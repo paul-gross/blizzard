@@ -20,8 +20,8 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from tests.support import FakeWorkSource, HubHarness, build_hub, claim_route, pointer_token, seed_session, seed_user
-from tests.test_fleet_auth import _seed_enrolled
+from tests.support import FakeWorkSource, build_hub, claim_route, pointer_token, seed_session, seed_user
+from tests.test_fleet_auth import seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -86,7 +86,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
+def seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
     hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
     admin = seed_user(hub, username="admin", role=Role.ADMIN)
     admin_token = seed_session(hub, admin)
@@ -100,7 +100,7 @@ def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | Non
     return hub, token, graph_id, nodes
 
 
-def _mint_chunk(hub: HubHarness, token: str, *, source: str = "default", ref: str = "1") -> str:
+def mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:
     resp = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
@@ -108,8 +108,8 @@ def _mint_chunk(hub: HubHarness, token: str, *, source: str = "default", ref: st
     return str(resp.json()["chunk_id"])
 
 
-def _push_usage(
-    hub: HubHarness,
+def push_usage(
+    hub,
     *,
     chunk_id: str,
     node_id: str,
@@ -161,7 +161,7 @@ def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> 
 
 @pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
-    token = _seed_enrolled(tmp_path, runner_id="runner-a")
+    token = seed_enrolled(tmp_path, runner_id="runner-a")
     hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(path, headers=_bearer(token))
@@ -172,10 +172,10 @@ def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> No
 
 
 def test_spend_by_node_rolls_up_usage(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
 
     resp = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token))
 
@@ -197,9 +197,9 @@ def test_spend_by_node_rolls_up_usage(tmp_path: Path) -> None:
 
 
 def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> None:
-    hub, token, graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    hub, token, graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
     resp = hub.client.get("/api/analytics/spend/graphs", headers=_cookie(token))
 
@@ -220,15 +220,15 @@ def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> No
 
 
 def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_graph(tmp_path: Path) -> None:
-    hub, token, graph_id, nodes = _seeded_hub(tmp_path)
+    hub, token, graph_id, nodes = seeded_hub(tmp_path)
     admin_token = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
     other = hub.client.post("/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token))
     assert other.status_code == 201, other.text
     other_graph_id = other.json()["graph_id"]
     other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
-    chunk_id = _mint_chunk(hub, token)
+    chunk_id = mint_chunk(hub, token)
     claim_route(hub, chunk_id)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
     cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_migration(
         chunk_id,
@@ -254,15 +254,15 @@ def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_
 
 
 def test_by_name_folds_a_graph_minted_twice_into_one_row_per_name(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
     admin = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
     remint = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin))
     assert remint.status_code == 201, remint.text
     second_build = {n["name"]: n["node_id"] for n in remint.json()["nodes"]}["build"]
     assert second_build != nodes["build"]
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_id, node_id=second_build, epoch=1, seq=2, cost_usd=0.2)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_id, node_id=second_build, epoch=1, seq=2, cost_usd=0.2)
 
     split = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token)).json()["spend"]
     folded = hub.client.get("/api/analytics/spend/nodes", params={"by_name": "true"}, headers=_cookie(token)).json()[
@@ -278,16 +278,16 @@ def test_by_name_folds_a_graph_minted_twice_into_one_row_per_name(tmp_path: Path
 def test_by_name_resolves_each_node_to_its_own_graph_and_node_name(tmp_path: Path) -> None:
     """Two graphs whose names differ and whose node names differ, plus usage on a node no
     graph defines: each id resolves through both correlation predicates to its own names."""
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
     admin = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
     other_yaml = _GRAPH_YAML.replace("name: default-delivery", "name: other-delivery").replace("review", "audit")
     other = hub.client.post("/api/graphs", json={"definition_yaml": other_yaml}, headers=_cookie(admin))
     assert other.status_code == 201, other.text
     other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["review"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_id, node_id=other_nodes["audit"], epoch=1, seq=2, cost_usd=0.2)
-    _push_usage(hub, chunk_id=chunk_id, node_id="nd_gone", epoch=1, seq=3, cost_usd=0.4)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["review"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_id, node_id=other_nodes["audit"], epoch=1, seq=2, cost_usd=0.2)
+    push_usage(hub, chunk_id=chunk_id, node_id="nd_gone", epoch=1, seq=3, cost_usd=0.4)
 
     resp = hub.client.get("/api/analytics/spend/nodes", params={"by_name": "true"}, headers=_cookie(token))
 
@@ -299,10 +299,10 @@ def test_by_name_resolves_each_node_to_its_own_graph_and_node_name(tmp_path: Pat
 
 
 def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=None)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=None)
 
     resp = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token))
 
@@ -316,9 +316,9 @@ def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path)
 def test_an_estimate_only_row_publishes_its_estimate_apart_from_billed_cost(tmp_path: Path, path: str) -> None:
     """The estimate sums into its own figure, never into ``cost_usd``, and a row carrying
     only one is not the "neither amount" shape that flags ``cost_partial``."""
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=None, estimated_cost_usd=0.03)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=None, estimated_cost_usd=0.03)
 
     resp = hub.client.get(path, headers=_cookie(token))
 
@@ -329,9 +329,9 @@ def test_an_estimate_only_row_publishes_its_estimate_apart_from_billed_cost(tmp_
 
 
 def test_a_group_with_no_estimated_row_publishes_no_estimate(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.10)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.10)
 
     resp = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token))
 
@@ -342,11 +342,11 @@ def test_a_group_with_no_estimated_row_publishes_no_estimate(tmp_path: Path) -> 
 
 
 def test_spend_by_chunk_pages_with_a_cursor(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_a = _mint_chunk(hub, token, ref="1")
-    chunk_b = _mint_chunk(hub, token, ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_a = mint_chunk(hub, token, ref="1")
+    chunk_b = mint_chunk(hub, token, ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
 
     first = hub.client.get("/api/analytics/spend/chunks", params={"limit": 1}, headers=_cookie(token))
     assert first.status_code == 200, first.text
@@ -377,7 +377,7 @@ def test_spend_by_chunk_pages_with_a_cursor(tmp_path: Path) -> None:
     ],
 )
 def test_spend_by_chunk_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
-    hub, token, _graph_id, _nodes = _seeded_hub(tmp_path)
+    hub, token, _graph_id, _nodes = seeded_hub(tmp_path)
 
     resp = hub.client.get("/api/analytics/spend/chunks", params={"cursor": cursor}, headers=_cookie(token))
 
@@ -386,11 +386,11 @@ def test_spend_by_chunk_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) 
 
 
 def test_ndjson_serves_the_same_chunk_spend_in_the_same_order_as_json(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_a = _mint_chunk(hub, token, ref="1")
-    chunk_b = _mint_chunk(hub, token, ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_a = mint_chunk(hub, token, ref="1")
+    chunk_b = mint_chunk(hub, token, ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
 
     json_resp = hub.client.get("/api/analytics/spend/chunks", headers=_cookie(token))
     ndjson_resp = hub.client.get("/api/analytics/spend/chunks/ndjson", headers=_cookie(token))
@@ -402,11 +402,11 @@ def test_ndjson_serves_the_same_chunk_spend_in_the_same_order_as_json(tmp_path: 
 
 
 def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_a = _mint_chunk(hub, token, ref="1")
-    chunk_b = _mint_chunk(hub, token, ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_a = mint_chunk(hub, token, ref="1")
+    chunk_b = mint_chunk(hub, token, ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
     criteria = OperationalCriteria()
 
     body = b"".join(chunk_spend_ndjson_lines(hub.services.operational_analytics, criteria, batch_size=1)).decode()
@@ -421,13 +421,13 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
 
 
 def test_spend_honors_the_source_filter(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(
+    hub, token, _graph_id, nodes = seeded_hub(
         tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")}
     )
-    chunk_a = _mint_chunk(hub, token, source="default", ref="1")
-    chunk_b = _mint_chunk(hub, token, source="other", ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
+    chunk_a = mint_chunk(hub, token, source="default", ref="1")
+    chunk_b = mint_chunk(hub, token, source="other", ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
 
     resp = hub.client.get("/api/analytics/spend/chunks", params={"source": "other"}, headers=_cookie(token))
 
@@ -438,9 +438,9 @@ def test_spend_honors_the_source_filter(tmp_path: Path) -> None:
 
 
 def test_spend_honors_the_graph_id_filter(tmp_path: Path) -> None:
-    hub, token, graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    hub, token, graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
     resp = hub.client.get("/api/analytics/spend/nodes", params={"graph_id": graph_id}, headers=_cookie(token))
     assert len(resp.json()["spend"]) == 1
@@ -452,12 +452,12 @@ def test_spend_honors_the_graph_id_filter(tmp_path: Path) -> None:
 
 
 def test_spend_honors_the_time_range_filter(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
     hub.clock.advance(timedelta(seconds=1))
     after_first = hub.clock.now().isoformat()
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
 
     resp = hub.client.get("/api/analytics/spend/nodes", params={"since": after_first}, headers=_cookie(token))
 
@@ -468,12 +468,12 @@ def test_spend_honors_the_time_range_filter(tmp_path: Path) -> None:
 
 
 def test_spend_reconciles_with_usage_total_and_the_fleet_spend_route(tmp_path: Path) -> None:
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_a = _mint_chunk(hub, token, ref="1")
-    chunk_b = _mint_chunk(hub, token, ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["review"], epoch=1, seq=2, cost_usd=None)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=3, cost_usd=0.3)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_a = mint_chunk(hub, token, ref="1")
+    chunk_b = mint_chunk(hub, token, ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["review"], epoch=1, seq=2, cost_usd=None)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=3, cost_usd=0.3)
 
     by_node = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token)).json()["spend"]
     since = (hub.clock.now() - timedelta(days=365)).isoformat()

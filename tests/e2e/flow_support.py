@@ -64,7 +64,7 @@ def _build_script(landed_file: str, repos: Sequence[str], *, delta: bool) -> str
     ) + (_PUBLISH_DELTA if delta else "")
 
 
-def _graph(landed_file: str, repos: Sequence[str], *, poll_interval: int, record_findings: bool) -> str:
+def landing_graph_yaml(landed_file: str, repos: Sequence[str], *, poll_interval: int, record_findings: bool) -> str:
     """A graph whose build commits ``landed_file`` in ``repos`` and whose ``deliver`` lands it, re-polling every
     ``poll_interval`` seconds — then ``record-findings`` when asked."""
     graph = {
@@ -108,7 +108,7 @@ def pinned_chunk(
     record_findings: bool = False,
 ) -> str:
     """Mint the graph landing ``landed_file`` in ``repos``, ingest one chunk pinned to it, and promote it."""
-    graph = _graph(landed_file, repos, poll_interval=poll_interval, record_findings=record_findings)
+    graph = landing_graph_yaml(landed_file, repos, poll_interval=poll_interval, record_findings=record_findings)
     assert hub.post("/api/graphs", json={"definition_yaml": graph}).status_code == 201
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": f"lands {landed_file}"})
     assert issue.status_code == 201, issue.text

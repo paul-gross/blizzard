@@ -12,29 +12,29 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support import build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
 
-def _register(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:
+def register_runner(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:
     resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
     assert resp.status_code == 201, resp.text
 
 
-def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> str:
+def enroll_runner(hub, runner_id: str = "runner-a") -> str:
     resp = hub.client.post(f"/api/runners/{runner_id}/enrollments")
     assert resp.status_code == 201, resp.text
     return str(resp.json()["token"])
 
 
-def _seed_enrolled(tmp_path: Path, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
+def seed_enrolled(tmp_path: Path, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     """Add and register ``runner_id`` in the store over ``tmp_path``; return its token. The caller
     builds its own hub over the same store, as a restarted hub reopens it."""
     return seed_runner(build_hub(tmp_path), runner_id, workspace_id=workspace_id)
 
 
-def _bearer(token: str) -> dict[str, str]:
+def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -43,10 +43,10 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 def test_valid_runner_token_succeeds_on_a_fleet_verb(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    resp = hub.client.get("/api/fleet/queue/peek", headers=_bearer(token))
+    resp = hub.client.get("/api/fleet/queue/peek", headers=bearer(token))
     assert resp.status_code == 200
 
 
@@ -63,28 +63,28 @@ def test_missing_token_is_rejected_on_a_fleet_verb_under_every_configuration(tmp
 
 
 def test_valid_runner_token_is_rejected_on_ingest(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_bearer(token))
+    resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=bearer(token))
     assert resp.status_code == 403
 
 
 def test_valid_runner_token_is_rejected_on_queue_replace(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    resp = hub.client.put("/api/queue", json={"chunk_ids": []}, headers=_bearer(token))
+    resp = hub.client.put("/api/queue", json={"chunk_ids": []}, headers=bearer(token))
     assert resp.status_code == 403
 
 
 def test_valid_runner_token_is_rejected_on_pause_resume(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "op"}, headers=_bearer(token))
+    paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "op"}, headers=bearer(token))
     assert paused.status_code == 403
-    resumed = hub.client.post("/api/runners/runner-a/resume", json={"by": "op"}, headers=_bearer(token))
+    resumed = hub.client.post("/api/runners/runner-a/resume", json={"by": "op"}, headers=bearer(token))
     assert resumed.status_code == 403
 
 
@@ -103,7 +103,7 @@ def test_operator_verbs_are_accessible_with_no_credential(tmp_path: Path) -> Non
 
 
 def test_a_body_runner_id_naming_another_runner_is_ignored_on_a_fleet_write(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path, "runner-a", "ws-a")
+    token = seed_enrolled(tmp_path, "runner-a", "ws-a")
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
 
@@ -113,7 +113,7 @@ def test_a_body_runner_id_naming_another_runner_is_ignored_on_a_fleet_write(tmp_
             "runner_id": "runner-b",
             "facts": [{"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
         },
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["runner_id"] == "runner-a"
@@ -132,7 +132,7 @@ def test_a_runner_verb_on_a_path_naming_another_runner_is_refused_403(tmp_path: 
     token = seed_runner(hub, "runner-a")
     seed_runner(hub, "runner-b")
 
-    resp = getattr(hub.client, method)(path, headers=_bearer(token))
+    resp = getattr(hub.client, method)(path, headers=bearer(token))
 
     assert resp.status_code == 403, resp.text
     assert resp.json() == {"detail": "token belongs to runner 'runner-a', not 'runner-b'"}

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.mock_fleet_support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
+from tests.mock_fleet_support import MockChunkSpec, mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
 from tests.runner_join import fleet_headers
 from tests.support import free_port
 
@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.service, service_gate]
 _WORK_REF_URL = "https://example.invalid/issues/1"
 
 
-def _answered_chunk_spec(work_ref: str) -> dict[str, object]:
+def _answered_chunk_spec(work_ref: str) -> MockChunkSpec:
     spec = mock_hub_chunk_spec(work_ref)
     spec["garden_answered_findings"] = [
         {

@@ -73,7 +73,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):
+def running_chunk(chunk="ch_1", *, runner_id="r1"):
     return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
@@ -176,7 +176,7 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path: Path):
     assert store.resume_intent_lease_ids() == {"lease_1"}
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
@@ -212,7 +212,7 @@ def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(t
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
@@ -238,7 +238,7 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     harness.resume_pgid = 4321
@@ -267,7 +267,7 @@ def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     # pid 100 is alive, but under a DIFFERENT start time — the OS recycled it.
@@ -300,7 +300,7 @@ def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_pat
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
@@ -329,7 +329,7 @@ def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_nul
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
@@ -352,7 +352,7 @@ def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_th
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     harness.resume_pgid = 9999  # deliberately distinct from resume_pid
@@ -374,7 +374,7 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path: Path):
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     # The survivor is still alive at tick start (kill-first exercises it); the resumed pid is live.
@@ -402,7 +402,7 @@ def test_resumed_lease_with_a_durable_session_end_is_still_resumed_not_judged(tm
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
@@ -429,7 +429,7 @@ def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path: Path):
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk(runner_id="r2")  # another runner holds it now
+    hub.chunks["ch_1"] = running_chunk(runner_id="r2")  # another runner holds it now
     harness = FakeHarness(handle=_HANDLE, verdict=None)
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
@@ -531,7 +531,7 @@ def test_resume_owner_failure_escalates_in_place(tmp_path: Path, known_but_unava
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     bindings = {"claude_code": HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
     if known_but_unavailable:

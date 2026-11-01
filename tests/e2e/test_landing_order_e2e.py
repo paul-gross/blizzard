@@ -22,14 +22,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.tools.invariants import hub_invariants
-from tests.e2e.flow_support import _graph, flow_world, set_lever, ticking_runner
+from tests.e2e.flow_support import flow_world, landing_graph_yaml, set_lever, ticking_runner
 from tests.e2e.test_flow_turns_e2e import (
-    _WEB_REPO,
-    _WEB_REPO_NAME,
-    _await_landed,
-    _detail,
-    _pending,
-    _store,
+    WEB_REPO,
+    WEB_REPO_NAME,
+    await_landed,
+    chunk_detail,
+    open_hub_db,
+    pending,
 )
 from tests.fleet_launchers import OWNER, REPO, run_forge, run_hub, runner_config
 from tests.fleet_world import REPO_NAME, basic_workspace, world_repos
@@ -45,7 +45,7 @@ pytestmark = [
 
 _LIB_REPO_NAME = "toy-lib"
 _LIB_REPO = f"{OWNER}/{_LIB_REPO_NAME}"
-_BOTH = (REPO_NAME, _WEB_REPO_NAME)
+_BOTH = (REPO_NAME, WEB_REPO_NAME)
 _SECOND_PROJECT = "consumers"
 _LANDING_INVARIANTS = frozenset(
     {"hub:landing-position-on-link", "hub:submission-terms-standing", "hub:repository-references-in-tenant"}
@@ -57,7 +57,7 @@ def _chunk(
 ) -> str:
     """Mint the graph landing ``landed_file`` in ``repos``, ingest one chunk from ``source`` pinned to it, and promote
     it; the chunk belongs to the project ``source`` is linked to."""
-    graph = _graph(landed_file, repos, poll_interval=1, record_findings=False)
+    graph = landing_graph_yaml(landed_file, repos, poll_interval=1, record_findings=False)
     assert hub.post("/api/graphs", json={"definition_yaml": graph}).status_code == 201
     issue = forge.post(f"/repos/{OWNER}/{source}/issues", json={"title": landed_file, "body": f"lands {landed_file}"})
     assert issue.status_code == 201, issue.text
@@ -69,7 +69,7 @@ def _chunk(
 
 
 def _add_web(hub: httpx2.Client, forge_port: int) -> None:
-    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, f"http://127.0.0.1:{forge_port}", owner=OWNER)])
+    create_repositories(hub, [fixture_repository(WEB_REPO_NAME, f"http://127.0.0.1:{forge_port}", owner=OWNER)])
 
 
 def _add_lib(hub: httpx2.Client, forge: httpx2.Client, forge_port: int) -> Path:
@@ -125,7 +125,7 @@ def _links(hub: httpx2.Client, project: str) -> list[tuple[str, float | None]]:
 
 def _landed_order(hub_dir: Path, chunk_id: str) -> list[str]:
     """The repositories the chunk landed, by name, in the order their landings were written."""
-    with _store(hub_dir) as conn:
+    with open_hub_db(hub_dir) as conn:
         rows = conn.execute(
             "SELECT repo FROM delivery_repo_landed WHERE chunk_id = ? ORDER BY id", (chunk_id,)
         ).fetchall()
@@ -134,7 +134,7 @@ def _landed_order(hub_dir: Path, chunk_id: str) -> list[str]:
 
 def _terms(hub_dir: Path, chunk_id: str) -> dict[str, tuple[str, float | None]]:
     """The terms the chunk's submissions took, by repository slug: ``(landing_policy, landing_position)``."""
-    with _store(hub_dir) as conn:
+    with open_hub_db(hub_dir) as conn:
         rows = conn.execute(
             "SELECT r.slug, t.landing_policy, t.landing_position FROM flow_submission_terms t"
             " JOIN flow_submissions s ON s.submission_id = t.submission_id"
@@ -145,7 +145,7 @@ def _terms(hub_dir: Path, chunk_id: str) -> dict[str, tuple[str, float | None]]:
 
 
 def _position_facts(hub_dir: Path) -> int:
-    with _store(hub_dir) as conn:
+    with open_hub_db(hub_dir) as conn:
         return conn.execute("SELECT count(*) FROM project_repository_positions").fetchone()[0]
 
 
@@ -172,16 +172,16 @@ def test_a_library_ranked_first_lands_before_its_consumer(tmp_path: Path) -> Non
 
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
-        assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
+        _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
+        assert _links(hub, "default") == [(WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
         with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
             chunk = _chunk(hub, forge, "LIBRARY.md", _BOTH)
-            tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
-        _await_landed(hub, chunk)
+            tick_until(lambda: chunk_detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
+        await_landed(hub, chunk)
 
-        assert _landed_order(hub_dir, chunk) == [_WEB_REPO_NAME, REPO_NAME]
+        assert _landed_order(hub_dir, chunk) == [WEB_REPO_NAME, REPO_NAME]
         assert _terms(hub_dir, chunk) == {
-            _WEB_REPO_NAME: ("merge-on-checks", 1.0),
+            WEB_REPO_NAME: ("merge-on-checks", 1.0),
             REPO_NAME: ("merge-on-checks", 2.0),
         }
         _assert_landing_record_holds(hub_dir)
@@ -198,25 +198,25 @@ def test_a_second_project_lands_the_same_repositories_in_its_own_order(tmp_path:
         _add_web(hub, forge_port)
         created = hub.post("/api/projects", json={"slug": _SECOND_PROJECT, "name": "Consumers", "description": ""})
         assert created.status_code == 201, created.text
-        source = fixture_work_source(_WEB_REPO_NAME, _WEB_REPO, forge_api)
+        source = fixture_work_source(WEB_REPO_NAME, WEB_REPO, forge_api)
         assert hub.post("/api/work-sources", json=source.model_dump()).status_code == 201
-        assert hub.put(f"/api/projects/{_SECOND_PROJECT}/source-links/{_WEB_REPO_NAME}").status_code == 200
+        assert hub.put(f"/api/projects/{_SECOND_PROJECT}/source-links/{WEB_REPO_NAME}").status_code == 200
         for slug in _BOTH:
             assert hub.put(f"/api/projects/{_SECOND_PROJECT}/repository-links/{slug}").status_code == 200
-        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
-        _order(hub, _SECOND_PROJECT, REPO_NAME, _WEB_REPO_NAME)
+        _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
+        _order(hub, _SECOND_PROJECT, REPO_NAME, WEB_REPO_NAME)
 
         config = flow_runner_config(tmp_path, workspace, bin_dir, hub_port, projects=("default", _SECOND_PROJECT))
         with ticking_runner(config) as tick_until:
             first = _chunk(hub, forge, "FIRST-PROJECT.md", _BOTH)
-            second = _chunk(hub, forge, "SECOND-PROJECT.md", _BOTH, source=_WEB_REPO_NAME)
-            assert _detail(hub, second)["project_id"] == created.json()["project_id"]
+            second = _chunk(hub, forge, "SECOND-PROJECT.md", _BOTH, source=WEB_REPO_NAME)
+            assert chunk_detail(hub, second)["project_id"] == created.json()["project_id"]
             settled = {"done", "needs_human", "stopped"}
-            tick_until(lambda: all(_detail(hub, c)["status"] in settled for c in (first, second)))
-        _await_landed(hub, first, second)
+            tick_until(lambda: all(chunk_detail(hub, c)["status"] in settled for c in (first, second)))
+        await_landed(hub, first, second)
 
-        assert _landed_order(hub_dir, first) == [_WEB_REPO_NAME, REPO_NAME]
-        assert _landed_order(hub_dir, second) == [REPO_NAME, _WEB_REPO_NAME]
+        assert _landed_order(hub_dir, first) == [WEB_REPO_NAME, REPO_NAME]
+        assert _landed_order(hub_dir, second) == [REPO_NAME, WEB_REPO_NAME]
         _assert_landing_record_holds(hub_dir)
 
 
@@ -225,23 +225,23 @@ def test_one_ranked_repository_lands_before_two_unranked_in_slug_order(tmp_path:
     bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
-    three = (REPO_NAME, _LIB_REPO_NAME, _WEB_REPO_NAME)
+    three = (REPO_NAME, _LIB_REPO_NAME, WEB_REPO_NAME)
 
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
         lib_origin = _add_lib(hub, forge, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME)
-        assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, None), (_LIB_REPO_NAME, None)]
+        _order(hub, "default", WEB_REPO_NAME)
+        assert _links(hub, "default") == [(WEB_REPO_NAME, 1.0), (REPO_NAME, None), (_LIB_REPO_NAME, None)]
 
         extra = (WorkspaceRepo(_LIB_REPO_NAME, f"file://{lib_origin}"),)
         with ticking_runner(
             flow_runner_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)
         ) as tick_until:
             chunk = _chunk(hub, forge, "RANKED.md", three)
-            tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
-        _await_landed(hub, chunk)
+            tick_until(lambda: chunk_detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
+        await_landed(hub, chunk)
 
-        assert _landed_order(hub_dir, chunk) == [_WEB_REPO_NAME, REPO_NAME, _LIB_REPO_NAME]
+        assert _landed_order(hub_dir, chunk) == [WEB_REPO_NAME, REPO_NAME, _LIB_REPO_NAME]
         _assert_landing_record_holds(hub_dir)
 
 
@@ -254,20 +254,20 @@ def test_a_relinked_repository_keeps_its_position(tmp_path: Path) -> None:
 
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
-        unlinked = hub.post(f"/api/projects/default/repository-links/{_WEB_REPO_NAME}/retire")
+        _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
+        unlinked = hub.post(f"/api/projects/default/repository-links/{WEB_REPO_NAME}/retire")
         assert unlinked.status_code == 200, unlinked.text
         assert _links(hub, "default") == [(REPO_NAME, 2.0)]
         _assert_landing_record_holds(hub_dir)
-        assert hub.put(f"/api/projects/default/repository-links/{_WEB_REPO_NAME}").status_code == 200
-        assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
+        assert hub.put(f"/api/projects/default/repository-links/{WEB_REPO_NAME}").status_code == 200
+        assert _links(hub, "default") == [(WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
 
         with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
             chunk = _chunk(hub, forge, "RELINKED.md", _BOTH)
-            tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
-        _await_landed(hub, chunk)
+            tick_until(lambda: chunk_detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
+        await_landed(hub, chunk)
 
-        assert _landed_order(hub_dir, chunk) == [_WEB_REPO_NAME, REPO_NAME]
+        assert _landed_order(hub_dir, chunk) == [WEB_REPO_NAME, REPO_NAME]
         _assert_landing_record_holds(hub_dir)
 
 
@@ -277,18 +277,18 @@ def test_an_exhausted_gap_is_renumbered_and_the_order_lands(tmp_path: Path) -> N
     bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
-    three = (REPO_NAME, _LIB_REPO_NAME, _WEB_REPO_NAME)
+    three = (REPO_NAME, _LIB_REPO_NAME, WEB_REPO_NAME)
 
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
         lib_origin = _add_lib(hub, forge, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME, _LIB_REPO_NAME, REPO_NAME)
+        _order(hub, "default", WEB_REPO_NAME, _LIB_REPO_NAME, REPO_NAME)
 
         renumbered: list[tuple[str, float | None]] | None = None
         moving, still = REPO_NAME, _LIB_REPO_NAME
         halvings = 0
         while renumbered is None and halvings < 200:
-            order = _move(hub, "default", moving, after=_WEB_REPO_NAME)
+            order = _move(hub, "default", moving, after=WEB_REPO_NAME)
             if halvings > 0 and order[1][1] == 1.5:
                 renumbered = order
             else:
@@ -296,7 +296,7 @@ def test_an_exhausted_gap_is_renumbered_and_the_order_lands(tmp_path: Path) -> N
                 halvings += 1
         # A float gap of one halves some fifty times before no midpoint is left.
         assert renumbered is not None and halvings > 40, (halvings, renumbered)
-        assert renumbered == [(_WEB_REPO_NAME, 1.0), (moving, 1.5), (still, 2.0)]
+        assert renumbered == [(WEB_REPO_NAME, 1.0), (moving, 1.5), (still, 2.0)]
         expected = [slug for slug, _ in renumbered]
 
         extra = (WorkspaceRepo(_LIB_REPO_NAME, f"file://{lib_origin}"),)
@@ -304,8 +304,8 @@ def test_an_exhausted_gap_is_renumbered_and_the_order_lands(tmp_path: Path) -> N
             flow_runner_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)
         ) as tick_until:
             chunk = _chunk(hub, forge, "RENUMBERED.md", three)
-            tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
-        _await_landed(hub, chunk)
+            tick_until(lambda: chunk_detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
+        await_landed(hub, chunk)
 
         assert _landed_order(hub_dir, chunk) == expected
         _assert_landing_record_holds(hub_dir)
@@ -321,28 +321,28 @@ def test_a_reorder_while_a_chunk_waits_behind_another_reaches_only_later_chunks(
 
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
-        for repo in (REPO, _WEB_REPO):
+        _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
+        for repo in (REPO, WEB_REPO):
             set_lever(forge, repo, armed=True)
         config = flow_runner_config(tmp_path, workspace, bin_dir, hub_port)
         with ticking_runner(config) as tick_until:
             ahead = _chunk(hub, forge, "AHEAD.md", _BOTH)
-            tick_until(_pending(hub, ahead))
+            tick_until(pending(hub, ahead))
             behind = _chunk(hub, forge, "BEHIND.md", _BOTH)
-            tick_until(_pending(hub, behind))
-        _order(hub, "default", REPO_NAME, _WEB_REPO_NAME)
+            tick_until(pending(hub, behind))
+        _order(hub, "default", REPO_NAME, WEB_REPO_NAME)
         _assert_landing_record_holds(hub_dir)
 
-        _release(forge, REPO, _WEB_REPO)
-        _await_landed(hub, ahead, behind)
-        assert _landed_order(hub_dir, ahead) == [_WEB_REPO_NAME, REPO_NAME]
-        assert _landed_order(hub_dir, behind) == [_WEB_REPO_NAME, REPO_NAME]
+        _release(forge, REPO, WEB_REPO)
+        await_landed(hub, ahead, behind)
+        assert _landed_order(hub_dir, ahead) == [WEB_REPO_NAME, REPO_NAME]
+        assert _landed_order(hub_dir, behind) == [WEB_REPO_NAME, REPO_NAME]
 
         with ticking_runner(config) as tick_until:
             later = _chunk(hub, forge, "LATER.md", _BOTH)
-            tick_until(lambda: _detail(hub, later)["status"] in {"done", "needs_human", "stopped"})
-        _await_landed(hub, later)
-        assert _landed_order(hub_dir, later) == [REPO_NAME, _WEB_REPO_NAME]
+            tick_until(lambda: chunk_detail(hub, later)["status"] in {"done", "needs_human", "stopped"})
+        await_landed(hub, later)
+        assert _landed_order(hub_dir, later) == [REPO_NAME, WEB_REPO_NAME]
         _assert_landing_record_holds(hub_dir)
 
 
@@ -356,23 +356,23 @@ def test_an_interrupted_turn_keeps_the_terms_its_first_turn_took(tmp_path: Path)
     with run_forge(bin_dir, origins, forge_port) as forge:
         with run_hub(hub_dir, forge_port, hub_port) as hub:
             _add_web(hub, forge_port)
-            _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
-            for repo in (REPO, _WEB_REPO):
+            _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
+            for repo in (REPO, WEB_REPO):
                 set_lever(forge, repo, armed=True)
             with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
                 chunk = _chunk(hub, forge, "INTERRUPTED.md", _BOTH)
-                tick_until(_pending(hub, chunk))
+                tick_until(pending(hub, chunk))
             taken = _terms(hub_dir, chunk)
-            _order(hub, "default", REPO_NAME, _WEB_REPO_NAME)
-            assert _links(hub, "default") == [(REPO_NAME, 1.0), (_WEB_REPO_NAME, 2.0)]
-        assert taken == {_WEB_REPO_NAME: ("merge-on-checks", 1.0), REPO_NAME: ("merge-on-checks", 2.0)}
+            _order(hub, "default", REPO_NAME, WEB_REPO_NAME)
+            assert _links(hub, "default") == [(REPO_NAME, 1.0), (WEB_REPO_NAME, 2.0)]
+        assert taken == {WEB_REPO_NAME: ("merge-on-checks", 1.0), REPO_NAME: ("merge-on-checks", 2.0)}
         # Down while the checks go green, so the visit is due on the first tick back.
-        _release(forge, REPO, _WEB_REPO)
+        _release(forge, REPO, WEB_REPO)
         with run_hub(hub_dir, forge_port, hub_port, rehost=True) as hub:
-            _await_landed(hub, chunk)
+            await_landed(hub, chunk)
 
     assert _terms(hub_dir, chunk) == taken
-    assert _landed_order(hub_dir, chunk) == [_WEB_REPO_NAME, REPO_NAME]
+    assert _landed_order(hub_dir, chunk) == [WEB_REPO_NAME, REPO_NAME]
     _assert_landing_record_holds(hub_dir)
 
 
@@ -390,12 +390,12 @@ def test_an_exported_document_applies_back_writing_nothing(tmp_path: Path) -> No
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
         _add_web(hub, forge_port)
         _add_lib(hub, forge, forge_port)
-        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
+        _order(hub, "default", WEB_REPO_NAME, REPO_NAME)
         exported = hub.get("/api/config/export")
         assert exported.status_code == 200, exported.text
         document = exported.json()
         (default,) = [p for p in document["projects"] if p["slug"] == "default"]
-        assert default["landing_order"] == [_WEB_REPO_NAME, REPO_NAME]
+        assert default["landing_order"] == [WEB_REPO_NAME, REPO_NAME]
         facts = _position_facts(hub_dir)
 
         applied = hub.post("/api/config/apply", json=document)
@@ -403,5 +403,5 @@ def test_an_exported_document_applies_back_writing_nothing(tmp_path: Path) -> No
 
         assert _written(applied.json()) == []
         assert _position_facts(hub_dir) == facts
-        assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0), (_LIB_REPO_NAME, None)]
+        assert _links(hub, "default") == [(WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0), (_LIB_REPO_NAME, None)]
         _assert_landing_record_holds(hub_dir)

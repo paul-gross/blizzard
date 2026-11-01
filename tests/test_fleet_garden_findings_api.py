@@ -18,7 +18,6 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
     build_hub,
@@ -40,8 +39,7 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     """A work item with its own resting chunk, plus a recorded run context for it
     unless ``with_run_context`` is False — the chunk id the route resolves through."""
     store_connections = hub_store_connections(hub.engine)
-    items = WorkItemStore(store_connections)
-    item = seed_work_item(items, graph_id="gr_garden", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    item = seed_work_item(store_connections, graph_id="gr_garden", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
         seed_scope(store_connections, _SCOPE, at=_NOW)
         RunContextStore(store_connections).record(

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -61,19 +61,19 @@ class FakeHubRunnerAdmin:
 
     issued: IssuedIdentity | None = None
     refusal: HubClientError | None = None
-    added: list[IssuedIdentity] = field(default_factory=list)
-    named: list[str | None] = field(default_factory=list)
-    declared: list[tuple[str, ...] | None] = field(default_factory=list)
-    tenants_answer: list[OperatorTenant] | HubClientError = field(default_factory=list)
-    hosts: list[IssuedHost] = field(default_factory=list)
+    added: list[IssuedIdentity] = field(default_factory=list[IssuedIdentity])
+    named: list[str | None] = field(default_factory=list[str | None])
+    declared: list[tuple[str, ...] | None] = field(default_factory=list[tuple[str, ...] | None])
+    tenants_answer: list[OperatorTenant] | HubClientError = field(default_factory=list[OperatorTenant])
+    hosts: list[IssuedHost] = field(default_factory=list[IssuedHost])
     #: Raised instead of adding a host when set.
     host_refusal: HubClientError | None = None
     #: Raised instead of retiring a runner under a host when set.
     retire_refusal: HubClientError | None = None
-    host_tenants: dict[str, str] = field(default_factory=dict)
-    held: dict[str, list[str]] = field(default_factory=dict)
-    adopted: list[tuple[str, ...]] = field(default_factory=list)
-    retired_hosts: set[str] = field(default_factory=set)
+    host_tenants: dict[str, str] = field(default_factory=dict[str, str])
+    held: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    adopted: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
+    retired_hosts: set[str] = field(default_factory=set[str])
 
     def add_runner(
         self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
@@ -189,19 +189,19 @@ class FakeInitHub:
 
     admin: FakeHubRunnerAdmin = field(default_factory=FakeHubRunnerAdmin)
     identity: FakeTokenIdentityReader | None = None
-    calls: list[InitHubCall] = field(default_factory=list)
+    calls: list[InitHubCall] = field(default_factory=list[InitHubCall])
     #: Scripts every host record read's answer.
     host_record: HostRefused | HubClientError | None = None
 
     @contextmanager
     def clients(
         self, hub_url: str, runner_token: str, operator_token: str | None
-    ) -> Iterator[tuple[ITokenIdentityReader, IHubRunnerAdmin]]:
+    ) -> Generator[tuple[ITokenIdentityReader, IHubRunnerAdmin], None, None]:
         self.calls.append(InitHubCall(hub_url, runner_token, operator_token))
         yield self.identity or FakeTokenIdentityReader(self._issued_to(runner_token)), self.admin
 
     @contextmanager
-    def host_clients(self, hub_url: str) -> Iterator[HostClients]:
+    def host_clients(self, hub_url: str) -> Generator[HostClients, None, None]:
         del hub_url
         yield lambda token: FakeHostHubClient(self.admin, token, self.host_record)
 

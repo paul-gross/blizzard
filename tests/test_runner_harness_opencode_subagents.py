@@ -301,7 +301,7 @@ def test_a_child_on_another_model_is_priced_at_its_own_model(spawn_executor: Exe
 # --- synthetic sessions -------------------------------------------------------
 
 
-def _step(part_id: str, session: str, message: str, tokens: int = 10, cost: float = 0) -> dict[str, Any]:
+def step(part_id: str, session: str, message: str, tokens: int = 10, cost: float = 0) -> dict[str, Any]:
     return {
         "id": part_id,
         "sessionID": session,
@@ -313,7 +313,7 @@ def _step(part_id: str, session: str, message: str, tokens: int = 10, cost: floa
     }
 
 
-def _task(
+def opencode_task(
     part_id: str,
     session: str,
     message: str,
@@ -339,7 +339,9 @@ def _task(
     }
 
 
-def _session(session: str, parent: str | None, messages: list[tuple[str, int, str, list[dict[str, Any]]]]) -> str:
+def opencode_session(
+    session: str, parent: str | None, messages: list[tuple[str, int, str, list[dict[str, Any]]]]
+) -> str:
     info: dict[str, Any] = {"id": session}
     if parent is not None:
         info["parentID"] = parent
@@ -364,7 +366,7 @@ def _session(session: str, parent: str | None, messages: list[tuple[str, int, st
     )
 
 
-def _events(parts: list[dict[str, Any]], *, root: str = "root", stamp: int = 1_000) -> str:
+def opencode_events(parts: list[dict[str, Any]], *, root: str = "root", stamp: int = 1_000) -> str:
     return "\n".join(
         json.dumps(
             {
@@ -379,10 +381,10 @@ def _events(parts: list[dict[str, Any]], *, root: str = "root", stamp: int = 1_0
 
 
 def _synthetic() -> tuple[FakeExporter, str]:
-    task = _task("t1", "root", "m0", "child", 100, 200)
+    task = opencode_task("t1", "root", "m0", "child", 100, 200)
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
                 [
@@ -390,15 +392,15 @@ def _synthetic() -> tuple[FakeExporter, str]:
                         "c1",
                         110,
                         "gpt-5.6-terra",
-                        [_step("cs1", "child", "c1", 20), _task("t2", "child", "c1", "grand", 120, 150)],
+                        [step("cs1", "child", "c1", 20), opencode_task("t2", "child", "c1", "grand", 120, 150)],
                     ),
-                    ("c0", 50, "gpt-5.6-terra", [_step("cs0", "child", "c0", 900)]),  # before the window
+                    ("c0", 50, "gpt-5.6-terra", [step("cs0", "child", "c0", 900)]),  # before the window
                 ],
             ),
-            "grand": _session("grand", "child", [("g1", 130, "gpt-5.6-luna", [_step("gs1", "grand", "g1", 5)])]),
+            "grand": opencode_session("grand", "child", [("g1", 130, "gpt-5.6-luna", [step("gs1", "grand", "g1", 5)])]),
         }
     )
-    return exporter, _events([task, _step("rs1", "root", "m0", 3)])
+    return exporter, opencode_events([task, step("rs1", "root", "m0", 3)])
 
 
 def test_a_grandchild_is_folded_through_its_parent_and_out_of_window_steps_are_skipped(
@@ -413,7 +415,7 @@ def test_a_grandchild_is_folded_through_its_parent_and_out_of_window_steps_are_s
 
 def test_a_failing_child_export_still_records_the_root_and_logs(spawn_executor: Executor) -> None:
     exporter = FakeExporter({"child": OpenCodeExportError("gone")})
-    output = _events([_task("t1", "root", "m0", "child", 100, 200), _step("rs1", "root", "m0", 3)])
+    output = opencode_events([opencode_task("t1", "root", "m0", "child", 100, 200), step("rs1", "root", "m0", 3)])
     with capture_logs() as logs:
         sample = _adapter(spawn_executor, exporter).parse_usage(output, "spawn")
     assert sample is not None
@@ -425,9 +427,9 @@ def test_a_failing_child_export_still_records_the_root_and_logs(spawn_executor: 
 
 def test_a_child_that_names_another_parent_contributes_nothing(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
-        {"child": _session("child", "elsewhere", [("c1", 110, "m", [_step("cs1", "child", "c1", 20)])])}
+        {"child": opencode_session("child", "elsewhere", [("c1", 110, "m", [step("cs1", "child", "c1", 20)])])}
     )
-    output = _events([_task("t1", "root", "m0", "child", 100, 200), _step("rs1", "root", "m0", 3)])
+    output = opencode_events([opencode_task("t1", "root", "m0", "child", 100, 200), step("rs1", "root", "m0", 3)])
     sample = _adapter(spawn_executor, exporter).parse_usage(output, "spawn")
     assert sample is not None
     assert sample.input_tokens == 3
@@ -436,24 +438,26 @@ def test_a_child_that_names_another_parent_contributes_nothing(spawn_executor: E
 def test_a_task_that_never_ended_is_closed_at_the_latest_event_instant(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
                 [
-                    ("c1", 110, "m", [_step("cs1", "child", "c1", 20)]),
-                    ("c2", 5_000, "m", [_step("cs2", "child", "c2", 700)]),  # after the last event
+                    ("c1", 110, "m", [step("cs1", "child", "c1", 20)]),
+                    ("c2", 5_000, "m", [step("cs2", "child", "c2", 700)]),  # after the last event
                 ],
             )
         }
     )
-    output = _events([_task("t1", "root", "m0", "child", 100, None), _step("rs1", "root", "m0", 3)], stamp=1_000)
+    output = opencode_events(
+        [opencode_task("t1", "root", "m0", "child", 100, None), step("rs1", "root", "m0", 3)], stamp=1_000
+    )
     sample = _adapter(spawn_executor, exporter).parse_usage(output, "spawn")
     assert sample is not None
     assert sample.input_tokens == 3 + 20
 
 
 def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_executor: Executor) -> None:
-    root = _session(
+    root = opencode_session(
         "root",
         None,
         [
@@ -461,17 +465,17 @@ def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_exe
                 "m0",
                 1_100,
                 "root-model",
-                [_task("t1", "root", "m0", "child", 1_200, None)],
+                [opencode_task("t1", "root", "m0", "child", 1_200, None)],
             )
         ],
     )
-    child = _session(
+    child = opencode_session(
         "child",
         "root",
         [
-            ("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)]),
-            ("c2", 1_700, "child-model", [_step("cs2", "child", "c2", 30)]),
-            ("c3", 2_300, "child-model", [_step("cs3", "child", "c3", 700)]),
+            ("c1", 1_300, "child-model", [step("cs1", "child", "c1", 20)]),
+            ("c2", 1_700, "child-model", [step("cs2", "child", "c2", 30)]),
+            ("c3", 2_300, "child-model", [step("cs3", "child", "c3", 700)]),
         ],
     )
     exporter = FakeExporter({"root": root, "child": child})
@@ -481,7 +485,7 @@ def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_exe
         return datetime.fromtimestamp(ms / 1000, UTC)
 
     first = adapter.parse_usage(
-        _events([_step("rs1", "root", "m0", 3)], stamp=1_000),
+        opencode_events([step("rs1", "root", "m0", 3)], stamp=1_000),
         "spawn",
         invocation_start=at(900),
         invocation_end=at(1_500),
@@ -490,7 +494,9 @@ def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_exe
     assert first.input_tokens == 23
     # The same root export remains available when the next generation continues the child.
     second = adapter.parse_usage(
-        _events([_task("t2", "root", "m1", "child", 1_600, 2_000), _step("rs2", "root", "m1", 4)], stamp=1_900),
+        opencode_events(
+            [opencode_task("t2", "root", "m1", "child", 1_600, 2_000), step("rs2", "root", "m1", 4)], stamp=1_900
+        ),
         "resume",
         invocation_start=at(1_550),
         invocation_end=at(2_050),
@@ -506,23 +512,23 @@ def _at(ms: int) -> datetime:
 
 def test_out_of_window_tasks_listed_first_do_not_hide_later_in_window_ones(spawn_executor: Executor) -> None:
     # The root export is unordered: a task past the window and one before it precede the in-window one.
-    root = _session(
+    root = opencode_session(
         "root",
         None,
         [
-            ("m2", 3_000, "m", [_task("late", "root", "m2", "late-child", 3_000, 3_100)]),
-            ("m0", 100, "m", [_task("early", "root", "m0", "early-child", 100, 200)]),
-            ("m1", 1_100, "m", [_task("inside", "root", "m1", "child", 1_200, 1_400)]),
+            ("m2", 3_000, "m", [opencode_task("late", "root", "m2", "late-child", 3_000, 3_100)]),
+            ("m0", 100, "m", [opencode_task("early", "root", "m0", "early-child", 100, 200)]),
+            ("m1", 1_100, "m", [opencode_task("inside", "root", "m1", "child", 1_200, 1_400)]),
         ],
     )
     exporter = FakeExporter(
         {
             "root": root,
-            "child": _session("child", "root", [("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)])]),
+            "child": opencode_session("child", "root", [("c1", 1_300, "m", [step("cs1", "child", "c1", 20)])]),
         }
     )
     sample = _adapter(spawn_executor, exporter).parse_usage(
-        _events([_step("rs1", "root", "r0", 3)], stamp=1_000),
+        opencode_events([step("rs1", "root", "r0", 3)], stamp=1_000),
         "spawn",
         invocation_start=_at(900),
         invocation_end=_at(1_500),
@@ -534,17 +540,19 @@ def test_out_of_window_tasks_listed_first_do_not_hide_later_in_window_ones(spawn
 def test_a_completed_task_ending_past_the_invocation_is_cut_at_its_end(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
                 [
-                    ("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)]),
-                    ("c2", 1_700, "m", [_step("cs2", "child", "c2", 700)]),  # after the invocation ended
+                    ("c1", 1_300, "m", [step("cs1", "child", "c1", 20)]),
+                    ("c2", 1_700, "m", [step("cs2", "child", "c2", 700)]),  # after the invocation ended
                 ],
             )
         }
     )
-    output = _events([_task("t1", "root", "m0", "child", 1_200, 2_000), _step("rs1", "root", "m0", 3)], stamp=1_000)
+    output = opencode_events(
+        [opencode_task("t1", "root", "m0", "child", 1_200, 2_000), step("rs1", "root", "m0", 3)], stamp=1_000
+    )
     sample = _adapter(spawn_executor, exporter).parse_usage(
         output, "spawn", invocation_start=_at(900), invocation_end=_at(1_500)
     )
@@ -559,18 +567,18 @@ def _boundary_children() -> tuple[FakeExporter, list[dict[str, Any]]]:
     sizes = {"before": 100, "on-start": 20, "on-end": 3_000, "after": 40_000}
     exporter = FakeExporter(
         {
-            name: _session(name, "root", [("c1", start, "m", [_step(f"s-{name}", name, "c1", sizes[name])])])
+            name: opencode_session(name, "root", [("c1", start, "m", [step(f"s-{name}", name, "c1", sizes[name])])])
             for name, start in starts.items()
         }
     )
-    tasks = [_task(f"t-{name}", "root", "m0", name, start, start + 100) for name, start in starts.items()]
+    tasks = [opencode_task(f"t-{name}", "root", "m0", name, start, start + 100) for name, start in starts.items()]
     return exporter, tasks
 
 
 def test_a_task_is_counted_on_either_window_bound_and_not_a_millisecond_outside(spawn_executor: Executor) -> None:
     exporter, tasks = _boundary_children()
     sample = _adapter(spawn_executor, exporter).parse_usage(
-        _events([*tasks, _step("rs1", "root", "m0", 5)], stamp=1_000),
+        opencode_events([*tasks, step("rs1", "root", "m0", 5)], stamp=1_000),
         "spawn",
         invocation_start=_at(1_000),
         invocation_end=_at(1_500),
@@ -593,7 +601,7 @@ def test_the_transcript_fallback_counts_a_task_on_either_window_bound_and_not_a_
                 "modelID": "m",
                 "time": {"created": 900},
             },
-            "parts": [*tasks, _step("rs1", "root", "m0", 5)],
+            "parts": [*tasks, step("rs1", "root", "m0", 5)],
         }
     )
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage(
@@ -605,9 +613,9 @@ def test_the_transcript_fallback_counts_a_task_on_either_window_bound_and_not_a_
 def _startless_task_with_child() -> tuple[FakeExporter, dict[str, Any]]:
     """A task part that never recorded its start, over a child step inside the invocation."""
     exporter = FakeExporter(
-        {"child": _session("child", "root", [("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)])])}
+        {"child": opencode_session("child", "root", [("c1", 1_300, "m", [step("cs1", "child", "c1", 20)])])}
     )
-    task = _task("t1", "root", "m0", "child", 0, 1_400)
+    task = opencode_task("t1", "root", "m0", "child", 0, 1_400)
     task["state"]["time"] = {"end": 1_400}
     return exporter, task
 
@@ -615,7 +623,7 @@ def _startless_task_with_child() -> tuple[FakeExporter, dict[str, Any]]:
 def test_a_task_with_no_recorded_start_is_not_counted_under_an_end_only_window(spawn_executor: Executor) -> None:
     exporter, task = _startless_task_with_child()
     sample = _adapter(spawn_executor, exporter).parse_usage(
-        _events([task, _step("rs1", "root", "m0", 5)], stamp=1_000), "spawn", invocation_end=_at(1_500)
+        opencode_events([task, step("rs1", "root", "m0", 5)], stamp=1_000), "spawn", invocation_end=_at(1_500)
     )
     assert sample is not None
     assert sample.input_tokens == 5
@@ -635,7 +643,7 @@ def test_the_transcript_fallback_skips_a_task_with_no_recorded_start_under_an_en
                 "modelID": "m",
                 "time": {"created": 900},
             },
-            "parts": [task, _step("rs1", "root", "m0", 5)],
+            "parts": [task, step("rs1", "root", "m0", 5)],
         }
     )
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage([message], "spawn", invocation_end=_at(1_500))
@@ -643,8 +651,10 @@ def test_the_transcript_fallback_skips_a_task_with_no_recorded_start_under_an_en
 
 
 def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_executor: Executor) -> None:
-    root = _session("root", None, [("m0", 1_100, "root-model", [_task("t1", "root", "m0", "child", 1_200, None)])])
-    child = _session("child", "root", [("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)])])
+    root = opencode_session(
+        "root", None, [("m0", 1_100, "root-model", [opencode_task("t1", "root", "m0", "child", 1_200, None)])]
+    )
+    child = opencode_session("child", "root", [("c1", 1_300, "child-model", [step("cs1", "child", "c1", 20)])])
 
     class Catalog:
         def __init__(self, child_priced: bool) -> None:
@@ -656,7 +666,7 @@ def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_exe
             rate = OpenCodeRate(input=10 if model == "child-model" else 1, output=0, cache_read=0, cache_write=0)
             return OpenCodeModelPrice(base=rate)
 
-    output = _events([_step("rs1", "root", "m0", 3)], stamp=1_000)
+    output = opencode_events([step("rs1", "root", "m0", 3)], stamp=1_000)
     for priced in (True, False):
         adapter = _adapter(spawn_executor, FakeExporter({"root": root, "child": child}), price_catalog=Catalog(priced))
         sample = adapter.parse_usage(
@@ -678,14 +688,21 @@ def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_exe
 def test_a_cycle_between_sessions_terminates(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
-                [("c1", 110, "m", [_step("cs1", "child", "c1", 20), _task("t2", "child", "c1", "root", 100, 200)])],
+                [
+                    (
+                        "c1",
+                        110,
+                        "m",
+                        [step("cs1", "child", "c1", 20), opencode_task("t2", "child", "c1", "root", 100, 200)],
+                    )
+                ],
             ),
         }
     )
-    output = _events([_task("t1", "root", "m0", "child", 100, 200), _step("rs1", "root", "m0", 3)])
+    output = opencode_events([opencode_task("t1", "root", "m0", "child", 100, 200), step("rs1", "root", "m0", 3)])
     sample = _adapter(spawn_executor, exporter).parse_usage(output, "spawn")
     assert sample is not None
     assert sample.input_tokens == 23
@@ -716,9 +733,11 @@ def test_one_unpriceable_step_voids_the_estimate_and_a_missing_export_does_not(s
 
 def test_a_child_step_with_its_own_cost_adds_into_cost_usd(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
-        {"child": _session("child", "root", [("c1", 110, "m", [_step("cs1", "child", "c1", 20, cost=0.5)])])}
+        {"child": opencode_session("child", "root", [("c1", 110, "m", [step("cs1", "child", "c1", 20, cost=0.5)])])}
     )
-    output = _events([_task("t1", "root", "m0", "child", 100, 200), _step("rs1", "root", "m0", 3, cost=0.25)])
+    output = opencode_events(
+        [opencode_task("t1", "root", "m0", "child", 100, 200), step("rs1", "root", "m0", 3, cost=0.25)]
+    )
     sample = _adapter(spawn_executor, exporter).parse_usage(output, "spawn")
     assert sample is not None
     assert sample.cost_usd == pytest.approx(0.75)
@@ -743,7 +762,7 @@ def test_the_transcript_fallback_folds_descendants_from_root_export_lines(spawn_
                 "modelID": "gpt-5.6-sol",
                 "time": {"created": 90, "completed": 210},
             },
-            "parts": [_task("t1", "root", "m0", "child", 100, 200), _step("rs1", "root", "m0", 3)],
+            "parts": [opencode_task("t1", "root", "m0", "child", 100, 200), step("rs1", "root", "m0", 3)],
         }
     )
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage([root_message], "spawn")
@@ -754,17 +773,19 @@ def test_the_transcript_fallback_folds_descendants_from_root_export_lines(spawn_
 def test_transcript_fallback_caps_running_task_at_invocation_end(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
                 [
-                    ("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)]),
-                    ("c2", 1_700, "m", [_step("cs2", "child", "c2", 700)]),
+                    ("c1", 1_300, "m", [step("cs1", "child", "c1", 20)]),
+                    ("c2", 1_700, "m", [step("cs2", "child", "c2", 700)]),
                 ],
             )
         }
     )
-    line = _session("root", None, [("m0", 1_100, "m", [_task("t1", "root", "m0", "child", 1_200, None)])])
+    line = opencode_session(
+        "root", None, [("m0", 1_100, "m", [opencode_task("t1", "root", "m0", "child", 1_200, None)])]
+    )
     [message] = json.loads(line)["messages"]
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage(
         [json.dumps(message)],
@@ -778,22 +799,22 @@ def test_transcript_fallback_caps_running_task_at_invocation_end(spawn_executor:
 def test_transcript_fallback_skips_a_continued_childs_earlier_generation_window(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "child": _session(
+            "child": opencode_session(
                 "child",
                 "root",
                 [
-                    ("c0", 150, "m", [_step("cs0", "child", "c0", 900)]),  # the earlier generation's turn
-                    ("c1", 1_700, "m", [_step("cs1", "child", "c1", 20)]),
+                    ("c0", 150, "m", [step("cs0", "child", "c0", 900)]),  # the earlier generation's turn
+                    ("c1", 1_700, "m", [step("cs1", "child", "c1", 20)]),
                 ],
             )
         }
     )
-    line = _session(
+    line = opencode_session(
         "root",
         None,
         [
-            ("m0", 90, "m", [_task("t1", "root", "m0", "child", 100, 200)]),
-            ("m1", 1_600, "m", [_task("t2", "root", "m1", "child", 1_600, 2_000)]),
+            ("m0", 90, "m", [opencode_task("t1", "root", "m0", "child", 100, 200)]),
+            ("m1", 1_600, "m", [opencode_task("t2", "root", "m1", "child", 1_600, 2_000)]),
         ],
     )
     messages = [json.dumps(message) for message in json.loads(line)["messages"]]
@@ -818,7 +839,7 @@ def test_the_transcript_fallback_closes_a_never_ended_tasks_window_at_its_lines_
                 "time": {"created": 90, "completed": 210},
             },
             # A killed run: the task part never recorded an end.
-            "parts": [_task("t1", "root", "m0", "child", 100, None), _step("rs1", "root", "m0", 3)],
+            "parts": [opencode_task("t1", "root", "m0", "child", 100, None), step("rs1", "root", "m0", 3)],
         }
     )
     sample = _adapter(spawn_executor, exporter).sum_transcript_usage([root_message], "spawn")

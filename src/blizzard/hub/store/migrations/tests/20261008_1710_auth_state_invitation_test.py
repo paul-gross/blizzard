@@ -2,11 +2,9 @@
 it, beside the rows already in flight; a re-run over a store that already holds the column changes nothing; and the
 downgrade drops it, restoring the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +32,7 @@ _COLUMN = "invitation_token_hash"
 
 
 @contextmanager
-def _at_the_move(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine]]:
+def _at_the_move(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine]]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_MOVE)

@@ -28,7 +28,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
-from tests.test_runner_restart_resume import _running_chunk
+from tests.test_runner_restart_resume import running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (~1h)
@@ -342,7 +342,7 @@ def test_marked_crash_lease_resumes_in_place(tmp_path: Path):
     ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(4321, "start-4321")})  # the survivor is already gone; the resumed pid is live
@@ -369,7 +369,7 @@ def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path: Path):
     ResumeIntents(make_stores(store)).mark_crashed(liveness=store, process=FakeProbe(alive=set()), now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = _running_chunk()
+    hub.chunks["ch_1"] = running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(4321, "start-4321")})

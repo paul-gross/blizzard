@@ -58,7 +58,7 @@ from tests.support import make_graph
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_T1 = _T0 + timedelta(minutes=1)
+T1 = _T0 + timedelta(minutes=1)
 
 
 def _node(
@@ -86,7 +86,7 @@ def _node(
     )
 
 
-_BUILD = _node(
+BUILD = _node(
     "nd_build",
     "build",
     choices=[
@@ -102,11 +102,11 @@ _LAND = _node("nd_land", "land", executor=Executor.HUB, choices=[Choice("ch_land
 _GATE = _node(
     "nd_gate", "gate", judged_by=JudgedBy.HUMAN, choices=[Choice("ch_yes", "yes", ""), Choice("ch_no", "no", "")]
 )
-_GRAPH = make_graph(
+GRAPH = make_graph(
     "gr_a",
     "work",
     entry_node_id="nd_build",
-    nodes=[_BUILD, _REVIEW, _LAND, _GATE],
+    nodes=[BUILD, _REVIEW, _LAND, _GATE],
     edges=[
         Edge("nd_build", "ch_ship", RESERVED_TERMINAL),
         Edge("nd_build", "ch_review", "review"),
@@ -118,7 +118,7 @@ _GRAPH = make_graph(
         Edge("nd_gate", "ch_no", "graph:delivery", target_graph="delivery"),
     ],
 )
-_DELIVERY = make_graph(
+DELIVERY = make_graph(
     "gr_d",
     "delivery",
     entry_node_id="nd_d_entry",
@@ -129,8 +129,8 @@ _DELIVERY = make_graph(
         _node("nd_d_land", "land", graph_id="gr_d", executor=Executor.HUB),
     ],
 )
-_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
-_AT_BUILD = ChunkFacts(minted=True, promoted=True, leases=[LeaseFact(epoch=1, minted_at=_T0)])
+CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
+AT_BUILD = ChunkFacts(minted=True, promoted=True, leases=[LeaseFact(epoch=1, minted_at=_T0)])
 
 
 class _SubmissionFields(TypedDict, total=False):
@@ -141,11 +141,13 @@ class _SubmissionFields(TypedDict, total=False):
     lease_id: str | None
 
 
-def _submission(choice: str, *, from_node_id: str = "nd_build", **fields: Unpack[_SubmissionFields]) -> Completion:
+def completion_submission(
+    choice: str, *, from_node_id: str = "nd_build", **fields: Unpack[_SubmissionFields]
+) -> Completion:
     return Completion(choice=choice, epoch=1, runner_id="runner-a", from_node_id=from_node_id, **fields)
 
 
-def _gate(
+def gate_decision(
     *, chunk_id: str = "chk_1", node_id: str = "nd_gate", resolved: str | None = None, transitioned: bool = False
 ) -> GateDecision:
     return GateDecision(
@@ -165,78 +167,78 @@ def _gate(
 
 
 def test_a_report_at_the_current_epoch_must_come_from_the_current_node() -> None:
-    refuse_incoherent_attempt(_AT_BUILD, _GRAPH, from_node=_BUILD, epoch=1)
+    refuse_incoherent_attempt(AT_BUILD, GRAPH, from_node=BUILD, epoch=1)
     with pytest.raises(CompletionNotAtCurrentNode):
-        refuse_incoherent_attempt(_AT_BUILD, _GRAPH, from_node=_REVIEW, epoch=1)
+        refuse_incoherent_attempt(AT_BUILD, GRAPH, from_node=_REVIEW, epoch=1)
 
 
 def test_a_moved_chunk_judges_the_report_against_its_newest_movement() -> None:
     moved = replace(
-        _AT_BUILD,
+        AT_BUILD,
         transitions=[
             TransitionFact(
-                to_node_id="nd_review", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_T1, graph_id="gr_a"
+                to_node_id="nd_review", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=T1, graph_id="gr_a"
             )
         ],
     )
-    refuse_incoherent_attempt(moved, _GRAPH, from_node=_REVIEW, epoch=1)
+    refuse_incoherent_attempt(moved, GRAPH, from_node=_REVIEW, epoch=1)
     with pytest.raises(CompletionNotAtCurrentNode):
-        refuse_incoherent_attempt(moved, _GRAPH, from_node=_BUILD, epoch=1)
+        refuse_incoherent_attempt(moved, GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_a_report_at_another_epoch_is_left_to_the_write_fence() -> None:
-    refuse_incoherent_attempt(_AT_BUILD, _GRAPH, from_node=_REVIEW, epoch=0)
+    refuse_incoherent_attempt(AT_BUILD, GRAPH, from_node=_REVIEW, epoch=0)
 
 
 def test_an_attempt_whose_own_escalation_is_open_is_parked() -> None:
-    escalated = replace(_AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=_T1)])
+    escalated = replace(AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=T1)])
     with pytest.raises(ChunkEscalated):
-        refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1)
+        refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_the_hubs_own_unresolvable_target_escalation_parks_all_but_a_re_escalation() -> None:
-    unresolvable = EscalationFact(epoch=1, recorded_at=_T1, cause=EscalationCause.MIGRATION_TARGET_UNRESOLVABLE)
-    escalated = replace(_AT_BUILD, escalations=[unresolvable])
-    refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1, re_escalating=True)
+    unresolvable = EscalationFact(epoch=1, recorded_at=T1, cause=EscalationCause.MIGRATION_TARGET_UNRESOLVABLE)
+    escalated = replace(AT_BUILD, escalations=[unresolvable])
+    refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1, re_escalating=True)
     with pytest.raises(ChunkEscalated):
-        refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1)
+        refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_the_hubs_own_escalate_choice_escalation_parks_all_but_a_re_escalation() -> None:
-    chosen = EscalationFact(epoch=1, recorded_at=_T1, cause=EscalationCause.ESCALATE_CHOICE)
-    escalated = replace(_AT_BUILD, escalations=[chosen])
-    refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1, re_escalating=True)
+    chosen = EscalationFact(epoch=1, recorded_at=T1, cause=EscalationCause.ESCALATE_CHOICE)
+    escalated = replace(AT_BUILD, escalations=[chosen])
+    refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1, re_escalating=True)
     with pytest.raises(ChunkEscalated):
-        refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1)
+        refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_a_runner_escalation_parks_even_a_re_escalation() -> None:
-    escalated = replace(_AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=_T1)])
+    escalated = replace(AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=T1)])
     with pytest.raises(ChunkEscalated):
-        refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1, re_escalating=True)
+        refuse_incoherent_attempt(escalated, GRAPH, from_node=BUILD, epoch=1, re_escalating=True)
 
 
 def test_an_escalation_superseded_by_a_later_lease_parks_nothing() -> None:
     superseded = replace(
-        _AT_BUILD,
-        leases=[LeaseFact(epoch=1, minted_at=_T0), LeaseFact(epoch=1, minted_at=_T1 + timedelta(minutes=1))],
-        escalations=[EscalationFact(epoch=1, recorded_at=_T1)],
+        AT_BUILD,
+        leases=[LeaseFact(epoch=1, minted_at=_T0), LeaseFact(epoch=1, minted_at=T1 + timedelta(minutes=1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=T1)],
     )
-    refuse_incoherent_attempt(superseded, _GRAPH, from_node=_BUILD, epoch=1)
+    refuse_incoherent_attempt(superseded, GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_an_attempt_whose_own_question_is_unanswered_is_parked() -> None:
-    asked = QuestionFact(question_id="qn_1", asked_at=_T1, epoch=1)
+    asked = QuestionFact(question_id="qn_1", asked_at=T1, epoch=1)
     with pytest.raises(OpenQuestion, match="qn_1"):
-        refuse_incoherent_attempt(replace(_AT_BUILD, questions=[asked]), _GRAPH, from_node=_BUILD, epoch=1)
+        refuse_incoherent_attempt(replace(AT_BUILD, questions=[asked]), GRAPH, from_node=BUILD, epoch=1)
     answered = replace(asked, answered=True)
-    refuse_incoherent_attempt(replace(_AT_BUILD, questions=[answered]), _GRAPH, from_node=_BUILD, epoch=1)
+    refuse_incoherent_attempt(replace(AT_BUILD, questions=[answered]), GRAPH, from_node=BUILD, epoch=1)
     earlier = replace(asked, epoch=0)
-    refuse_incoherent_attempt(replace(_AT_BUILD, questions=[earlier]), _GRAPH, from_node=_BUILD, epoch=1)
+    refuse_incoherent_attempt(replace(AT_BUILD, questions=[earlier]), GRAPH, from_node=BUILD, epoch=1)
 
 
 def test_a_runner_report_out_of_a_hub_executed_node_is_refused() -> None:
-    refuse_hub_executed(_BUILD)
+    refuse_hub_executed(BUILD)
     with pytest.raises(HubExecutedNode):
         refuse_hub_executed(_LAND)
 
@@ -245,9 +247,9 @@ def test_a_runner_report_out_of_a_hub_executed_node_is_refused() -> None:
 
 
 def test_a_runner_config_gate_needs_a_known_node_with_choices() -> None:
-    assert gate_refusal(_GRAPH, "nd_build") == _BUILD
+    assert gate_refusal(GRAPH, "nd_build") == BUILD
     with pytest.raises(CompletionRefused, match="no node nd_missing"):
-        gate_refusal(_GRAPH, "nd_missing")
+        gate_refusal(GRAPH, "nd_missing")
     with pytest.raises(CompletionRefused, match="no choices"):
         gate_refusal(make_graph("gr_b", "b", nodes=[_node("nd_bare", "bare", graph_id="gr_b")]), "nd_bare")
 
@@ -262,94 +264,94 @@ def test_a_gate_offers_the_nodes_own_choices() -> None:
 # --- Plain completion plan ---------------------------------------------------
 
 
-def _plain(submission: Completion, *, node: Node = _BUILD, gate: GateDecision | None = None) -> CompletionPlan:
-    return CompletionPlan.plain(_GRAPH, node, submission, open_gate=gate, produces_mode="enforce")
+def _plain(submission: Completion, *, node: Node = BUILD, gate: GateDecision | None = None) -> CompletionPlan:
+    return CompletionPlan.plain(GRAPH, node, submission, open_gate=gate, produces_mode="enforce")
 
 
 def test_a_plain_completion_lands_on_its_edges_destination() -> None:
-    assert _plain(_submission("ship")).to_node_id == RESERVED_TERMINAL
-    plan = _plain(_submission("review", check_results=[CheckOutcome(command="make test", passed=True)]))
+    assert _plain(completion_submission("ship")).to_node_id == RESERVED_TERMINAL
+    plan = _plain(completion_submission("review", check_results=[CheckOutcome(command="make test", passed=True)]))
     assert (plan.to_node_id, plan.migrates) == ("nd_review", False)
 
 
 def test_a_cross_graph_choice_migrates_instead() -> None:
-    plan = _plain(_submission("hand-off"))
+    plan = _plain(completion_submission("hand-off"))
     assert plan.migrates and plan.edge.target_graph == "delivery"
 
 
 def test_cross_graph_plain_completion_checks_the_source_nodes_outputs() -> None:
-    source = replace(_BUILD, produces=[ProducesSpec(name="handoff-notes")])
+    source = replace(BUILD, produces=[ProducesSpec(name="handoff-notes")])
     with pytest.raises(CompletionRefused, match="handoff-notes"):
-        _plain(_submission("hand-off"), node=source)
+        _plain(completion_submission("hand-off"), node=source)
     attached = CompletionArtifact(name="handoff-notes", kind=ArtifactKind.ASSET, content="ready", attached=True)
-    assert _plain(_submission("hand-off", artifacts=[attached]), node=source).migrates
+    assert _plain(completion_submission("hand-off", artifacts=[attached]), node=source).migrates
 
 
 def test_a_cross_graph_choice_that_requires_green_checks_is_refused_over_a_red_one() -> None:
     red = [CheckOutcome(command="make test", passed=False)]
     with pytest.raises(CompletionRefused, match="requires green checks"):
-        _plain(_submission("gated-hand-off", check_results=red))
+        _plain(completion_submission("gated-hand-off", check_results=red))
     green = [CheckOutcome(command="make test", passed=True)]
-    assert _plain(_submission("gated-hand-off", check_results=green)).migrates
+    assert _plain(completion_submission("gated-hand-off", check_results=green)).migrates
 
 
 def test_a_human_judged_node_is_left_only_by_its_resolving_transition() -> None:
     with pytest.raises(CompletionRefused, match="human signoff required"):
-        _plain(_submission("yes", from_node_id="nd_gate"), node=_GATE)
+        _plain(completion_submission("yes", from_node_id="nd_gate"), node=_GATE)
 
 
 def test_an_open_runner_config_gate_refuses_the_plain_completion() -> None:
     with pytest.raises(GateDecisionOpen):
-        _plain(_submission("ship"), gate=_gate(node_id="nd_build"))
+        _plain(completion_submission("ship"), gate=gate_decision(node_id="nd_build"))
 
 
 def test_a_resolved_but_uncarried_runner_config_gate_refuses_the_plain_completion() -> None:
-    gate = _gate(node_id="nd_build", resolved="yes")
+    gate = gate_decision(node_id="nd_build", resolved="yes")
     with pytest.raises(GateResolutionUnapplied, match="resolved to `yes` — submit its resolving transition"):
-        _plain(_submission("ship"), gate=gate)
+        _plain(completion_submission("ship"), gate=gate)
     with pytest.raises(GateResolutionUnapplied):
-        _plain(_submission("yes"), gate=gate)
+        _plain(completion_submission("yes"), gate=gate)
 
 
 def test_a_runner_config_gate_a_transition_carried_no_longer_refuses() -> None:
-    gate = replace(_gate(node_id="nd_build", resolved="yes"), transitioned=True)
-    assert _plain(_submission("ship"), gate=gate).to_node_id == RESERVED_TERMINAL
+    gate = replace(gate_decision(node_id="nd_build", resolved="yes"), transitioned=True)
+    assert _plain(completion_submission("ship"), gate=gate).to_node_id == RESERVED_TERMINAL
 
 
 def test_an_unknown_choice_or_destination_is_refused() -> None:
     with pytest.raises(CompletionRefused, match="no choice `nope`"):
-        _plain(_submission("nope"))
+        _plain(completion_submission("nope"))
     with pytest.raises(CompletionRefused, match="unknown node nowhere"):
-        _plain(_submission("lost"))
+        _plain(completion_submission("lost"))
 
 
 def test_a_red_check_refuses_a_choice_that_requires_green_ones() -> None:
     red = [CheckOutcome(command="make test", passed=False)]
     with pytest.raises(CompletionRefused, match="requires green checks"):
-        _plain(_submission("review", check_results=red))
+        _plain(completion_submission("review", check_results=red))
 
 
 # --- Resolving completion plan -----------------------------------------------
 
 
 def _resolving(choice: str, decision: GateDecision | None) -> CompletionPlan:
-    submission = _submission(choice, from_node_id="nd_gate", decision_id="dec_1")
-    return CompletionPlan.resolving(_GRAPH, _GATE, submission, decision, chunk=_CHUNK)
+    submission = completion_submission(choice, from_node_id="nd_gate", decision_id="dec_1")
+    return CompletionPlan.resolving(GRAPH, _GATE, submission, decision, chunk=CHUNK)
 
 
 def test_a_resolving_completion_takes_the_resolved_choice() -> None:
-    assert _resolving("yes", _gate(resolved="yes")).to_node_id == "nd_review"
-    assert _resolving("no", _gate(resolved="no")).migrates
+    assert _resolving("yes", gate_decision(resolved="yes")).to_node_id == "nd_review"
+    assert _resolving("no", gate_decision(resolved="no")).migrates
 
 
 @pytest.mark.parametrize(
     ("decision", "detail"),
     [
         (None, "does not match node `gate`"),
-        (_gate(chunk_id="chk_other", resolved="yes"), "does not match node `gate`"),
-        (_gate(node_id="nd_build", resolved="yes"), "does not match node `gate`"),
-        (_gate(), "is not yet resolved"),
-        (_gate(resolved="no"), "is not the resolved choice `no`"),
+        (gate_decision(chunk_id="chk_other", resolved="yes"), "does not match node `gate`"),
+        (gate_decision(node_id="nd_build", resolved="yes"), "does not match node `gate`"),
+        (gate_decision(), "is not yet resolved"),
+        (gate_decision(resolved="no"), "is not the resolved choice `no`"),
     ],
 )
 def test_a_resolving_completion_naming_a_gate_it_cannot_leave_is_refused(
@@ -362,7 +364,7 @@ def test_a_resolving_completion_naming_a_gate_it_cannot_leave_is_refused(
 # --- Migration replay --------------------------------------------------------
 
 
-def _migration(source: MigrationSource | None, executor: Executor = Executor.RUNNER) -> MigrationFact:
+def migration_fact(source: MigrationSource | None, executor: Executor = Executor.RUNNER) -> MigrationFact:
     return MigrationFact(
         from_node_id="nd_build",
         from_graph_id="gr_a",
@@ -371,7 +373,7 @@ def _migration(source: MigrationSource | None, executor: Executor = Executor.RUN
         choice_name="hand-off",
         model=None,
         epoch=1,
-        recorded_at=_T1,
+        recorded_at=T1,
         landed_node_executor=executor,
         source=source,
     )
@@ -380,13 +382,13 @@ def _migration(source: MigrationSource | None, executor: Executor = Executor.RUN
 @pytest.mark.parametrize(
     ("migration", "replay"),
     [
-        (_migration(MigrationSource.RESTART), ReplayedMigration.SUPERSEDED_BY_RESTART),
-        (_migration(MigrationSource.AUTHORED_EDGE, Executor.HUB), ReplayedMigration.HUB_NODE_TAKEN),
-        (_migration(MigrationSource.AUTHORED_EDGE), ReplayedMigration.MIGRATED),
+        (migration_fact(MigrationSource.RESTART), ReplayedMigration.SUPERSEDED_BY_RESTART),
+        (migration_fact(MigrationSource.AUTHORED_EDGE, Executor.HUB), ReplayedMigration.HUB_NODE_TAKEN),
+        (migration_fact(MigrationSource.AUTHORED_EDGE), ReplayedMigration.MIGRATED),
     ],
 )
 def test_a_replayed_migration_is_classified_by_what_landed(migration: MigrationFact, replay: ReplayedMigration) -> None:
-    facts = replace(_AT_BUILD, migrations=[migration])
+    facts = replace(AT_BUILD, migrations=[migration])
     assert replayed_migration(facts, from_node_id="nd_build", epoch=1) is replay
 
 
@@ -400,7 +402,7 @@ def test_a_replay_answers_without_claiming_a_fresh_migration() -> None:
 # --- Migration targets and the landing consult -------------------------------
 
 _NEWER_WORK = replace(
-    make_graph("gr_a2", "work", entry_node_id="nd_build", nodes=[]), created_at=_T1 + timedelta(days=1)
+    make_graph("gr_a2", "work", entry_node_id="nd_build", nodes=[]), created_at=T1 + timedelta(days=1)
 )
 _ON = FollowLatest(enabled=True)
 
@@ -408,9 +410,9 @@ _ON = FollowLatest(enabled=True)
 def _targets(chunk: Chunk, *, intent_retired: bool = False, follow: FollowLatest = _ON) -> MigrationTargets:
     return MigrationTargets.of(
         chunk,
-        _GRAPH,
-        cross_graph=_DELIVERY,
-        intent_graph=_DELIVERY,
+        GRAPH,
+        cross_graph=DELIVERY,
+        intent_graph=DELIVERY,
         intent_retired=intent_retired,
         follow_latest=follow,
         newest_same_name=_NEWER_WORK,
@@ -418,24 +420,24 @@ def _targets(chunk: Chunk, *, intent_retired: bool = False, follow: FollowLatest
 
 
 def _with_intent(node_name: str | None) -> Chunk:
-    return replace(_CHUNK, intended_migration=IntendedMigration.toward("gr_d", node_name))
+    return replace(CHUNK, intended_migration=IntendedMigration.toward("gr_d", node_name))
 
 
 def test_follow_latest_drifts_only_without_an_intent() -> None:
-    assert _targets(_CHUNK).follow_latest == _NEWER_WORK
-    assert _targets(_CHUNK, follow=FollowLatest(enabled=False)).follow_latest is None
+    assert _targets(CHUNK).follow_latest == _NEWER_WORK
+    assert _targets(CHUNK, follow=FollowLatest(enabled=False)).follow_latest is None
     with_intent = _targets(_with_intent(None))
-    assert (with_intent.intended, with_intent.follow_latest) == (_DELIVERY, None)
+    assert (with_intent.intended, with_intent.follow_latest) == (DELIVERY, None)
 
 
 def test_a_retired_intent_target_moves_nothing() -> None:
     assert _targets(_with_intent(None), intent_retired=True).intended is None
-    assert _targets(_CHUNK).intended is None
+    assert _targets(CHUNK).intended is None
 
 
 def test_the_cross_graph_name_is_the_submitted_choices_target() -> None:
-    assert MigrationTargets.cross_graph_name(_GRAPH, _submission("hand-off")) == "delivery"
-    assert MigrationTargets.cross_graph_name(_GRAPH, _submission("ship")) is None
+    assert MigrationTargets.cross_graph_name(GRAPH, completion_submission("hand-off")) == "delivery"
+    assert MigrationTargets.cross_graph_name(GRAPH, completion_submission("ship")) is None
 
 
 def _review_edge() -> Edge:
@@ -447,7 +449,7 @@ def test_a_forced_intent_lands_on_its_named_node() -> None:
     landing = Landing.consult(chunk, _review_edge(), _targets(chunk))
     assert landing is not None
     assert (landing.graph, landing.node_id, landing.source, landing.clear_intent) == (
-        _DELIVERY,
+        DELIVERY,
         "nd_d_land",
         MigrationSource.INTENT,
         True,
@@ -464,18 +466,18 @@ def test_an_auto_intent_lands_on_the_same_named_node_or_waits() -> None:
 
 
 def test_follow_latest_lands_on_the_same_named_node_except_into_the_terminal() -> None:
-    landing = Landing.consult(_CHUNK, _review_edge(), _targets(_CHUNK))
+    landing = Landing.consult(CHUNK, _review_edge(), _targets(CHUNK))
     assert landing is not None
     assert (landing.graph, landing.source, landing.clear_intent) == (_NEWER_WORK, MigrationSource.FOLLOW_LATEST, False)
-    assert Landing.consult(_CHUNK, Edge("nd_build", "ch_ship", RESERVED_TERMINAL), _targets(_CHUNK)) is None
-    assert Landing.consult(_CHUNK, _review_edge(), _targets(_CHUNK, follow=FollowLatest(enabled=False))) is None
+    assert Landing.consult(CHUNK, Edge("nd_build", "ch_ship", RESERVED_TERMINAL), _targets(CHUNK)) is None
+    assert Landing.consult(CHUNK, _review_edge(), _targets(CHUNK, follow=FollowLatest(enabled=False))) is None
 
 
 def test_an_authored_edge_lands_on_the_same_named_node_and_repins_its_model() -> None:
     edge = Edge("nd_build", "ch_hand", "graph:delivery", target_graph="delivery", model="opus")
-    landing = Landing.authored(edge, _DELIVERY, _BUILD)
+    landing = Landing.authored(edge, DELIVERY, BUILD)
     assert (landing.node_id, landing.source, landing.model) == ("nd_d_build", MigrationSource.AUTHORED_EDGE, "opus")
-    assert Landing.authored(edge, _DELIVERY, _GATE).node_id == "nd_d_entry"
+    assert Landing.authored(edge, DELIVERY, _GATE).node_id == "nd_d_entry"
 
 
 # --- Next step ---------------------------------------------------------------
@@ -492,7 +494,7 @@ def test_an_authored_edge_lands_on_the_same_named_node_and_repins_its_model() ->
     ],
 )
 def test_the_next_step_follows_the_destination(to_node_id: str, kind: NextStepKind) -> None:
-    assert NextStep.of(_GRAPH, to_node_id).kind is kind
+    assert NextStep.of(GRAPH, to_node_id).kind is kind
 
 
 # --- Stored artifacts --------------------------------------------------------
@@ -503,7 +505,7 @@ def test_a_commit_artifact_encodes_branch_and_hash_and_alone_carries_its_repo() 
         name="c", kind=ArtifactKind.GIT_COMMIT, forge="github", repo="o/r", branch_name="main", commit_hash="abc"
     )
     note = CompletionArtifact(name="n", kind=ArtifactKind.ASSET, repo="o/r", content="hello")
-    rows = stored_artifacts("chk_1", _BUILD, 2, [commit, note], artifact_ids=["ar_1", "ar_2"])
+    rows = stored_artifacts("chk_1", BUILD, 2, [commit, note], artifact_ids=["ar_1", "ar_2"])
 
     assert [(r.artifact_id, r.data, r.repo, r.forge) for r in rows] == [
         ("ar_1", "main:abc", "o/r", "github"),
@@ -515,4 +517,4 @@ def test_a_commit_artifact_encodes_branch_and_hash_and_alone_carries_its_repo() 
 def test_every_submitted_artifact_gets_exactly_one_minted_id() -> None:
     note = CompletionArtifact(name="n", kind=ArtifactKind.ASSET)
     with pytest.raises(ValueError):
-        stored_artifacts("chk_1", _BUILD, 1, [note], artifact_ids=[])
+        stored_artifacts("chk_1", BUILD, 1, [note], artifact_ids=[])

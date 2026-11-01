@@ -14,16 +14,16 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from tests.support import hub_scoped_engine
 
 # What a revision that stamps a time reads (``migration_clock``).
-_MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
-_PM_POINTER_SOURCE_REF = "20260716_1512_hub_pm_pointer_source_ref"
+PM_POINTER_SOURCE_REF = "20260716_1512_hub_pm_pointer_source_ref"
 
 
-def _store(tmp_path: Path, revision: str) -> tuple[MigrationRunner, str]:
+def scratch_store(tmp_path: Path, revision: str) -> tuple[MigrationRunner, str]:
     """A scratch hub store migrated from ``base`` up to exactly ``revision``."""
     url = f"sqlite:///{tmp_path}/hub.db"
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
     runner.upgrade(revision)
     return runner, url
 
@@ -36,10 +36,10 @@ def _columns(url: str, table: str) -> set[str]:
         engine.dispose()
 
 
-def _assert_table_shape_is_frozen(tmp_path: Path, revision: str, table: str, expected: set[str]) -> None:
+def assert_table_shape_is_frozen(tmp_path: Path, revision: str, table: str, expected: set[str]) -> None:
     """A ``base -> <revision>`` build lands the shape that revision shipped with, not
     head-of-tree ``src/blizzard/hub/store/schema.py``'s — the frozen local ``sa.Table`` literal decision. Also
     pins that pre-rename revisions still speak the old table name (``canon:no-retro``)."""
-    _runner, url = _store(tmp_path, revision)
+    _runner, url = scratch_store(tmp_path, revision)
 
     assert _columns(url, table) == expected

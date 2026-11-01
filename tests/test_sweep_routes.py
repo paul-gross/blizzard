@@ -28,7 +28,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_sweeps_per_tenant import _close_events, _landed_hub_ref
+from tests.test_sweeps_per_tenant import close_events, landed_hub_ref
 
 pytestmark = pytest.mark.component
 
@@ -56,7 +56,7 @@ def _two_tenants(tmp_path: Path, mode: SweepMode = SweepMode.TIMED) -> _Hub:
     hub = build_hub(tmp_path)
     carried = default_tenant(hub.engine)
     other = hub.add_tenant("other").tenant
-    stores = {carried: _landed_hub_ref(hub, carried, "ch_carried"), other: _landed_hub_ref(hub, other, "ch_other")}
+    stores = {carried: landed_hub_ref(hub, carried, "ch_carried"), other: landed_hub_ref(hub, other, "ch_other")}
     app = hub.wired_app
     app.state.config = dataclasses.replace(app.state.config, sweeps=SweepModes(dict.fromkeys(SweepName, mode)))
     return _Hub(hub, carried, other, stores)
@@ -76,9 +76,9 @@ def test_a_tenant_pass_answers_once_its_writes_are_readable_and_leaves_the_other
     _completed_in_order(world.post(_TENANT_PASS.format("close_drain")))
 
     assert world.pending(world.carried) == []
-    assert _close_events(world.hub, world.carried) == ["ch_carried"]
+    assert close_events(world.hub, world.carried) == ["ch_carried"]
     assert world.pending(world.other) == ["ch_other"]
-    assert _close_events(world.hub, world.other) == []
+    assert close_events(world.hub, world.other) == []
 
 
 @pytest.mark.parametrize("mode", list(SweepMode))
@@ -91,7 +91,7 @@ def test_a_pass_over_every_tenant_answers_once_every_tenants_writes_are_readable
 
     for tenant, chunk_id in ((world.carried, "ch_carried"), (world.other, "ch_other")):
         assert world.pending(tenant) == []
-        assert _close_events(world.hub, tenant) == [chunk_id]
+        assert close_events(world.hub, tenant) == [chunk_id]
 
 
 @pytest.mark.parametrize("name", ["forge_status", "event_derivation"])

@@ -377,9 +377,9 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 
 
 def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
-    tmp_path: Path, spawn_executor: Executor
+    tmp_path, spawn_executor: Executor
 ) -> None:
-    from tests.test_runner_harness_opencode_subagents import _events, _session, _step, _task
+    from tests.test_runner_harness_opencode_subagents import opencode_events, opencode_session, opencode_task, step
 
     def at(ms: int) -> datetime:
         return datetime.fromtimestamp(ms / 1000, UTC)
@@ -398,15 +398,17 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
             resolved_model="openai/root",
         )
     )
-    root = _session("root", None, [("m1", 1_100, "root", [_task("t1", "root", "m1", "child", 1_200, None)])])
-    child = _session(
+    root = opencode_session(
+        "root", None, [("m1", 1_100, "root", [opencode_task("t1", "root", "m1", "child", 1_200, None)])]
+    )
+    child = opencode_session(
         "child",
         "root",
         [
-            ("c1", 1_300, "child", [_step("cs1", "child", "c1", 20)]),
-            ("during-judge", 1_475, "child", [_step("cs-judge", "child", "during-judge", 99)]),
-            ("c2", 1_700, "child", [_step("cs2", "child", "c2", 30)]),
-            ("c3", 2_300, "child", [_step("cs3", "child", "c3", 700)]),
+            ("c1", 1_300, "child", [step("cs1", "child", "c1", 20)]),
+            ("during-judge", 1_475, "child", [step("cs-judge", "child", "during-judge", 99)]),
+            ("c2", 1_700, "child", [step("cs2", "child", "c2", 30)]),
+            ("c3", 2_300, "child", [step("cs3", "child", "c3", 700)]),
         ],
     )
     exporter = FakeExporter({"root": root, "child": child})
@@ -421,12 +423,14 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
-    (stdout_dir / "lease_1.1.stdout").write_text(_events([_step("rs1", "root", "m0", 3)], root="root", stamp=1_000))
+    (stdout_dir / "lease_1.1.stdout").write_text(
+        opencode_events([step("rs1", "root", "m0", 3)], root="root", stamp=1_000)
+    )
     (stdout_dir / "lease_1.2.stdout").write_text(
-        _events(
+        opencode_events(
             [
-                _task("t2", "root", "m2", "child", 1_600, 2_000),
-                _step("rs2", "root", "m2", 4),
+                opencode_task("t2", "root", "m2", "child", 1_600, 2_000),
+                step("rs2", "root", "m2", 4),
             ],
             root="root",
             stamp=1_900,

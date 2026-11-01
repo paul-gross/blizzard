@@ -17,10 +17,10 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.migrations import MIGRATION_CLOCK_ATTRIBUTE
 from blizzard.hub.store import MIGRATIONS_DIR
 
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-_NOW = datetime(2026, 10, 8, 19, 0, tzinfo=UTC)
+NOW = datetime(2026, 10, 8, 19, 0, tzinfo=UTC)
 
 
 def _filler(column: ReflectedColumn) -> object:
@@ -30,11 +30,11 @@ def _filler(column: ReflectedColumn) -> object:
     if "BOOL" in kind:
         return False
     if "DATE" in kind or "TIME" in kind:
-        return _T0
+        return T0
     return "x"
 
 
-def _insert(engine: sa.Engine, table: str, rows: list[dict[str, object]]) -> None:
+def insert(engine: sa.Engine, table: str, rows: list[dict[str, object]]) -> None:
     """``rows`` into ``table`` as the store holds it, each required column the row leaves out filled."""
     columns = sa.inspect(engine).get_columns(table)
     required = [c for c in columns if not c["nullable"] and c["default"] is None and not c.get("autoincrement")]
@@ -47,14 +47,14 @@ def _insert(engine: sa.Engine, table: str, rows: list[dict[str, object]]) -> Non
             conn.execute(sa.insert(reflected).values({**filled, **row}))
 
 
-def _query(engine: sa.Engine, sql: str, **params: object) -> list[tuple[Any, ...]]:
+def query(engine: sa.Engine, sql: str, **params: object) -> list[tuple[Any, ...]]:
     with engine.connect() as conn:
         return [tuple(row) for row in conn.execute(sa.text(sql), params)]
 
 
-def _run_step(conn: sa.Connection, step: Any) -> None:
+def run_step(conn: sa.Connection, step: Any) -> None:
     config = Config()
-    config.attributes[MIGRATION_CLOCK_ATTRIBUTE] = FixedClock(_NOW)
+    config.attributes[MIGRATION_CLOCK_ATTRIBUTE] = FixedClock(NOW)
     environment = EnvironmentContext(config, ScriptDirectory(str(MIGRATIONS_DIR)))
     with Operations.context(MigrationContext.configure(conn, environment_context=environment)):
         step(conn)

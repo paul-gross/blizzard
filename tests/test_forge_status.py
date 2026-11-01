@@ -39,7 +39,7 @@ from tests.support import (
     ingest,
     scoped_connections,
 )
-from tests.test_store_work_source_registry import _create, _promote, forge
+from tests.test_store_work_source_registry import create, forge, promote
 
 # Re-exported so pytest resolves the registry suite's `forge` fixture here; the tests request it by name.
 _FIXTURES = (forge,)
@@ -339,8 +339,8 @@ def test_a_retired_source_has_its_labels_cleared_once(
     hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
 ) -> None:
     client, services, memory, double, forge_url = hosted
-    source_id = _create(client, services, forge_url, annotate=True)
-    _promote(client, "widget:1")
+    source_id = create(client, services, forge_url, annotate=True)
+    promote(client, "widget:1")
     assert services.annotation is not None
     services.annotation.sweep()
     assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
@@ -365,8 +365,8 @@ def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
     """With no credential left there is no clearer to reach the forge: the departure is
     forgotten rather than retried forever, and the labels stay as they were."""
     client, services, memory, double, forge_url = hosted
-    source_id = _create(client, services, forge_url, annotate=True)
-    _promote(client, "widget:1")
+    source_id = create(client, services, forge_url, annotate=True)
+    promote(client, "widget:1")
     assert services.annotation is not None
     services.annotation.sweep()
     assert memory.annotated_sources() == {source_id}

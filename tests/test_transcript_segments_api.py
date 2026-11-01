@@ -20,7 +20,7 @@ from blizzard.hub.domain.observability.transcripts import (
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
 from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
-from tests.test_fleet_auth import _enroll, _register
+from tests.test_fleet_auth import enroll_runner, register_runner
 
 pytestmark = pytest.mark.component
 
@@ -65,11 +65,11 @@ def _record(
     }
 
 
-def _cookie(token: str) -> dict[str, str]:
+def cookie(token: str) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
 
 
-def _bearer(token: str) -> dict[str, str]:
+def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -77,11 +77,11 @@ def _seed_enrolled(hub: HubHarness, runner_id: str = "runner-a", workspace_id: s
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
     ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
-    _register(hub, runner_id=runner_id, workspace_id=workspace_id)
-    return _enroll(hub, runner_id)
+    register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
+    return enroll_runner(hub, runner_id)
 
 
-def _ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
+def ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])
@@ -92,7 +92,7 @@ def _ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, poi
 
 def test_ingest_lands_records_and_returns_an_ack(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
 
     resp = hub.client.post(
         "/api/fleet/transcripts",
@@ -108,7 +108,7 @@ def test_ingest_lands_records_and_returns_an_ack(tmp_path: Path) -> None:
 
 def test_a_replayed_ingest_is_idempotent_through_the_route(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     payload = {"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]}
 
     hub.client.post("/api/fleet/transcripts", json=payload)
@@ -120,10 +120,10 @@ def test_a_replayed_ingest_is_idempotent_through_the_route(tmp_path: Path) -> No
 
 def test_ingest_accepts_a_record_with_and_without_spawn_cwd_and_no_read_returns_it(tmp_path: Path) -> None:
     seed_hub = build_hub(tmp_path)
-    _register(seed_hub, runner_id="r1")
-    runner = _bearer(_enroll(seed_hub, "r1"))
+    register_runner(seed_hub, runner_id="r1")
+    runner = bearer(enroll_runner(seed_hub, "r1"))
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     with_cwd = _record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0, segment_id="sg_1") | {"spawn_cwd": "/ws"}
     without = _record(chunk_id, seq=2, turn_range_start=0, turn_range_end=0, segment_id="sg_2")
 
@@ -156,7 +156,7 @@ def test_ingest_attributes_the_batch_to_the_tokens_runner_whatever_its_body_decl
     resp = hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "runner-b", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["runner_id"] == "runner-a"
@@ -176,7 +176,7 @@ def test_list_segments_is_403_below_transcript_read(tmp_path: Path) -> None:
     guest = seed_user(hub, username="grace", role=Role.GUEST)
     token = seed_session(hub, guest)
 
-    resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=_cookie(token))
+    resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=cookie(token))
     assert resp.status_code == 403
 
 
@@ -184,9 +184,9 @@ def test_list_segments_is_200_at_contributor(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=cookie(token))
     assert resp.status_code == 200
     assert resp.json()["chunk_id"] == chunk_id
     assert resp.json()["segments"] == []
@@ -203,34 +203,34 @@ def test_get_segment_is_403_below_transcript_read(tmp_path: Path) -> None:
     guest = seed_user(hub, username="grace", role=Role.GUEST)
     token = seed_session(hub, guest)
 
-    resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=_cookie(token))
+    resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=cookie(token))
     assert resp.status_code == 403
 
 
-def _enrolled_runner_token(tmp_path: Path) -> str:
+def enrolled_runner_token(tmp_path: Path) -> str:
     """A runner token enrolled through its own throwaway hub over ``tmp_path``, for the caller's
     oauth hub to read — the same two-hub-instances-over-one-store shape ``tests/test_fleet_auth.py``'s
     own ``_seed_enrolled`` uses."""
     seed_hub = build_hub(tmp_path)
-    _register(seed_hub, runner_id="runner-a", workspace_id="ws-a")
-    return _enroll(seed_hub, "runner-a")
+    register_runner(seed_hub, runner_id="runner-a", workspace_id="ws-a")
+    return enroll_runner(seed_hub, "runner-a")
 
 
 def test_list_segments_refuses_a_runner_principal(tmp_path: Path) -> None:
     """Blizzard#545's own out-of-scope: a routine run reads no transcript content at
     all, so this stays refused even though no other test names it."""
-    token = _enrolled_runner_token(tmp_path)
+    token = enrolled_runner_token(tmp_path)
     hub = build_hub(tmp_path, auth_mode="oauth")
 
-    resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=_bearer(token))
+    resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=bearer(token))
     assert resp.status_code == 403
 
 
 def test_get_segment_refuses_a_runner_principal(tmp_path: Path) -> None:
-    token = _enrolled_runner_token(tmp_path)
+    token = enrolled_runner_token(tmp_path)
     hub = build_hub(tmp_path, auth_mode="oauth")
 
-    resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=_bearer(token))
+    resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=bearer(token))
     assert resp.status_code == 403
 
 
@@ -238,7 +238,7 @@ def test_get_segment_is_200_at_contributor_and_returns_decompressed_turns(tmp_pa
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
     hub.client.post(
         "/api/fleet/transcripts",
         json={
@@ -247,7 +247,7 @@ def test_get_segment_is_200_at_contributor_and_returns_decompressed_turns(tmp_pa
         },
     )
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=cookie(token))
     assert resp.status_code == 200
     body = resp.json()
     assert body["segment_id"] == "sg_1"
@@ -260,8 +260,8 @@ def test_get_segment_404s_when_the_segment_belongs_to_a_different_chunk(tmp_path
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    owning_chunk = _ingest_chunk(hub, headers=_cookie(token))
-    other_chunk = _ingest_chunk(hub, headers=_cookie(token), pointer_token="default:2")
+    owning_chunk = ingest_chunk(hub, headers=cookie(token))
+    other_chunk = ingest_chunk(hub, headers=cookie(token), pointer_token="default:2")
     hub.client.post(
         "/api/fleet/transcripts",
         json={
@@ -270,10 +270,10 @@ def test_get_segment_404s_when_the_segment_belongs_to_a_different_chunk(tmp_path
         },
     )
 
-    resp = hub.client.get(f"/api/chunks/{other_chunk}/transcripts/sg_1", headers=_cookie(token))
+    resp = hub.client.get(f"/api/chunks/{other_chunk}/transcripts/sg_1", headers=cookie(token))
 
     assert resp.status_code == 404
-    same_chunk = hub.client.get(f"/api/chunks/{owning_chunk}/transcripts/sg_1", headers=_cookie(token))
+    same_chunk = hub.client.get(f"/api/chunks/{owning_chunk}/transcripts/sg_1", headers=cookie(token))
     assert same_chunk.status_code == 200
 
 
@@ -286,7 +286,7 @@ def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(tmp_pa
     hub = build_hub(tmp_path, auth_mode="oauth", transcript_caps=TranscriptCaps(record_max_bytes=200))
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
     head = hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -302,10 +302,10 @@ def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(tmp_pa
     )
     assert tail.json()["capped"] == [2]
 
-    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=cookie(token))
     assert index.json()["segments"][0]["truncated"] is True
 
-    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=cookie(token))
     assert content.json()["truncated"] is True
     assert [t["index"] for t in content.json()["turns"]] == [0]
 
@@ -319,7 +319,7 @@ def test_a_runner_declared_record_truncation_is_visible_on_both_read_routes_even
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
     head = hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -333,10 +333,10 @@ def test_a_runner_declared_record_truncation_is_visible_on_both_read_routes_even
     assert tail.json()["applied"] == [2]  # accepted outright — nothing about it trips a hub cap
     assert tail.json()["capped"] == []
 
-    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=cookie(token))
     assert index.json()["segments"][0]["truncated"] is True
 
-    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=cookie(token))
     assert content.json()["truncated"] is True
     assert [t["index"] for t in content.json()["turns"]] == [0]  # only the first record's turn
 
@@ -348,7 +348,7 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
     big_turns = [_turn(i, text="x" * 5000) for i in range(50)]
     hub.client.post(
         "/api/fleet/transcripts",
@@ -373,7 +373,7 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
         },
     )
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=cookie(token))
     assert resp.status_code == 200
     body = resp.json()
     assert "turns" not in body["segments"][0]
@@ -385,7 +385,7 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
 
 def test_lease_transcript_read_is_401_with_no_resolvable_token(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -403,7 +403,7 @@ def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_se
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -413,7 +413,7 @@ def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_se
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(other_token),
+        headers=bearer(other_token),
     )
 
     assert resp.status_code == 403
@@ -423,7 +423,7 @@ def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path:
     """The response body must not turn any enrolled runner into a fleet-wide ownership
     oracle — it can learn a lease is owned by someone else, never by whom."""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -433,7 +433,7 @@ def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path:
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(other_token),
+        headers=bearer(other_token),
     )
 
     assert resp.status_code == 403
@@ -445,7 +445,7 @@ def test_lease_transcript_read_401s_before_the_segment_store_is_ever_read(tmp_pa
     depends on: reaching the *segment* store would raise, so a 401 proves the route refuses
     first. (Token resolution reads the runner registry before this, by construction.)"""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -468,7 +468,7 @@ def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp
     one lease key) must surface as a definite 500 — the store's ``RuntimeError`` caught
     and logged at the route, not an unhandled exception."""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
@@ -482,7 +482,7 @@ def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
 
     assert resp.status_code == 500
@@ -492,19 +492,19 @@ def test_lease_transcript_read_confines_by_the_tokens_runner_id_not_its_name(tmp
     """A hub-minted id and the name its runner declares differ, so neither the owner check nor the
     record read may key on the name."""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     token = seed_runner(hub, "rn_reader", name="r-claude")
     pushed = hub.client.post(
         "/api/fleet/transcripts",
         json={"records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=1)]},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert pushed.status_code == 200, pushed.text
 
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
 
     assert resp.status_code == 200, resp.text
@@ -516,7 +516,7 @@ def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path
     concatenates two runs that each start at 0. Renumbering across the whole body keeps a
     consumer keying on it from collapsing two different turns."""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     token = _seed_enrolled(hub, runner_id="r1")
     for generation, segment_id in ((1, "sg_a"), (2, "sg_b")):
         pushed = hub.client.post(
@@ -534,14 +534,14 @@ def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path
                     )
                 ],
             },
-            headers=_bearer(token),
+            headers=bearer(token),
         )
         assert pushed.status_code == 200, pushed.text
 
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
 
     assert resp.status_code == 200, resp.text
@@ -590,19 +590,19 @@ def test_the_late_link_handles_survive_the_lease_reads_own_renumbering(tmp_path:
     """Why the link is an id and not an index: this route renumbers `index` across a lease's
     generations, so an index-based parent would name a different turn after the rewrite."""
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     token = _seed_enrolled(hub, runner_id="r1")
     pushed = hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_late_link_record(chunk_id, seq=1, turn_range_start=8)]},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert pushed.status_code == 200, pushed.text
 
     resp = hub.client.get(
         f"/api/fleet/chunks/{chunk_id}/transcript-segments",
         params={"node_id": "nd_build", "epoch": 1},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
 
     turns = resp.json()["turns"]
@@ -618,13 +618,13 @@ def test_a_turn_stored_before_the_late_link_fields_still_validates_on_read_back(
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
-    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
     hub.client.post(
         "/api/fleet/transcripts",
         json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
     )
 
-    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=cookie(token))
 
     assert content.status_code == 200, content.text
     [turn] = content.json()["turns"]

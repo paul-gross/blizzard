@@ -19,7 +19,6 @@ from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
 from blizzard.hub.store.internal.flow_store import FlowStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.github_double import DoubleRepo, GitHubDouble
 from tests.support import (
     HubHarness,
@@ -80,7 +79,7 @@ def _chunk(hub: HubHarness, *repos: str) -> str:
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH})
     assert minted.status_code == 201, minted.text
     item = seed_work_item(
-        WorkItemStore(hub_store_connections(hub.engine)),
+        hub_store_connections(hub.engine),
         graph_id=minted.json()["graph_id"],
         author=WorkItemAuthor.user("u_1"),
         at=hub.clock.now(),

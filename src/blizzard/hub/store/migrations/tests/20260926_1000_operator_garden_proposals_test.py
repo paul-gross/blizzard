@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from tests.support import migrate_to
 
 pytestmark = [pytest.mark.component]
@@ -38,7 +39,7 @@ _OLD_GARDEN_PROPOSALS = sa.Table(
 )
 
 
-def _seed_preexisting_proposal(tmp_path: Path):
+def _seed_preexisting_proposal(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         conn.execute(

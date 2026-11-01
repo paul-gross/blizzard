@@ -58,26 +58,24 @@ def boundary(
 
 
 def usage(row_id: int, generation: int, kind: str, seconds: int, **kw: object) -> TokenUsageFact:
-    fields: dict[str, object] = {
-        "model": "claude-opus",
-        "input_tokens": 100,
-        "output_tokens": 10,
-        "cache_read_tokens": 1000,
-        "cache_create_tokens": 50,
-        "cost_usd": 0.5,
-        **kw,
-    }
-    return TokenUsageFact(id=row_id, generation=generation, kind=kind, recorded_at=at(seconds), **fields)  # type: ignore[arg-type]
+    base = TokenUsageFact(
+        id=row_id,
+        generation=generation,
+        kind=kind,
+        recorded_at=at(seconds),
+        model="claude-opus",
+        input_tokens=100,
+        output_tokens=10,
+        cache_read_tokens=1000,
+        cache_create_tokens=50,
+        cost_usd=0.5,
+    )
+    return replace(base, **kw)
 
 
 def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: object) -> LeaseTraceFacts:
     """One closed lease minted at ``at(0)``: a single identified spawn opened at ``at(1)`` unless overridden."""
-    defaults: dict[str, object] = {
-        "spawns": (spawn(1, 1),),
-        "boundaries": (boundary(1, 1, "spawn", 1, closed),),
-    }
-    defaults.update(kwargs)
-    return LeaseTraceFacts(
+    base = LeaseTraceFacts(
         lease=LeaseGrantFact(LEASE_ID, CHUNK_ID, EPOCH, at(0)),
         runner=RunnerFact(REGISTERED.runner_id, REGISTERED.runner_name),
         context=LeaseContextFact(
@@ -91,8 +89,10 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
             resolved_effort="high",
         ),
         closure=LeaseClosureFact(reason, at(closed)),
-        **defaults,  # type: ignore[arg-type]
+        spawns=(spawn(1, 1),),
+        boundaries=(boundary(1, 1, "spawn", 1, closed),),
     )
+    return replace(base, **kwargs)
 
 
 def with_context(facts: LeaseTraceFacts, **kw: object) -> LeaseTraceFacts:

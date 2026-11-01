@@ -5,18 +5,16 @@ migration is what stamps its owner. Every operation below is driven against that
 migrated store, never a hand-stamped one, proving the backfilled ``claude_code`` owner
 is enough to keep each seam working."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 from sqlalchemy import Connection
 
 from blizzard.cli.main import blizzard
@@ -65,7 +63,7 @@ _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _migrated_store(tmp_path, seed: Callable[[Connection], None]) -> SqlAlchemyRunnerStore:
+def _migrated_store(tmp_path: Path, seed: Callable[[Connection], None]) -> SqlAlchemyRunnerStore:
     """A store whose schema is built by the real migration chain: ``seed`` writes
     old-shape rows (no ``harness_id``) at the pre-change revision, then the upgrade to
     head runs the actual backfill over them — the owner every test below reads back is
@@ -95,7 +93,14 @@ def _migrated_store(tmp_path, seed: Callable[[Connection], None]) -> SqlAlchemyR
 
 
 def _seed_lease(
-    conn: Connection, *, lease_id: str, chunk_id: str, session_id: str, pid: int, node_id="nd_build", node_name="build"
+    conn: Connection,
+    *,
+    lease_id: str,
+    chunk_id: str,
+    session_id: str,
+    pid: int,
+    node_id: str = "nd_build",
+    node_name: str = "build",
 ) -> None:
     """A realistic pre-change Claude Code lease: minted, spawned, session stamped —
     exactly the old shape (no ``harness_id`` anywhere), one node deep."""
@@ -126,7 +131,7 @@ def _seed_lease(
     )
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: Collection[str]) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids
 
@@ -206,7 +211,7 @@ def _copy_with_db_url(original: Path, config_db_url: str, copy: Path) -> None:
     shutil.copytree(original, copy)
 
 
-def _check_invariants(runtime_dir: Path):  # type: ignore[no-untyped-def]
+def _check_invariants(runtime_dir: Path) -> Result:
     return CliRunner().invoke(blizzard, ["dev", "check-invariants", "--runner-dir", str(runtime_dir)])
 
 
@@ -227,7 +232,7 @@ def _fixture_at_parent(root: Path, *, registered: bool, seeded: bool) -> str:
     return config.db_url
 
 
-def test_backfilled_session_resumes_on_an_answer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_backfilled_session_resumes_on_an_answer(tmp_path: Path) -> None:
     """A dormant, ask-parked pre-change session resumes under the backfilled owner: the
     adapter is invoked with the SAME raw session id, and the new spawn generation records
     the adapter's actual version while the migration's own generation stays version-NULL."""
@@ -288,17 +293,23 @@ def test_backfilled_session_resumes_on_an_answer(tmp_path) -> None:  # type: ign
     # The adapter resumed the exact raw session id, dispatched through the backfilled owner.
     assert harness.resumed == [("/ws/e1", "sess-resume-old", "# Answer from alice. Continue.\nrest")]
 
-    with store._engine.connect() as conn:
-        rows = conn.execute(
-            sa.text("SELECT harness_id, harness_version FROM lease_spawns WHERE lease_id = 'lease_resume' ORDER BY id")
-        ).all()
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                sa.text(
+                    "SELECT harness_id, harness_version FROM lease_spawns WHERE lease_id = 'lease_resume' ORDER BY id"
+                )
+            ).all()
+    finally:
+        engine.dispose()
     # The migration's own backfilled generation: owner known, version never observed.
     assert tuple(rows[0]) == (CLAUDE_CODE_HARNESS_ID, None)
     # This resume's fresh generation: the adapter's actual reported version.
     assert tuple(rows[1]) == (CLAUDE_CODE_HARNESS_ID, "claude-code/9.9.9")
 
 
-def test_backfilled_session_is_judged_after_exit(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_backfilled_session_is_judged_after_exit(tmp_path: Path) -> None:
     """A pre-change session whose worker already exited is judged (launch, then collect)
     under the backfilled owner — the elicitation runs against the same raw session id."""
 
@@ -334,7 +345,7 @@ def test_backfilled_session_is_judged_after_exit(tmp_path) -> None:  # type: ign
     assert "completion.submitted" in kinds
 
 
-def test_backfilled_session_transcript_reads_from_the_claude_code_source(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_backfilled_session_transcript_reads_from_the_claude_code_source(tmp_path: Path) -> None:
     """The transcript route resolves a backfilled lease's owner through the registry and
     reads its content straight from the ``claude_code`` transcript source."""
 
@@ -396,7 +407,7 @@ def test_backfilled_session_transcript_reads_from_the_claude_code_source(tmp_pat
     assert [t.text for t in resolved.transcript.turns] == ["hello from the backfilled session"]
 
 
-def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_backfilled_session_takeover_opens_under_claude_code(tmp_path: Path) -> None:
     """Opening a takeover over a backfilled session resolves its owner through the
     registry and reports the backfilled ``harness_id`` on the opened command."""
 

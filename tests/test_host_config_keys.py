@@ -325,9 +325,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
 }
 
 
-def _document_carrying_every_key(
-    registry: ConfigRegistry, overrides: dict[str, object] | None = None
-) -> dict[str, Any]:
+def document_carrying_every_key(registry: ConfigRegistry, overrides: dict[str, object] | None = None) -> dict[str, Any]:
     """A host document holding every declared key that is not deprecated, nested as the file nests it."""
     document: dict[str, Any] = {}
     for key in registry.keys:
@@ -364,7 +362,7 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
 
     monkeypatch.setattr(ConfigView, "_check", recording)
     loaded = _parse(
-        _document_carrying_every_key(HOST_REGISTRY),
+        document_carrying_every_key(HOST_REGISTRY),
         layout=HostLayout(tmp_path),
         host=None,
         port=None,

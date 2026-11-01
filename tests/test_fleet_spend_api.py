@@ -15,7 +15,7 @@ import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
-from tests.test_fleet_auth import _seed_enrolled
+from tests.test_fleet_auth import seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -95,7 +95,7 @@ def test_refuses_a_runner_principal(tmp_path: Path) -> None:
     """``GET /api/spend`` stays operator-only — a routine run reads its fleet-wide
     spend total nowhere at all (held here since no
     other test refuses a runner token on this route)."""
-    token = _seed_enrolled(tmp_path, runner_id="runner-a")
+    token = seed_enrolled(tmp_path, runner_id="runner-a")
     hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(

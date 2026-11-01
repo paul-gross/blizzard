@@ -1,7 +1,5 @@
 """Tests proving the ``20261003_1300_hub_transcript_segment_spawn_cwd`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -12,7 +10,7 @@ import pytest
 from blizzard.hub import runtime as hub_runtime
 from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
-    _spawn_cwd_round_trip,
+    spawn_cwd_round_trip,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -37,6 +35,6 @@ def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_pat
         "content_digest": "d",
     }
 
-    values = _spawn_cwd_round_trip(config, hub_runtime.migration_runner(config), "20261003_1200_event_drops", row)
+    values = spawn_cwd_round_trip(config.db_url, hub_runtime.migration_runner(config), "20261003_1200_event_drops", row)
 
     assert values == [None]

@@ -1,7 +1,5 @@
 """Tests proving the ``20260728_1410_chunk_defaults`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,8 +11,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_pin_hub_api import (
-    _MIGRATION_CLOCK,
-    _store,
+    MIGRATION_CLOCK,
+    scratch_store,
 )
 from tests.support import hub_scoped_engine
 
@@ -28,7 +26,7 @@ _CHUNK_DEFAULTS = "20260728_1410_hub_chunk_defaults"
 def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: Path) -> None:
     """``chunks.model`` is kept (it is the only record of what a pre-#144 chunk ran) and
     ``default_model`` is left NULL rather than filled in from it."""
-    _runner, url = _store(tmp_path, _GRAPH_SESSIONS)
+    _runner, url = scratch_store(tmp_path, _GRAPH_SESSIONS)
     engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
@@ -41,7 +39,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_CHUNK_DEFAULTS)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK).upgrade(_CHUNK_DEFAULTS)
 
     engine = hub_scoped_engine(create_engine_from_url(url))
     try:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub, make_ready, pointer_token
+from tests.support import build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -49,7 +49,7 @@ nodes:
 """
 
 
-def _asked(hub: HubHarness, *, question_id: str = "qn_1") -> str:
+def ask_question(hub, *, question_id: str = "qn_1") -> str:
     """Mint the graph, claim a chunk, and land an open question; return the chunk id."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
@@ -82,7 +82,7 @@ def _asked(hub: HubHarness, *, question_id: str = "qn_1") -> str:
 
 def test_answers_first_write_wins(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _asked(hub)
+    chunk_id = ask_question(hub)
 
     first = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest", "answered_by": "alice"})
     assert first.status_code == 201, first.text
@@ -205,14 +205,14 @@ def test_equal_raw_session_ids_are_isolated_across_harnesses(tmp_path: Path) -> 
 
 
 def test_runner_bearer_token_is_rejected_on_answers(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
-    _asked(warn_hub)
+    ask_question(warn_hub)
 
     hub = build_hub(tmp_path)
     assert (
-        hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}, headers=_bearer(token)).status_code
+        hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}, headers=bearer(token)).status_code
         == 403
     )

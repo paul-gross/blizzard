@@ -10,6 +10,7 @@ import pytest
 
 from tests.fleet_launchers import REPO
 from tests.mock_fleet_support import (
+    SegmentRecordPayload,
     mock_hub,
     mock_hub_chunk_spec,
     require_mock_fleet,
@@ -22,7 +23,7 @@ from tests.support import free_port
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _record(chunk_id: str, *, seq: int) -> dict[str, object]:
+def _record(chunk_id: str, *, seq: int) -> SegmentRecordPayload:
     return transcript_segment_record(chunk_id, seq=seq)
 
 

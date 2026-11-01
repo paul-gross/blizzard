@@ -115,16 +115,16 @@ class DoubleRepo:
     base_branch: str = "main"
     #: ``None`` reads as a base branch that does not exist.
     base_tip: str | None = "base-tip"
-    heads: dict[str, str] = field(default_factory=dict)
-    changes: dict[int, Change] = field(default_factory=dict)
+    heads: dict[str, str] = field(default_factory=dict[str, str])
+    changes: dict[int, Change] = field(default_factory=dict[int, Change])
     mergeability: Mergeability = Mergeability.MERGEABLE
     #: Each ref's checks; a ref not named here is green, and ``None`` is a forge that does not answer.
-    checks: dict[str, tuple[Check, ...] | None] = field(default_factory=dict)
+    checks: dict[str, tuple[Check, ...] | None] = field(default_factory=dict[str, tuple[Check, ...] | None])
     #: Each ``(base, head)`` comparison; one not named here is a revision the forge does not know.
-    compares: dict[tuple[str, str], Comparison] = field(default_factory=dict)
+    compares: dict[tuple[str, str], Comparison] = field(default_factory=dict[tuple[str, str], Comparison])
     update: Update = field(default_factory=lambda: Update(UpdateOutcome.ACCEPTED, UpdateMethod.MERGE))
     #: Overrides by call name (``merge``, ``open_change``, …), each consumed in order; the last one stays.
-    replies: dict[str, list[Override]] = field(default_factory=dict)
+    replies: dict[str, list[Override]] = field(default_factory=dict[str, list[Override]])
     #: Called with the change number as a merge lands, before it answers.
     on_merge: Callable[[int], None] | None = None
 
@@ -348,10 +348,10 @@ class _Adapter:
         return self._double.answer("rerun_check", self._repo, lambda: Rerun(RerunOutcome.ACCEPTED), id=id)
 
 
-def _conforms(x: _Adapter) -> IForgeAdapter:
-    return x
+_adapter_conforms: type[IForgeAdapter] = _Adapter
 
 
 def forge_holding(*repos: str, branch: str, commit: str, **state: Any) -> GitHubDouble:
     """A double whose every named repository has ``branch`` pushed at ``commit``, each in ``state``."""
-    return GitHubDouble({repo: DoubleRepo(**{"heads": {branch: commit}, **state}) for repo in repos})
+    fields: dict[str, Any] = {"heads": {branch: commit}, **state}
+    return GitHubDouble({repo: DoubleRepo(**fields) for repo in repos})

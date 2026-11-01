@@ -59,8 +59,8 @@ is not an interface repair. Fixture-parameter and bare-generic reports are later
 of the first single-file budgets.
 
 The ten shipping-code errors this baseline counts are cleared, and the gate holds blizzard's `src/` and
-`exemplars/python/` to strict. What it does not yet hold are the tests and each store migration test still carrying a
-`# pyright: standard` waiver. Each follows the same path, per project: clear the remaining diagnostics or justify each
-residual by file, Pyright rule, reason and removal condition, bring the area under the gate's strict paths, and retain
-only rule-named `# pyright: ignore[<rule>]` comments with reasons. Infra first needs a standing typecheck task and
-verification-matrix/CI declaration.
+`exemplars/python/` to strict — the store migration tests under `src/` included, none of them waived. What it does not
+yet hold are the tests under `tests/`. Each follows the same path, per project: clear the remaining diagnostics or
+justify each residual by file, Pyright rule, reason and removal condition, bring the area under the gate's strict paths,
+and retain only rule-named `# pyright: ignore[<rule>]` comments with reasons. Infra first needs a standing typecheck
+task and verification-matrix/CI declaration.

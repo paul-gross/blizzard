@@ -16,7 +16,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.test_runner_status_cli import _init_runner, _registered_store, _serve_local_api
+from tests.test_runner_status_cli import init_runner_home, registered_store, serve_local_api
 from tests.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -48,11 +48,11 @@ def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
 
 @pytest.mark.component
 def test_requeue_over_an_escalated_chunk_reports_success(tmp_path: Path) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_chunk(store)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["requeue", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
@@ -62,8 +62,8 @@ def test_requeue_over_an_escalated_chunk_reports_success(tmp_path: Path) -> None
 
 @pytest.mark.component
 def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_chunk(store)
     store.record_takeover(
         takeover_id="tko_1",
@@ -75,7 +75,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
         opened_at=_NOW,
     )
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["requeue", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
@@ -85,8 +85,8 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -100,7 +100,7 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None
         )
     )  # active, never closed — not needs_human
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["requeue", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
@@ -109,12 +109,12 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path: Path) -> None
 
 @pytest.mark.component
 def test_requeue_refuses_a_needs_human_chunk_holding_no_environment(tmp_path: Path) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_chunk(store)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["requeue", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0

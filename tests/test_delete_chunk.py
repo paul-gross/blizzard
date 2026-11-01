@@ -253,8 +253,8 @@ def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -
 
 
 def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouched(tmp_path: Path) -> None:
-    chunks, items, delete, _ = _stores(tmp_path)
-    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    chunks, items, delete, engine = _stores(tmp_path)
+    item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
     chunk_id = f"ch_{item.ref}"
     forge_pointer = WorkRef(source="forge", ref="99")
     with chunks.exclusive.locked([chunk_id]) as handle:
@@ -273,8 +273,8 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
 
 def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchanged(tmp_path: Path) -> None:
     """A delivery that closed the held item first stands: the delete's withdraw write is guarded to open items."""
-    chunks, items, delete, _ = _stores(tmp_path)
-    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    chunks, items, delete, engine = _stores(tmp_path)
+    item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
     items.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
     chunk = chunks.record.get(f"ch_{item.ref}")
     assert chunk is not None

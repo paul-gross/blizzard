@@ -15,7 +15,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
 from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
-from tests.test_layering import _loaded_after_running
+from tests.test_layering import loaded_after_running
 from tests.worker_http import StubClient
 
 pytestmark = pytest.mark.unit
@@ -31,7 +31,7 @@ _ENV = {
 def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     """Collaborators whose client factory hands out ``client`` — a fresh stub when none is given."""
     handed = client or StubClient({})
-    return CliCollaborators(client_factory=lambda **_: handed, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type,return-value]
+    return CliCollaborators(client_factory=lambda **_: handed, clock=Clock(), wall_clock=SystemClock())
 
 
 def _runner_context() -> click.Context:
@@ -224,7 +224,7 @@ def test_a_hook_with_both_halves_is_the_bound_identity(monkeypatch: pytest.Monke
 
 def test_a_worker_call_verb_under_a_sampled_traceparent_loads_no_opentelemetry() -> None:
     """The span a call-making verb posts must not pull in the OpenTelemetry SDK either."""
-    loaded = _loaded_after_running(
+    loaded = loaded_after_running(
         ["runner", "artifact", "list"],
         {
             "BLIZZARD_TRACEPARENT": _PARENT,

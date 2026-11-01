@@ -16,16 +16,16 @@ from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import hub_store_connections, seed_runner
-from tests.test_flow_driver import _World
+from tests.test_flow_driver import World
 
 pytestmark = pytest.mark.component
 
 
-class _Line:
+class Line:
     """Two chunks in one line at ``merge``, the first arrived first, each past its first ``pending`` turn."""
 
     def __init__(self, tmp_path: Path) -> None:
-        self.world = _World(tmp_path)
+        self.world = World(tmp_path)
         self.client = self.world.hub.client
         self.first = self.world.at_merge(ref="1")
         self.world.hub.clock.advance(timedelta(seconds=1))
@@ -58,11 +58,11 @@ class _Line:
 
 
 @pytest.fixture
-def line(tmp_path: Path) -> _Line:
-    return _Line(tmp_path)
+def line(tmp_path: Path) -> Line:
+    return Line(tmp_path)
 
 
-def test_each_place_on_the_flow_and_on_the_chunk_reads_is_the_lines(line: _Line) -> None:
+def test_each_place_on_the_flow_and_on_the_chunk_reads_is_the_lines(line: Line) -> None:
     view = line.client.get(f"/api/flows/{line.flow_id}").json()
     assert [(p["state"], p["next_poll_at"] is not None) for p in view["line"]] == [
         ("polling", True),
@@ -76,7 +76,7 @@ def test_each_place_on_the_flow_and_on_the_chunk_reads_is_the_lines(line: _Line)
     assert line.chunk_places(line.second) == [(line.flow_id, "waiting", 2)]
 
 
-def test_a_turn_open_on_the_flow_is_landing_and_the_one_behind_it_next(line: _Line) -> None:
+def test_a_turn_open_on_the_flow_is_landing_and_the_one_behind_it_next(line: Line) -> None:
     line.world.poll_due()
     line.take_turn(line.first)
 
@@ -87,7 +87,7 @@ def test_a_turn_open_on_the_flow_is_landing_and_the_one_behind_it_next(line: _Li
     assert line.chunk_places(line.first) == [(line.flow_id, "landing", 1)]
 
 
-def test_a_chunk_a_person_holds_is_passed_over_and_the_one_behind_it_next(line: _Line) -> None:
+def test_a_chunk_a_person_holds_is_passed_over_and_the_one_behind_it_next(line: Line) -> None:
     line.world.poll_due()
     line.world.action.answer = Pass(
         choice=None, escalation=ActionEscalation(EscalationCause.FORGE_AUTH, "token revoked")
@@ -106,7 +106,7 @@ def test_a_chunk_a_person_holds_is_passed_over_and_the_one_behind_it_next(line: 
     assert line.chunk_places(line.first) == [(line.flow_id, "passed-over", 1)]
 
 
-def test_a_chunks_detail_carries_every_fact_its_submissions_wrote(line: _Line) -> None:
+def test_a_chunks_detail_carries_every_fact_its_submissions_wrote(line: Line) -> None:
     record = line.world.detail(line.first)["flow_record"]
 
     assert [(f["flow_id"], f["kind"], f["outcome"]) for f in record] == [
@@ -117,7 +117,7 @@ def test_a_chunks_detail_carries_every_fact_its_submissions_wrote(line: _Line) -
     assert [f["id"] for f in record] == sorted(f["id"] for f in record)
 
 
-def test_active_keeps_exactly_the_flows_in_line_or_moved_within_the_board_window(line: _Line) -> None:
+def test_active_keeps_exactly_the_flows_in_line_or_moved_within_the_board_window(line: Line) -> None:
     def active() -> list[str]:
         return [flow["flow_id"] for flow in line.client.get("/api/flows", params={"active": True}).json()["flows"]]
 
@@ -137,7 +137,7 @@ def test_active_keeps_exactly_the_flows_in_line_or_moved_within_the_board_window
 
 
 def test_a_submission_closed_between_the_chunk_reads_holds_no_place(
-    line: _Line, monkeypatch: pytest.MonkeyPatch
+    line: Line, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The chunk reads find the chunks' open submissions, then read the line over their flows. A submission that
     closes in between — its chunk bounced off the node — holds no place in either read, never a failed one."""
@@ -156,7 +156,7 @@ def test_a_submission_closed_between_the_chunk_reads_holds_no_place(
     assert line.chunk_places(line.second) == [(line.flow_id, "polling", 1)]
 
 
-def test_a_withdrawal_is_no_verdict(line: _Line) -> None:
+def test_a_withdrawal_is_no_verdict(line: Line) -> None:
     assert line.client.post(f"/api/chunks/{line.first}/stop", json={}).status_code == 202
 
     view = line.client.get(f"/api/flows/{line.flow_id}").json()
@@ -165,7 +165,7 @@ def test_a_withdrawal_is_no_verdict(line: _Line) -> None:
     assert view["last_landing"] is None
 
 
-def test_the_record_pages_newest_first_and_next_before_ends_the_walk(line: _Line) -> None:
+def test_the_record_pages_newest_first_and_next_before_ends_the_walk(line: Line) -> None:
     ids: list[int] = []
     before: int | None = None
     while True:
@@ -181,14 +181,14 @@ def test_the_record_pages_newest_first_and_next_before_ends_the_walk(line: _Line
     assert {fact["id"] for fact in line.world.detail(line.first)["flow_record"]} <= set(ids)
 
 
-def test_a_runner_token_answers_403_on_every_flow_route(line: _Line) -> None:
+def test_a_runner_token_answers_403_on_every_flow_route(line: Line) -> None:
     runner = {"Authorization": f"Bearer {seed_runner(line.world.hub, 'r9')}"}
 
     for path in ("/api/flows", f"/api/flows/{line.flow_id}", f"/api/flows/{line.flow_id}/record"):
         assert line.client.get(path, headers=runner).status_code == 403, path
 
 
-def test_another_tenants_flow_answers_404(line: _Line) -> None:
+def test_another_tenants_flow_answers_404(line: Line) -> None:
     assert line.client.get("/api/flows/flw_missing").status_code == 404
     other = line.world.hub.add_tenant("other")
 
@@ -197,7 +197,7 @@ def test_another_tenants_flow_answers_404(line: _Line) -> None:
     assert other.client.get(f"/api/flows/{line.flow_id}/record").status_code == 404
 
 
-def test_the_last_verdict_is_the_newest_turn_whose_outcome_closed_its_submission(line: _Line) -> None:
+def test_the_last_verdict_is_the_newest_turn_whose_outcome_closed_its_submission(line: Line) -> None:
     line.world.poll_due()
     line.world.action.answer = Pass(choice="failure")
     line.world.tick()

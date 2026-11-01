@@ -3,11 +3,9 @@ completed, the time the migration ran when it is underway — paged in bounded b
 index becomes a unique constraint, refused while two facts name one tenant; a re-run changes nothing; and the downgrade
 refuses while a deletion is underway, else restores the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -51,7 +49,7 @@ def _batch_rows() -> int:
 
 
 @contextmanager
-def _at_the_invitation(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine]]:
+def _at_the_invitation(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine]]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner
     runner.upgrade(_INVITATION)

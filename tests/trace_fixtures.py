@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import UsageFact
@@ -75,61 +74,56 @@ GRAPHS = {"g1": G1, "g2": G2}
 
 
 def make_facts(**kwargs: object) -> StepFacts:
-    fields: dict[str, object] = {"chunk_id": "ch_1", "graphs": GRAPHS, "pin_graph_id": "g1", "minted_at": at(0)}
-    return StepFacts(**{**fields, **kwargs})  # type: ignore[arg-type]
+    base = StepFacts(chunk_id="ch_1", graphs=GRAPHS, pin_graph_id="g1", minted_at=at(0))
+    return replace(base, **kwargs)
 
 
 def to(graph: str, name: str, seconds: int, epoch: int, **kw: str | None) -> TracedTransition:
     return TracedTransition(epoch=epoch, recorded_at=at(seconds), graph_id=graph, to_node_id=f"{graph}-{name}", **kw)
 
 
-def runner_epoch(epoch: int, seconds: int, runner: str | None = "r-1") -> dict[str, Any]:
+def runner_epoch(epoch: int, seconds: int, runner: str | None = "r-1") -> dict[str, tuple[object, ...]]:
     return {
         "lease_facts": (TracedLease(epoch, at(seconds)),),
         "epoch_owners": (TracedEpochOwner(epoch, runner, at(seconds - 1)),),
     }
 
 
-def merge(*parts: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def merge(*parts: dict[str, tuple[object, ...]]) -> dict[str, tuple[object, ...]]:
+    out: dict[str, tuple[object, ...]] = {}
     for part in parts:
         for key, value in part.items():
             out[key] = out.get(key, ()) + value
     return out
 
 
-def usage(epoch: int = 1, at_seconds: int = 12, **kw: Any) -> UsageFact:
-    fields: dict[str, Any] = {
-        "node_id": "g1-build",
-        "epoch": epoch,
-        "kind": "spawn",
-        "model": "claude-x",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 1000,
-        "cache_create_tokens": 10,
-        "cost_usd": 0.5,
-        "recorded_at": at(at_seconds),
-        "harness_id": "claude-code",
-        "harness_version": "2.0",
-    }
-    fields.update(kw)
-    return UsageFact(**fields)
+def usage(epoch: int = 1, at_seconds: int = 12, **kw: object) -> UsageFact:
+    base = UsageFact(
+        node_id="g1-build",
+        epoch=epoch,
+        kind="spawn",
+        model="claude-x",
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=1000,
+        cache_create_tokens=10,
+        cost_usd=0.5,
+        recorded_at=at(at_seconds),
+        harness_id="claude-code",
+        harness_version="2.0",
+    )
+    return replace(base, **kw)
 
 
 def hub_graph(graph_id: str = "g1") -> Graph:
     base = graph(graph_id, "build", "poll")
-    nodes = [n if n.name != "poll" else Node(**{**n.__dict__, "executor": Executor.HUB}) for n in base.nodes]
-    return Graph(**{**base.__dict__, "nodes": nodes})
+    nodes = [n if n.name != "poll" else replace(n, executor=Executor.HUB) for n in base.nodes]
+    return replace(base, nodes=nodes)
 
 
-def hub_facts(**extra: object) -> StepFacts:
-    return StepFacts(
-        chunk_id="ch_1",
-        graphs={"g1": hub_graph(), "g2": G2},
-        pin_graph_id="g1",
-        **merge({"transitions": (to("g1", "poll", 5, 1),)}, runner_epoch(2, 90, runner=None), extra),
-    )
+def hub_facts(**extra: tuple[object, ...]) -> StepFacts:
+    base = StepFacts(chunk_id="ch_1", graphs={"g1": hub_graph(), "g2": G2}, pin_graph_id="g1")
+    return replace(base, **merge({"transitions": (to("g1", "poll", 5, 1),)}, runner_epoch(2, 90, runner=None), extra))
 
 
 def _gate(close: dict[str, tuple[object, ...]], *, resolved: bool = True) -> StepFacts:
@@ -146,14 +140,14 @@ def _repinned() -> StepFacts:
     """Two graphs with different names: the step stands on the one it was pinned to, not the current pin."""
     old = replace(graph("g1", "build", "review", "gate"), name="legacy-flow")
     new = replace(graph("g2", "build", "review", "gate"), name="modern-flow")
-    return StepFacts(
+    base = StepFacts(
         chunk_id="ch_1",
         graphs={"g1": old, "g2": new},
         pin_graph_id="g2",
         migrations=(TracedMigration(1, at(30), "g1", "g2", from_node_id="g1-build"),),
         transitions=(to("g2", "review", 90, 2),),
-        **merge(runner_epoch(1, 10), runner_epoch(2, 50)),
     )
+    return replace(base, **merge(runner_epoch(1, 10), runner_epoch(2, 50)))
 
 
 def scenarios() -> dict[str, StepFacts]:

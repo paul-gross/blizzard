@@ -59,7 +59,6 @@ from blizzard.hub.forge.landing import (
 )
 from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
 from tests.support import (
     HubHarness,
@@ -995,7 +994,7 @@ def _chunk(hub: HubHarness, *repos: str, forges: tuple[str | None, ...] = ()) ->
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH})
     assert minted.status_code == 201, minted.text
     item = seed_work_item(
-        WorkItemStore(hub_store_connections(hub.engine)),
+        hub_store_connections(hub.engine),
         graph_id=minted.json()["graph_id"],
         author=WorkItemAuthor.user("u_1"),
         at=hub.clock.now(),

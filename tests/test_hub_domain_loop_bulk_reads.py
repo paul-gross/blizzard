@@ -44,7 +44,7 @@ from tests.support import (
     seed_graph,
     stamp,
 )
-from tests.test_analytics_events_api import _ingest_chunk, _record, _tool_turn
+from tests.test_analytics_events_api import ingest_chunk, record_transcript, tool_turn
 
 pytestmark = pytest.mark.component
 
@@ -165,8 +165,10 @@ def test_transcript_ingest_reads_epoch_owners_once_across_record_counts(tmp_path
         hub = build_hub(_dir(tmp_path, n))
         records = []
         for i in range(n):
-            chunk_id = _ingest_chunk(hub, pointer_token=f"default:{i + 1}")
-            record = _record(chunk_id, turns=[_tool_turn(0, "Read", {"file_path": "a.py"})], segment_id=f"sg_{i}")
+            chunk_id = ingest_chunk(hub, pointer_token=f"default:{i + 1}")
+            record = record_transcript(
+                chunk_id, turns=[tool_turn(0, "Read", {"file_path": "a.py"})], segment_id=f"sg_{i}"
+            )
             record["seq"] = i + 1
             records.append(record)
         counts.append(_epoch_owner_statements(hub, records))
@@ -306,13 +308,13 @@ def _derived_hub(tmp_path: Path, *, others: int) -> tuple[HubHarness, str]:
     """A hub whose target chunk and ``others`` further chunks each carry one segment, every
     segment derived and its marker current."""
     hub = build_hub(tmp_path)
-    turns = [_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
+    turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
     records = []
     chunk_ids = []
     for i in range(others + 1):
-        chunk_id = _ingest_chunk(hub, pointer_token=f"default:{i + 1}")
+        chunk_id = ingest_chunk(hub, pointer_token=f"default:{i + 1}")
         chunk_ids.append(chunk_id)
-        record = _record(chunk_id, turns=turns, segment_id=f"sg_{i}")
+        record = record_transcript(chunk_id, turns=turns, segment_id=f"sg_{i}")
         record["seq"] = i + 1
         records.append(record)
     push = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": records})

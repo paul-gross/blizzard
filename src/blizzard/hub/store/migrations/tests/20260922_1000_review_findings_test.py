@@ -11,6 +11,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = [pytest.mark.component]
@@ -42,7 +43,7 @@ _OLD_FINDINGS = sa.Table(
 )
 
 
-def _seed_preexisting_finding(tmp_path: Path):
+def _seed_preexisting_finding(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         conn.execute(sa.insert(_SCOPES).values(slug="blizzard", description="", created_at=_T0))

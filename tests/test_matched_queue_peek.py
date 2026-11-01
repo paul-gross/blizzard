@@ -13,14 +13,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support import HubHarness, build_hub, count_queries
-from tests.test_fleet_auth import _bearer, _enroll, _register
+from tests.test_fleet_auth import bearer, enroll_runner, register_runner
 
 pytestmark = pytest.mark.component
 
 
-def _token(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
-    _register(hub, runner_id=runner_id, workspace_id=workspace_id)
-    return _enroll(hub, runner_id)
+def _token(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
+    register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
+    return enroll_runner(hub, runner_id)
 
 
 def _ingest(hub: HubHarness, ref: str, *, default_harnesses: list[str] | None = None, promote: bool = True) -> str:
@@ -46,7 +46,7 @@ def test_pass_over_skips_an_incompatible_head_and_returns_the_first_workable_ent
     incompatible = _ingest(hub, "1", default_harnesses=["special-harness"])
     workable = _ingest(hub, "2")
 
-    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=bearer(token))
     assert resp.status_code == 200, resp.text
     entries = resp.json()["entries"]
     assert [e["chunk_id"] for e in entries] == [workable]
@@ -68,7 +68,7 @@ def test_hold_yields_nothing_when_the_head_is_unusable_and_examines_no_later_ent
     resp = hub.client.post(
         "/api/fleet/queue/peek",
         json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["entries"] == []
@@ -82,7 +82,7 @@ def test_hold_returns_a_usable_head_normally(tmp_path: Path) -> None:
     resp = hub.client.post(
         "/api/fleet/queue/peek",
         json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
     assert [e["chunk_id"] for e in resp.json()["entries"]] == [workable]
@@ -100,7 +100,7 @@ def test_an_unavailable_default_capability_is_treated_as_incompatible(tmp_path: 
         {"harness_id": "claude", "default": True, "available": False},
         {"harness_id": "special-harness", "tiers": ["blizzard:frontier"]},
     ]
-    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": capabilities}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": capabilities}, headers=bearer(token))
     assert resp.status_code == 200, resp.text
     entries = resp.json()["entries"]
     assert [e["chunk_id"] for e in entries] == [workable]
@@ -115,7 +115,7 @@ def test_no_capabilities_asserted_gets_no_entry(tmp_path: Path) -> None:
     _ingest(hub, "1", default_harnesses=["special-harness"])
     _ingest(hub, "2")
 
-    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=bearer(token))
     assert resp.status_code == 200, resp.text
     assert resp.json()["entries"] == []
 
@@ -129,7 +129,7 @@ def test_an_unrecognized_policy_value_round_trips_as_pass_over(tmp_path: Path) -
     resp = hub.client.post(
         "/api/fleet/queue/peek",
         json={"capabilities": _DEFAULT_CAPABILITY, "policy": "some-future-value"},
-        headers=_bearer(token),
+        headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
     assert [e["chunk_id"] for e in resp.json()["entries"]] == [workable]
@@ -148,7 +148,7 @@ def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_p
 
     # Pass-over (the default): the blocked head is skipped in favor of `prerequisite`,
     # itself unblocked and capability-unfiltered — never renumbered from its own position.
-    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=bearer(token))
     assert resp.status_code == 200, resp.text
     entries = resp.json()["entries"]
     assert [e["chunk_id"] for e in entries] == [prerequisite]
@@ -156,7 +156,7 @@ def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_p
 
     # Hold: the blocked head yields nothing, and `prerequisite` is never examined.
     resp = hub.client.post(
-        "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"}, headers=_bearer(token)
+        "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"}, headers=bearer(token)
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["entries"] == []
@@ -176,7 +176,7 @@ def test_refuses_401_without_a_resolvable_principal_under_every_configuration(
 def test_succeeds_with_a_valid_token(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     token = _token(hub)
-    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=_bearer(token))
+    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=bearer(token))
     assert resp.status_code == 200, resp.text
 
 
@@ -201,7 +201,7 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, extra: di
 
     def call(hub: HubHarness, key: str, token: str) -> None:
         resp = hub.client.post(
-            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, **extra}, headers=_bearer(token)
+            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, **extra}, headers=bearer(token)
         )
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json()["entries"])

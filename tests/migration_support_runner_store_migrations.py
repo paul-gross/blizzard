@@ -9,19 +9,19 @@ import sqlalchemy as sa
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.utc import UtcDateTime
 
-_NEW = datetime(2026, 10, 1, 12, tzinfo=UTC)
+NEW = datetime(2026, 10, 1, 12, tzinfo=UTC)
 
 
-_LATER = datetime(2026, 10, 6, 12, tzinfo=UTC)
+LATER = datetime(2026, 10, 6, 12, tzinfo=UTC)
 
 
 # Each keyed table's shape at the identity revision's parent — only the columns these tests write.
-_keyed = sa.MetaData()
+keyed_metadata = sa.MetaData()
 
 
-_leases = sa.Table(
+leases_table = sa.Table(
     "leases",
-    _keyed,
+    keyed_metadata,
     sa.Column("lease_id", sa.String(), primary_key=True),
     sa.Column("chunk_id", sa.String()),
     sa.Column("epoch", sa.Integer()),
@@ -35,7 +35,7 @@ _leases = sa.Table(
 _SCOPE_PARENT = "20261009_1000_runner_lease_closures_lease_id_index"
 
 
-_RUNNER = "rn_01JX0000000000000000000000"
+RUNNER = "rn_01JX0000000000000000000000"
 
 
 _identity_at_scope_parent = sa.table(
@@ -46,20 +46,20 @@ _identity_at_scope_parent = sa.table(
 )
 
 
-def _seed_identity_before_the_scope(migration: MigrationRunner, engine: sa.Engine) -> None:
-    """Carry the store to the scope revision's parent holding no identity row, then record ``_RUNNER``'s there."""
+def seed_identity_before_the_scope(migration: MigrationRunner, engine: sa.Engine) -> None:
+    """Carry the store to the scope revision's parent holding no identity row, then record ``RUNNER``'s there."""
     migration.upgrade(_SCOPE_PARENT)
-    assert _rows(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
+    assert rows_of(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
     with engine.begin() as conn:
         conn.execute(
-            _identity_at_scope_parent.insert().values(runner_id=_RUNNER, runner_name="r-claude", registered_at=_LATER)
+            _identity_at_scope_parent.insert().values(runner_id=RUNNER, runner_name="r-claude", registered_at=LATER)
         )
 
 
-def _columns(engine: sa.Engine, table: str) -> set[str]:
+def column_names(engine: sa.Engine, table: str) -> set[str]:
     return {c["name"] for c in sa.inspect(engine).get_columns(table)}
 
 
-def _rows(engine: sa.Engine, statement: str) -> list[tuple[object, ...]]:
+def rows_of(engine: sa.Engine, statement: str) -> list[tuple[object, ...]]:
     with engine.connect() as conn:
         return [tuple(r) for r in conn.execute(sa.text(statement))]

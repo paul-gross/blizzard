@@ -1,11 +1,9 @@
 """The decision check-results revision: existing decisions read as having run no checks and existing resolutions as no
 override; a re-run changes nothing; and the downgrade restores the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +31,7 @@ _NOW = datetime(2026, 10, 18, 9, 0, tzinfo=UTC)
 
 
 @contextmanager
-def _at_the_parent(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine]]:
+def _at_the_parent(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine]]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner
     runner.upgrade(_PARENT)

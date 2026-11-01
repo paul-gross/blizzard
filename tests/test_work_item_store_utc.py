@@ -16,6 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.unit
@@ -23,20 +24,21 @@ pytestmark = pytest.mark.unit
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path: Path) -> WorkItemStore:
+def _connections(tmp_path: Path) -> ScopedConnections:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
-    return WorkItemStore(hub_store_connections(engine))
+    return hub_store_connections(engine)
 
 
 def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    connections = _connections(tmp_path)
+    store = WorkItemStore(connections)
 
     item = seed_work_item(
-        store,
+        connections,
         graph_id="gr_1",
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_NOW,
@@ -51,9 +53,10 @@ def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
 
 
 def test_close_round_trips_a_later_instant(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    connections = _connections(tmp_path)
+    store = WorkItemStore(connections)
     item = seed_work_item(
-        store,
+        connections,
         graph_id="gr_1",
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_NOW,

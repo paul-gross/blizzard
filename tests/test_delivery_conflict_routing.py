@@ -47,7 +47,7 @@ class _RepoState(TypedDict, total=False):
     checks: dict[str, tuple[Check, ...] | None]
 
 
-def _forge(*repos: str, **state: Unpack[_RepoState]) -> GitHubDouble:
+def github_double(*repos: str, **state: Unpack[_RepoState]) -> GitHubDouble:
     return forge_holding(*(repos or ("acme/widget",)), branch="feat/thing", commit=_COMMIT, **state)
 
 
@@ -55,7 +55,7 @@ def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
-def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
+def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     """Mint the packaged adv-dwf graph, ingest a chunk (which pins to the hub's own
     packaged **default** graph — ingest names no graph), then repin it onto adv-dwf via
     ``PATCH /chunks/{id}`` (legal while the chunk is still ``not_ready``) before claiming
@@ -79,7 +79,7 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     return chunk_id, nodes
 
 
-def _seed_at_deliver_with_an_unlanded_commit(
+def seed_at_deliver_with_an_unlanded_commit(
     hub: HubHarness, chunk_id: str, nodes: dict[str, str], *, repos: tuple[str, ...] = ("acme/widget",)
 ) -> None:
     """Place the chunk's current node directly at ``deliver`` (standing in for the six
@@ -117,9 +117,9 @@ def _seed_at_deliver_with_an_unlanded_commit(
 
 
 def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     assert hub.turn_outcome(chunk_id) == "conflict"
@@ -147,9 +147,9 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
 
 
 def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
 
     # `deliver` falls back to `DEFAULT_BOUNCE_CAP` (5) — pre-seed that many prior bounces
     # (idempotent per `(chunk_id, epoch)`) so this run's kick-back crosses it.
@@ -187,9 +187,9 @@ def _envelope(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
 
 
 def test_a_red_check_envelope_names_the_unlanded_repo_its_pr_and_the_land_action(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forges=_forge(checks={_COMMIT: RED}).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(checks={_COMMIT: RED}).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     assert hub.turn_outcome(chunk_id) == "failure"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "resolve"
@@ -211,12 +211,12 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) ->
         change("acme/widget", 945, branch="feat/thing", sha=_COMMIT, base="main"),
         web_url="https://x/acme/widget/pull/945",
     )
-    double = _forge("acme/done", "acme/widget", mergeability=Mergeability.CONFLICTING)
+    double = github_double("acme/done", "acme/widget", mergeability=Mergeability.CONFLICTING)
     double.repos["acme/widget"].changes[945] = pr
     repositories = [replace(DEFAULT_FIXTURE_REPOSITORIES[0], repo=name) for name in ("widget", "done")]
     hub = build_hub(tmp_path, forges=double.forges, repositories=repositories)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/done", "acme/widget"))
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/done", "acme/widget"))
     _record(hub, chunk_id, nodes, "merged/acme/done", "d" * 40)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.take_turns()
@@ -229,9 +229,9 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) ->
 
 
 def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.take_turns()
 
@@ -244,10 +244,10 @@ def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_pat
 
 def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_path: Path) -> None:
     repositories = [replace(DEFAULT_FIXTURE_REPOSITORIES[0], repo=name) for name in ("widget", "gadget")]
-    double = _forge("acme/widget", "acme/gadget", mergeability=Mergeability.CONFLICTING)
+    double = github_double("acme/widget", "acme/gadget", mergeability=Mergeability.CONFLICTING)
     hub = build_hub(tmp_path, forges=double.forges, repositories=repositories)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/widget", "acme/gadget"))
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/widget", "acme/gadget"))
     _record(hub, chunk_id, nodes, "merged/acme/widget", "  ")
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.take_turns()

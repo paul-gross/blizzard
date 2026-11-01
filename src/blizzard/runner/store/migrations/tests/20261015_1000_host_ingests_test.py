@@ -46,7 +46,16 @@ def _tables(engine: sa.Engine) -> set[str]:
     return set(sa.inspect(engine).get_table_names()) - {"alembic_version"}
 
 
-def _schema(engine: sa.Engine) -> dict[str, object]:
+type _TableShape = tuple[
+    tuple[tuple[str, str, bool], ...],
+    tuple[str, ...],
+    frozenset[tuple[tuple[str | None, ...], bool, str | None]],
+    frozenset[tuple[tuple[str | None, ...], str | None]],
+]
+"""A table's columns (name, type, nullability), primary key, indexes, and unique constraints."""
+
+
+def _schema(engine: sa.Engine) -> dict[str, _TableShape]:
     inspector = sa.inspect(engine)
     return {
         table: (
@@ -74,7 +83,7 @@ def test_the_upgrade_creates_an_empty_host_ingests_table_and_changes_nothing_els
         after = _schema(engine)
         assert set(after) - set(before) == {"host_ingests"}
         assert {k: v for k, v in after.items() if k != "host_ingests"} == before
-        columns, key, _, _ = after["host_ingests"]  # type: ignore[misc]
+        columns, key, _, _ = after["host_ingests"]
         assert columns == (
             ("id", "INTEGER", False),
             ("runner_id", "VARCHAR", False),

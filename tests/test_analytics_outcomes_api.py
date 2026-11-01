@@ -30,11 +30,11 @@ from tests.support import (
     seed_user,
 )
 from tests.test_delivery_conflict_routing import (
-    _forge,
-    _mint_and_claim,
-    _seed_at_deliver_with_an_unlanded_commit,
+    github_double,
+    mint_and_claim,
+    seed_at_deliver_with_an_unlanded_commit,
 )
-from tests.test_fleet_auth import _seed_enrolled
+from tests.test_fleet_auth import seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -159,7 +159,7 @@ def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> 
 
 @pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
-    token = _seed_enrolled(tmp_path, runner_id="runner-a")
+    token = seed_enrolled(tmp_path, runner_id="runner-a")
     hub = build_hub(tmp_path, auth_mode="oauth")
 
     resp = hub.client.get(path, headers=_bearer(token))
@@ -225,9 +225,9 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
     """A kick-back's own routing transition shares its epoch with the bounce fact by
     construction (`src/blizzard/hub/delivery/hub_node.py` records both). Driven through the REAL hub-node delivery
     path, not a bare bounce write, so the excluded transition actually exists."""
-    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     assert hub.turn_outcome(chunk_id) == "conflict"
@@ -246,9 +246,9 @@ def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tm
     """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
     judged choice on the SAME chunk still counts — the hub's turn claims a synthetic lease
     at its epoch, so the runner's next lease mints strictly above it and never collides."""
-    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
-    chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     assert hub.turn_outcome(chunk_id) == "conflict"
 

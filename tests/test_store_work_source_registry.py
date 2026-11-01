@@ -32,17 +32,19 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
 from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import OP, forge_state, free_port, github_double, hub_store_connections
+from tests.support import OP, ForgeDouble, ForgeIssue, forge_state, free_port, github_double, hub_store_connections
 
 pytestmark = pytest.mark.component
 
-_ISSUES = {f"acme/widget#{n}": {"title": f"t{n}", "body": f"b{n}", "comments": []} for n in (1, 2)}
+_ISSUES: dict[str, ForgeIssue] = {
+    f"acme/widget#{n}": {"title": f"t{n}", "body": f"b{n}", "comments": []} for n in (1, 2)
+}
 
 
 @pytest.fixture
-def forge() -> Iterator[tuple[TestClient, str]]:
+def forge() -> Iterator[tuple[ForgeDouble, str]]:
     """The double and the loopback URL it is served on."""
-    double = github_double(issues={key: dict(value) for key, value in _ISSUES.items()})
+    double = github_double(issues={key: value.copy() for key, value in _ISSUES.items()})
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(double.app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -69,7 +71,7 @@ def hub(tmp_path: Path) -> Iterator[tuple[TestClient, HubServices]]:
     app.state.engine.dispose()
 
 
-def _create(
+def create(
     client: TestClient,
     services: HubServices,
     forge_url: str,
@@ -103,7 +105,7 @@ def _ingest(client: TestClient, token: str) -> httpx2.Response:
     return client.post("/api/chunks", json={"tokens": [token]})
 
 
-def _promote(client: TestClient, token: str) -> None:
+def promote(client: TestClient, token: str) -> None:
     resp = _ingest(client, token)
     assert resp.status_code == 201, resp.text
     assert client.post(f"/api/chunks/{resp.json()['chunk_id']}/promote").status_code == 202
@@ -139,13 +141,13 @@ def _adapter(services: HubServices) -> GitHubWorkSource:
 
 
 def test_a_source_created_mid_run_claims_ingest_with_no_rebuild(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
     _, forge_url = forge
     assert _ingest(client, "widget:1").status_code == 422
 
-    source_id = _create(client, services, forge_url)
+    source_id = create(client, services, forge_url)
 
     assert _ingest(client, "widget:1").status_code == 201
     assert _sources(services).names() == ["widget", "hub"]
@@ -153,10 +155,10 @@ def test_a_source_created_mid_run_claims_ingest_with_no_rebuild(
 
 
 def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replaced_client(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    _create(client, services, forge[1])
+    create(client, services, forge[1])
     before = _adapter(services)
     assert before._client.headers["Authorization"] == "token tok-a"
     assert _adapter(services) is before  # a hit reuses the built adapter
@@ -172,10 +174,10 @@ def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replac
 
 
 def test_a_forge_edit_rebuilds_the_adapter_of_every_source_naming_it(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     before = _adapter(services)
     tenant = _tenant(services)
     record = tenant.work_source_records.get(WorkSourceId(source_id))
@@ -191,10 +193,10 @@ def test_a_forge_edit_rebuilds_the_adapter_of_every_source_naming_it(
 
 
 def test_a_locator_edit_reaches_the_next_resolve(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     old_url = "https://github.com/acme/widget/issues/7"
     new_url = "https://github.com/acme/gadget/issues/7"
     assert _sources(services).resolve(old_url) == WorkRef(source=source_id, ref="7")
@@ -206,12 +208,12 @@ def test_a_locator_edit_reaches_the_next_resolve(
 
 
 def test_the_annotation_sweep_reads_the_annotating_set_each_pass(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
     double, forge_url = forge
-    source_id = _create(client, services, forge_url)
-    _promote(client, "widget:1")
+    source_id = create(client, services, forge_url)
+    promote(client, "widget:1")
     assert services.annotation is not None
 
     services.annotation.sweep()
@@ -219,20 +221,20 @@ def test_the_annotation_sweep_reads_the_annotating_set_each_pass(
 
     assert client.patch(f"/api/work-sources/{source_id}", json={"annotate": True}).status_code == 200
     services.annotation.sweep()
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
     assert client.patch(f"/api/work-sources/{source_id}", json={"annotate": False}).status_code == 200
     services.annotation.sweep()
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()
 
 
 def test_a_retired_source_refuses_ingest_while_its_ingested_item_still_closes_and_annotates(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
     double, forge_url = forge
-    source_id = _create(client, services, forge_url, annotate=True)
-    _promote(client, "widget:1")
+    source_id = create(client, services, forge_url, annotate=True)
+    promote(client, "widget:1")
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
 
@@ -245,16 +247,16 @@ def test_a_retired_source_refuses_ingest_while_its_ingested_item_still_closes_an
     assert closer is not None and annotator is not None
     pointer = WorkRef(source=source_id, ref="1")
     annotator.set_status(pointer, WorkStatusMarker.IN_PROGRESS)
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}
     closer.close(pointer, trace=None)
-    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"
 
 
 def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_error(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
     assert client.post("/api/secrets/gh/retire").status_code == 200
 
@@ -267,10 +269,10 @@ def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_erro
 
 
 def test_board_reads_a_retired_source_without_its_secret_and_renames_on_the_next_request(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     minted = _ingest(client, "widget:1")
     assert minted.status_code == 201, minted.text
     chunk_id = minted.json()["chunk_id"]
@@ -300,10 +302,10 @@ def test_board_reads_a_retired_source_without_its_secret_and_renames_on_the_next
 
 
 def test_an_ingested_ref_holds_the_id_whichever_handle_the_token_names(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     sources = _sources(services)
 
     assert sources.resolve("widget:1") == WorkRef(source=source_id, ref="1")
@@ -314,10 +316,10 @@ def test_an_ingested_ref_holds_the_id_whichever_handle_the_token_names(
 
 
 def test_a_rename_keeps_ingested_refs_resolving_and_their_labels_follow(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     minted = _ingest(client, "widget:1")
     assert minted.status_code == 201, minted.text
     chunk_id = minted.json()["chunk_id"]
@@ -339,13 +341,13 @@ def test_a_rename_keeps_ingested_refs_resolving_and_their_labels_follow(
 
 
 def test_a_reclaimed_former_slug_resolves_to_its_new_holder(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    first = _create(client, services, forge[1])
+    first = create(client, services, forge[1])
     _rename(services, first, "widget-core")
 
-    second = _create(client, services, forge[1], slug="widget", locator="acme/gadget")
+    second = create(client, services, forge[1], slug="widget", locator="acme/gadget")
 
     assert second != first
     assert _sources(services).resolve("widget:3") == WorkRef(source=second, ref="3")
@@ -353,11 +355,11 @@ def test_a_reclaimed_former_slug_resolves_to_its_new_holder(
 
 
 def test_an_id_shaped_prefix_never_resolves_as_a_slug(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     """A ``wsrc_`` value is only ever an id: one naming no source resolves to nothing, whatever the slugs."""
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     unknown = "wsrc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
     assert unknown != source_id
 
@@ -365,9 +367,9 @@ def test_an_id_shaped_prefix_never_resolves_as_a_slug(
     assert WorkSourceSlug.of(source_id) is None
 
 
-def test_hub_is_never_a_work_source_slug(hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]) -> None:
+def test_hub_is_never_a_work_source_slug(hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
 
     with pytest.raises(ConfigFieldError):
         _rename(services, source_id, "hub")
@@ -376,10 +378,10 @@ def test_hub_is_never_a_work_source_slug(hub: tuple[TestClient, HubServices], fo
 
 
 def test_a_retired_source_s_former_slug_is_refused_like_its_current_one(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
     _rename(services, source_id, "widget-core")
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
 
@@ -395,11 +397,11 @@ def test_a_key_naming_no_source_has_no_closer(hub: tuple[TestClient, HubServices
 
 
 def test_an_active_source_that_cannot_be_built_raises_on_closer(
-    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
 ) -> None:
     """Only a retired source's failed build reads as absent; an active one's surfaces."""
     client, services = hub
-    source_id = _create(client, services, forge[1])
+    source_id = create(client, services, forge[1])
 
     def unbuildable(record: ConfiguredWorkSource) -> BuiltWorkSource:
         raise WorkSourceError(f"work source {record.slug} cannot be built")

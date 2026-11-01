@@ -16,7 +16,7 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
@@ -148,7 +148,7 @@ class StepTrace:
     """One step's exported spans: its root and the children parented on it."""
 
     root: ExportedSpan
-    children: list[ExportedSpan] = field(default_factory=list)
+    children: list[ExportedSpan] = field(default_factory=list[ExportedSpan])
 
     @property
     def event_names(self) -> list[str]:
@@ -887,7 +887,7 @@ class FleetCollector:
 
 
 @contextlib.contextmanager
-def fleet_collector(workdir: Path, *, decision_wait_seconds: int | None = None) -> Iterator[FleetCollector]:
+def fleet_collector(workdir: Path, *, decision_wait_seconds: int | None = None) -> Generator[FleetCollector]:
     """A collector running the documented config; ``decision_wait_seconds`` puts a tail-sampling stage with that
     ``decision_wait`` ahead of its ``batch``."""
     collector = FleetCollector(resolve_collector(), workdir, decision_wait_seconds=decision_wait_seconds)
@@ -934,7 +934,7 @@ class RunnerSweep:
 @contextlib.contextmanager
 def runner_sweep(
     config: RunnerConfig, collector: FleetCollector, *, settle_seconds: int = 0, sweep_seconds: int = 1
-) -> Iterator[RunnerSweep]:
+) -> Generator[RunnerSweep]:
     """The runner's one process graph, traced like the hub: fleet sweep and platform spans (at a zero root sample
     ratio, so only spans parented on a step's context export) to ``collector``."""
     if not collector.available:

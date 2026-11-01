@@ -13,14 +13,14 @@ from sqlalchemy import select
 from blizzard.hub.store import schema as s
 from tests.support import build_hub, hub_scoped
 from tests.test_garden_delivery_api import (
-    _SCOPE,
-    _add_op,
-    _delta,
-    _finding_count,
-    _post,
-    _record_artifact,
-    _seed_chunk,
-    _seed_scope,
+    SCOPE,
+    add_op,
+    finding_count,
+    garden_delta,
+    post,
+    record_artifact,
+    seed_chunk,
+    seed_scope,
 )
 
 pytestmark = pytest.mark.component
@@ -28,46 +28,46 @@ pytestmark = pytest.mark.component
 
 def test_a_missing_delta_beside_a_resolving_one_refuses_the_delivery(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    _seed_scope(hub, _SCOPE)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    seed_scope(hub, SCOPE)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
 
-    resp = _post(hub, chunk_id, delta=["delta", "ghost-delta"])
+    resp = post(hub, chunk_id, delta=["delta", "ghost-delta"])
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["outcome"] == "invalid"
     assert "ghost-delta" in body["detail"]
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
 
 
 def test_a_missing_proposals_artifact_is_tolerated(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    _seed_scope(hub, _SCOPE)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    seed_scope(hub, SCOPE)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
 
-    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"outcome": "recorded", "detail": ""}
-    assert _finding_count(hub) == 1
+    assert finding_count(hub) == 1
 
 
 @pytest.mark.parametrize("field", ["title", "class", "body"])
 def test_a_proposal_with_a_blank_field_refuses_the_delivery(tmp_path: Path, field: str) -> None:
     hub = build_hub(tmp_path)
-    _seed_scope(hub, _SCOPE)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    seed_scope(hub, SCOPE)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
     candidate = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
     candidate[field] = "   "
-    _record_artifact(hub, chunk_id, name="docket", content=json.dumps([candidate]))
+    record_artifact(hub, chunk_id, name="docket", content=json.dumps([candidate]))
 
-    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"outcome": "invalid", "detail": f"proposal 'p1' has a blank {field}"}
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []

@@ -23,9 +23,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.tools.invariants import hub_invariants
 from tests.e2e.flow_support import flow_runner_config, flow_world, pinned_chunk, set_lever, ticking_runner
 from tests.e2e.test_flow_turns_e2e import (
-    _await_landed,
-    _detail,
-    _pending,
+    await_landed,
+    chunk_detail,
+    pending,
 )
 from tests.fleet_launchers import REPO, run_forge, run_hub
 from tests.fleet_world import REPO_NAME
@@ -111,11 +111,11 @@ def test_a_store_held_before_landing_policies_carries_over_and_lands_its_chunks_
             config = flow_runner_config(tmp_path, workspace, bin_dir, hub_port)
             with ticking_runner(config) as tick_until:
                 before = pinned_chunk(hub, forge, "BEFORE.md")
-                tick_until(lambda: _detail(hub, before)["status"] == "done")
-                landed_before = _detail(hub, before)
+                tick_until(lambda: chunk_detail(hub, before)["status"] == "done")
+                landed_before = chunk_detail(hub, before)
                 set_lever(forge, REPO, armed=True)
                 midway = pinned_chunk(hub, forge, "MIDWAY.md")
-                tick_until(_pending(hub, midway))
+                tick_until(pending(hub, midway))
         assert (landed_before["status"], landed_before["landed"]) == ("done", True)
 
         _hub_migrate(hub_dir, "--down", _BEFORE_POLICIES)
@@ -127,17 +127,17 @@ def test_a_store_held_before_landing_policies_carries_over_and_lands_its_chunks_
         with run_hub(hub_dir, forge_port, hub_port, test_actions=False, rehost=True) as hub:
             assert _policies(hub) == {(REPO_NAME, "merge-on-checks", None)}
             assert _positions(hub) == {("default", REPO_NAME, None)}
-            assert _detail(hub, midway)["status"] == "delivering"
+            assert chunk_detail(hub, midway)["status"] == "delivering"
 
             set_lever(forge, REPO, armed=False)
-            _await_landed(hub, midway)
-            landed_midway = _detail(hub, midway)
+            await_landed(hub, midway)
+            landed_midway = chunk_detail(hub, midway)
 
             with ticking_runner(config) as tick_until:
                 after = pinned_chunk(hub, forge, "AFTER.md")
-                tick_until(lambda: _detail(hub, after)["status"] in {"done", "needs_human", "stopped"})
-            _await_landed(hub, after)
-            landed_after = _detail(hub, after)
+                tick_until(lambda: chunk_detail(hub, after)["status"] in {"done", "needs_human", "stopped"})
+            await_landed(hub, after)
+            landed_after = chunk_detail(hub, after)
 
     assert _landing(landed_midway) == _landing(landed_before)
     assert _landing(landed_after) == _landing(landed_before)

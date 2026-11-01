@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support import HubHarness, build_hub
-from tests.test_auth_login_api import ADA, FakeOAuthProvider, _state_from_redirect, known_ada
+from tests.test_auth_login_api import ADA, FakeOAuthProvider, known_ada, state_from_redirect
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ def test_forwarded_proto_https_from_a_trusted_proxy_mints_a_secure_cookie(tmp_pa
 
     headers = {"x-forwarded-proto": "https"}
     authorize = client.get("/api/auth/github/authorize", headers=headers, follow_redirects=False)
-    state = _state_from_redirect(authorize.headers["location"])
+    state = state_from_redirect(authorize.headers["location"])
     callback = client.get(f"/api/auth/github/callback?code=c1&state={state}", headers=headers, follow_redirects=False)
     assert callback.status_code in (302, 307)
     set_cookie = callback.headers["set-cookie"]
@@ -55,7 +55,7 @@ def test_forwarded_proto_https_from_an_unlisted_peer_is_ignored(tmp_path: Path) 
 
     headers = {"x-forwarded-proto": "https"}
     authorize = client.get("/api/auth/github/authorize", headers=headers, follow_redirects=False)
-    state = _state_from_redirect(authorize.headers["location"])
+    state = state_from_redirect(authorize.headers["location"])
     callback = client.get(f"/api/auth/github/callback?code=c1&state={state}", headers=headers, follow_redirects=False)
     assert callback.status_code in (302, 307)
     assert "Secure" not in callback.headers["set-cookie"]
@@ -70,7 +70,7 @@ def test_with_no_trusted_proxies_the_forwarded_proto_header_is_ignored(tmp_path:
 
     headers = {"x-forwarded-proto": "https"}
     authorize = client.get("/api/auth/github/authorize", headers=headers, follow_redirects=False)
-    state = _state_from_redirect(authorize.headers["location"])
+    state = state_from_redirect(authorize.headers["location"])
     callback = client.get(f"/api/auth/github/callback?code=c1&state={state}", headers=headers, follow_redirects=False)
     assert "Secure" not in callback.headers["set-cookie"]
 

@@ -43,7 +43,7 @@ from tests.support import (
     seed_graph,
     serve_default_tenant,
 )
-from tests.test_ingest_and_queue import _BUILD_REVIEW_DELIVER_YAML, _pass
+from tests.test_ingest_and_queue import BUILD_REVIEW_DELIVER_YAML, pass_node
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -472,7 +472,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     """Live-holder/blocked derivation resolves a cause held off the page, so a marking must
     be identical whether its cause shares the page or not — forced here by putting every chunk on its own page (`limit=1`)."""
     hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
+    assert hub.client.post("/api/graphs", json={"definition_yaml": BUILD_REVIEW_DELIVER_YAML}).status_code == 201
 
     # (a) old + fresh holders of one pointer, over the `hub` source since its `web_url`
     # varies with the live holder — `default`'s ignores `live_holder` entirely.
@@ -491,10 +491,10 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
             "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
     ]
-    to_review = _pass(hub, old_holder_id, build_id, 1, artifacts=commit)
+    to_review = pass_node(hub, old_holder_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
     assert report_lease(hub, old_holder_id, epoch=2, seq=1)["applied"] == [1]
-    _pass(hub, old_holder_id, review_id, 2, artifacts=[])
+    pass_node(hub, old_holder_id, review_id, 2, artifacts=[])
     hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{old_holder_id}").json()["status"] == "done"
 

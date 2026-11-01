@@ -144,7 +144,7 @@ nodes:
 _REPO = "acme/widget"
 
 
-class _World:
+class World:
     def __init__(self, tmp_path: Path) -> None:
         self.action = _HeldLanding()
         actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])
@@ -252,11 +252,11 @@ class _World:
 
 
 @pytest.fixture
-def world(tmp_path: Path) -> _World:
-    return _World(tmp_path)
+def world(tmp_path: Path) -> World:
+    return World(tmp_path)
 
 
-def _submitted_once(world: _World, chunk_id: str) -> Submission:
+def _submitted_once(world: World, chunk_id: str) -> Submission:
     """The chunk was submitted and took its turn on one tick, and a forced second tick submits nothing more."""
     first = world.tick()
     assert first.submitted == 1
@@ -271,7 +271,7 @@ def _submitted_once(world: _World, chunk_id: str) -> Submission:
 # --- every path in -----------------------------------------------------------------------------------------------
 
 
-def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(world: _World) -> None:
+def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(world: World) -> None:
     chunk_id = world.at_merge()
 
     sub = _submitted_once(world, chunk_id)
@@ -286,7 +286,7 @@ def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(
     assert world.action.passes == [chunk_id]
 
 
-def test_a_hub_to_hub_transition_is_routed_by_a_turn_and_the_next_node_submitted_once(world: _World) -> None:
+def test_a_hub_to_hub_transition_is_routed_by_a_turn_and_the_next_node_submitted_once(world: World) -> None:
     chunk_id = world.at_merge(_HUB_TO_HUB)
     assert world.detail(chunk_id)["current_node_name"] == "check"
 
@@ -300,7 +300,7 @@ def test_a_hub_to_hub_transition_is_routed_by_a_turn_and_the_next_node_submitted
     assert [sub.closed for sub in world.submissions(chunk_id)] == ["success", None]
 
 
-def test_a_restart_onto_the_node_is_submitted_once(world: _World) -> None:
+def test_a_restart_onto_the_node_is_submitted_once(world: World) -> None:
     chunk_id, _build = world.mint()
     world.hub.clock.advance(timedelta(seconds=1))
     resp = world.hub.client.post(f"/api/chunks/{chunk_id}/restart", json={"node": "merge"})
@@ -310,7 +310,7 @@ def test_a_restart_onto_the_node_is_submitted_once(world: _World) -> None:
     _submitted_once(world, chunk_id)
 
 
-def test_a_cross_graph_migration_onto_the_node_is_submitted_once(world: _World) -> None:
+def test_a_cross_graph_migration_onto_the_node_is_submitted_once(world: World) -> None:
     assert world.hub.client.post("/api/graphs", json={"definition_yaml": _LANDING}).status_code == 201
     chunk_id, build = world.mint(_GRAPH.replace("          to: merge\n", "          to: graph:landing\n", 1))
     world.complete(chunk_id, build)
@@ -320,7 +320,7 @@ def test_a_cross_graph_migration_onto_the_node_is_submitted_once(world: _World) 
     _submitted_once(world, chunk_id)
 
 
-def test_a_chunk_paused_at_the_node_takes_no_turn_until_it_is_resumed(world: _World) -> None:
+def test_a_chunk_paused_at_the_node_takes_no_turn_until_it_is_resumed(world: World) -> None:
     chunk_id, build = world.mint()
     assert world.hub.client.post(f"/api/chunks/{chunk_id}/pause", json={}).status_code == 202
     world.complete(chunk_id, build)
@@ -333,7 +333,7 @@ def test_a_chunk_paused_at_the_node_takes_no_turn_until_it_is_resumed(world: _Wo
     assert world.action.passes == [chunk_id]
 
 
-def test_a_requeue_after_an_escalation_is_a_new_visit_at_the_back(world: _World) -> None:
+def test_a_requeue_after_an_escalation_is_a_new_visit_at_the_back(world: World) -> None:
     chunk_id = world.at_merge()
     world.action.answer = Pass(choice=None, escalation=ActionEscalation(EscalationCause.FORGE_AUTH, "token revoked"))
     first = _submitted_once(world, chunk_id)
@@ -357,7 +357,7 @@ def test_a_requeue_after_an_escalation_is_a_new_visit_at_the_back(world: _World)
 # --- the line -------------------------------------------------------------------------------------------------------
 
 
-def test_two_chunks_on_one_branch_take_turns_in_arrival_order_and_a_pending_one_yields(world: _World) -> None:
+def test_two_chunks_on_one_branch_take_turns_in_arrival_order_and_a_pending_one_yields(world: World) -> None:
     first = world.at_merge(ref="first")
     world.hub.clock.advance(timedelta(seconds=1))
     second = world.at_merge(ref="second")
@@ -382,7 +382,7 @@ def test_two_chunks_on_one_branch_take_turns_in_arrival_order_and_a_pending_one_
     assert [world.submissions(c)[0].closed for c in (first, second)] == ["landed", "landed"]
 
 
-def test_a_chunk_that_lands_closes_with_its_verdict(world: _World) -> None:
+def test_a_chunk_that_lands_closes_with_its_verdict(world: World) -> None:
     chunk_id = world.at_merge()
     world.action.answer = Pass(choice="landed")
 
@@ -395,7 +395,7 @@ def test_a_chunk_that_lands_closes_with_its_verdict(world: _World) -> None:
     assert facts == [("submitted", None), ("turn-started", None), ("turn-ended", "landed"), ("withdrawn", "landed")]
 
 
-def test_hub_advance_wakes_the_driver_and_answers_where_the_visit_stands(world: _World) -> None:
+def test_hub_advance_wakes_the_driver_and_answers_where_the_visit_stands(world: World) -> None:
     first = world.at_merge(ref="first")
     world.hub.clock.advance(timedelta(seconds=1))
     second = world.at_merge(ref="second")
@@ -410,7 +410,7 @@ def test_hub_advance_wakes_the_driver_and_answers_where_the_visit_stands(world: 
     assert world.hub.client.post(f"/api/fleet/chunks/{second}/hub-advance").json()["detail"] == "2nd on widget/main"
 
 
-def test_a_pending_visit_is_reported_waiting_on_its_poll(world: _World) -> None:
+def test_a_pending_visit_is_reported_waiting_on_its_poll(world: World) -> None:
     chunk_id = world.at_merge()
     world.tick()
 
@@ -422,7 +422,7 @@ def test_a_pending_visit_is_reported_waiting_on_its_poll(world: _World) -> None:
 # --- nothing left holding a place ---------------------------------------------------------------------------------
 
 
-def test_a_stopped_chunk_closes_stopped(world: _World) -> None:
+def test_a_stopped_chunk_closes_stopped(world: World) -> None:
     chunk_id = world.at_merge()
     _submitted_once(world, chunk_id)
 
@@ -432,7 +432,7 @@ def test_a_stopped_chunk_closes_stopped(world: _World) -> None:
     assert world.submissions(chunk_id)[0].closed == "stopped"
 
 
-def test_a_chunk_held_by_its_person_at_a_later_epoch_stays_open_and_takes_no_turn(world: _World) -> None:
+def test_a_chunk_held_by_its_person_at_a_later_epoch_stays_open_and_takes_no_turn(world: World) -> None:
     chunk_id = world.at_merge()
     world.action.answer = Pass(choice=None, escalation=ActionEscalation(EscalationCause.FORGE_AUTH, "token revoked"))
     _submitted_once(world, chunk_id)
@@ -453,7 +453,7 @@ def test_a_chunk_held_by_its_person_at_a_later_epoch_stays_open_and_takes_no_tur
 # --- the reconcile's own writes -----------------------------------------------------------------------------------
 
 
-def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world: _World) -> None:
+def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world: World) -> None:
     chunk_id, build = world.mint()
     world.complete(chunk_id, build, repo="acme/unknown")
 
@@ -472,7 +472,7 @@ def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world:
     assert [k for (k,) in kinds].count("repository-unresolved") == 1
 
 
-def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_up(world: _World) -> None:
+def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_up(world: World) -> None:
     chunk_id, build = world.mint()
     graph_id = world.detail(chunk_id)["graph_id"]
     with world.hub.engine.begin() as conn:  # as the carry-over leaves a node it could not translate
@@ -515,7 +515,7 @@ def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_u
 # --- the probe -----------------------------------------------------------------------------------------------------
 
 
-def test_an_unchanged_signature_skips_the_rescan_until_the_floor(world: _World) -> None:
+def test_an_unchanged_signature_skips_the_rescan_until_the_floor(world: World) -> None:
     world.at_merge()
     assert world.tick().reconciled == (world.tenant,)
     world.tick()  # the wake its turn's end sent
@@ -537,7 +537,7 @@ def test_an_unchanged_signature_skips_the_rescan_until_the_floor(world: _World) 
 # --- a turn no task answers for -----------------------------------------------------------------------------------
 
 
-def test_a_turn_a_tick_started_but_no_task_ran_is_ended_by_the_sweep_within_two_ticks(world: _World) -> None:
+def test_a_turn_a_tick_started_but_no_task_ran_is_ended_by_the_sweep_within_two_ticks(world: World) -> None:
     chunk_id = world.at_merge()
     orphaned = world.driver.tick(world.stores, world.hub.clock)  # the turn is taken; its task is never created
     assert len(orphaned.started) == 1
@@ -555,7 +555,7 @@ def test_a_turn_a_tick_started_but_no_task_ran_is_ended_by_the_sweep_within_two_
     assert world.action.passes == [chunk_id]  # eligible again at once, and taken by a fresh turn
 
 
-def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: _World) -> None:
+def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: World) -> None:
     chunk_id = world.at_merge()
     (started,) = world.driver.tick(world.stores, world.hub.clock).started
     stores = chunk_stores(world.hub.engine, world.hub.clock)
@@ -580,7 +580,7 @@ def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: _Wor
     assert world.submissions(chunk_id)[0].closed is None  # a person holds it at a later epoch
 
 
-def test_a_running_turn_is_never_swept(world: _World) -> None:
+def test_a_running_turn_is_never_swept(world: World) -> None:
     world.at_merge()
     taken = world.driver.tick(world.stores, world.hub.clock)
     (started,) = taken.started
@@ -597,7 +597,7 @@ def test_a_running_turn_is_never_swept(world: _World) -> None:
 # --- boot -----------------------------------------------------------------------------------------------------------
 
 
-def test_boot_ends_a_planted_open_turn_interrupted_once(world: _World) -> None:
+def test_boot_ends_a_planted_open_turn_interrupted_once(world: World) -> None:
     chunk_id = world.at_merge()
     sub = _submitted_once(world, chunk_id)
     with world.hub.engine.begin() as conn:
@@ -623,7 +623,7 @@ def test_boot_ends_a_planted_open_turn_interrupted_once(world: _World) -> None:
     assert world.submissions(chunk_id)[0].closed is None  # its visit is current: it keeps its place
 
 
-def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_their_node(world: _World) -> None:
+def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_their_node(world: World) -> None:
     later, build_later = world.mint(ref="later")
     earlier, build_earlier = world.mint(ref="earlier")
     world.complete(earlier, build_earlier)
@@ -639,7 +639,7 @@ def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_th
 # --- forge budget notices -----------------------------------------------------------------------------------------
 
 
-def _budget_events(world: _World) -> list[tuple[str, str, dict[str, Any]]]:
+def _budget_events(world: World) -> list[tuple[str, str, dict]]:
     with world.hub.engine.connect() as conn:
         rows = conn.execute(
             hub_scoped(
@@ -651,7 +651,7 @@ def _budget_events(world: _World) -> list[tuple[str, str, dict[str, Any]]]:
     return [(r.kind, r.severity, r.detail if isinstance(r.detail, dict) else json.loads(r.detail)) for r in rows]
 
 
-def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: _World) -> None:
+def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: World) -> None:
     budgets = world.hub.open_services(world.tenant).forge_budgets
     key = BudgetKey("github", "token")
     reset = world.hub.clock.now() + timedelta(minutes=2)
@@ -688,7 +688,7 @@ def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log
     }
 
 
-def test_a_new_window_drains_its_notice_again(world: _World) -> None:
+def test_a_new_window_drains_its_notice_again(world: World) -> None:
     budgets = world.hub.open_services(world.tenant).forge_budgets
     key = BudgetKey("github", None)
     for _ in range(2):
@@ -737,7 +737,7 @@ def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain
 
 
 def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry_order(
-    world: _World, tmp_path: Path
+    world: World, tmp_path: Path
 ) -> None:
     later, build_later = world.mint(ref="later")
     world.hub.clock.advance(timedelta(seconds=1))
@@ -778,7 +778,7 @@ def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry
 # --- isolation ------------------------------------------------------------------------------------------------------
 
 
-def test_a_raising_tenant_does_not_stop_the_others(world: _World) -> None:
+def test_a_raising_tenant_does_not_stop_the_others(world: World) -> None:
     other = world.hub.add_tenant("other")
 
     def lines(tenant: TenantId) -> FlowLineReconciler:
@@ -800,7 +800,7 @@ def test_a_raising_tenant_does_not_stop_the_others(world: _World) -> None:
     assert result.reconciled == (other.tenant,)
 
 
-def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: _World) -> None:
+def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: World) -> None:
     ticks: list[int] = []
 
     def tenants() -> list[TenantId]:
@@ -832,7 +832,7 @@ def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: _World) -> Non
 
 
 def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submit(
-    world: _World, monkeypatch: pytest.MonkeyPatch
+    world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     broken, build_broken = world.mint(ref="broken")
     sound, build_sound = world.mint(ref="sound")

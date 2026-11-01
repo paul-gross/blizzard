@@ -9,7 +9,6 @@ import pytest
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
 from tests.support import (
     FakeWorkSource,
@@ -124,11 +123,10 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     hub_store = hub_store_connections(hub.engine)
-    items = WorkItemStore(hub_store)
     work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
     hub_item = seed_work_item(
-        items,
+        hub_store,
         graph_id=graph.graph_id,
         title="proposed by the fleet",
         body="please add a widget",

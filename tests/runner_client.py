@@ -3,11 +3,13 @@ base URL carries that prefix keeps every ``/api/...`` path a test calls unchange
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute, _IncludedRouter
+from fastapi.routing import APIRoute, APIRouter
 from fastapi.testclient import TestClient
+from starlette.routing import BaseRoute
 
 from blizzard.runner.api.wiring import RunnerRegistry
 from blizzard.runner.route_paths import runner_prefix
@@ -51,14 +53,18 @@ def live_api_routes(app: FastAPI) -> list[tuple[str, APIRoute]]:
     """Every mounted API route with the full path it answers at, its include prefix applied; the web root, the SPA
     shell, is left out."""
 
-    def collect(routes: object, prefix: str) -> list[tuple[str, APIRoute]]:
+    def collect(routes: Sequence[BaseRoute], prefix: str) -> list[tuple[str, APIRoute]]:
         out: list[tuple[str, APIRoute]] = []
-        for route in routes:  # type: ignore[attr-defined]
+        for route in routes:
             if isinstance(route, APIRoute):
                 if prefix + route.path != "/":
                     out.append((prefix + route.path, route))
-            elif isinstance(route, _IncludedRouter):
-                out.extend(collect(route.original_router.routes, prefix + route.include_context.prefix))
+            else:
+                # FastAPI publishes no included-router type: a mounted router carries its own router and prefix.
+                included: Any = route
+                inner = getattr(included, "original_router", None)
+                if isinstance(inner, APIRouter):
+                    out.extend(collect(inner.routes, prefix + str(included.include_context.prefix)))
         return out
 
     return collect(app.routes, "")

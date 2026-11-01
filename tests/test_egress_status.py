@@ -13,7 +13,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.egress.factory import EgressUnavailable
 from tests.support import HubHarness
-from tests.test_egress_sweep import _closed_step, _hub
+from tests.test_egress_sweep import closed_step, egress_hub
 from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
@@ -31,7 +31,7 @@ def _status(hub: HubHarness) -> dict[str, Any]:
 
 
 def test_a_hub_with_the_export_off_reports_it_off(tmp_path: Path) -> None:
-    hub, _ = _hub(tmp_path)
+    hub, _ = egress_hub(tmp_path)
     body = _status(hub)
     assert body["state"] == "off"
     assert body["directory"] is None
@@ -44,7 +44,7 @@ def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypat
         "blizzard.hub.composition.build_egress_writer", lambda *_: EgressUnavailable("parquet needs pyarrow")
     )
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
-    hub, _ = _hub(tmp_path, config)
+    hub, _ = egress_hub(tmp_path, config)
     body = _status(hub)
     assert body["state"] == "rejected"
     assert body["rejected_setting"] == "egress.format"
@@ -54,7 +54,7 @@ def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypat
 
 
 def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _on(tmp_path))
+    hub, graph = egress_hub(tmp_path, _on(tmp_path))
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
@@ -68,7 +68,7 @@ def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tm
     assert start["free_bytes"] is not None
     assert start["min_free_bytes"] == 0
 
-    chunk_id = _closed_step(hub, graph, 1, usage=2)
+    chunk_id = closed_step(hub, graph, 1, usage=2)
     hub.clock.advance(timedelta(seconds=100))
     waiting = _status(hub)
     assert [d["lag_seconds"] for d in waiting["datasets"]] == [100, 105]
@@ -86,12 +86,12 @@ def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tm
 
 def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     assert _status(hub)["last_error_at"] is None
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     sweep.sweep()
     failed = _status(hub)
     assert failed["last_error_ongoing"] is True
@@ -107,7 +107,7 @@ def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> Non
 
 
 def test_the_cli_renders_the_status_and_its_json(tmp_path: Path) -> None:
-    hub, _ = _hub(tmp_path, _on(tmp_path))
+    hub, _ = egress_hub(tmp_path, _on(tmp_path))
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()

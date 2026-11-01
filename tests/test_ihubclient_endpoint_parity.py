@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from tests.service.test_parity_guard import _assert_ihubclient_endpoint_table_matches_protocol
+from tests.service.test_parity_guard import assert_ihubclient_endpoint_table_matches_protocol
 
 pytestmark = pytest.mark.unit
 
 
 def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
     """See ``_assert_ihubclient_endpoint_table_matches_protocol`` for the check itself."""
-    _assert_ihubclient_endpoint_table_matches_protocol()
+    assert_ihubclient_endpoint_table_matches_protocol()

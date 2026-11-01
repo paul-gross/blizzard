@@ -1,7 +1,5 @@
 """Tests proving the ``20261008_1000_runner_identity_tenant`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +15,7 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from tests.config_inputs import init_host
-from tests.migration_support_runner_identity_tenant import _REGISTERED, _RUNNER, _ctx, _tenant_hub
+from tests.migration_support_runner_identity_tenant import REGISTERED, RUNNER, started_context, tenant_hub
 from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     runner_store_errors,
@@ -52,7 +50,7 @@ def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
 def _seed_a_pre_tenant_identity(engine: sa.Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
-            _identity_at_parent.insert().values(runner_id=_RUNNER, runner_name="r-claude", registered_at=_REGISTERED)
+            _identity_at_parent.insert().values(runner_id=RUNNER, runner_name="r-claude", registered_at=REGISTERED)
         )
 
 
@@ -76,7 +74,7 @@ _lease_context_at_parent = sa.table(
 def _seed_a_pre_tenant_lease(engine: sa.Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
-            _leases_at_parent.insert().values(lease_id="lease_1", chunk_id="ch_1", epoch=1, created_at=_REGISTERED)
+            _leases_at_parent.insert().values(lease_id="lease_1", chunk_id="ch_1", epoch=1, created_at=REGISTERED)
         )
         conn.execute(
             _lease_context_at_parent.insert().values(
@@ -86,7 +84,7 @@ def _seed_a_pre_tenant_lease(engine: sa.Engine) -> None:
                 node_id="nd_build",
                 node_name="build",
                 retries_max=2,
-                recorded_at=_REGISTERED,
+                recorded_at=REGISTERED,
             )
         )
 
@@ -107,8 +105,8 @@ def test_the_upgrade_adds_both_columns_empty_and_keeps_the_row(tmp_path: Path) -
         assert all(
             c["nullable"] for c in sa.inspect(engine).get_columns("runner_identity") if c["name"] in _TENANT_COLUMNS
         )
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
-        assert store.runner_identity() == RunnerIdentity(_RUNNER, "r-claude", _REGISTERED)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
+        assert store.runner_identity() == RunnerIdentity(RUNNER, "r-claude", REGISTERED)
     finally:
         engine.dispose()
 
@@ -128,18 +126,18 @@ def test_the_downgrade_drops_both_columns_keeping_the_row_and_upgrades_back(tmp_
     migration, engine = _store_at_parent(tmp_path)
     try:
         migration.upgrade(_REVISION)
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
-        store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED, "ten_default", "default"))
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
+        store.record_runner_identity(RunnerIdentity(RUNNER, "r-claude", REGISTERED, "ten_default", "default"))
 
         migration.downgrade(_PARENT)
         assert not _TENANT_COLUMNS & _columns(engine, "runner_identity")
         with engine.connect() as conn:
             assert [tuple(r) for r in conn.execute(sa.text("SELECT runner_id, runner_name FROM runner_identity"))] == [
-                (_RUNNER, "r-claude")
+                (RUNNER, "r-claude")
             ]
 
         migration.upgrade(_REVISION)
-        assert store.runner_identity() == RunnerIdentity(_RUNNER, "r-claude", _REGISTERED)
+        assert store.runner_identity() == RunnerIdentity(RUNNER, "r-claude", REGISTERED)
     finally:
         engine.dispose()
 
@@ -151,12 +149,12 @@ def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_co
         _seed_a_pre_tenant_identity(engine)
         _seed_a_pre_tenant_lease(engine)
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
-        ctx = _ctx(store, _tenant_hub())
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
+        ctx = started_context(store, tenant_hub())
 
         IdentityCheck(ctx).run()
 
-        adopted = RunnerIdentity(_RUNNER, "r-claude", _REGISTERED, "ten_default", "default")
+        adopted = RunnerIdentity(RUNNER, "r-claude", REGISTERED, "ten_default", "default")
         assert ctx.identity_verdict.verdict().state is IdentityState.MATCHED
         assert store.runner_identity() == adopted
         assert ctx.identity.current() == adopted

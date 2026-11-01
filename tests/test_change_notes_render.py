@@ -120,16 +120,16 @@ def test_render_of_no_notes_is_the_commit_block_alone() -> None:
     assert render("v0.3.0", [], {}, _COMMITS).startswith("## Commits\n")
 
 
-def _git(cwd: Path, *args: str) -> str:
+def git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def _commit(repo: Path, message: str, files: dict[str, str]) -> None:
+def commit(repo: Path, message: str, files: dict[str, str]) -> None:
     for name, text in files.items():
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text(text)
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", message)
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", message)
 
 
 def _fixed(text: str) -> str:
@@ -140,22 +140,22 @@ def _fixed(text: str) -> str:
 def repo(tmp_path: Path) -> Path:
     path = tmp_path / "repo"
     (path / "scripts").mkdir(parents=True)
-    _git(path, "init", "-b", "main")
-    _git(path, "config", "user.name", "Test")
-    _git(path, "config", "user.email", "test@example.com")
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.name", "Test")
+    git(path, "config", "user.email", "test@example.com")
     shutil.copy(repo_root() / "scripts" / "release-notes.sh", path / "scripts" / "release-notes.sh")
-    _commit(path, "feat: first", {"changes/0.1.0/one.md": _fixed("Fixes one."), "README.md": "x"})
-    _git(path, "tag", "v0.1.0")
-    _commit(
+    commit(path, "feat: first", {"changes/0.1.0/one.md": _fixed("Fixes one."), "README.md": "x"})
+    git(path, "tag", "v0.1.0")
+    commit(
         path,
         "fix: second",
         {"changes/0.2.0/two.md": _fixed("Fixes two."), "changes/0.2.0/shared.md": _fixed("Shared.")},
     )
-    _git(path, "tag", "v0.2.0")
-    _git(path, "checkout", "-q", "-b", "release/0.1", "v0.1.0")
-    _commit(path, "fix: patch", {"changes/0.1.1/shared.md": _fixed("Shared.")})
-    _git(path, "tag", "v0.1.1")
-    _git(path, "checkout", "-q", "main")
+    git(path, "tag", "v0.2.0")
+    git(path, "checkout", "-q", "-b", "release/0.1", "v0.1.0")
+    commit(path, "fix: patch", {"changes/0.1.1/shared.md": _fixed("Shared.")})
+    git(path, "tag", "v0.1.1")
+    git(path, "checkout", "-q", "main")
     return path
 
 
@@ -189,16 +189,14 @@ def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, mon
 
 </details>
 """
-    sha = _git(repo, "log", "-1", "--format=%h", "v0.2.0")
+    sha = git(repo, "log", "-1", "--format=%h", "v0.2.0")
     assert first.output == expected.replace("SHA", sha)
     assert _render(repo, "v0.2.0", monkeypatch).output == first.output
 
 
-def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(
-    repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _commit(repo, "chore: later", {"x": "y"})
-    _git(repo, "tag", "v0.3.0")
+def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(repo: Path, monkeypatch) -> None:
+    commit(repo, "chore: later", {"x": "y"})
+    git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
     assert result.exit_code == 0, result.output
     assert result.output.startswith("## Commits\n") and "- later (" in result.output
@@ -211,9 +209,9 @@ def test_a_tag_with_no_previous_tag_renders_the_empty_range_block(repo: Path, mo
     assert "- first (" not in result.output
 
 
-def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _commit(repo, "fix: bad", {"changes/0.3.0/bad.md": "no frontmatter\n"})
-    _git(repo, "tag", "v0.3.0")
+def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch) -> None:
+    commit(repo, "fix: bad", {"changes/0.3.0/bad.md": "no frontmatter\n"})
+    git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
     assert result.exit_code == 1
     assert "changes/0.3.0/bad.md" in result.output
@@ -228,12 +226,12 @@ def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(
 ) -> None:
     path = "src/blizzard/foundation/flags/registry.toml"
     off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
-    _commit(repo, "feat: staged", {path: off})
-    _git(repo, "tag", "v0.3.0")
-    _commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
-    _git(repo, "tag", "v0.4.0")
-    _commit(repo, "chore: later", {"README.md": "later"})
-    _git(repo, "tag", "v0.5.0")
+    commit(repo, "feat: staged", {path: off})
+    git(repo, "tag", "v0.3.0")
+    commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
+    git(repo, "tag", "v0.4.0")
+    commit(repo, "chore: later", {"README.md": "later"})
+    git(repo, "tag", "v0.5.0")
     turned = _render(repo, "v0.4.0", monkeypatch)
     assert turned.exit_code == 0, turned.output
     assert turned.output.startswith("## Turned on\n\n- Alpha capability\n")
@@ -242,15 +240,15 @@ def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(
     assert "## Turned on" not in _render(repo, "v0.2.0", monkeypatch).output
 
 
-def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _commit(
+def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch) -> None:
+    commit(
         repo,
         "feat: immediate capability",
         {
             "src/blizzard/foundation/flags/registry.toml": '[flag.immediate]\ndefault = "on"\nsummary = "Immediate use"\n'
         },
     )
-    _git(repo, "tag", "v0.3.0")
+    git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
     assert result.exit_code == 0, result.output
     assert "## Turned on\n\n- Immediate use" in result.output
@@ -259,11 +257,11 @@ def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, mo
 def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = "src/blizzard/foundation/flags/registry.toml"
     off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
-    _commit(repo, "feat: staged", {path: off})
-    _git(repo, "tag", "v0.3.0")
-    _commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
-    _git(repo, "tag", "v0.4.0-rc.1")
-    _git(repo, "tag", "v0.4.0")
+    commit(repo, "feat: staged", {path: off})
+    git(repo, "tag", "v0.3.0")
+    commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
+    git(repo, "tag", "v0.4.0-rc.1")
+    git(repo, "tag", "v0.4.0")
     candidate = _render(repo, "v0.4.0-rc.1", monkeypatch)
     stable = _render(repo, "v0.4.0", monkeypatch)
     assert candidate.exit_code == stable.exit_code == 0
@@ -282,8 +280,8 @@ def _breaks_file(repo: Path, tag: str, *entries: dict[str, Any]) -> str:
 
 @pytest.fixture
 def breaking(repo: Path) -> Path:
-    _commit(repo, "feat: drop", {"changes/0.3.0/drop.md": _BREAKING})
-    _git(repo, "tag", "v0.3.0")
+    commit(repo, "feat: drop", {"changes/0.3.0/drop.md": _BREAKING})
+    git(repo, "tag", "v0.3.0")
     return repo
 
 
@@ -322,7 +320,7 @@ def test_also_in_marks_only_supported_releases(repo: Path, monkeypatch: pytest.M
     assert "releases --json --tag 0.2.0" in result.compat_calls  # type: ignore[attr-defined]
 
 
-def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _commit(repo, "chore: later", {"x": "y"})
-    _git(repo, "tag", "v0.3.0")
+def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch) -> None:
+    commit(repo, "chore: later", {"x": "y"})
+    git(repo, "tag", "v0.3.0")
     assert _render(repo, "v0.3.0", monkeypatch).compat_calls == ""  # type: ignore[attr-defined]

@@ -47,7 +47,16 @@ def _tables(engine: sa.Engine) -> set[str]:
     return set(sa.inspect(engine).get_table_names()) - {"alembic_version"}
 
 
-def _schema(engine: sa.Engine) -> dict[str, object]:
+type _TableShape = tuple[
+    tuple[tuple[str, str, bool], ...],
+    tuple[str, ...],
+    frozenset[tuple[tuple[str | None, ...], bool, str | None]],
+    frozenset[tuple[tuple[str | None, ...], str | None]],
+]
+"""A table's columns (name, type, nullability), primary key, indexes, and unique constraints."""
+
+
+def _schema(engine: sa.Engine) -> dict[str, _TableShape]:
     inspector = sa.inspect(engine)
     return {
         table: (
@@ -76,8 +85,8 @@ def test_the_upgrade_adds_a_null_cause_to_pause_parks_and_changes_nothing_else(t
         assert {k: v for k, v in after.items() if k != "pause_parks"} == {
             k: v for k, v in before.items() if k != "pause_parks"
         }
-        columns, key, indexes, uniques = after["pause_parks"]  # type: ignore[misc]
-        old_columns, old_key, old_indexes, old_uniques = before["pause_parks"]  # type: ignore[misc]
+        columns, key, indexes, uniques = after["pause_parks"]
+        old_columns, old_key, old_indexes, old_uniques = before["pause_parks"]
         assert columns == (*old_columns, ("cause", "VARCHAR", True))
         assert (key, indexes, uniques) == (old_key, old_indexes, old_uniques)
         assert _row_counts(engine) == counts

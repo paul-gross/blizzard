@@ -15,7 +15,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.span_clock import Clock
 
 
-class StubClient:
+class StubClient(httpx2.Client):
     """A client whose verbs are the callables a test supplies, each answering as ``httpx2.<verb>(url, **kwargs)``.
 
     ``request`` and ``stream`` take the method first; without a ``request`` callable, a request routes to its method's own."""
@@ -27,6 +27,7 @@ class StubClient:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> None:
+        super().__init__()
         self._calls = calls
         self._ambient: dict[str, Any] = {}
         if timeout is not None:
@@ -47,31 +48,31 @@ class StubClient:
             merged["headers"] = {**self._ambient["headers"], **kwargs["headers"]}
         return merged
 
-    def get(self, url: str, **kwargs: Any) -> Any:
-        return self._verb("get", url, kwargs)
+    def get(self, url: httpx2.URL | str, **kwargs: Any) -> Any:
+        return self._verb("get", str(url), kwargs)
 
-    def post(self, url: str, **kwargs: Any) -> Any:
-        return self._verb("post", url, kwargs)
+    def post(self, url: httpx2.URL | str, **kwargs: Any) -> Any:
+        return self._verb("post", str(url), kwargs)
 
-    def patch(self, url: str, **kwargs: Any) -> Any:
-        return self._verb("patch", url, kwargs)
+    def patch(self, url: httpx2.URL | str, **kwargs: Any) -> Any:
+        return self._verb("patch", str(url), kwargs)
 
-    def put(self, url: str, **kwargs: Any) -> Any:
-        return self._verb("put", url, kwargs)
+    def put(self, url: httpx2.URL | str, **kwargs: Any) -> Any:
+        return self._verb("put", str(url), kwargs)
 
-    def delete(self, url: str, **kwargs: Any) -> Any:
-        return self._verb("delete", url, kwargs)
+    def delete(self, url: httpx2.URL | str, **kwargs: Any) -> Any:
+        return self._verb("delete", str(url), kwargs)
 
-    def request(self, method: str, url: str, **kwargs: Any) -> Any:
+    def request(self, method: str, url: httpx2.URL | str, **kwargs: Any) -> Any:
         if "request" in self._calls:
-            return self._calls["request"](method.lower(), url, **self._merged(kwargs))
-        return self._verb(method.lower(), url, kwargs)
+            return self._calls["request"](method.lower(), str(url), **self._merged(kwargs))
+        return self._verb(method.lower(), str(url), kwargs)
 
-    def stream(self, method: str, url: str, **kwargs: Any) -> Any:
+    def stream(self, method: str, url: httpx2.URL | str, **kwargs: Any) -> Any:
         call = self._calls.get("stream")
         if call is None:
             raise AssertionError(f"unexpected streamed {method} {url}")
-        return call(method.lower(), url, **self._merged(kwargs))
+        return call(method.lower(), str(url), **self._merged(kwargs))
 
     def close(self) -> None:
         self.closed = True
@@ -145,7 +146,7 @@ def bind_stubs(
         "stream": stream,
     }
     factory = _StubFactory({name: call for name, call in given.items() if call is not None})
-    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type]
+    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())
     return Bound(collaborators, _BoundRunner(collaborators), factory.built)
 
 

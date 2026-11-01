@@ -17,7 +17,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "104"}
 
-_GATE_YAML = """
+GATE_YAML = """
 name: default-delivery
 entry: build
 nodes:
@@ -71,7 +71,7 @@ _BUILD_ARTIFACT = {
 def _open_decision(hub: HubHarness) -> str:
     """Mint the gated graph, ingest+promote+claim+lease a chunk, and drive it to an
     open decision; return the decision id."""
-    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": GATE_YAML})
     assert graph.status_code == 201, graph.text
     build_node_id = next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
@@ -140,16 +140,16 @@ def test_resolutions_unknown_choice_is_400(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
     decision_id = _open_decision(warn_hub)
 
     hub = build_hub(tmp_path)
     assert (
         hub.client.post(
-            f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}, headers=_bearer(token)
+            f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}, headers=bearer(token)
         ).status_code
         == 403
     )

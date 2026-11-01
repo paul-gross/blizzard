@@ -3,8 +3,6 @@ by it, a part-way rerun finishes, a tenantless row or a two-tenant downgrade is 
 change, and with one tenant the downgrade restores the store exactly. A legacy over-long
 derivations index name is renamed on the way to head."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,14 +20,14 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.config_inputs import init_hub
 from tests.migration_support_tenant_keys_migration import (
-    _BACKFILL,
-    _SECOND_TENANT,
-    _T0,
-    _rows,
-    _seeded_at_the_backfill,
-    _snapshot,
-    _tenant_column_nullable,
-    _tenant_ids,
+    BACKFILL,
+    SECOND_TENANT,
+    T0,
+    rows_of,
+    schema_of,
+    seeded_at_the_backfill,
+    tenant_column_nullable,
+    tenant_ids,
 )
 
 # The egress indexes under the name each carries at head; between their own revision and the tenant keys they carry
@@ -111,19 +109,19 @@ def test_legacy_long_derivations_index_is_renamed_on_the_way_to_head(tmp_path: P
 
 @pytest.mark.component
 def test_the_upgrade_keeps_every_row_in_its_tenant_and_keys_each_table_by_it(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
+    db_url, engine = seeded_at_the_backfill(tmp_path)
     try:
-        rows_before = _rows(engine)
-        [tenant_id] = _tenant_ids(engine)
+        rows_before = rows_of(engine)
+        [tenant_id] = tenant_ids(engine)
 
         migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_KEYS)
 
-        assert _rows(engine) == rows_before
+        assert rows_of(engine) == rows_before
         inspector = sa.inspect(engine)
         with engine.connect() as conn:
             for table in _REKEYED:
                 assert set(conn.execute(sa.text(f"SELECT tenant_id FROM {table}")).scalars()) == {tenant_id}, table
-                assert not _tenant_column_nullable(engine, table), table
+                assert not tenant_column_nullable(engine, table), table
                 assert ("fk_" + table + "_tenant_id", ["tenant_id"], "tenants") in [
                     (fk["name"], fk["constrained_columns"], fk["referred_table"])
                     for fk in inspector.get_foreign_keys(table)
@@ -154,26 +152,26 @@ def test_a_rerun_over_a_store_keyed_part_way_finishes(tmp_path: Path) -> None:
     """Re-entry: the tables a stopped run already keyed — a parent and its child among them — are skipped, the copy a
     stopped batch left behind is cleared, every other table is rebuilt, and the store ends exactly as a single run
     leaves it."""
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
+    db_url, engine = seeded_at_the_backfill(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        rows_before = _rows(engine)
+        rows_before = rows_of(engine)
         _key_only(engine, {"secrets", "work_sources", "question_answers", "transcript_events"})
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE _alembic_tmp_graphs (graph_id VARCHAR)"))  # a stopped copy's leftover
         assert sa.inspect(engine).get_pk_constraint("secrets")["name"] == "pk_secrets"
-        assert _tenant_column_nullable(engine, "work_items")
-        assert runner.current_revision() == _BACKFILL
+        assert tenant_column_nullable(engine, "work_items")
+        assert runner.current_revision() == BACKFILL
 
         runner.upgrade(_KEYS)
 
         assert runner.current_revision() == _KEYS
-        assert _rows(engine) == rows_before
+        assert rows_of(engine) == rows_before
         (tmp_path / "reference").mkdir()
-        reference_url, reference = _seeded_at_the_backfill(tmp_path / "reference")
+        reference_url, reference = seeded_at_the_backfill(tmp_path / "reference")
         try:
             migration_runner(HubConfig(root=tmp_path / "reference", db_url=reference_url)).upgrade(_KEYS)
-            assert _snapshot(engine) == _snapshot(reference)
+            assert schema_of(engine) == schema_of(reference)
         finally:
             reference.dispose()
     finally:
@@ -182,60 +180,60 @@ def test_a_rerun_over_a_store_keyed_part_way_finishes(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_the_upgrade_refuses_a_row_without_a_tenant_and_changes_nothing(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
+    db_url, engine = seeded_at_the_backfill(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
         with engine.begin() as conn:
             conn.execute(sa.text("UPDATE work_items SET tenant_id = NULL"))
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         with pytest.raises(RuntimeError, match="work_items holds rows without a tenant_id"):
             runner.upgrade(_KEYS)
 
-        assert runner.current_revision() == _BACKFILL
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert runner.current_revision() == BACKFILL
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()
 
 
 @pytest.mark.component
 def test_the_downgrade_refuses_a_store_holding_two_tenants_and_changes_nothing(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
+    db_url, engine = seeded_at_the_backfill(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
         runner.upgrade(_KEYS)
-        [first] = _tenant_ids(engine)
+        [first] = tenant_ids(engine)
         with engine.begin() as conn:
             conn.execute(
-                sa.text(f"INSERT INTO tenants VALUES ('{_SECOND_TENANT}', 'second', :at, 'migration')"), {"at": _T0}
+                sa.text(f"INSERT INTO tenants VALUES ('{SECOND_TENANT}', 'second', :at, 'migration')"), {"at": T0}
             )
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
-            runner.downgrade(_BACKFILL)
+            runner.downgrade(BACKFILL)
 
-        assert first in str(refused.value) and _SECOND_TENANT in str(refused.value)
+        assert first in str(refused.value) and SECOND_TENANT in str(refused.value)
         assert runner.current_revision() == _KEYS
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()
 
 
 @pytest.mark.component
 def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
+    db_url, engine = seeded_at_the_backfill(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         runner.upgrade(_KEYS)
-        assert _snapshot(engine) != snapshot
-        runner.downgrade(_BACKFILL)
+        assert schema_of(engine) != snapshot
+        runner.downgrade(BACKFILL)
 
-        assert runner.current_revision() == _BACKFILL
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert runner.current_revision() == BACKFILL
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()

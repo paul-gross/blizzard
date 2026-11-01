@@ -10,9 +10,9 @@ import os
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, TypedDict
 
 import httpx2
 import pytest
@@ -130,7 +130,37 @@ BUILD_SCRIPT = scripted_build_prompt(
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 
-def transcript_segment_turn(index: int, kind: str, text: str) -> dict[str, Any]:
+class SegmentTurnPayload(TypedDict):
+    """A ``TurnSegmentView`` as the wire carries it."""
+
+    index: int
+    kind: str
+    timestamp: str | None
+    text: str
+    tool: str | None
+    thinking_redacted: bool
+    sidechain: str | None
+    truncated: bool
+
+
+class SegmentRecordPayload(TypedDict):
+    """A ``TranscriptSegmentRecord`` as the wire carries it."""
+
+    seq: int
+    segment_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    turn_range_start: int
+    turn_range_end: int
+    final: bool
+    normalizer_version: str
+    harness_version: str
+    turns: list[SegmentTurnPayload]
+
+
+def transcript_segment_turn(index: int, kind: str, text: str) -> SegmentTurnPayload:
     """One ``TurnSegmentView`` as the wire carries it, at its defaults."""
     return {
         "index": index,
@@ -150,8 +180,8 @@ def transcript_segment_record(
     seq: int,
     node_id: str = "nd_build",
     epoch: int = 1,
-    turns: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+    turns: list[SegmentTurnPayload] | None = None,
+) -> SegmentRecordPayload:
     """One final ``TranscriptSegmentRecord`` on ``(chunk_id, node_id, epoch)``'s lane —
     a single ``asst`` turn unless ``turns`` says otherwise."""
     carried = turns if turns is not None else [transcript_segment_turn(0, "asst", "hi")]
@@ -171,7 +201,66 @@ def transcript_segment_record(
     }
 
 
-def mock_hub_chunk_spec(work_ref: str) -> dict[str, Any]:
+class ChoiceSpec(TypedDict):
+    name: str
+    description: str
+    to: str
+
+
+class RunnerNodeSpec(TypedDict):
+    executor: str
+    session: str
+    judged_by: str
+    prompt: str
+    judgement_prompt: str
+    choices: list[ChoiceSpec]
+    retries_max: int
+    session_model: NotRequired[list[str]]
+    session_harnesses: NotRequired[list[str]]
+
+
+class JudgementChoiceSpec(TypedDict):
+    description: str
+    to: str
+
+
+class JudgementSpec(TypedDict):
+    choices: dict[str, JudgementChoiceSpec]
+
+
+class HubNodeSpec(TypedDict):
+    executor: str
+    judgement: JudgementSpec
+
+
+class ChunkNodesSpec(TypedDict):
+    build: RunnerNodeSpec
+    deliver: HubNodeSpec
+
+
+class WorkRefSpec(TypedDict):
+    source: str
+    ref: str
+
+
+AnsweredFindingSpec = TypedDict(
+    "AnsweredFindingSpec",
+    {"finding_id": str, "routine_name": str, "scope_slug": str, "class": str, "locus": str, "summary": str},
+)
+
+
+class MockChunkSpec(TypedDict):
+    """The body ``blizzard-mock-hub``'s ``POST /_seed/chunk`` takes."""
+
+    graph_id: str
+    entry: str
+    nodes: ChunkNodesSpec
+    work_refs: list[WorkRefSpec]
+    garden_answered_findings: NotRequired[list[AnsweredFindingSpec]]
+    project_id: NotRequired[str]
+
+
+def mock_hub_chunk_spec(work_ref: str) -> MockChunkSpec:
     """A scripted build -> deliver chunk the mock hub serves to a real runner."""
     return {
         "graph_id": "gr_service",
@@ -202,7 +291,7 @@ def mock_hub_chunk_spec(work_ref: str) -> dict[str, Any]:
 
 
 @contextlib.contextmanager
-def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx2.Client]:
+def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Generator[httpx2.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
     log = _mock_daemon_log("mock-hub", port, log_dir)
     proc = subprocess.Popen(
@@ -229,7 +318,7 @@ def mock_runner(
     name: str = "runner-mock",
     token: str | None = None,
     log_dir: Path | None = None,
-) -> Iterator[httpx2.Client]:
+) -> Generator[httpx2.Client]:
     """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it. With no
     ``token`` the driver adds itself at the hub on start, as ``runner init`` does; the id the hub minted
     reads back from its ``POST /_drive/register``."""
@@ -265,7 +354,7 @@ def mock_runner(
 
 
 @contextlib.contextmanager
-def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-parity") -> Iterator[HttpHubClient]:
+def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-parity") -> Generator[HttpHubClient]:
     """A real :class:`HttpHubClient` pointed at a hub subprocess on ``port``, driven
     directly rather than through the runner loop — for a wire-parity assertion that needs
     a specific ``IHubClient`` method's response (see ``LoopWiring.tick_once`` for the
@@ -282,7 +371,7 @@ def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-
         client.close()
 
 
-def poll_until(predicate, *, timeout: float = 20.0, interval: float = 0.2) -> bool:
+def poll_until(predicate: Callable[[], bool], *, timeout: float = 20.0, interval: float = 0.2) -> bool:
     """Poll ``predicate`` until true or the deadline; return whether it became true."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

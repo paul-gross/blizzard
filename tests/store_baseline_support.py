@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import sqlalchemy as sa
+from typing_extensions import TypeIs
 
 from tests.migration_support_store_migrations import schema_snapshot
 
@@ -38,13 +39,21 @@ def _generated_name(table: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![A-Za-z0-9_]){re.escape(table)}_")
 
 
-def _rewrite(value: Any, pattern: re.Pattern[str], new: str) -> Any:
+def _frozen(value: object) -> TypeIs[frozenset[object]]:
+    return isinstance(value, frozenset)
+
+
+def _tupled(value: object) -> TypeIs[tuple[object, ...]]:
+    return isinstance(value, tuple)
+
+
+def _rewrite(value: object, pattern: re.Pattern[str], new: str) -> object:
     """``value`` with every name that begins with the old table's name beginning with ``new`` instead."""
     if isinstance(value, str):
         return pattern.sub(new + "_", value)
-    if isinstance(value, frozenset):
+    if _frozen(value):
         return frozenset(_rewrite(item, pattern, new) for item in value)
-    if isinstance(value, tuple):
+    if _tupled(value):
         return tuple(_rewrite(item, pattern, new) for item in value)
     return value
 
@@ -78,7 +87,7 @@ def autoincrement_of(url: str) -> dict[str, bool]:
         engine.dispose()
 
 
-def schema_differences(history: Mapping[str, Any], baseline: Mapping[str, Any]) -> list[str]:
+def schema_differences(history: Mapping[str, object], baseline: Mapping[str, object]) -> list[str]:
     """Each way ``baseline``'s fingerprint differs from ``history``'s, naming the table and the part."""
     found: list[str] = []
     for table in sorted(set(history) | set(baseline)):
@@ -88,10 +97,12 @@ def schema_differences(history: Mapping[str, Any], baseline: Mapping[str, Any]) 
         if table not in history:
             found.append(f"table {table}: only the baseline creates it")
             continue
-        for part, kept, built in zip(_PARTS, history[table], baseline[table], strict=True):
+        kept_parts, built_parts = history[table], baseline[table]
+        assert _tupled(kept_parts) and _tupled(built_parts)
+        for part, kept, built in zip(_PARTS, kept_parts, built_parts, strict=True):
             if kept == built:
                 continue
-            if isinstance(kept, frozenset) and isinstance(built, frozenset):
+            if _frozen(kept) and _frozen(built):
                 found += [
                     f"table {table} {part}: only the history has {item!r}" for item in sorted(kept - built, key=repr)
                 ]

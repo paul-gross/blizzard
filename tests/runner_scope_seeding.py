@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
-from typing import Any
 
 import sqlalchemy as sa
 
@@ -37,7 +36,7 @@ def reflect(engine: sa.Engine) -> sa.MetaData:
     return reflected
 
 
-def _value_for(column: sa.Column[Any]) -> object:
+def _value_for(column: sa.Column[object]) -> object:
     try:
         python_type = column.type.python_type
     except NotImplementedError:

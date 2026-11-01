@@ -3,31 +3,31 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store.schema import GLOBAL_TABLES
 
-_BEFORE = "20261008_1000_drop_work_item_proposals"
+BEFORE = "20261008_1000_drop_work_item_proposals"
 
 
-_TENANTS = "20261008_1100_tenants"
+TENANTS = "20261008_1100_tenants"
 
 
-_BACKFILL = "20261008_1200_tenant_id_backfill"
+BACKFILL = "20261008_1200_tenant_id_backfill"
 
 
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-_SEED = (
+SEED = (
     "INSERT INTO graphs (graph_id, name, entry_node_id, definition_yaml, created_at)"
     " VALUES ('gr_1', 'g', 'nd_1', '', :at)",
     "INSERT INTO chunks (chunk_id, graph_id, minted_at) VALUES ('ch_1', 'gr_1', :at)",
@@ -41,29 +41,29 @@ _SEED = (
 )
 
 
-def _store(tmp_path: Path) -> tuple[str, sa.Engine]:
+def scratch_store(tmp_path: Path) -> tuple[str, sa.Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     return db_url, create_engine_from_url(db_url)
 
 
-def _tables(engine: sa.Engine) -> set[str]:
+def tables(engine: sa.Engine) -> set[str]:
     return set(sa.inspect(engine).get_table_names()) - {"alembic_version"}
 
 
-def _row_counts(engine: sa.Engine) -> dict[str, int]:
+def row_counts(engine: sa.Engine) -> dict[str, int]:
     with engine.connect() as conn:
         return {
             table: conn.execute(sa.select(sa.func.count()).select_from(sa.table(table))).scalar_one()
-            for table in _tables(engine)
+            for table in tables(engine)
         }
 
 
-def _tenant_rows(engine: sa.Engine) -> list[sa.Row[Any]]:
+def tenant_rows(engine: sa.Engine) -> list[sa.Row[tuple[object, ...]]]:
     with engine.connect() as conn:
         return list(conn.execute(sa.text("SELECT tenant_id, name, created_at, created_by FROM tenants")).all())
 
 
-def _schema(engine: sa.Engine) -> dict[str, object]:
+def schema(engine: sa.Engine) -> dict[str, object]:
     inspector = sa.inspect(engine)
     return {
         table: (
@@ -74,7 +74,7 @@ def _schema(engine: sa.Engine) -> dict[str, object]:
                 (tuple(fk["constrained_columns"]), fk["referred_table"]) for fk in inspector.get_foreign_keys(table)
             ),
         )
-        for table in _tables(engine)
+        for table in tables(engine)
     }
 
 
@@ -88,7 +88,7 @@ _ADDRESSES = {
 }
 
 
-def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
+def seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
     """One row in every table outside the global list, built from the store's reflected shape: every
     column without a server default gets a value of its own type, or the first value its ``IN (...)``
     CHECK constraint allows; filling every column satisfies the "this column implies that one" checks. A foreign-key
@@ -116,7 +116,7 @@ def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
     return seeded
 
 
-def _value_for(column: sa.Column[Any]) -> object:
+def _value_for(column: sa.Column[object]) -> object:
     if column.foreign_keys:
         return _value_for(next(iter(column.foreign_keys)).column)
     try:
@@ -130,33 +130,33 @@ def _value_for(column: sa.Column[Any]) -> object:
     if python_type is float:
         return 1.0
     if python_type is datetime:
-        return _T0
+        return T0
     if python_type is bytes:
         return b"1"
     return f"{column.name}-1"
 
 
-def _keyed_tables(engine: sa.Engine) -> dict[str, bool]:
+def keyed_tables(engine: sa.Engine) -> dict[str, bool]:
     """Every table outside the global list, and whether it carries ``tenant_id``."""
     inspector = sa.inspect(engine)
     return {
         table: any(column["name"] == "tenant_id" for column in inspector.get_columns(table))
-        for table in _tables(engine) - GLOBAL_TABLES
+        for table in tables(engine) - GLOBAL_TABLES
     }
 
 
-def _tenants_of(engine: sa.Engine, table: str) -> list[str | None]:
+def tenants_of(engine: sa.Engine, table: str) -> list[str | None]:
     with engine.connect() as conn:
-        return list(conn.execute(sa.select(sa.column("tenant_id")).select_from(sa.table(table))).scalars())
+        return list(conn.execute(sa.select(sa.column("tenant_id", sa.String)).select_from(sa.table(table))).scalars())
 
 
-def _foreign_key_violations(engine: sa.Engine) -> list[tuple[object, ...]]:
+def foreign_key_violations(engine: sa.Engine) -> list[tuple[object, ...]]:
     """Every row whose foreign key names no row of its parent, as SQLite's own check reports it."""
     with engine.connect() as conn:
         return [tuple(row) for row in conn.exec_driver_sql("PRAGMA foreign_key_check")]
 
 
-_LINKS_AT_HEAD = {
+LINKS_AT_HEAD = {
     **{
         table: f"SELECT c.{key}, s.slug FROM {table} c"
         f" JOIN scopes s ON s.tenant_id = c.tenant_id AND s.scope_id = c.{scope_id}"
@@ -189,12 +189,19 @@ _LINKS_AT_HEAD = {
 
 
 @contextmanager
-def _rows_each_update_changed() -> Iterator[list[tuple[str, int]]]:
+def rows_each_update_changed() -> Generator[list[tuple[str, int]]]:
     """Every ``UPDATE`` any engine in the process runs while the context is open — the migration runner's engine
     included — as the table it names and the rows it changed, in issue order."""
     updates: list[tuple[str, int]] = []
 
-    def record(conn, cursor, statement, parameters, context, executemany):
+    def record(
+        conn: sa.Connection,
+        cursor: DBAPICursor,
+        statement: str,
+        parameters: object,
+        context: ExecutionContext | None,
+        executemany: bool,
+    ) -> None:
         words = statement.split()
         if words[0].upper() == "UPDATE":
             updates.append((words[1], cursor.rowcount))

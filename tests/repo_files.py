@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import errno
+import inspect
 import os
 import shlex
 import sys
 import tomllib
 from pathlib import Path
+
+from typing_extensions import TypeIs
 
 _STORES = ("hub", "runner")
 
@@ -66,6 +69,14 @@ def check_repo_read(path: str | bytes | Path, copied: frozenset[Path] | None = N
         )
 
 
+def _argument_list(value: object) -> TypeIs[list[object] | tuple[object, ...]]:
+    return isinstance(value, (list, tuple))
+
+
+def _path_operand(value: object) -> TypeIs[str | bytes | os.PathLike[str] | os.PathLike[bytes]]:
+    return isinstance(value, (str, bytes, os.PathLike))
+
+
 def install_repo_read_guard() -> None:
     """Catch repo-file opens and subprocess launches from fast-tier tests."""
     copied = copied_repo_files()
@@ -82,14 +93,17 @@ def install_repo_read_guard() -> None:
             # A direct os.open from a test resolves against cwd; a bare name opened
             # by a library may instead be relative to an unreported dir_fd.
             if not isinstance(mode, str) and not Path(os.fsdecode(args[0])).is_absolute():
-                caller = Path(sys._getframe(1).f_globals.get("__file__", "")).resolve()
+                here = inspect.currentframe()
+                caller_frame = here.f_back if here else None
+                caller = Path(caller_frame.f_globals.get("__file__", "") if caller_frame else "").resolve()
                 if "/" not in os.fsdecode(args[0]) and not any(caller.is_relative_to(audited) for audited in roots):
                     return
             if not isinstance(mode, str) and isinstance(args[2], int) and args[2] & os.O_ACCMODE != os.O_RDONLY:
                 return
             if isinstance(mode, str) and not any(flag in mode for flag in ("r", "+")):
                 return
-        frame = sys._getframe(1)
+        here = inspect.currentframe()
+        frame = here.f_back if here else None
         while frame:
             filename = Path(frame.f_globals.get("__file__", frame.f_code.co_filename)).resolve()
             if any(filename.is_relative_to(audited) for audited in roots) and filename.name != "repo_files.py":
@@ -98,24 +112,22 @@ def install_repo_read_guard() -> None:
                         check_repo_read(args[0], copied)
                 else:
                     executable, argv, cwd = args[:3]
-                    working_dir = (
-                        Path(os.fsdecode(cwd)).resolve() if isinstance(cwd, (str, bytes, os.PathLike)) else Path.cwd()
-                    )
+                    working_dir = Path(os.fsdecode(cwd)).resolve() if _path_operand(cwd) else Path.cwd()
                     # Git's -C changes where its file arguments are resolved.
                     if (
                         isinstance(executable, (str, bytes))
                         and Path(os.fsdecode(executable)).name == "git"
-                        and isinstance(argv, (list, tuple))
+                        and _argument_list(argv)
                         and "-C" in argv
                     ):
                         index = argv.index("-C")
-                        if index + 1 < len(argv) and isinstance(argv[index + 1], (str, bytes, os.PathLike)):
-                            working_dir = (working_dir / os.fsdecode(argv[index + 1])).resolve()
-                    candidates = [executable, *(argv if isinstance(argv, (list, tuple)) else ())]
+                        if index + 1 < len(argv) and _path_operand(operand := argv[index + 1]):
+                            working_dir = (working_dir / os.fsdecode(operand)).resolve()
+                    candidates = [executable, *(argv if _argument_list(argv) else ())]
                     if (
                         isinstance(executable, (str, bytes))
                         and Path(os.fsdecode(executable)).name in {"sh", "bash", "dash"}
-                        and isinstance(argv, (list, tuple))
+                        and _argument_list(argv)
                     ):
                         for index, option in enumerate(argv[1:-1], start=1):
                             if not isinstance(option, (str, bytes)):

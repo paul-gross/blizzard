@@ -8,6 +8,8 @@ from collections.abc import Mapping
 from functools import cache
 from typing import Any
 
+from typing_extensions import TypeIs
+
 from tests.repo_files import repo_root
 
 CONTRACT_DIR = repo_root() / "contracts" / "traces"
@@ -27,7 +29,7 @@ STEP_KIND = "blizzard.step.kind"
 BARE_NAMES = {"invoke_agent": "runner/invocation"}
 
 #: The dictionary's attribute type for each Python scalar an OTLP value decodes to.
-OTLP_TYPE_OF = {str: "string", bool: "bool", int: "int", float: "double"}
+OTLP_TYPE_OF: dict[type[object], str] = {str: "string", bool: "bool", int: "int", float: "double"}
 
 
 @cache
@@ -55,9 +57,13 @@ def scope_of_role(role: str) -> str:
     return next(entry["scope"] for entry in dictionary()["spans"] if entry["role"] == role)
 
 
+def _listed(value: object) -> TypeIs[list[object]]:
+    return isinstance(value, list)
+
+
 def otlp_type(value: object) -> str:
     """The dictionary type of a decoded attribute value."""
-    if isinstance(value, list):
+    if _listed(value):
         assert all(isinstance(v, str) for v in value)
         return "string[]"
     return OTLP_TYPE_OF[type(value)]

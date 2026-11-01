@@ -1,7 +1,5 @@
 """Tests proving the ``20261008_1100_tenants`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from collections import Counter
@@ -23,22 +21,22 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.schema import GLOBAL_TABLES
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.config_inputs import init_hub
-from tests.migration_support_carried_config_round_trip import _AT, _BEFORE_TENANTS, _NOW
-from tests.migration_support_carried_config_round_trip import _SEED as _CARRIED_SEED
+from tests.migration_support_carried_config_round_trip import AT, BEFORE_TENANTS, NOW
+from tests.migration_support_carried_config_round_trip import SEED as _CARRIED_SEED
 from tests.migration_support_tenant_carry_over_migration import (
-    _BEFORE,
-    _SEED,
-    _T0,
-    _TENANTS,
-    _foreign_key_violations,
-    _keyed_tables,
-    _row_counts,
-    _schema,
-    _seed_every_tenant_owned_table,
-    _store,
-    _tables,
-    _tenant_rows,
-    _tenants_of,
+    BEFORE,
+    SEED,
+    T0,
+    TENANTS,
+    foreign_key_violations,
+    keyed_tables,
+    row_counts,
+    schema,
+    scratch_store,
+    seed_every_tenant_owned_table,
+    tables,
+    tenant_rows,
+    tenants_of,
 )
 from tests.support import build_hub
 
@@ -48,14 +46,14 @@ _RUNNER_ID = "run_carried"
 
 _CARRIED_RUNNER = (
     "INSERT INTO runner_registrations (runner_id, name, workspace_id, registered_at, last_seen_at, added_at, added_by)"
-    f" VALUES ('{_RUNNER_ID}', 'r-carried', 'ws-carried', {_AT}, {_AT}, {_AT}, 'operator')"
+    f" VALUES ('{_RUNNER_ID}', 'r-carried', 'ws-carried', {AT}, {AT}, {AT}, 'operator')"
 )
 
 
 def _carried_store(root: Path) -> None:
     root.mkdir()
     db_url = f"sqlite:///{root / 'hub.db'}"
-    Migrations(HubConfig(root=root, db_url=db_url), FixedClock(_NOW)).runner.upgrade(_BEFORE_TENANTS)
+    Migrations(HubConfig(root=root, db_url=db_url), FixedClock(NOW)).runner.upgrade(BEFORE_TENANTS)
     engine = create_engine_from_url(db_url)
     try:
         with engine.begin() as conn:
@@ -69,7 +67,7 @@ _ADDED = {"tenants", "tenant_deletions", "invitations", "invitation_facts", "hub
 
 
 def _assert_the_first_tenant(engine: sa.Engine) -> None:
-    [(tenant_id, name, created_at, created_by)] = _tenant_rows(engine)
+    [(tenant_id, name, created_at, created_by)] = tenant_rows(engine)
     parsed = Id.parse(tenant_id)
     assert parsed is not None and parsed.has_prefix(IdPrefix.TENANT)
     assert parsed.minted_at is not None
@@ -101,7 +99,7 @@ def _tenant_keys(engine: sa.Engine) -> dict[str, tuple[bool, str | None]]:
                 None,
             ),
         )
-        for table in _tables(engine) - GLOBAL_TABLES
+        for table in tables(engine) - GLOBAL_TABLES
     }
 
 
@@ -142,7 +140,7 @@ def test_a_carried_runner_naming_no_projects_keeps_serving_default(tmp_path: Pat
 
 def test_a_carried_store_applies_its_own_export_without_a_change(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner.upgrade(_BEFORE_TENANTS)
+    Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(NOW)).runner.upgrade(BEFORE_TENANTS)
     engine = create_engine_from_url(db_url)
     try:
         with engine.begin() as conn:
@@ -185,14 +183,16 @@ def test_a_fresh_store_starts_with_the_one_default_tenant(tmp_path: Path) -> Non
 
 
 def test_the_first_tenant_is_stamped_by_the_clock_the_migration_was_given(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     at = datetime(2026, 3, 4, 5, 6, 7, 890000, tzinfo=UTC)
     try:
-        Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(at)).runner.upgrade(_TENANTS)
+        Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(at)).runner.upgrade(TENANTS)
 
         with engine.connect() as conn:
             tenant_id, created_at = conn.execute(
-                sa.select(sa.column("tenant_id"), sa.column("created_at", UtcDateTime)).select_from(sa.table("tenants"))
+                sa.select(sa.column("tenant_id", sa.String), sa.column("created_at", UtcDateTime)).select_from(
+                    sa.table("tenants")
+                )
             ).one()
         assert created_at == at
         parsed = Id.parse(tenant_id)
@@ -202,31 +202,31 @@ def test_the_first_tenant_is_stamped_by_the_clock_the_migration_was_given(tmp_pa
 
 
 def test_a_hub_upgrade_through_the_tenants_revision_without_a_clock_fails_naming_the_fix(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=db_url)
     try:
-        runner.upgrade(_BEFORE)
+        runner.upgrade(BEFORE)
 
         with pytest.raises(MigrationClockMissingError, match="migrate through MigrationRunner with a clock"):
-            runner.upgrade(_TENANTS)
-        assert runner.current_revision() == _BEFORE
+            runner.upgrade(TENANTS)
+        assert runner.current_revision() == BEFORE
     finally:
         engine.dispose()
 
 
 def test_a_carried_over_store_keeps_every_row_and_gains_one_tenant(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
+        runner.upgrade(BEFORE)
         with engine.begin() as conn:
-            for statement in _SEED:
-                conn.execute(sa.text(statement), {"at": _T0})
-        before = _row_counts(engine)
+            for statement in SEED:
+                conn.execute(sa.text(statement), {"at": T0})
+        before = row_counts(engine)
 
-        runner.upgrade(_TENANTS)
+        runner.upgrade(TENANTS)
 
-        after = _row_counts(engine)
+        after = row_counts(engine)
         assert {table: after[table] for table in before} == before
         assert {table: after[table] for table in _ADDED} == {
             "tenants": 1,
@@ -241,34 +241,34 @@ def test_a_carried_over_store_keeps_every_row_and_gains_one_tenant(tmp_path: Pat
 
 
 def test_downgrade_removes_exactly_what_the_revision_added(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
+        runner.upgrade(BEFORE)
         with engine.begin() as conn:
-            for statement in _SEED:
-                conn.execute(sa.text(statement), {"at": _T0})
-        schema_before, counts_before = _schema(engine), _row_counts(engine)
+            for statement in SEED:
+                conn.execute(sa.text(statement), {"at": T0})
+        schema_before, counts_before = schema(engine), row_counts(engine)
 
-        runner.upgrade(_TENANTS)
-        assert _tables(engine) - set(schema_before) == _ADDED
+        runner.upgrade(TENANTS)
+        assert tables(engine) - set(schema_before) == _ADDED
 
-        runner.downgrade(_BEFORE)
-        assert _schema(engine) == schema_before
-        assert _row_counts(engine) == counts_before
+        runner.downgrade(BEFORE)
+        assert schema(engine) == schema_before
+        assert row_counts(engine) == counts_before
     finally:
         engine.dispose()
 
 
 def test_a_rerun_after_downgrade_mints_a_fresh_single_tenant(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_TENANTS)
-        [(first, *_)] = _tenant_rows(engine)
-        runner.downgrade(_BEFORE)
-        runner.upgrade(_TENANTS)
-        [(second, *_)] = _tenant_rows(engine)
+        runner.upgrade(TENANTS)
+        [(first, *_)] = tenant_rows(engine)
+        runner.downgrade(BEFORE)
+        runner.upgrade(TENANTS)
+        [(second, *_)] = tenant_rows(engine)
         assert first != second
         _assert_the_first_tenant(engine)
     finally:
@@ -278,10 +278,10 @@ def test_a_rerun_after_downgrade_mints_a_fresh_single_tenant(tmp_path: Path) -> 
 def test_upgrade_creates_only_what_is_missing_and_never_a_second_tenant(tmp_path: Path) -> None:
     """Re-entry: a store already holding the tenant record (an interrupted earlier run) is completed,
     not duplicated."""
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
+        runner.upgrade(BEFORE)
         with engine.begin() as conn:
             conn.execute(
                 sa.text(
@@ -291,21 +291,21 @@ def test_upgrade_creates_only_what_is_missing_and_never_a_second_tenant(tmp_path
             )
             conn.execute(
                 sa.text("INSERT INTO tenants VALUES ('ten_01J9Z3M0P8QK7V2S4W6X8Y0A1B', 'default', :at, 'migration')"),
-                {"at": _T0},
+                {"at": T0},
             )
 
-        runner.upgrade(_TENANTS)
+        runner.upgrade(TENANTS)
 
-        assert _tables(engine) >= _ADDED
-        assert [row[0] for row in _tenant_rows(engine)] == ["ten_01J9Z3M0P8QK7V2S4W6X8Y0A1B"]
+        assert tables(engine) >= _ADDED
+        assert [row[0] for row in tenant_rows(engine)] == ["ten_01J9Z3M0P8QK7V2S4W6X8Y0A1B"]
     finally:
         engine.dispose()
 
 
 def test_the_tenant_tables_take_their_declared_shape(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     try:
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_TENANTS)
+        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(TENANTS)
         inspector = sa.inspect(engine)
 
         def columns(table: str) -> dict[str, bool]:
@@ -408,25 +408,25 @@ def test_the_global_list_names_exactly_the_tables_that_carry_no_tenant_key() -> 
 
 
 def test_a_carried_over_store_reaches_head_with_every_row_in_the_first_tenant(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
-        seeded = _seed_every_tenant_owned_table(engine)
-        before = _row_counts(engine)
+        runner.upgrade(BEFORE)
+        seeded = seed_every_tenant_owned_table(engine)
+        before = row_counts(engine)
 
         runner.upgrade("head")
 
-        [(tenant_id, *_)] = _tenant_rows(engine)
-        assert _keyed_tables(engine) == dict.fromkeys(_tables(engine) - GLOBAL_TABLES, True)
+        [(tenant_id, *_)] = tenant_rows(engine)
+        assert keyed_tables(engine) == dict.fromkeys(tables(engine) - GLOBAL_TABLES, True)
         assert seeded == set(before) - GLOBAL_TABLES
-        after = _row_counts(engine)
+        after = row_counts(engine)
         after["config_changes"] -= _project_change_rows(engine)
         assert {table: after[table] for table in seeded} == {table: before[table] for table in seeded}
-        assert {table: set(_tenants_of(engine, table)) for table in seeded} == {table: {tenant_id} for table in seeded}
+        assert {table: set(tenants_of(engine, table)) for table in seeded} == {table: {tenant_id} for table in seeded}
         assert _tenant_keys(engine) == {
-            table: (False, f"fk_{table}_tenant_id") for table in _tables(engine) - GLOBAL_TABLES
+            table: (False, f"fk_{table}_tenant_id") for table in tables(engine) - GLOBAL_TABLES
         }
-        assert _foreign_key_violations(engine) == []
+        assert foreign_key_violations(engine) == []
     finally:
         engine.dispose()

@@ -19,7 +19,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.api.events import _RESERVED_COMMENT
+from blizzard.hub.api.events import RESERVED_COMMENT
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import User
 from tests.support import HubHarness, build_hub, default_tenant, parse_sse_frames, seed_session, seed_user
@@ -88,8 +88,8 @@ async def test_a_revoked_members_open_stream_ends_and_another_members_keeps_runn
     revoked = seed_user(hub, username="grace", role=Role.GUEST)
     kept = seed_user(hub, username="linus", role=Role.GUEST)
     broker = hub.open_services(default_tenant(hub.engine)).events
-    kept_stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, owner=kept.user_id).frames()  # type: ignore[arg-type]
-    assert await anext(kept_stream) == _RESERVED_COMMENT.encode()
+    kept_stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, owner=kept.user_id).frames()  # type: ignore[arg-type]
+    assert await anext(kept_stream) == RESERVED_COMMENT.encode()
     loop = asyncio.get_running_loop()
 
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -159,11 +159,11 @@ async def test_a_logged_out_sessions_stream_ends_and_the_users_other_session_kee
         broker,
         _ConnectedRequest(),  # type: ignore[arg-type]
         Cursor(0),
-        _RESERVED_COMMENT,
+        RESERVED_COMMENT,
         owner=user.user_id,
         session=SessionId(staying).hash,
     ).frames()
-    assert await anext(kept_stream) == _RESERVED_COMMENT.encode()
+    assert await anext(kept_stream) == RESERVED_COMMENT.encode()
     loop = asyncio.get_running_loop()
 
     with ThreadPoolExecutor(max_workers=1) as pool:

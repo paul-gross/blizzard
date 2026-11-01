@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.component]
 _BEFORE = "20260721_1200_hub_auth_oauth"  # the head just before this revision
 
 
-def _upgrade_existing_store_to_head(tmp_path: Path):
+def _upgrade_existing_store_to_head(tmp_path: Path) -> sa.Engine:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)

@@ -521,7 +521,7 @@ def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path
     assert "claude_code" in resp.json()["detail"]
 
 
-class _FixedPidAdapter:
+class FixedPidAdapter:
     """Spawns and resumes as fast, well-behaved subprocess mechanics honoring fixed
     pids — isolates the automated-resume reap behavior from real process spawning."""
 
@@ -673,7 +673,7 @@ class _FixedPidAdapter:
         return NullTranscriptSource()
 
 
-class _RecordingProcessProbe:
+class RecordingProcessProbe:
     """Reports every pid already exited (so the poll loops resolve instantly) while
     recording every ``kill``/``start_time`` call, so a test can assert the resume
     check actually reaped its pid."""
@@ -702,8 +702,8 @@ class _RecordingProcessProbe:
 
 @pytest.mark.component
 def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down(tmp_path: Path) -> None:
-    probe = _RecordingProcessProbe()
-    adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
+    probe = RecordingProcessProbe()
+    adapter = FixedPidAdapter(spawn_pid=111, resume_pid=222)
 
     checks = SelfTest(
         adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), probe, ElicitationFiles(root="")

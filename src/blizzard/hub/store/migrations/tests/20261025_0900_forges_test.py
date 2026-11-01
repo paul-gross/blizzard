@@ -8,14 +8,12 @@ as the live ones do.
 
 Seeded from the store's reflected shape at the parent revision rather than ``src/blizzard/hub/store/schema.py``."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import json
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -43,7 +41,7 @@ from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import TenantId
 from blizzard.tools.invariants import hub_invariants
-from tests.migration_support_project_columns_migration import _NOW, _insert, _query, _run_step
+from tests.migration_support_project_columns_migration import NOW, insert, query, run_step
 from tests.migration_support_store_migrations import schema_snapshot
 from tests.repo_files import repo_root
 from tests.support import scoped_connections
@@ -120,31 +118,31 @@ def _source(
 
 
 @contextmanager
-def _before(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine, str]]:
+def _before(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine, str]]:
     """A store at the parent revision: its own tenant holds :data:`_REPOSITORIES` and :data:`_SOURCES`, retired ones
     with a retiring fact newest and an earlier enabling one; a second tenant holds one repository on GitHub. The
     runner, the engine, and the store's own tenant id."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner
+    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(NOW)).runner
     runner.upgrade(_PARENT)
     engine = create_engine_from_url(db_url)
     try:
-        _insert(engine, "tenants", [{"tenant_id": _SECOND, "name": "second", "created_by": "migration"}])
-        (tenant,) = _query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :s", s=_SECOND)[0]
-        _insert(engine, "secrets", [{"tenant_id": tenant, "name": "tok"}, {"tenant_id": _SECOND, "name": "tok"}])
-        _insert(engine, "repositories", [_repository(tenant, s, url, n) for n, (s, url, _) in enumerate(_REPOSITORIES)])
-        _insert(engine, "repositories", [_repository(_SECOND, "app", "https://api.github.com", 0)])
-        _insert(
+        insert(engine, "tenants", [{"tenant_id": _SECOND, "name": "second", "created_by": "migration"}])
+        (tenant,) = query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :s", s=_SECOND)[0]
+        insert(engine, "secrets", [{"tenant_id": tenant, "name": "tok"}, {"tenant_id": _SECOND, "name": "tok"}])
+        insert(engine, "repositories", [_repository(tenant, s, url, n) for n, (s, url, _) in enumerate(_REPOSITORIES)])
+        insert(engine, "repositories", [_repository(_SECOND, "app", "https://api.github.com", 0)])
+        insert(
             engine,
             "work_sources",
             [_source(tenant, s, api, web, n) for n, (s, api, web, _) in enumerate(_SOURCES)],
         )
         for slug, *_, retired in _REPOSITORIES:
             if retired:
-                facts = [
+                facts: list[dict[str, object]] = [
                     {"tenant_id": tenant, "repository_id": f"repo_{tenant}_{slug}", "retired": r} for r in (False, True)
                 ]
-                _insert(engine, "repository_lifecycle_facts", facts)
+                insert(engine, "repository_lifecycle_facts", facts)
         yield runner, engine, tenant
     finally:
         engine.dispose()
@@ -161,12 +159,12 @@ def _forges(engine: sa.Engine, tenant: str) -> dict[str, tuple[Any, ...]]:
 
 
 def _forge_ids(engine: sa.Engine) -> dict[tuple[str, str], str]:
-    return {(t, slug): id_ for id_, t, slug in _query(engine, "SELECT forge_id, tenant_id, slug FROM forges")}
+    return {(t, slug): id_ for id_, t, slug in query(engine, "SELECT forge_id, tenant_id, slug FROM forges")}
 
 
-def _rows(engine: sa.Engine, table: str) -> list[dict[str, Any]]:
+def _rows(engine: sa.Engine, table: str) -> list[dict[str, object]]:
     with engine.connect() as conn:
-        return [dict(row._mapping) for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table)))]
+        return [dict(row) for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table))).mappings()]
 
 
 def _labelled(value: object, labels: dict[str, str]) -> object:
@@ -180,11 +178,11 @@ def _labelled(value: object, labels: dict[str, str]) -> object:
 def _shape(engine: sa.Engine) -> tuple[object, ...]:
     """The store's schema and every row, a change row's id aside, with every minted tenant and forge id read as a
     label."""
-    (tenant,) = _query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :s", s=_SECOND)[0]
+    (tenant,) = query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :s", s=_SECOND)[0]
     labels: dict[str, str] = {}
     if sa.inspect(engine).has_table("forges"):
         labels = {id_: f"forge-{t}-{slug}" for (t, slug), id_ in _forge_ids(engine).items()}
-    (project,) = _query(engine, "SELECT project_id FROM projects WHERE tenant_id = :t", t=tenant)[0]
+    (project,) = query(engine, "SELECT project_id FROM projects WHERE tenant_id = :t", t=tenant)[0]
     labels = {
         **{k: str(_labelled(v, {tenant: "tenant"})) for k, v in labels.items()},
         tenant: "tenant",
@@ -259,7 +257,7 @@ def test_every_record_names_its_forge_and_holds_its_forges_addresses(tmp_path: P
         ids = _forge_ids(engine)
         github, local = ids[(tenant, "github")], ids[(tenant, "127-0-0-1-8123")]
         ghe, retired = ids[(tenant, "ghe-acme-internal")], ids[(tenant, "retired-example")]
-        repositories = _query(
+        repositories = query(
             engine, "SELECT slug, forge_id, forge_api_url FROM repositories WHERE tenant_id = :t", t=tenant
         )
         assert sorted(repositories) == [
@@ -268,7 +266,7 @@ def test_every_record_names_its_forge_and_holds_its_forges_addresses(tmp_path: P
             ("local", local, "http://127.0.0.1:8123"),
             ("old", retired, "https://retired.example"),
         ]
-        sources = _query(
+        sources = query(
             engine, "SELECT slug, forge_id, api_base, web_base FROM work_sources WHERE tenant_id = :t", t=tenant
         )
         assert sorted(sources) == [
@@ -277,10 +275,10 @@ def test_every_record_names_its_forge_and_holds_its_forges_addresses(tmp_path: P
             ("ghe-other", ghe, "https://ghe.acme.internal/api/v3", "https://ghe.acme.internal"),
             ("null", github, "https://api.github.com", None),
         ]
-        assert _query(engine, "SELECT forge_id FROM repositories WHERE tenant_id = :t", t=_SECOND) == [
+        assert query(engine, "SELECT forge_id FROM repositories WHERE tenant_id = :t", t=_SECOND) == [
             (ids[(_SECOND, "github")],)
         ]
-        assert _query(engine, "SELECT DISTINCT revision FROM repositories") == [(1,)]
+        assert query(engine, "SELECT DISTINCT revision FROM repositories") == [(1,)]
 
 
 def test_a_forge_only_retired_records_name_is_created_retired_with_its_change_rows(tmp_path: Path) -> None:
@@ -288,10 +286,10 @@ def test_a_forge_only_retired_records_name_is_created_retired_with_its_change_ro
         runner.upgrade(_FORGES)
 
         ids = _forge_ids(engine)
-        assert _query(engine, "SELECT forge_id, retired, set_by FROM forge_lifecycle_facts") == [
+        assert query(engine, "SELECT forge_id, retired, set_by FROM forge_lifecycle_facts") == [
             (ids[(tenant, "retired-example")], True, "migration")
         ]
-        changes = _query(
+        changes = query(
             engine,
             "SELECT tenant_id, record_key, actor, door, op, revision, diff, project_id FROM config_changes "
             "WHERE record_kind = 'forge'",
@@ -357,7 +355,7 @@ def test_the_records_whose_web_links_move_are_logged(tmp_path: Path, caplog: pyt
 
 def test_a_slug_another_forge_of_the_tenant_holds_is_suffixed(tmp_path: Path) -> None:
     with _before(tmp_path) as (runner, engine, tenant):
-        _insert(
+        insert(
             engine,
             "repositories",
             [
@@ -376,11 +374,11 @@ def test_a_slug_another_forge_of_the_tenant_holds_is_suffixed(tmp_path: Path) ->
 def test_ids_and_slugs_are_the_same_on_every_run(tmp_path: Path) -> None:
     with _before(tmp_path) as (runner, engine, _):
         runner.upgrade(_FORGES)
-        first = _query(engine, "SELECT forge_id, tenant_id, slug, name FROM forges ORDER BY forge_id")
+        first = query(engine, "SELECT forge_id, tenant_id, slug, name FROM forges ORDER BY forge_id")
         runner.downgrade(_PARENT)
         runner.upgrade(_FORGES)
 
-        assert _query(engine, "SELECT forge_id, tenant_id, slug, name FROM forges ORDER BY forge_id") == first
+        assert query(engine, "SELECT forge_id, tenant_id, slug, name FROM forges ORDER BY forge_id") == first
 
 
 @pytest.mark.parametrize("steps", range(1, 6))
@@ -390,7 +388,7 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
     with _before(tmp_path / "stopped") as (runner, engine, _):
         with engine.begin() as conn:
             for step in _revision_module().UPGRADE_STEPS[:steps]:
-                _run_step(conn, step)
+                run_step(conn, step)
 
         runner.upgrade(_FORGES)
 
@@ -403,7 +401,7 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
 def test_the_updates_page_in_bounded_batches_and_miss_no_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_revision_module(), "_BATCH_ROWS", 2)
     with _before(tmp_path) as (runner, engine, tenant):
-        _insert(
+        insert(
             engine,
             "repositories",
             [_repository(tenant, f"many-{n}", "https://api.github.com", 30 + n) for n in range(7)],
@@ -411,30 +409,28 @@ def test_the_updates_page_in_bounded_batches_and_miss_no_row(tmp_path: Path, mon
 
         runner.upgrade(_FORGES)
 
-        assert _query(engine, "SELECT count(*) FROM repositories WHERE forge_id IS NULL") == [(0,)]
-        assert _query(engine, "SELECT count(*) FROM work_sources WHERE forge_id IS NULL") == [(0,)]
+        assert query(engine, "SELECT count(*) FROM repositories WHERE forge_id IS NULL") == [(0,)]
+        assert query(engine, "SELECT count(*) FROM work_sources WHERE forge_id IS NULL") == [(0,)]
 
 
 def test_the_downgrade_returns_the_parent_schema_with_the_addresses_canonical(tmp_path: Path) -> None:
     with _before(tmp_path) as (runner, engine, tenant):
         schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
-        changes = _query(engine, "SELECT count(*) FROM config_changes")
+        changes = query(engine, "SELECT count(*) FROM config_changes")
 
         runner.upgrade(_FORGES)
         runner.downgrade(_PARENT)
 
         assert runner.current_revision() == _PARENT
         assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
-        assert _query(engine, "SELECT count(*) FROM config_changes") == changes
-        assert sorted(
-            _query(engine, "SELECT slug, forge_api_url FROM repositories WHERE tenant_id = :t", t=tenant)
-        ) == [
+        assert query(engine, "SELECT count(*) FROM config_changes") == changes
+        assert sorted(query(engine, "SELECT slug, forge_api_url FROM repositories WHERE tenant_id = :t", t=tenant)) == [
             ("app", "https://api.github.com"),
             ("ghe-app", "https://ghe.acme.internal/api/v3"),
             ("local", "http://127.0.0.1:8123"),
             ("old", "https://retired.example"),
         ]
-        assert ("empty", "https://api.github.com") in _query(
+        assert ("empty", "https://api.github.com") in query(
             engine, "SELECT slug, api_base FROM work_sources WHERE tenant_id = :t", t=tenant
         )
         runner.upgrade(_FORGES)
@@ -485,7 +481,7 @@ def test_each_refusal_names_the_records_the_check_names_and_an_edit_settles_it(t
     with _before(tmp_path) as (runner, engine, tenant):
         _, planted, (table, key, edit) = next(p for p in _plants(tenant) if p[0] == case)
         for into, row in planted:
-            _insert(engine, into, [row])
+            insert(engine, into, [row])
         slugs = tuple(str(row["slug"]) for _, row in planted)
 
         assert _judged_by_the_revision(engine) == _judged_by_the_check(engine) == [(tenant, case, slugs)]
@@ -496,7 +492,7 @@ def test_each_refusal_names_the_records_the_check_names_and_an_edit_settles_it(t
         assert not sa.inspect(engine).has_table("forges")
 
         with engine.begin() as conn:
-            target = sa.table(table, *(sa.column(c) for c in (_keyed(table), *edit)))
+            target = sa.table(table, *(sa.column(c, sa.types.NullType()) for c in (_keyed(table), *edit)))
             conn.execute(sa.update(target).where(target.c[_keyed(table)] == key).values(edit))
         assert _judged_by_the_revision(engine) == _judged_by_the_check(engine) == []
         runner.upgrade(_FORGES)
@@ -507,7 +503,7 @@ def test_every_refusal_of_a_store_is_named_by_both(tmp_path: Path) -> None:
     with _before(tmp_path) as (_runner, engine, tenant):
         for _, planted, _ in _plants(tenant):
             for into, row in planted:
-                _insert(engine, into, [row])
+                insert(engine, into, [row])
 
         judged = _judged_by_the_revision(engine)
         assert judged == _judged_by_the_check(engine)

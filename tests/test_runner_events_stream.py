@@ -16,7 +16,7 @@ from fastapi import HTTPException
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS, Stream
 from blizzard.foundation.leases import LeaseClosureReason
-from blizzard.runner.api.events import _RESERVED_COMMENT, events_stream
+from blizzard.runner.api.events import RESERVED_COMMENT, events_stream
 from blizzard.runner.events.broker import EventBroker as RunnerEventBroker
 from tests.config_inputs import export_runner_app
 
@@ -56,7 +56,7 @@ async def test_stream_endpoint_degrades_cleanly_with_no_broker() -> None:
     response = await events_stream(_FakeRequest(None))  # type: ignore[arg-type]
     assert response.status_code == 200
     frames = [chunk async for chunk in response.body_iterator]
-    assert frames == [_RESERVED_COMMENT.encode()]
+    assert frames == [RESERVED_COMMENT.encode()]
 
 
 async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -109,7 +109,7 @@ async def test_stream_endpoint_from_latest_joins_after_the_ring_but_resumes_a_he
         response = await events_stream(request)  # type: ignore[arg-type]
         return [c.encode() if isinstance(c, str) else bytes(c) async for c in response.body_iterator]
 
-    assert await first_frames(None) == [_RESERVED_COMMENT.encode()]
+    assert await first_frames(None) == [RESERVED_COMMENT.encode()]
     resumed = await first_frames("1")
     assert [f.split(b"\n")[0] for f in resumed[1:]] == [b"id: 2", b"id: 3"]
 

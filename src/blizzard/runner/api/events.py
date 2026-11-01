@@ -12,7 +12,7 @@ from blizzard.runner.api.wiring import RunnerWiring
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
-_RESERVED_COMMENT = ": blizzard runner event stream\n\n"
+RESERVED_COMMENT = ": blizzard runner event stream\n\n"
 
 
 @router.get("/events/stream", include_in_schema=False)
@@ -25,5 +25,5 @@ async def events_stream(request: Request) -> StreamingResponse:
     except CursorRefused as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     wiring = RunnerWiring.of(request)
-    stream = Stream(wiring.maybe_event_broker(), request, cursor, _RESERVED_COMMENT, wiring.maybe_shutdown())
+    stream = Stream(wiring.maybe_event_broker(), request, cursor, RESERVED_COMMENT, wiring.maybe_shutdown())
     return StreamingResponse(stream.frames(), media_type="text/event-stream")

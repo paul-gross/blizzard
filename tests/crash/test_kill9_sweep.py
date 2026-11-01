@@ -82,7 +82,7 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
-from tests.e2e.flow_support import _graph
+from tests.e2e.flow_support import landing_graph_yaml
 from tests.fleet_world import BUILD_BRANCH, scripted_build, world_repos
 from tests.host_files import load_runner_config, with_runner
 from tests.otlp_sink import OtlpSink, otlp_sink
@@ -1264,7 +1264,7 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
         assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after runner kill -9"
         _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery", after_recovery=True)
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         assert len(after) == 1, f"exit-is-done recovery minted an extra lease (a retry, not a direct judge): {after}"
         assert after[0][:3] == (lease_id, epoch, session_id)
         # Mutation-sensitive (`bzh:mutation-review-selection`): a restart-resume respawns
@@ -1311,7 +1311,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
 
         # Fence: wait for the push, strictly before the declare — an in-test fence
         # (``bzh:crash-sweep`` property 3), not a race against the worker's pace.
-        _await_marker(pushed_marker)
+        await_marker(pushed_marker)
         # Property 2: the pre-declaration window is provably open at the kill instant.
         assert not _git_commit_declared(runner_dir, lease_id), "the commit was already declared before the kill"
 
@@ -1469,7 +1469,7 @@ def _audit_connection(runner_dir: Path) -> Iterator[Any]:
         engine.dispose()
 
 
-def _leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:
+def leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:
     """Every lease row (active or closed) for a chunk: (lease_id, epoch, session_id, pid)."""
     with _audit_connection(runner_dir) as conn:
         rows = conn.execute(
@@ -1496,7 +1496,7 @@ def _lease_for_chunk(runner_dir: Path, chunk_id: str, *, timeout: float = 30.0) 
     ``(lease_id, epoch, session_id, pid)`` — the identity a deterministic-kill case pins against."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        rows = _leases_for_chunk(runner_dir, chunk_id)
+        rows = leases_for_chunk(runner_dir, chunk_id)
         if len(rows) == 1 and rows[0][2] is not None and rows[0][3] is not None:
             lease_id, epoch, session_id, pid = rows[0]
             assert session_id is not None and pid is not None
@@ -1585,7 +1585,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         # Gracefully stop the runner: the shutdown hook marks the lease, then the drain
         # SIGINTs its worker group — `terminate` blocks until that's done, worker included.
         terminate(runner_proc)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before restart, got {before}"
         lease_id, epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
@@ -1602,7 +1602,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
             "the SIGINT-interrupted generation recorded no cost — the drain's envelope was lost"
         )
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         # Nothing worked twice: still exactly one lease, same lease/epoch/session — a same-lease
         # resume, not a retry (which would mint a new lease + epoch + session).
         assert len(after) == 1, f"restart-resume minted an extra lease (retry, not resume): {after}"
@@ -1655,7 +1655,7 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
         # Let the chunk get claimed and the worker reach its commit, then hang mid-flight.
         assert wait_status(hub, chunk_id, {"running"}) == "running"
         _await_committed(runner_dir, chunk_id, landed_file)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before the crash, got {before}"
         lease_id, epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
@@ -1678,7 +1678,7 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
         runner_proc = start_runner(runner_dir, crash_point=None)
         assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after ungraceful restart"
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         # Nothing worked twice: still exactly one lease, same lease/epoch/session — a same-lease
         # resume with no retry, reached with no graceful marker to hand it off.
         assert len(after) == 1, f"crash-resume minted an extra lease (retry, not resume): {after}"
@@ -1721,7 +1721,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert wait_status(hub, chunk_id, {"running"}) == "running"
         _await_committed(runner_dir, chunk_id, landed_file)
         terminate(runner_proc)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before restart, got {before}"
         lease_id, epoch, session_id, _pid_before = before[0]
         assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
@@ -1736,7 +1736,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         runner_proc = start_runner(runner_dir, crash_point=None)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         # Same-lease resume across the crash: no extra lease minted (that would be a retry), and the
         # lease/epoch/session are the ones marked before the restart — the pid is the only rewrite.
         assert len(after) == 1, f"resume across a crash at {point} minted an extra lease (retry): {after}"
@@ -1922,7 +1922,7 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
             "the hanging build's own fresh mint was not dispatched to the OpenCode harness"
         )
         terminate(runner_proc)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before restart, got {before}"
         lease_id, epoch, session_id, _pid_before = before[0]
         assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
@@ -1942,7 +1942,7 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
         runner_proc = start_runner(runner_dir, crash_point=None)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after OpenCode kill at {point}"
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         assert len(after) == 1, f"resume across an OpenCode crash at {point} minted an extra lease (retry): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
         assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
@@ -2001,7 +2001,7 @@ def _hang_once_build_script(landed_file: str, marker: Path) -> str:
     )
 
 
-def _abandon_graph_yaml(landed_file: str, marker: Path) -> str:
+def abandon_graph_yaml(landed_file: str, marker: Path) -> str:
     """The hang-once ``build -> deliver`` graph this scenario detaches mid-flight."""
     import yaml
 
@@ -2031,7 +2031,7 @@ def _abandon_graph_yaml(landed_file: str, marker: Path) -> str:
 
 def _ingest_abandon_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str, marker: Path) -> str:
     """Mint the hang-once graph and ingest a fresh issue against it to a ready chunk."""
-    minted = hub.post("/api/graphs", json={"definition_yaml": _abandon_graph_yaml(landed_file, marker)})
+    minted = hub.post("/api/graphs", json={"definition_yaml": abandon_graph_yaml(landed_file, marker)})
     assert minted.status_code == 201, minted.text
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an abandon-crash chunk"})
     assert issue.status_code == 201, issue.text
@@ -2043,7 +2043,7 @@ def _ingest_abandon_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file:
     return chunk_id
 
 
-def _await_marker(marker: Path, *, timeout: float = 30.0) -> None:
+def await_marker(marker: Path, *, timeout: float = 30.0) -> None:
     """Block until ``marker`` exists — proof the first attempt reached its hang, past the
     commit, so the detach it races is pinned strictly after that point rather than racing
     the pre-commit write."""
@@ -2064,7 +2064,7 @@ def _closure_reason(runner_dir: Path, lease_id: str) -> str | None:
     return str(row[0]) if row is not None else None
 
 
-def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> str | None:
+def wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> str | None:
     """Poll until ``lease_id`` closes, or the timeout elapses (return whatever was last seen)."""
     deadline = time.monotonic() + timeout
     reason = None
@@ -2114,8 +2114,8 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
         assert wait_status(hub, chunk_id, {"running"}) == "running"
         # Wait for the marker, not just the committed file — see `_await_marker`.
-        _await_marker(marker)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        await_marker(marker)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before detach, got {before}"
         lease_id_before, _epoch_before, _session_before, pid_before = before[0]
         assert pid_before is not None
@@ -2138,7 +2138,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # Restart UNARMED: startup crash-recovery must read the dead pid's fresh-at-crash heartbeat
         # as resumable (not stale), mark it, and RESUME must re-run the abandon idempotently.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        reason = _wait_for_closure(runner_dir, lease_id_before)
+        reason = wait_for_closure(runner_dir, lease_id_before)
         assert reason == "released", (
             f"the original lease closed {reason!r}, not 'released' — the abandon window was not "
             "recovered via RESUME (a REAP-retry here would consume a retry instead of releasing)"
@@ -2148,7 +2148,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # Re-claimable: the same (only) runner picks the now-ready chunk back up fresh and, this
         # time past the marker, runs it to completion rather than hanging again.
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         assert len(after) == 2, f"expected the original (released) lease plus one fresh re-claim: {after}"
         lease_ids_after = {row[0] for row in after}
         assert lease_id_before in lease_ids_after
@@ -2201,7 +2201,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
 
         assert wait_status(hub, chunk_id, {"running"}) == "running"
         _await_committed(runner_dir, chunk_id, landed_file)
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before the pause, got {before}"
         lease_id, epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
@@ -2239,7 +2239,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         assert resumed.status_code == 202, resumed.text
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         # Nothing worked twice: still exactly one lease, same lease/epoch/session — the pause cost
         # the chunk a process, not an attempt (a retry would have minted a second lease).
         assert len(after) == 1, f"the pause/resume cycle minted an extra lease (retry, not resume): {after}"
@@ -2382,7 +2382,7 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         _clear_subscription_floor(runner_dir, runner_port)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         # Nothing worked twice: still exactly one lease, same lease/epoch/session — the park
         # cost the chunk a process, not an attempt.
         assert len(after) == 1, f"the usage-limit park/resume cycle minted an extra lease (retry, not resume): {after}"
@@ -2564,7 +2564,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         runner_proc = start_runner(runner_dir, crash_point=None)
         await_host(runner_port, runner_proc)
         if usage_limited:
-            assert _wait_for_closure(runner_dir, lease_id) == "released"
+            assert wait_for_closure(runner_dir, lease_id) == "released"
             deadline = time.monotonic() + 30.0
             while time.monotonic() < deadline and _holds_environments(runner_dir, chunk_id):
                 time.sleep(0.25)
@@ -2575,7 +2575,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             assert _closure_reason(runner_dir, lease_id) is not None, "the finished step's lease never closed"
         assert _open_pause_parks(runner_dir) == set(), "a park outlived the release"
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "the declining runner claimed it back"
-        assert len(_leases_for_chunk(runner_dir, chunk_id)) == 1, "a node was entered while the gate declined"
+        assert len(leases_for_chunk(runner_dir, chunk_id)) == 1, "a node was entered while the gate declined"
         _assert_invariants(runner_dir, hub_dir, when=f"after recovery past {point}", after_recovery=True)
 
         # The gate reopens: the chunk is claimed cold and lands once.
@@ -2585,7 +2585,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             _utilization_sample(runner_dir, _UNDER_LINE_PCT)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
         # Two leases and no more: the abandoned build and its cold re-entry, or one per runner node.
-        assert len(_leases_for_chunk(runner_dir, chunk_id)) == 2
+        assert len(leases_for_chunk(runner_dir, chunk_id)) == 2
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
@@ -3017,7 +3017,7 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         )
         assert configured.status_code == 200, configured.text
         pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
-        graph = yaml.safe_load(_graph(landed_file, (REPO_NAME,), poll_interval=1, record_findings=False))
+        graph = yaml.safe_load(landing_graph_yaml(landed_file, (REPO_NAME,), poll_interval=1, record_findings=False))
         if not park:
             # Move main after the worker's commit so candidate creation is unavoidable.
             graph["nodes"]["build"]["prompt"] += (
@@ -3171,8 +3171,8 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         runner_proc = start_runner(runner_dir, crash_point=point)
 
         assert wait_status(hub, chunk_id, {"running"}) == "running"
-        _await_marker(marker)  # the worker is provably inside its hang, not racing the spawn
-        before = _leases_for_chunk(runner_dir, chunk_id)
+        await_marker(marker)  # the worker is provably inside its hang, not racing the spawn
+        before = leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before the restart, got {before}"
         lease_id, _epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
@@ -3191,7 +3191,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # Restart UNARMED: the fence still stands at the hub, so recovery must reach the same
         # preempt — never a reap or a failure, either of which would spend the node's budget.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        reason = _wait_for_closure(runner_dir, lease_id)
+        reason = wait_for_closure(runner_dir, lease_id)
         assert reason == "preempted", (
             f"the restarted chunk's lease closed {reason!r}, not 'preempted' — recovery spent a "
             "retry on an attempt the operator superseded (issue #370's budget promise regressed?)"
@@ -3200,7 +3200,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
         # The claim was kept throughout: the same runner re-enters and finishes the work.
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
-        after = _leases_for_chunk(runner_dir, chunk_id)
+        after = leases_for_chunk(runner_dir, chunk_id)
         reasons = sorted(filter(None, (_closure_reason(runner_dir, row[0]) for row in after)))
         assert reasons == ["preempted", "transitioned"], f"unexpected closure set after the restart: {reasons}"
 

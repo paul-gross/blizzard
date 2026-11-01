@@ -20,9 +20,9 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import _DATASETS
 from tests.repo_files import repo_root
 from tests.support import HubHarness
-from tests.test_analytics_events_api import _cookie, _seeded_hub
-from tests.test_analytics_spend_api import _mint_chunk, _push_usage
-from tests.test_analytics_spend_api import _seeded_hub as _seeded_spend_hub
+from tests.test_analytics_events_api import cookie, seeded_hub
+from tests.test_analytics_spend_api import mint_chunk, push_usage
+from tests.test_analytics_spend_api import seeded_hub as _seeded_spend_hub
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
@@ -46,7 +46,7 @@ _LENS_PARAMS = {"project"}
 
 
 def _relay(hub: HubHarness, token: str) -> Bound:
-    headers = _cookie(token)
+    headers = cookie(token)
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
         return hub.client.get(url, params=params, headers=headers)
@@ -107,7 +107,7 @@ def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path) ->
 
 
 def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path) -> None:
-    hub, token, _chunk_id = _seeded_hub(tmp_path)
+    hub, token, _chunk_id = seeded_hub(tmp_path)
     bound = _relay(hub, token)
 
     by_kind = _invoke(bound, "counts-nodes", "--kind", "file_read", "--json")
@@ -138,8 +138,8 @@ def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path) -> N
 def test_spend_models_and_the_provenance_filters_round_trip(tmp_path: Path) -> None:
     hub, token, _graph_id, nodes = _seeded_spend_hub(tmp_path)
     bound = _relay(hub, token)
-    chunk_id = _mint_chunk(hub, token)
-    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    chunk_id = mint_chunk(hub, token)
+    push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
     by_model = _invoke(bound, "spend-models", "--json")
     assert [r["key"] for r in json.loads(by_model.stdout)["spend"]] == ["claude-opus-4-8"]
@@ -161,10 +161,10 @@ def test_spend_chunks_filters_round_trip_and_ndjson_streams_the_real_rollup(
 ) -> None:
     hub, token, _graph_id, nodes = _seeded_spend_hub(tmp_path)
     bound = _relay(hub, token)
-    chunk_a = _mint_chunk(hub, token, ref="1")
-    chunk_b = _mint_chunk(hub, token, ref="2")
-    _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
-    _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
+    chunk_a = mint_chunk(hub, token, ref="1")
+    chunk_b = mint_chunk(hub, token, ref="2")
+    push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+    push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
 
     paged = _invoke(bound, "spend-chunks", "--json")
     assert paged.exit_code == 0, paged.output

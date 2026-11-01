@@ -497,12 +497,12 @@ def _to_merge_node(hub: HubHarness, pointer=_POINTER, graph_yaml: str = _HUB_CMD
 
 def _submit_build_pass(hub: HubHarness, chunk_id: str, build_node_id: str, epoch: int):
     """Complete ``build`` with ``pass``, then take every hub turn it leads to."""
-    resp = _post_build_pass(hub, chunk_id, build_node_id, epoch)
+    resp = post_build_pass(hub, chunk_id, build_node_id, epoch)
     hub.settle_turns()
     return resp
 
 
-def _post_build_pass(hub: HubHarness, chunk_id: str, build_node_id: str, epoch: int):
+def post_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -1001,7 +1001,7 @@ def test_a_chunks_own_live_turn_is_never_reentered_and_a_finished_one_never_repl
     gate = _Gate()
     hub = _hub_with(tmp_path, gate)
     chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_gated())
-    assert _post_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+    assert post_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
     thread = threading.Thread(target=hub.take_turns)
     thread.start()

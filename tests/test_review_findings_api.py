@@ -17,7 +17,6 @@ from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import HubHarness, build_hub, hub_scoped, hub_store_connections, seed_lease, seed_work_item
 
 pytestmark = pytest.mark.component
@@ -55,8 +54,9 @@ def _seed_chunk(hub: HubHarness) -> str:
         created_at=hub.clock.now(),
     )
     GraphStore(store_connections).mint(graph, definition_yaml="", at=hub.clock.now())
-    items = WorkItemStore(store_connections)
-    item = seed_work_item(items, graph_id="gr_record_findings", author=WorkItemAuthor.user("u_1"), at=hub.clock.now())
+    item = seed_work_item(
+        store_connections, graph_id="gr_record_findings", author=WorkItemAuthor.user("u_1"), at=hub.clock.now()
+    )
     return f"ch_{item.ref}"
 
 

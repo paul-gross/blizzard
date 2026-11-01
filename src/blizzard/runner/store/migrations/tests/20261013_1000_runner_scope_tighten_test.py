@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -246,10 +247,10 @@ def _stop_before_batch(monkeypatch: pytest.MonkeyPatch, table: str) -> None:
     """Make the upgrade's batch step for ``table`` raise, as a process stopped at that point would."""
     real = Operations.batch_alter_table
 
-    def batch_alter_table(self: Operations, name: str, *args: object, **kwargs: object) -> object:
+    def batch_alter_table(self: Operations, name: str, *args: Any, **kwargs: Any) -> object:
         if name == table:
             raise KeyboardInterrupt(f"stopped before {table}")
-        return real(self, name, *args, **kwargs)  # type: ignore[arg-type]
+        return real(self, name, *args, **kwargs)
 
     monkeypatch.setattr(Operations, "batch_alter_table", batch_alter_table)
 
