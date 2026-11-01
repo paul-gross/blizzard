@@ -404,7 +404,7 @@ def test_advances_are_independent_across_lease_generation_and_kind() -> None:
         _advance(store, lease_id, generation, kind, "el-1", at)
 
     for lease_id, generation, kind in markers:
-        current = store.current_start(lease_id, generation, kind)  # type: ignore[arg-type]
+        current = store.current_start(lease_id, generation, kind)
         assert current is not None
         assert (current.start_position, current.at) == (f"adv-{lease_id}-{generation}-{kind}-el-1", at)
 
