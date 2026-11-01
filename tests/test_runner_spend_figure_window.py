@@ -30,7 +30,7 @@ _ESTIMATED: Row = (None, 2.5)
 _NEITHER: Row = (None, None)
 
 
-def _store_with(tmp_path, rows: list[Row], *, at: datetime = _T0):  # type: ignore[no-untyped-def]
+def _store_with(tmp_path, rows: list[Row], *, at: datetime = _T0):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     for i, (cost, estimate) in enumerate(rows):
         record_usage(
@@ -66,7 +66,7 @@ def _store_with(tmp_path, rows: list[Row], *, at: datetime = _T0):  # type: igno
         ([_BILLED, _ESTIMATED, _NEITHER], 1.25, 2.5, True, "~$3.75+"),
     ],
 )
-def test_each_window_reads_its_amount_and_partial_by_the_both_null_meaning(  # type: ignore[no-untyped-def]
+def test_each_window_reads_its_amount_and_partial_by_the_both_null_meaning(  #
     tmp_path, rows, cost_usd, estimated_cost_usd, partial, rendered
 ):
     totals = _store_with(tmp_path, rows).usage_since(_T0)
@@ -77,19 +77,19 @@ def test_each_window_reads_its_amount_and_partial_by_the_both_null_meaning(  # t
     assert totals.figure.rendered() == rendered
 
 
-def test_reaches_compares_billed_plus_estimated(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_reaches_compares_billed_plus_estimated(tmp_path) -> None:  #
     totals = _store_with(tmp_path, [_BILLED, _ESTIMATED]).usage_since(_T0)
     assert totals.reaches(3.75)
     assert not totals.reaches(3.76)
 
 
-def test_rows_before_the_window_are_left_out(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_rows_before_the_window_are_left_out(tmp_path) -> None:  #
     store = _store_with(tmp_path, [_ESTIMATED, _NEITHER], at=_T0 - timedelta(seconds=1))
     totals = store.usage_since(_T0)
     assert (totals.cost_usd, totals.estimated_cost_usd, totals.cost_partial) == (0.0, None, False)
 
 
-def test_every_surface_renders_the_same_rows_to_the_same_figure(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_every_surface_renders_the_same_rows_to_the_same_figure(tmp_path) -> None:  #
     rows = [_BILLED, _ESTIMATED, _NEITHER]
     figure = "~$3.75+"
 

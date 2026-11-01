@@ -35,7 +35,7 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 8, 9, tzinfo=UTC)
 
 
-def _seed_chunk(hub, chunk_id: str = "ch_1") -> None:  # type: ignore[no-untyped-def]
+def _seed_chunk(hub, chunk_id: str = "ch_1") -> None:  #
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, chunk_id, graph_id="gr_1", at=_T0)

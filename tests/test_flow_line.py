@@ -64,7 +64,7 @@ def _at_node(node_id: str = _DELIVER, *, epoch: int = 1, at: datetime = _AT, **o
         leases=[LeaseFact(epoch=epoch, minted_at=at)],
         transitions=[TransitionFact(node_id, Executor.HUB, epoch, at, from_node_id="nd_build", choice_name="pass")],
     )
-    return replace(facts, **overrides)  # type: ignore[arg-type]
+    return replace(facts, **overrides)  #
 
 
 def _submission(

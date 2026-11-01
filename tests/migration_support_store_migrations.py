@@ -102,7 +102,7 @@ def assert_frozen_table_lacks_a_later_revisions_columns(
             assert column not in after
 
 
-def _spawn_cwd_round_trip(  # type: ignore[no-untyped-def]
+def _spawn_cwd_round_trip(  #
     config, runner, parent: str, row: dict[str, object], *, registered: bool = False
 ) -> list[object]:
     """Downgrade to ``parent``, seed one segment row there, upgrade — the column's value on that row. A runner store

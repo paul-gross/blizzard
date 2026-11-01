@@ -268,7 +268,7 @@ def registered_fixture_store(engine: Engine, runner_id: str = FIXTURE_RUNNER_ID)
     return store
 
 
-def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
+def record_usage(usage, **kwargs):  #
     """``record_usage`` as ``UsageRecorder`` drives it: the session's banked basis, then the
     domain cost policy, then the store's verbatim write."""
     cost = derive_invocation_cost(kwargs["sample"], usage.session_cost_basis(kwargs["lease_id"]))

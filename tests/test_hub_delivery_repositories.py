@@ -330,7 +330,7 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
     secrets = hub.services.forges._secrets
     reveal = secrets.reveal
 
-    def reveal_unless_retired(name: SecretName):  # type: ignore[no-untyped-def]
+    def reveal_unless_retired(name: SecretName):  #
         if name.value == "other-forge-token":
             raise SecretRetired("other-forge-token")
         return reveal(name)

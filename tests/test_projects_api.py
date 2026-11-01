@@ -22,7 +22,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path, link=False)
 
 
-def _ok(response, status: int = 200) -> dict:  # type: ignore[no-untyped-def]
+def _ok(response, status: int = 200) -> dict:  #
     assert response.status_code == status, response.text
     return response.json()
 

@@ -19,7 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.sweeps.names import SweepName
 from tests.config_inputs import load_hub_config
-from tests.test_host_config_keys import _document_carrying_every_key  # pyright: ignore[reportPrivateUsage]
+from tests.test_host_config_keys import _document_carrying_every_key
 
 pytestmark = pytest.mark.unit
 
@@ -51,10 +51,10 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     read: set[str] = set()
-    checked = ConfigView._check  # pyright: ignore[reportPrivateUsage]
+    checked = ConfigView._check
 
     def recording(view: ConfigView, key: str) -> None:
-        read.add(view._join(key))  # pyright: ignore[reportPrivateUsage]
+        read.add(view._join(key))
         checked(view, key)
 
     monkeypatch.setattr(ConfigView, "_check", recording)

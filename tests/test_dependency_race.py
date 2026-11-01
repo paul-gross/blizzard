@@ -43,7 +43,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     release_write = threading.Event()
     real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  #
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
@@ -51,7 +51,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
         return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
+    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  #
 
     first_result: dict[str, object] = {}
 
@@ -131,7 +131,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     release_write = threading.Event()
     real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  #
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
@@ -139,7 +139,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
         return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
+    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  #
 
     first_result: dict[str, object] = {}
 
@@ -194,7 +194,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         start = threading.Barrier(2)
         results: dict[str, object] = {}
 
-        def _x_depends_on_y(dep=x, prereq=y, barrier=start, sink=results) -> None:  # type: ignore[no-untyped-def]
+        def _x_depends_on_y(dep=x, prereq=y, barrier=start, sink=results) -> None:  #
             barrier.wait()
             try:
                 sink["x_on_y"] = hub.services.dependencies.declare(
@@ -203,7 +203,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
             except DependencyWouldCloseCycle:
                 sink["x_on_y"] = "refused"
 
-        def _y_depends_on_x(dep=y, prereq=x, barrier=start, sink=results) -> None:  # type: ignore[no-untyped-def]
+        def _y_depends_on_x(dep=y, prereq=x, barrier=start, sink=results) -> None:  #
             barrier.wait()
             try:
                 sink["y_on_x"] = hub.services.dependencies.declare(
@@ -245,12 +245,12 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     release_write = threading.Event()
     real_record_fold_locked = _writable_dependencies(hub).record_fold_locked
 
-    def _blocking_record_fold_locked(handle, targets, **kwargs):  # type: ignore[no-untyped-def]
+    def _blocking_record_fold_locked(handle, targets, **kwargs):  #
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
         return real_record_fold_locked(handle, targets, **kwargs)
 
-    _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked  # type: ignore[method-assign]
+    _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked  #
 
     fold_result: dict[str, object] = {}
 

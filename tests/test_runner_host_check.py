@@ -245,7 +245,7 @@ def test_a_host_start_refuses_a_missing_worker_shell_naming_the_runner(tmp_path:
 
     import click
 
-    from blizzard.runner.cli.runtime import _start  # pyright: ignore[reportPrivateUsage]
+    from blizzard.runner.cli.runtime import _start
 
     built = SimpleNamespace(
         id="rn_1", config=SimpleNamespace(name="alpha", worker_shell=str(tmp_path / "no-such-shell"))

@@ -477,7 +477,7 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
     create_repositories(hub.client, [fixture_repository("widget", "http://forge.example", owner="acme")])
     revealed: list[str] = []
 
-    def retired(name: SecretName):  # type: ignore[no-untyped-def]
+    def retired(name: SecretName):  #
         revealed.append(name.value)
         raise SecretRetired(name.value)
 

@@ -73,7 +73,7 @@ def test_the_folded_cost_equals_the_span_roots(name: str, index: int) -> None:
     step = identify_steps(facts)[index]
     root = assemble_step(facts, step, identify_steps(facts))[0]
     summary = summarize_step(facts, step)
-    assert summary.folded_cost_usd() == pytest.approx(root.attributes[attr.STEP_COST_USD])  # type: ignore[arg-type]
+    assert summary.folded_cost_usd() == pytest.approx(root.attributes[attr.STEP_COST_USD])  #
 
 
 @pytest.mark.parametrize(("name", "index"), [(n, i) for n, _, i in EVERY_STEP], ids=IDS)

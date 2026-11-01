@@ -25,11 +25,11 @@ from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, lease="lease_1", retries_max=2):  # type: ignore[no-untyped-def]
+def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, lease="lease_1", retries_max=2):  #
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -44,13 +44,13 @@ def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, leas
     )
 
 
-def _session_id(store, chunk_id, node_name):  # type: ignore[no-untyped-def]
+def _session_id(store, chunk_id, node_name):  #
     session = store.latest_session(chunk_id, node_name)
     return session.session_id if session is not None else None
 
 
 @pytest.mark.unit
-def test_lease_round_trips_its_own_written_instant(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_round_trips_its_own_written_instant(tmp_path):  #
     """``created_at`` reads back UTC-aware and equal to what was written
     (``bzh:utc-instants``) — the store column is ``UtcDateTime``-typed, not a plain
     ``DateTime`` that sqlite would hand back naive."""
@@ -63,7 +63,7 @@ def test_lease_round_trips_its_own_written_instant(tmp_path):  # type: ignore[no
 
 
 @pytest.mark.unit
-def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyped-def]
+def test_minted_lease_is_active_until_closed(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     assert [lease_.lease_id for lease_ in store.list_active_leases()] == ["lease_1"]
@@ -73,7 +73,7 @@ def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.component
-def test_lease_spans_closure_where_active_lease_does_not(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_spans_closure_where_active_lease_does_not(tmp_path):  #
     """``lease()`` is the closure-spanning read ``active_lease()`` is *not*
     — a transcript outlives its lease, so the read that serves it must too."""
     store = _store(tmp_path)
@@ -87,13 +87,13 @@ def test_lease_spans_closure_where_active_lease_does_not(tmp_path):  # type: ign
 
 
 @pytest.mark.component
-def test_lease_returns_none_for_an_unknown_id(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_returns_none_for_an_unknown_id(tmp_path):  #
     store = _store(tmp_path)
     assert store.lease("no-such-lease") is None
 
 
 @pytest.mark.unit
-def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path):  #
     """The worker-authorization resolver's second half: an open takeover
     names a lease, and this read resolves it regardless of the lease's own closure."""
     store = _store(tmp_path)
@@ -119,7 +119,7 @@ def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_lease_for_open_takeover_is_none_with_no_open_takeover(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_for_open_takeover_is_none_with_no_open_takeover(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -127,7 +127,7 @@ def test_lease_for_open_takeover_is_none_with_no_open_takeover(tmp_path):  # typ
 
 
 @pytest.mark.unit
-def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -146,7 +146,7 @@ def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  # ty
 
 
 @pytest.mark.component
-def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  #
     """Node-entry resume resolution: ``node_name=None`` spans every
     node of the chunk, newest-first by mint order."""
     store = _store(tmp_path)
@@ -184,7 +184,7 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  # 
     assert _session_id(store, "ch_1", "review") == "sess-review-1"
 
 
-def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None):  # type: ignore[no-untyped-def]
+def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None):  #
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -208,7 +208,7 @@ def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", nod
 
 
 @pytest.mark.component
-def test_a_released_closure_discards_every_earlier_session_from_both_lookups(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_released_closure_discards_every_earlier_session_from_both_lookups(tmp_path):  #
     store = _store(tmp_path)
     _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW, session_name="pool")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -237,7 +237,7 @@ def test_a_released_closure_discards_every_earlier_session_from_both_lookups(tmp
 
 
 @pytest.mark.component
-def test_without_a_released_closure_an_earlier_transitioned_session_is_still_returned(tmp_path):  # type: ignore[no-untyped-def]
+def test_without_a_released_closure_an_earlier_transitioned_session_is_still_returned(tmp_path):  #
     store = _store(tmp_path)
     _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW, session_name="pool")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -247,7 +247,7 @@ def test_without_a_released_closure_an_earlier_transitioned_session_is_still_ret
     assert head is not None and head.session_id == "sess-1"
 
 
-def _close(store, lease, reason, at, chunk="ch_1"):  # type: ignore[no-untyped-def]
+def _close(store, lease, reason, at, chunk="ch_1"):  #
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason=reason, closed_at=at)
 
 
@@ -255,7 +255,7 @@ def _close(store, lease, reason, at, chunk="ch_1"):  # type: ignore[no-untyped-d
 @pytest.mark.parametrize(
     ("node_name", "expected"), [("build", "sess-build"), ("review", "sess-review"), (None, "sess-review")]
 )
-def test_latest_session_filters_by_node_name_after_a_release(tmp_path, node_name, expected):  # type: ignore[no-untyped-def]
+def test_latest_session_filters_by_node_name_after_a_release(tmp_path, node_name, expected):  #
     store = _store(tmp_path)
     _mint_with_session(store, lease="lease_1", session="sess-old", epoch=1, at=_NOW)
     _close(store, "lease_1", "released", _NOW + timedelta(minutes=1))
@@ -284,7 +284,7 @@ def test_latest_session_filters_by_node_name_after_a_release(tmp_path, node_name
         ("ch_1", "failed", timedelta(minutes=2), True),
     ],
 )
-def test_latest_session_release_barrier(tmp_path, closure_chunk, reason, closed_offset, visible):  # type: ignore[no-untyped-def]
+def test_latest_session_release_barrier(tmp_path, closure_chunk, reason, closed_offset, visible):  #
     store = _store(tmp_path)
     _mint(store, chunk=closure_chunk, lease="lease_0")
     _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW + timedelta(minutes=1))
@@ -293,7 +293,7 @@ def test_latest_session_release_barrier(tmp_path, closure_chunk, reason, closed_
 
 
 @pytest.mark.component
-def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  #
     store = _store(tmp_path)
     assert store.latest_session("ch_none", None) is None
 
@@ -305,7 +305,7 @@ def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  # t
 
 
 @pytest.mark.component
-def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path):  #
     """``created_at`` is not a total order — tied timestamps must still resolve
     deterministically, by the monotonic ``lease_id`` (bzh:sql-portable)."""
     store = _store(tmp_path)
@@ -343,7 +343,7 @@ def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path):  # type: i
 
 
 @pytest.mark.component
-def test_list_closed_leases_orders_newest_first_and_respects_limit(tmp_path):  # type: ignore[no-untyped-def]
+def test_list_closed_leases_orders_newest_first_and_respects_limit(tmp_path):  #
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", lease="lease_1")
     _mint(store, chunk="ch_2", lease="lease_2")
@@ -374,7 +374,7 @@ def test_list_closed_leases_orders_newest_first_and_respects_limit(tmp_path):  #
 
 
 @pytest.mark.component
-def test_list_closed_leases_excludes_active_leases(tmp_path):  # type: ignore[no-untyped-def]
+def test_list_closed_leases_excludes_active_leases(tmp_path):  #
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", lease="lease_1")
     _mint(store, chunk="ch_2", lease="lease_2")
@@ -384,7 +384,7 @@ def test_list_closed_leases_excludes_active_leases(tmp_path):  # type: ignore[no
 
 
 @pytest.mark.unit
-def test_spawn_facts_populate_pid_and_session(tmp_path):  # type: ignore[no-untyped-def]
+def test_spawn_facts_populate_pid_and_session(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(
@@ -400,7 +400,7 @@ def test_spawn_facts_populate_pid_and_session(tmp_path):  # type: ignore[no-unty
 
 
 @pytest.mark.unit
-def test_held_ids_are_bindings_minus_releases(tmp_path):  # type: ignore[no-untyped-def]
+def test_held_ids_are_bindings_minus_releases(tmp_path):  #
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
@@ -414,7 +414,7 @@ def test_held_ids_are_bindings_minus_releases(tmp_path):  # type: ignore[no-unty
 
 
 @pytest.mark.unit
-def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore[no-untyped-def]
+def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  #
     store = _store(tmp_path)
     _mint(store, lease="lease_1", epoch=1)
     _mint(store, lease="lease_2", epoch=2)
@@ -426,7 +426,7 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
 
 @pytest.mark.unit
 @pytest.mark.parametrize("boundary_reason", ["transitioned", "parked"])
-def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path, boundary_reason):  # type: ignore[no-untyped-def]
+def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path, boundary_reason):  #
     """A completed node-step (`transitioned`, or `parked` on a gate) ends the visit; a failure inside a
     visit does not, and leases of the new visit spend its budget from zero."""
     store = _store(tmp_path)
@@ -446,7 +446,7 @@ def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path, b
 
 
 @pytest.mark.unit
-def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_one(tmp_path):  # type: ignore[no-untyped-def]
+def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_one(tmp_path):  #
     """An owner-unresolvable escalation's own never-spawned mint must not cost the node's
     real attempts a retry — discriminated by its own closure reason from an ordinary,
     already-spawned escalation, which still counts."""
@@ -484,7 +484,7 @@ def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_
 
 
 @pytest.mark.unit
-def test_attempt_count_still_counts_a_never_spawned_escalation_with_a_real_budget(tmp_path):  # type: ignore[no-untyped-def]
+def test_attempt_count_still_counts_a_never_spawned_escalation_with_a_real_budget(tmp_path):  #
     """`Reap` treats a never-spawned orphan as a failed attempt like any other, so its
     escalation still closes plain `escalated`, never the mint's own distinct reason — and
     must still cost the node a retry."""
@@ -497,7 +497,7 @@ def test_attempt_count_still_counts_a_never_spawned_escalation_with_a_real_budge
 
 
 @pytest.mark.unit
-def test_session_end_fact_is_recorded_and_derived(tmp_path):  # type: ignore[no-untyped-def]
+def test_session_end_fact_is_recorded_and_derived(tmp_path):  #
     """A ``session_ends`` row means the worker declared done — startup recovery reads its absence."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
@@ -509,7 +509,7 @@ def test_session_end_fact_is_recorded_and_derived(tmp_path):  # type: ignore[no-
 
 
 @pytest.mark.unit
-def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyped-def]
+def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  #
     store = _store(tmp_path)
     s1 = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
     s2 = store.enqueue_outbound(
@@ -524,14 +524,14 @@ def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
-def test_workspace_prompt_override_absent_is_none(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_workspace_prompt_override_absent_is_none(tmp_path) -> None:  #
     # Never overridden — the spawn preamble falls back to static config.
     store = _store(tmp_path)
     assert store.workspace_prompt_override("ws1") is None
 
 
 @pytest.mark.unit
-def test_workspace_prompt_override_set_then_read_and_upsert(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_workspace_prompt_override_set_then_read_and_upsert(tmp_path) -> None:  #
     store = _store(tmp_path)
     store.set_workspace_prompt("ws1", prompt="first", at=_NOW)
     assert store.workspace_prompt_override("ws1") == "first"
@@ -541,7 +541,7 @@ def test_workspace_prompt_override_set_then_read_and_upsert(tmp_path) -> None:  
 
 
 @pytest.mark.unit
-def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> None:  #
     # A present empty override is a deliberate clear-to-table-only — not None.
     store = _store(tmp_path)
     store.set_workspace_prompt("ws1", prompt="", at=_NOW)
@@ -549,7 +549,7 @@ def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> No
 
 
 @pytest.mark.unit
-def test_workspace_prompt_clear_removes_the_row_and_reports_what_it_found(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_workspace_prompt_clear_removes_the_row_and_reports_what_it_found(tmp_path) -> None:  #
     # Absence is the only state that resolves back to the configured prompt.
     store = _store(tmp_path)
     store.set_workspace_prompt("ws1", prompt="", at=_NOW)
@@ -571,7 +571,7 @@ def _sample(kind: UsageKind = "spawn", cost: float | None = 1.5, model: str = "c
 
 
 @pytest.mark.unit
-def test_lease_generation_counts_spawn_facts(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_generation_counts_spawn_facts(tmp_path):  #
     """Generation 1 at the initial spawn, incrementing at each resume (its own
     tracking, reused as usage's idempotency co-key)."""
     store = _store(tmp_path)
@@ -596,7 +596,7 @@ def test_lease_generation_counts_spawn_facts(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
-def test_latest_spawn_harness_version_reads_none_for_a_generation_that_recorded_none(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_spawn_harness_version_reads_none_for_a_generation_that_recorded_none(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(
@@ -610,7 +610,7 @@ def test_latest_spawn_harness_version_reads_none_for_a_generation_that_recorded_
 
 
 @pytest.mark.unit
-def test_latest_spawn_harness_version_reads_the_newest_generations_own_recorded_version(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_spawn_harness_version_reads_the_newest_generations_own_recorded_version(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(
@@ -637,7 +637,7 @@ def test_latest_spawn_harness_version_reads_the_newest_generations_own_recorded_
 
 
 @pytest.mark.unit
-def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  #
     """The atomic local-write + outbound-enqueue pairing (mirrors ``record_local_pause``)."""
     store = _store(tmp_path)
     _mint(store)
@@ -663,7 +663,7 @@ def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore
 
 
 @pytest.mark.unit
-def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_payload(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_payload(tmp_path):  #
     """The sample's own ``harness_id``/``harness_version`` (stamped by the
     caller) ride the outbound ``usage.recorded`` payload untransformed."""
     store = _store(tmp_path)
@@ -685,7 +685,7 @@ def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_
 
 
 @pytest.mark.unit
-def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path):  #
     """A sample nobody stamped (no session, no stamp) reads back null, never a
     fabricated identity."""
     store = _store(tmp_path)
@@ -706,7 +706,7 @@ def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path)
 
 
 @pytest.mark.unit
-def test_record_usage_carries_an_estimate_on_the_payload_and_into_the_window(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_carries_an_estimate_on_the_payload_and_into_the_window(tmp_path):  #
     """``estimated_cost_usd`` rides the outbound payload untransformed, and ``usage_since``
     sums it: a ``None``-cost, estimate-bearing sample is not PARTIAL."""
     store = _store(tmp_path)
@@ -732,7 +732,7 @@ def test_record_usage_carries_an_estimate_on_the_payload_and_into_the_window(tmp
 
 
 @pytest.mark.unit
-def test_record_usage_persists_the_handed_cost_verbatim(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_persists_the_handed_cost_verbatim(tmp_path):  #
     """The store decides no figure: a pair ``invocation_cost`` would never produce — an
     estimate beside an absent billed cost, on a sample reporting a billed figure — lands as handed."""
     store = _store(tmp_path)
@@ -755,7 +755,7 @@ def test_record_usage_persists_the_handed_cost_verbatim(tmp_path):  # type: igno
 
 
 @pytest.mark.unit
-def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  #
     """A replay of the exact same invocation (same lease/generation/kind) is a no-op."""
     store = _store(tmp_path)
     _mint(store)
@@ -785,7 +785,7 @@ def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  #
     """A retry/resume within the same lease mints a new generation — a genuinely new row."""
     store = _store(tmp_path)
     _mint(store)
@@ -815,7 +815,7 @@ def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_usage_since_flags_partial_on_absent_cost(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_since_flags_partial_on_absent_cost(tmp_path):  #
     """A cost-absent row (envelope-less fallback) contributes tokens but flags PARTIAL —
     never fabricated as zero-cost (lower-bound + PARTIAL treatment)."""
     store = _store(tmp_path)
@@ -836,7 +836,7 @@ def test_usage_since_flags_partial_on_absent_cost(tmp_path):  # type: ignore[no-
 
 
 @pytest.mark.unit
-def test_usage_since_excludes_facts_before_the_window(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_since_excludes_facts_before_the_window(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     earlier = _NOW - timedelta(hours=1)
@@ -855,7 +855,7 @@ def test_usage_since_excludes_facts_before_the_window(tmp_path):  # type: ignore
 
 
 @pytest.mark.unit
-def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path):  #
     store = _store(tmp_path)
     _mint(store, lease="lease_1", epoch=1)
     _mint(store, lease="lease_2", epoch=2)
@@ -864,7 +864,7 @@ def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path):  # type: ignore[
 
 
 @pytest.mark.unit
-def test_lease_token_hash_absent_for_a_lease_never_minted_one(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_token_hash_absent_for_a_lease_never_minted_one(tmp_path):  #
     # Never minted here (e.g. a lease from before this revision).
     store = _store(tmp_path)
     _mint(store)
@@ -872,7 +872,7 @@ def test_lease_token_hash_absent_for_a_lease_never_minted_one(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_lease_token("lease_1", "deadbeef" * 8, _NOW)
@@ -882,7 +882,7 @@ def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  # type: igno
 
 
 @pytest.mark.unit
-def test_lease_for_token_hash_finds_the_lease_that_minted_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_lease_for_token_hash_finds_the_lease_that_minted_it(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_lease_token("lease_1", "deadbeef" * 8, _NOW)
@@ -893,7 +893,7 @@ def test_lease_for_token_hash_finds_the_lease_that_minted_it(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_record_lease_token_overwrites_on_re_mint(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_lease_token_overwrites_on_re_mint(tmp_path):  #
     # A resume re-mints the lease's capability token; the second write replaces the
     # first for the same `lease_id` PK, and the prior token no longer authorizes attach.
     store = _store(tmp_path)
@@ -904,14 +904,14 @@ def test_record_lease_token_overwrites_on_re_mint(tmp_path):  # type: ignore[no-
 
 
 @pytest.mark.unit
-def test_attachments_for_lease_is_empty_when_nothing_attached(tmp_path):  # type: ignore[no-untyped-def]
+def test_attachments_for_lease_is_empty_when_nothing_attached(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     assert store.attachments_for_lease("lease_1") == {}
 
 
 @pytest.mark.unit
-def test_attachments_for_lease_round_trips_what_was_recorded(tmp_path):  # type: ignore[no-untyped-def]
+def test_attachments_for_lease_round_trips_what_was_recorded(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_attachment(
@@ -927,7 +927,7 @@ def test_attachments_for_lease_round_trips_what_was_recorded(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_attachments_for_lease_is_latest_wins_per_name(tmp_path):  # type: ignore[no-untyped-def]
+def test_attachments_for_lease_is_latest_wins_per_name(tmp_path):  #
     """A re-attach of the same name is a correction, not a duplicate — the newest
     row for the pair is what reads back."""
     store = _store(tmp_path)
@@ -942,7 +942,7 @@ def test_attachments_for_lease_is_latest_wins_per_name(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
-def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  #
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     _mint(store, lease="lease_2", chunk="ch_2")
@@ -957,14 +957,14 @@ def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no
 
 
 @pytest.mark.unit
-def test_session_preamble_fingerprint_is_none_for_an_unrecorded_session(tmp_path):  # type: ignore[no-untyped-def]
+def test_session_preamble_fingerprint_is_none_for_an_unrecorded_session(tmp_path):  #
     """A session nothing was ever recorded for reads back ``None``."""
     store = _store(tmp_path)
     assert store.session_preamble_fingerprint(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_never_seen")) is None
 
 
 @pytest.mark.unit
-def test_record_session_preamble_round_trips(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_session_preamble_round_trips(tmp_path):  #
     store = _store(tmp_path)
     store.record_session_preamble(
         SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
@@ -977,7 +977,7 @@ def test_record_session_preamble_round_trips(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
-def test_session_preamble_fingerprint_is_newest_row_wins(tmp_path):  # type: ignore[no-untyped-def]
+def test_session_preamble_fingerprint_is_newest_row_wins(tmp_path):  #
     """Append-only, newest-row-is-the-answer (``bzh:facts-not-status``): the second spawn's
     prose is what the third spawn compares against, not the first's."""
     store = _store(tmp_path)
@@ -997,7 +997,7 @@ def test_session_preamble_fingerprint_is_newest_row_wins(tmp_path):  # type: ign
 
 
 @pytest.mark.unit
-def test_session_preamble_newest_row_wins_at_an_identical_stamp(tmp_path):  # type: ignore[no-untyped-def]
+def test_session_preamble_newest_row_wins_at_an_identical_stamp(tmp_path):  #
     """Two spawns of one session can share a clock stamp (a fake clock in tests, a coarse
     one in production), so the newest-row read orders on the insert id, never on
     ``recorded_at`` — with an equal stamp, the later insert still wins."""
@@ -1018,7 +1018,7 @@ def test_session_preamble_newest_row_wins_at_an_identical_stamp(tmp_path):  # ty
 
 
 @pytest.mark.unit
-def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: ignore[no-untyped-def]
+def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  #
     store = _store(tmp_path)
     store.record_session_preamble(
         SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
@@ -1042,7 +1042,7 @@ def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: 
 
 
 @pytest.mark.unit
-def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_path):  #
     """A fresh spawn is generation 1, keyed on the lease's own (chunk, node, epoch). A
     rotation to a new session_id opens generation 2 and leaves the prior one open."""
     store = _store(tmp_path)
@@ -1083,7 +1083,7 @@ def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_
 
 
 @pytest.mark.unit
-def test_transcript_segments_for_chunk_returns_every_segment_open_or_finalized(tmp_path):  # type: ignore[no-untyped-def]
+def test_transcript_segments_for_chunk_returns_every_segment_open_or_finalized(tmp_path):  #
     """The chunk-scoped index read (runner-node-grouped-transcripts) — unlike
     ``open_transcript_segments``, a finalized segment stays in the result, and a chunk
     this store never held a lease for reads back ``[]`` (ownership exclusion)."""
@@ -1118,7 +1118,7 @@ def test_transcript_segments_for_chunk_returns_every_segment_open_or_finalized(t
 
 @pytest.mark.unit
 def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on_a_same_session_resume(
-    tmp_path,  # type: ignore[no-untyped-def]
+    tmp_path,  #
 ):
     """A pooled resume reuses the SAME session_id under a new generation, which
     would otherwise leave two open segments double-shipping one session. ``record_spawn``
@@ -1179,7 +1179,7 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
 
 
 @pytest.mark.unit
-def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_path):  #
     """A named session pool resumes across DIFFERENT leases. Goes through the REAL
     production order: ``record_closure`` finalizes lease_1's segment before
     lease_2 mints, so carry-forward must find it ALREADY finalized."""
@@ -1236,14 +1236,14 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     assert len(finals) == 1
 
 
-def _pin_next_segment_id_suffixes(monkeypatch, suffixes):  # type: ignore[no-untyped-def]
+def _pin_next_segment_id_suffixes(monkeypatch, suffixes):  #
     """Force the next segment mints' relative id order — a ULID's sub-millisecond half is
     random, so two same-instant ids order as a coin flip and a test reading its expectation
     off that order observes the tie-break only half the time."""
     queued = list(suffixes)
-    real = Id.mint_at.__func__  # type: ignore[attr-defined]
+    real = Id.mint_at.__func__  #
 
-    def fake(cls, prefix, at):  # type: ignore[no-untyped-def]
+    def fake(cls, prefix, at):  #
         minted = real(cls, prefix, at)
         return Id(prefix, minted.ulid[:-1] + queued.pop(0)) if prefix == IdPrefix.SEGMENT and queued else minted
 
@@ -1252,7 +1252,7 @@ def _pin_next_segment_id_suffixes(monkeypatch, suffixes):  # type: ignore[no-unt
 
 @pytest.mark.unit
 @pytest.mark.parametrize("suffixes", [("A", "Z"), ("Z", "A")], ids=["newer-id-greater", "older-id-greater"])
-def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatch, suffixes):  # type: ignore[no-untyped-def]
+def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatch, suffixes):  #
     """`bzh:sql-portable`: two finalized segments sharing an identical
     ``stamped_at`` must resolve deterministically (postgres does not) — run at BOTH id
     orders, so whichever row a tie-break-less scan yields first, one case still fails."""
@@ -1319,7 +1319,7 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
 
 
 @pytest.mark.unit
-def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  #
     """Two leases (e.g. two retries at fresh epochs) each stamp their own generation-1
     segment — the epoch is part of the key, so the two are never confused."""
     store = _store(tmp_path)
@@ -1347,7 +1347,7 @@ def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  
 
 
 @pytest.mark.unit
-def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path):  # type: ignore[no-untyped-def]
+def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path):  #
     """The two never-silent reasons land on two DISTINCT fields — a
     segment stays open after ``mark_transcript_record_truncated``, closed off only via
     the production finalize path, ``record_closure``, regardless of either reason."""
@@ -1426,7 +1426,7 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
 
 @pytest.mark.unit
 @pytest.mark.unit
-def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfilled(tmp_path):  # type: ignore[no-untyped-def]
+def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfilled(tmp_path):  #
     """`truncated_reason_severity` arrived after `truncated_reason` and is nullable with no
     backfill, so a row carrying a reason and a NULL severity is reachable and must not raise."""
     store = _store(tmp_path)
@@ -1455,7 +1455,7 @@ def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfi
 
 
 @pytest.mark.unit
-def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_path):  # type: ignore[no-untyped-def]
+def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_path):  #
     """The transcript lane's sequence is independent of the fact lane's ``outbound_buffer``
     — a fact-lane enqueue does not perturb the transcript lane's own numbering."""
     store = _store(tmp_path)
@@ -1519,7 +1519,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
 
 
 @pytest.mark.unit
-def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # type: ignore[no-untyped-def]
+def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  #
     """A bare SQLite `INTEGER PRIMARY KEY` reuses a deleted row's rowid, which pruning
     the highest-seq acked row sets up; the next transcript seq is still fresh. A reissued
     seq would read as a replay of one already applied."""
@@ -1562,7 +1562,7 @@ def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # 
 
 
 @pytest.mark.unit
-def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_path):  # type: ignore[no-untyped-def]
+def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_path):  #
     """Regression: pruning an acked `final` row like a `delta` row breaks
     `TranscriptSegmentFinalizedExactlyOnce`, which counts marker rows still present as the
     receipt a finalized segment's marker landed exactly once."""
@@ -1597,7 +1597,7 @@ def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_
 
 
 @pytest.mark.unit
-def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp_path):  #
     """A step's segments are final by step close: every open segment for the
     closing lease is finalized and its marker enqueued atomically. Two DIFFERENT
     session_ids (a rotation, not a resume) so both genuinely stay open until closure."""
@@ -1636,7 +1636,7 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
 
 
 @pytest.mark.unit
-def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  #
     """A closure for a lease that never spawned enqueues no transcript marker."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
@@ -1645,7 +1645,7 @@ def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # ty
 
 
 @pytest.mark.unit
-def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path):  #
     """Closure finalizes a segment on its normalizer-version sentinel even with no pump
     ever run. The buffered marker row stays minimal — this pins the sentinel
     on the ledger row, the one place ``_final_record`` reads it from."""
@@ -1674,7 +1674,7 @@ def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path
 # --- retention pruning ------------------------------
 
 
-def _outbound_row_seqs(tmp_path) -> set[int]:  # type: ignore[no-untyped-def]
+def _outbound_row_seqs(tmp_path) -> set[int]:  #
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         from blizzard.runner.store.schema import outbound_buffer
@@ -1687,7 +1687,7 @@ def _outbound_row_seqs(tmp_path) -> set[int]:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.component
-def test_prune_outbound_deletes_old_acked_rows_below_the_pending_floor(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_outbound_deletes_old_acked_rows_below_the_pending_floor(tmp_path):  #
     """Retention: an acked row past the window is pruned only
     when its seq sits below the lowest still-pending seq — one interleaved above it
     survives regardless of age, keeping the retained buffer gapless from the floor up."""
@@ -1711,7 +1711,7 @@ def test_prune_outbound_deletes_old_acked_rows_below_the_pending_floor(tmp_path)
 
 
 @pytest.mark.component
-def test_prune_outbound_keeps_acked_rows_still_inside_the_retention_window(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_outbound_keeps_acked_rows_still_inside_the_retention_window(tmp_path):  #
     """An acked row younger than the retention window survives even below the pending
     floor — retention is about age, not merely about being superseded by a pending row."""
     store = _store(tmp_path)
@@ -1729,7 +1729,7 @@ def test_prune_outbound_keeps_acked_rows_still_inside_the_retention_window(tmp_p
 
 
 @pytest.mark.component
-def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_path):  #
     """A lease's newest beat survives regardless of age — ``latest_heartbeat`` answers
     identically before and after — while a superseded beat past the window is pruned."""
     store = _store(tmp_path)
@@ -1758,7 +1758,7 @@ def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_pat
 
 
 @pytest.mark.component
-def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  #
     """``< latest_beat``, never ``<=``: two beats tied for newest are both spared, even
     when that tied instant is itself past the retention window."""
     store = _store(tmp_path)
@@ -1779,14 +1779,14 @@ def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path)
     assert remaining == 2
 
 
-def _record_external_usage_attempt(store, *, slug: str, sampled_at):  # type: ignore[no-untyped-def]
+def _record_external_usage_attempt(store, *, slug: str, sampled_at):  #
     store.record_external_usage_attempt(
         slug=slug, sampled_at=sampled_at, payload=None, report_kind="", report_payload=""
     )
 
 
 @pytest.mark.component
-def test_prune_external_usage_samples_removes_a_superseded_attempt_but_never_the_newest(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_external_usage_samples_removes_a_superseded_attempt_but_never_the_newest(tmp_path):  #
     """A slug's newest attempt survives regardless of age — ``last_external_usage_attempt_at``
     answers identically before and after — while a superseded attempt past the window is pruned."""
     store = _store(tmp_path)
@@ -1813,7 +1813,7 @@ def test_prune_external_usage_samples_removes_a_superseded_attempt_but_never_the
 
 
 @pytest.mark.component
-def test_prune_external_usage_samples_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  # type: ignore[no-untyped-def]
+def test_prune_external_usage_samples_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  #
     """``< latest_sample``, never ``<=``: two attempts tied for newest are both spared,
     even when that tied instant is itself past the retention window."""
     store = _store(tmp_path)
@@ -1835,7 +1835,7 @@ def test_prune_external_usage_samples_never_prunes_a_same_instant_tied_newest_pa
 
 
 @pytest.mark.unit
-def test_ack_of_an_acked_outbound_fact_keeps_its_first_acked_at(tmp_path):  # type: ignore[no-untyped-def]
+def test_ack_of_an_acked_outbound_fact_keeps_its_first_acked_at(tmp_path):  #
     store = _store(tmp_path)
     seq = store.enqueue_outbound(
         kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
@@ -1850,7 +1850,7 @@ def test_ack_of_an_acked_outbound_fact_keeps_its_first_acked_at(tmp_path):  # ty
 
 
 @pytest.mark.unit
-def test_ack_of_an_acked_final_marker_keeps_its_first_acked_at(tmp_path):  # type: ignore[no-untyped-def]
+def test_ack_of_an_acked_final_marker_keeps_its_first_acked_at(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(
@@ -1877,7 +1877,7 @@ def test_ack_of_an_acked_final_marker_keeps_its_first_acked_at(tmp_path):  # typ
 
 
 @pytest.mark.unit
-def test_a_finalized_segment_takes_no_content_and_no_stop(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_finalized_segment_takes_no_content_and_no_stop(tmp_path):  #
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn(

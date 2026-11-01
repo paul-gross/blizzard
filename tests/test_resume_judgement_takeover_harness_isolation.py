@@ -43,7 +43,7 @@ _SHARED_SESSION_ID = "shared-dispatch-session"
 _OTHER_HARNESS_ID = "other_harness"
 
 
-def _seed_lease(  # type: ignore[no-untyped-def]
+def _seed_lease(  #
     store,
     *,
     lease_id: str,
@@ -84,7 +84,7 @@ def _two_harness_registry(harness_a: FakeHarness, harness_b: FakeHarness) -> Har
     )
 
 
-def _swap_registry(ctx, registry: HarnessRegistry):  # type: ignore[no-untyped-def]
+def _swap_registry(ctx, registry: HarnessRegistry):  #
     """``make_context`` bakes its single-harness registry into three other places besides
     ``ctx.harnesses`` itself — ``ctx.usage`` (:class:`UsageRecorder`), ``ctx.sessions``
     (:class:`SessionResolver`), and ``ctx.harness_selector`` (:class:`HarnessSelector`) each
@@ -104,7 +104,7 @@ def _swap_registry(ctx, registry: HarnessRegistry):  # type: ignore[no-untyped-d
 # RESUME (src/blizzard/runner/lifecycle/dormant.py) — the restart-resume re-attach.
 
 
-def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_siblings(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_siblings(tmp_path) -> None:  #
     """Two leases, sharing one raw session id, marked for graceful restart-resume — each
     must be re-attached through its OWN recorded owner's ``resume_with_message``, never the
     sibling's, despite the fake registry storing the pids identically."""
@@ -148,7 +148,7 @@ def test_restart_resume_dispatches_each_lease_to_its_own_harness_never_the_sibli
     assert lease_b is not None and lease_b.pid == 201
 
 
-def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path) -> None:  #
     """An unresolvable owner on ONE lease (a harness id the registry never binds) escalates
     only that lease — the sibling, sharing the same raw session id under a KNOWN harness,
     still resumes cleanly through its own adapter."""
@@ -194,7 +194,7 @@ def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path
 # JUDGEMENT (src/blizzard/runner/lifecycle/judgement/judgement.py `_resolve_harness`) — launch (`_elicit`) then collect.
 
 
-def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):  # type: ignore[no-untyped-def]
+def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):  #
     choices = [("pass", "meets criteria"), ("fail", "does not")]
     envelope_a = make_envelope("ch_a", "build", node_id="nd_build", choices=choices)
     envelope_b = make_envelope("ch_b", "build", node_id="nd_build", choices=choices)
@@ -212,7 +212,7 @@ def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, pro
     return _swap_registry(ctx, _two_harness_registry(harness_a, harness_b)), envelope_a, envelope_b
 
 
-def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp_path) -> None:  #
     """Two exited workers, sharing one raw session id under different harnesses: the launch
     pass elicits a verdict from each lease's OWN adapter, and the collect pass reads each
     verdict back from that SAME adapter — never the sibling's, even though both fakes are
@@ -254,7 +254,7 @@ def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp
     assert choice_b == "fail"
 
 
-def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tmp_path) -> None:  #
     """An unresolvable owner (a harness id this registry never binds) on ONE lease escalates
     only that lease; the sibling, sharing the same raw session id under a KNOWN harness,
     still judges cleanly through its own adapter, on the same tick."""
@@ -298,7 +298,7 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 # TAKEOVER (src/blizzard/runner/lifecycle/takeover.py `_resolved_harness`).
 
 
-def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:  # type: ignore[no-untyped-def]
+def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:  #
     return TakeoverService(
         FixedClock(_NOW),
         FakeProbe(),
@@ -312,7 +312,7 @@ def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) 
     )
 
 
-def _open_scope(store, chunk_id: str) -> TakeoverOpenScope:  # type: ignore[no-untyped-def]
+def _open_scope(store, chunk_id: str) -> TakeoverOpenScope:  #
     return TakeoverOpenScope(
         chunk_id=chunk_id,
         open_takeover=store.open_takeover_for_chunk(chunk_id),
@@ -325,7 +325,7 @@ def _open_scope(store, chunk_id: str) -> TakeoverOpenScope:  # type: ignore[no-u
     )
 
 
-def test_takeover_opens_each_parked_chunk_through_its_own_harness(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_takeover_opens_each_parked_chunk_through_its_own_harness(tmp_path) -> None:  #
     """Two ask-parked chunks, sharing one raw session id under different harnesses: opening a
     takeover on each must compose its resume command through its OWN recorded owner's
     ``resume_command`` — never the sibling's, proven by each fake's own call-log staying
@@ -357,7 +357,7 @@ def test_takeover_opens_each_parked_chunk_through_its_own_harness(tmp_path) -> N
     assert record_b is not None and record_b.harness_id == _OTHER_HARNESS_ID
 
 
-def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_path) -> None:  #
     """An unresolvable owner on ONE parked chunk (its harness id unbound in this registry)
     raises out of `open` for that chunk alone; the sibling, sharing the same raw session id
     under a KNOWN harness, still opens cleanly through its own adapter."""
@@ -395,6 +395,6 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     assert store.open_takeover_for_chunk("ch_b") is None
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:  # type: ignore[no-untyped-def]
+def _active_in(store, chunk_id: str, lease_ids) -> bool:  #
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

@@ -277,7 +277,7 @@ async def test_a_from_latest_stream_sends_only_events_published_after_it_registe
 
 async def test_an_event_published_around_registration_arrives_exactly_once() -> None:
     class _RacingBroker(EventBroker):
-        def subscribe(self, owner: str | None = None, session: str | None = None):  # type: ignore[no-untyped-def]
+        def subscribe(self, owner: str | None = None, session: str | None = None):  #
             self.publish("widget-changed", {"id": "pre"})
             sub = super().subscribe(owner, session)
             self.publish("widget-changed", {"id": "post"})

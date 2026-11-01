@@ -39,9 +39,9 @@ def with_sections(config: RunnerConfig, *overrides: HarnessSection) -> RunnerCon
 
 def with_claude_code(config: RunnerConfig, **changes: object) -> RunnerConfig:
     """``config`` with its Claude Code section's ``changes`` applied."""
-    return with_sections(config, replace(claude_code(config), **changes))  # type: ignore[arg-type]
+    return with_sections(config, replace(claude_code(config), **changes))  #
 
 
 def with_opencode(config: RunnerConfig, **changes: object) -> RunnerConfig:
     """``config`` with its OpenCode section's ``changes`` applied."""
-    return with_sections(config, replace(opencode(config), **changes))  # type: ignore[arg-type]
+    return with_sections(config, replace(opencode(config), **changes))  #

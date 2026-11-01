@@ -97,7 +97,7 @@ _HEAD = PoolHead(
 _HEAD_SESSION = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-head")
 
 
-def _node(*, model: list[str] | None, harnesses: list[str] | None = None, rotate: RotateBounds | None = None):  # type: ignore[no-untyped-def]
+def _node(*, model: list[str] | None, harnesses: list[str] | None = None, rotate: RotateBounds | None = None):  #
     return make_envelope(
         "ch_1",
         "verify",
@@ -116,7 +116,7 @@ def _resolver(registry: _Registry, leases: _Leases | None = None, *, wired: bool
     return SessionResolver(leases=leases or _Leases(), harnesses=registry, transcripts_wired=wired)  # type: ignore[arg-type]
 
 
-def _breach(resolver: SessionResolver, node):  # type: ignore[no-untyped-def]
+def _breach(resolver: SessionResolver, node):  #
     return resolver._rotation_breach(_HEAD, node, _CWD)
 
 
@@ -146,7 +146,7 @@ def test_a_lenient_selection_resolves_the_declared_preference_leniently() -> Non
     ],
     ids=["authored-tier", "several-members"],
 )
-def test_a_strict_selection_resolves_the_declared_preference_strictly(node_kwargs) -> None:  # type: ignore[no-untyped-def]
+def test_a_strict_selection_resolves_the_declared_preference_strictly(node_kwargs) -> None:  #
     registry = _Registry(model=_Model(strict="head-model"))
 
     assert _breach(_resolver(registry), _node(**node_kwargs)) == (None, None)
@@ -202,7 +202,7 @@ def test_a_model_breach_short_circuits_before_any_threshold_is_read() -> None:
 @pytest.mark.parametrize(
     "error", [UnknownHarnessError("x", ()), UnavailableHarnessError("x", "model")], ids=["unknown", "unavailable"]
 )
-def test_an_unresolvable_owner_is_an_owner_unresolvable_breach_carrying_its_exception(error) -> None:  # type: ignore[no-untyped-def]
+def test_an_unresolvable_owner_is_an_owner_unresolvable_breach_carrying_its_exception(error) -> None:  #
     registry = _Registry(owner_error=error)
 
     assert _breach(_resolver(registry), _node(model=["sonnet"])) == ("owner-unresolvable", error)
@@ -270,7 +270,7 @@ def test_both_transcript_bounds_share_one_source_resolution() -> None:
 
     _breach(_resolver(registry), _node(model=["sonnet"], rotate=rotate))
 
-    assert [call[0] for call in registry.source.calls] == ["context_tokens", "size_bytes"]  # type: ignore[union-attr]
+    assert [call[0] for call in registry.source.calls] == ["context_tokens", "size_bytes"]  #
     assert registry.asked.count(("transcript_source", CLAUDE_CODE_HARNESS_ID)) == 1
 
 
@@ -287,7 +287,7 @@ def test_an_unwired_transcripts_lane_measures_neither_transcript_signal() -> Non
 @pytest.mark.parametrize(
     "error", [UnknownHarnessError("x", ()), UnavailableHarnessError("x", "model")], ids=["unknown", "unavailable"]
 )
-def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_the_invocation_count(error) -> None:  # type: ignore[no-untyped-def]
+def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_the_invocation_count(error) -> None:  #
     registry = _under_model()
     registry.source = error
     rotate = RotateBounds(max_context_tokens=1, max_transcript_bytes=1, max_invocations=2)
@@ -323,7 +323,7 @@ def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_
         (RotateBounds(max_context_tokens=5, max_invocations=5, max_transcript_bytes=5), 5, 5, 5, None),
     ],
 )
-def test_each_threshold_breaches_strictly_over_its_bound_and_the_first_declared_wins(  # type: ignore[no-untyped-def]
+def test_each_threshold_breaches_strictly_over_its_bound_and_the_first_declared_wins(  #
     rotate, context, size, invocations, expected
 ) -> None:
     registry = _under_model()

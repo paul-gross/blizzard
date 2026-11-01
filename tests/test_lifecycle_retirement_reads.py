@@ -13,8 +13,8 @@ from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
-from blizzard.hub.store.internal.repository_record_store import _retirements  # type: ignore[attr-defined]
-from blizzard.hub.store.internal.work_source_record_store import _retired_ids  # type: ignore[attr-defined]
+from blizzard.hub.store.internal.repository_record_store import _retirements  #
+from blizzard.hub.store.internal.work_source_record_store import _retired_ids  #
 from blizzard.hub.store.scoped import statements_of
 from tests.support import hub_store_connections, migrate_to, stamp
 
@@ -50,7 +50,7 @@ def _engine(tmp_path: Path) -> Engine:
     return engine
 
 
-def _read(engine: Engine, fn):  # type: ignore[no-untyped-def]
+def _read(engine: Engine, fn):  #
     with hub_store_connections(engine).read("test") as conn:
         return fn(conn)
 
@@ -88,7 +88,7 @@ def test_newest_fact_select_returns_each_keys_highest_id_row_whatever_its_retire
     engine = _engine(tmp_path)
     facts = s.repository_lifecycle_facts
 
-    def read(conn):  # type: ignore[no-untyped-def]
+    def read(conn):  #
         stmt = newest_fact_select(statements_of(conn), facts, facts.c.repository_id, ["k2", "k3"], facts.c.set_at)
         return {r.repository_id: r.set_at for r in conn.execute(stmt.add_columns(facts.c.repository_id))}
 

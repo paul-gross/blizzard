@@ -516,7 +516,7 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
         clock=clock,
     )
     attachments_store = CountingAttachmentStore(ctx.stores.attachments)
-    ctx = replace(ctx, stores=replace(ctx.stores, attachments=attachments_store))  # type: ignore[arg-type]
+    ctx = replace(ctx, stores=replace(ctx.stores, attachments=attachments_store))  #
 
     Advance(ctx).run()  # launches the detached elicitation — the produces-coverage check runs here
     assert attachments_store.attachment_names_for_lease_calls == ["lease_r"]  # names only

@@ -61,7 +61,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         self.find_live_holder_calls += 1
         return super().find_live_holder(pointer)
 
-    def live_holders(self, pointers):  # type: ignore[no-untyped-def]
+    def live_holders(self, pointers):  #
         self.live_holders_calls += 1
         return super().live_holders(pointers)
 
@@ -199,7 +199,7 @@ def test_editor_listing_resolves_its_source_label_once_only_when_nonempty(
         label.assert_called_once_with("hub")
 
 
-def _seed_authored_items(hub, n: int) -> str:  # type: ignore[no-untyped-def]
+def _seed_authored_items(hub, n: int) -> str:  #
     """``n`` hub items, each authored by its own user — the token of the last one."""
     token = ""
     for i in range(n):
@@ -243,7 +243,7 @@ def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_pat
     large = build_hub(tmp_path / "large", auth_mode="oauth")
     large_token = _seed_authored_items(large, 6)  # 3x the small fixture
 
-    def call(hub, token: str) -> None:  # type: ignore[no-untyped-def]
+    def call(hub, token: str) -> None:  #
         resp = hub.client.get("/api/work-sources/hub/items", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200, resp.text
 

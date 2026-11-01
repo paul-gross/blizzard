@@ -34,7 +34,7 @@ from tests.support import assert_all_timestamps_utc, count_queries
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: FakeProbe | None = None):  # type: ignore[no-untyped-def]
+def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: FakeProbe | None = None):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = LocalLeaseService(
@@ -55,7 +55,7 @@ def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: 
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store, **overrides: object) -> None:  #
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -273,7 +273,7 @@ def test_parked_state_reaches_the_wire_via_real_park_facts(tmp_path: Path) -> No
     assert items[0]["state"] == "parked"
 
 
-def _spawn(store) -> None:  # type: ignore[no-untyped-def]
+def _spawn(store) -> None:  #
     store.record_spawn(
         "lease_1",
         pid=100,
@@ -283,20 +283,20 @@ def _spawn(store) -> None:  # type: ignore[no-untyped-def]
     )
 
 
-def _seed_active(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_active(store) -> None:  #
     _spawn(store)
 
 
-def _seed_parked(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_parked(store) -> None:  #
     _spawn(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
 
 
-def _seed_spawning(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_spawning(store) -> None:  #
     pass
 
 
-def _seed_closed(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_closed(store) -> None:  #
     _spawn(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
 
@@ -312,7 +312,7 @@ def _seed_closed(store) -> None:  # type: ignore[no-untyped-def]
         (_seed_closed, _NOW, "closed"),
     ],
 )
-def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed, now: datetime, state: str) -> None:  # type: ignore[no-untyped-def]
+def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed, now: datetime, state: str) -> None:  #
     app, store = _app_with_leases(tmp_path, clock=FixedClock(now), probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
     seed(store)
@@ -372,7 +372,7 @@ def test_an_open_ask_on_one_chunk_changes_only_that_chunk_s_display_status(tmp_p
     assert items["ch_1"]["state"] == "running"
 
 
-def _seed_chunk_history(store, *, count: int, chunk_id: str = "ch_1", prefix: str = "lease") -> list[str]:  # type: ignore[no-untyped-def]
+def _seed_chunk_history(store, *, count: int, chunk_id: str = "ch_1", prefix: str = "lease") -> list[str]:  #
     """``count`` leases of ``chunk_id``, minted a minute apart, every one but the newest closed."""
     ids = [f"{prefix}_{n:02d}" for n in range(count)]
     for n, lease_id in enumerate(ids):

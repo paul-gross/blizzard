@@ -86,12 +86,12 @@ def _completion(node_id: str, *, epoch: int, choice: str, artifacts: list[dict])
     }
 
 
-def _report_lease(hub, chunk_id: str, epoch: int) -> None:  # type: ignore[no-untyped-def]
+def _report_lease(hub, chunk_id: str, epoch: int) -> None:  #
     # One lease per epoch, minted in epoch order, so the epoch doubles as the runner's fact seq.
     assert report_lease(hub, chunk_id, epoch=epoch, seq=epoch)["applied"] == [epoch]
 
 
-def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
+def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  #
     """Mint the graph, ingest a chunk, claim it. Returns (chunk_id, node-name -> node_id)."""
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML})
     assert minted.status_code == 201, minted.text
@@ -147,7 +147,7 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
     assert findings[0]["content"] == _FINDINGS
 
 
-def _fail_review_into_build(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
+def _fail_review_into_build(hub) -> tuple[str, dict[str, str]]:  #
     """Drive build -> review -> (fail) -> build, leaving the chunk on build entered by the addended edge."""
     chunk_id, nodes = _mint_and_claim(hub)
     hub.client.post(

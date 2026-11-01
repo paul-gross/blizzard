@@ -56,7 +56,7 @@ _HUB = "http://hub.test:8421"
 # --- the stored answer ------------------------------------------------------------------------------
 
 
-def _store(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_runner_identity(RunnerIdentity(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_AT))
     return store
@@ -188,11 +188,11 @@ def test_status_shows_the_hubs_answer_to_a_config_naming_none_and_nothing_before
 # --- the wire ---------------------------------------------------------------------------------------
 
 
-def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
+def _client(handler) -> HttpHubClient:  #
     return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)))
 
 
-def _registration(seen: dict[str, object], answer: object = None):  # type: ignore[no-untyped-def]
+def _registration(seen: dict[str, object], answer: object = None):  #
     def handler(request: httpx2.Request) -> httpx2.Response:
         seen.update(json.loads(request.content))
         return httpx2.Response(

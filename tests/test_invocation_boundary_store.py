@@ -151,7 +151,7 @@ def test_open_boundaries_for_lease_excludes_closed_rows() -> None:
     assert closed.closed_reason == "failed"
 
 
-def _open_judge(store, *, position: str | None = "pos-original") -> None:  # type: ignore[no-untyped-def]
+def _open_judge(store, *, position: str | None = "pos-original") -> None:  #
     store.record_boundary_open(
         lease_id="lease_1",
         chunk_id="ch_1",
@@ -354,7 +354,7 @@ def test_open_after_close_keeps_the_closed_marker() -> None:
     assert (boundary.start_position, boundary.closed_reason) == ("pos-original", "completed")
 
 
-def _open(store, lease_id: str, generation: int, kind: str) -> None:  # type: ignore[no-untyped-def]
+def _open(store, lease_id: str, generation: int, kind: str) -> None:  #
     store.record_boundary_open(
         lease_id=lease_id,
         chunk_id="ch_1",
@@ -367,7 +367,7 @@ def _open(store, lease_id: str, generation: int, kind: str) -> None:  # type: ig
     )
 
 
-def _advance(store, lease_id: str, generation: int, kind: str, superseded: str, at: datetime) -> None:  # type: ignore[no-untyped-def]
+def _advance(store, lease_id: str, generation: int, kind: str, superseded: str, at: datetime) -> None:  #
     store.record_boundary_advance(
         lease_id=lease_id,
         generation=generation,

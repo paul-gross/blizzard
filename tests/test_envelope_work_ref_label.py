@@ -39,7 +39,7 @@ nodes:
 """
 
 
-def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _claimed(hub) -> tuple[str, str]:  #
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
     claimed = hub.client.post(

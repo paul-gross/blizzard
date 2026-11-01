@@ -17,4 +17,4 @@ def test_the_finding_bucket_is_a_reader_bound_to_the_finding_store(tmp_path: Pat
     services = build_hub(tmp_path).services
 
     assert isinstance(services.finding_bucket, FindingBucketReader)
-    assert services.finding_bucket._findings is services.findings  # type: ignore[attr-defined]
+    assert services.finding_bucket._findings is services.findings  #

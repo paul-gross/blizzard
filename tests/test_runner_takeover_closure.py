@@ -31,11 +31,11 @@ _NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_taken_over(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):  # type: ignore[no-untyped-def]
+def _seed_taken_over(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):  #
     """A lease minted, closed ``escalated``, then taken over — the needs-human-under-
     takeover shape a stranded operator session leaves behind."""
     store.record_lease(
@@ -69,7 +69,7 @@ def _seed_taken_over(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
     )
 
 
-def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
+def _chunk(chunk="ch_1", *, status: ChunkStatus):  #
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -78,7 +78,7 @@ def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def
     )
 
 
-def _ctx(store, hub, *, clock=None):  # type: ignore[no-untyped-def]
+def _ctx(store, hub, *, clock=None):  #
     return make_context(
         store,
         hub=hub,
@@ -90,7 +90,7 @@ def _ctx(store, hub, *, clock=None):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_pull_closes_a_takeover_the_hub_stopped(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_a_takeover_the_hub_stopped(tmp_path):  #
     store = _store(tmp_path)
     _seed_taken_over(store)
     hub = FakeHub()
@@ -104,7 +104,7 @@ def test_pull_closes_a_takeover_the_hub_stopped(tmp_path):  # type: ignore[no-un
 
 
 @pytest.mark.unit
-def test_pull_closes_a_takeover_whose_chunk_the_hub_landed(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_a_takeover_whose_chunk_the_hub_landed(tmp_path):  #
     store = _store(tmp_path)
     _seed_taken_over(store)
     hub = FakeHub()
@@ -116,7 +116,7 @@ def test_pull_closes_a_takeover_whose_chunk_the_hub_landed(tmp_path):  # type: i
 
 
 @pytest.mark.unit
-def test_pull_leaves_a_takeover_the_hub_still_holds(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_leaves_a_takeover_the_hub_still_holds(tmp_path):  #
     store = _store(tmp_path)
     _seed_taken_over(store)
     hub = FakeHub()
@@ -128,7 +128,7 @@ def test_pull_leaves_a_takeover_the_hub_still_holds(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.unit
-def test_an_unreachable_hub_leaves_the_takeover_open(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_unreachable_hub_leaves_the_takeover_open(tmp_path):  #
     store = _store(tmp_path)
     _seed_taken_over(store)
     hub = FakeHub()
@@ -140,7 +140,7 @@ def test_an_unreachable_hub_leaves_the_takeover_open(tmp_path):  # type: ignore[
 
 
 @pytest.mark.unit
-def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  #
     store = _store(tmp_path)
     _seed_taken_over(store)
     hub = FakeHub()

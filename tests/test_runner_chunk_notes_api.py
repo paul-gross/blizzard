@@ -112,7 +112,7 @@ def _hub_detail(tmp_path: Path, notes: tuple[str | None, str | None, str | None]
     return chunk_id, detail.json()
 
 
-def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict):  # type: ignore[no-untyped-def]
+def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict):  #
     """A runner whose hub forward answers ``detail`` verbatim, with an open lease on ``chunk_id``."""
     tmp_path.mkdir(exist_ok=True)
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"

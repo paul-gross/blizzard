@@ -119,7 +119,7 @@ def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> N
         assert loop.usage.workspaces is loop.workspaces
 
 
-def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seeded_running_lease_store(tmp_path: Path):  #
     """A store holding one live, session-bearing build lease — the shape both restart-resume
     hooks mark, seeded exactly as ``tests/test_runner_restart_resume.py`` does."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -666,12 +666,12 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
     original_client = httpx2.Client
     clients: list[httpx2.Client] = []
 
-    def client(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def client(*args, **kwargs):  #
         result = original_client(*args, **kwargs)
         clients.append(result)
         return result
 
-    def fail(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def fail(*args, **kwargs):  #
         raise RuntimeError("app wiring failed")
 
     monkeypatch.setattr(runner_app.httpx2, "Client", client)

@@ -71,7 +71,7 @@ class _World:
 
         return live.objects.get(RecordKind.WORK_SOURCE, self.source_id, build)
 
-    def source(self):  # type: ignore[no-untyped-def]
+    def source(self):  #
         record = self.stores.work_source_records.get(self.source_id)
         assert record is not None
         return record

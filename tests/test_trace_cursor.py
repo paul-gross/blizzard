@@ -122,7 +122,7 @@ def _chunk(chunk_id: str, *, closes_at: int) -> StepFacts:
     )
 
 
-def _ids(window) -> list[str]:  # type: ignore[no-untyped-def]
+def _ids(window) -> list[str]:  #
     return [c.key.chunk_id for c in window.closed_steps()]
 
 

@@ -48,7 +48,7 @@ def _cursor_rows(store: SqlAlchemyRunnerStore) -> int:
         return conn.exec_driver_sql("SELECT count(*) FROM trace_cursor").scalar_one()
 
 
-def _events(store: SqlAlchemyRunnerStore) -> list[dict]:  # type: ignore[type-arg]
+def _events(store: SqlAlchemyRunnerStore) -> list[dict]:  #
     return [json.loads(f.payload) for f in store.pending_outbound() if f.kind == EVENT_RECORDED]
 
 

@@ -31,11 +31,11 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
+def _seed_exited_lease(store):  #
     """A build lease spawned into env e1; the worker has already exited (no probe entry)."""
     store.record_lease(
         NewLease(
@@ -59,7 +59,7 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store, harness, *, clock=None):  # type: ignore[no-untyped-def]
+def _ctx(store, harness, *, clock=None):  #
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     return hub, make_context(
@@ -75,7 +75,7 @@ def _ctx(store, harness, *, clock=None):  # type: ignore[no-untyped-def]
 # --- A single overload backs off -------------------------------
 
 
-def test_a_single_overload_backs_off_the_worker_generation_without_judging(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_single_overload_backs_off_the_worker_generation_without_judging(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     overload = ProviderOverload(detail="Overloaded: 529")
@@ -96,7 +96,7 @@ def test_a_single_overload_backs_off_the_worker_generation_without_judging(tmp_p
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
 
 
-def test_backing_off_is_a_no_op_until_resume_after_elapses(tmp_path):  # type: ignore[no-untyped-def]
+def test_backing_off_is_a_no_op_until_resume_after_elapses(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     overload = ProviderOverload(detail="Overloaded: 529")
@@ -116,7 +116,7 @@ def test_backing_off_is_a_no_op_until_resume_after_elapses(tmp_path):  # type: i
     assert harness.resumed == []
 
 
-def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_delay(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_delay(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     overload = ProviderOverload(detail="Overloaded: 529")
@@ -135,7 +135,7 @@ def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_de
     assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
 
 
-def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past_resume_after(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past_resume_after(tmp_path):  #
     """The runner's own brake starts no process — a due wake is a resume, so it waits for the brake."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -164,7 +164,7 @@ def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past
 # --- Consecutive overloads escalate, then fall through -----
 
 
-def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path):  # type: ignore[no-untyped-def]
+def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path):  #
     """Reconstructs the whole streak: ordinals 1-4 each back off for double the last delay,
     and the 5th (:data:`BACKOFF_LIMIT`) falls through to an ordinary judged completion."""
     store = _store(tmp_path)
@@ -203,7 +203,7 @@ def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path
 # --- A clean exit resets an open streak --------------------
 
 
-def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     overload = ProviderOverload(detail="Overloaded: 529")
@@ -237,7 +237,7 @@ def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tm
 # --- A judge elicitation's own overload -------------------------
 
 
-def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitation(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitation(tmp_path):  #
     """The worker's own turn already finished before its verdict elicitation overloaded —
     the wake re-runs `Judgement`, launching a fresh elicitation, never the plain worker
     wake message (mirrors the usage-limit judge park's own handling)."""
@@ -280,7 +280,7 @@ def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitat
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
 
 
-def test_a_replayed_judge_backoff_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_replayed_judge_backoff_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  #
     """A crash before the fresh elicitation launches leaves the overloaded one standing: the
     retry carries the same identity, so it appends nothing a second time."""
     store = _store(tmp_path)

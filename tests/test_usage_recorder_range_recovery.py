@@ -30,11 +30,11 @@ _CHUNK_ID = "ch_a"
 _NODE_ID = "nd_build"
 
 
-def _usage_payloads_by_lease(store):  # type: ignore[no-untyped-def]
+def _usage_payloads_by_lease(store):  #
     return {b.lease_id: json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED}
 
 
-def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store) -> None:  #
     store.record_lease(
         NewLease(
             lease_id="lease_a",
@@ -49,7 +49,7 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
     )
 
 
-def _recorder(store, registry) -> UsageRecorder:  # type: ignore[no-untyped-def]
+def _recorder(store, registry) -> UsageRecorder:  #
     return UsageRecorder(
         leases=store,
         usage=store,
@@ -62,7 +62,7 @@ def _recorder(store, registry) -> UsageRecorder:  # type: ignore[no-untyped-def]
     )
 
 
-def test_a_later_generations_recovery_range_excludes_an_earlier_generations_tokens(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_later_generations_recovery_range_excludes_an_earlier_generations_tokens(tmp_path) -> None:  #
     """Two generations, each opened its own boundary, each with no surviving stdout
     envelope: generation 2's range read must start at ITS OWN boundary — the tail
     generation 1 left — never at the session's beginning, re-summing generation 1's lines."""
@@ -139,7 +139,7 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
     assert len(store.pending_outbound()) == 2
 
 
-def test_no_boundary_for_this_generation_records_no_sample_and_reads_no_transcript(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_no_boundary_for_this_generation_records_no_sample_and_reads_no_transcript(tmp_path) -> None:  #
     """A lease that predates the invocation-boundary write (or a store answering ``None``)
     must not fall through to the old whole-session read — no boundary, no sample, no read."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -166,7 +166,7 @@ def test_no_boundary_for_this_generation_records_no_sample_and_reads_no_transcri
     assert _usage_payloads_by_lease(store) == {}
 
 
-def test_a_boundary_with_no_start_position_reads_from_the_beginning(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_boundary_with_no_start_position_reads_from_the_beginning(tmp_path) -> None:  #
     """``start_position is None`` is the fresh-session beginning sentinel, not a failure —
     ``read_raw_lines`` is still called, with ``start=None``."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -214,7 +214,7 @@ def test_a_boundary_with_no_start_position_reads_from_the_beginning(tmp_path) ->
     assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 7
 
 
-def test_a_nudge_opened_boundary_still_recovers_a_resume_labeled_generation(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_nudge_opened_boundary_still_recovers_a_resume_labeled_generation(tmp_path) -> None:  #
     """A generation whose worker-starting boundary was opened under ``kind="nudge"`` still
     recovers, even though `record_worker`'s own usage-kind label for it reads ``"resume"``
     — a usage-accounting label, never a reliable pointer to the boundary that opened it."""
@@ -263,7 +263,7 @@ def test_a_nudge_opened_boundary_still_recovers_a_resume_labeled_generation(tmp_
     assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 42
 
 
-def test_a_worker_boundary_with_an_unreadable_start_records_no_sample_and_reads_no_transcript(  # type: ignore[no-untyped-def]
+def test_a_worker_boundary_with_an_unreadable_start_records_no_sample_and_reads_no_transcript(  #
     tmp_path,
 ) -> None:
     """``start_unreadable=True`` must never be treated as "read from zero" — a transient tail
@@ -303,7 +303,7 @@ def test_a_worker_boundary_with_an_unreadable_start_records_no_sample_and_reads_
     assert _usage_payloads_by_lease(store) == {}
 
 
-def test_a_readable_judge_boundary_caps_the_worker_sample_at_its_own_start(  # type: ignore[no-untyped-def]
+def test_a_readable_judge_boundary_caps_the_worker_sample_at_its_own_start(  #
     tmp_path,
 ) -> None:
     """The companion, positive case: a judge boundary that DID read its own start caps the
@@ -365,7 +365,7 @@ def test_a_readable_judge_boundary_caps_the_worker_sample_at_its_own_start(  # t
     assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 5
 
 
-def test_an_advanced_judge_range_starts_at_the_advance_and_the_worker_range_ends_at_the_marker(  # type: ignore[no-untyped-def]
+def test_an_advanced_judge_range_starts_at_the_advance_and_the_worker_range_ends_at_the_marker(  #
     tmp_path,
 ) -> None:
     """A park-resume advances the standing judge boundary: the judge's own range starts at the
@@ -429,7 +429,7 @@ def test_an_advanced_judge_range_starts_at_the_advance_and_the_worker_range_ends
     ]
 
 
-def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entirely(  # type: ignore[no-untyped-def]
+def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entirely(  #
     tmp_path,
 ) -> None:
     """A judge boundary exists but its own start could not be read: falling back to "tail
@@ -482,7 +482,7 @@ def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entir
     assert _usage_payloads_by_lease(store) == {}
 
 
-def test_a_recorded_boundary_advance_moves_the_judge_range_start_and_leaves_the_marker(  # type: ignore[no-untyped-def]
+def test_a_recorded_boundary_advance_moves_the_judge_range_start_and_leaves_the_marker(  #
     tmp_path,
 ) -> None:
     """A recorded advance of a generation's judge boundary moves where its judge transcript

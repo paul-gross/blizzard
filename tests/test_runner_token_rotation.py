@@ -18,7 +18,7 @@ from tests.support import HubHarness, build_hub, hub_store_connections, migrated
 pytestmark = pytest.mark.component
 
 
-def _enroll(hub) -> str:  # type: ignore[no-untyped-def]
+def _enroll(hub) -> str:  #
     resp = hub.client.post("/api/runners/runner-a/enrollments")
     assert resp.status_code == 201, resp.text
     return str(resp.json()["token"])

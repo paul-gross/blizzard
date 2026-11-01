@@ -93,7 +93,7 @@ def _seed(engine: sa.Engine) -> None:
             )
 
 
-def _runner(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _runner(tmp_path: Path):  #
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     return migration_runner(HubConfig(root=tmp_path, db_url=db_url)), db_url
 

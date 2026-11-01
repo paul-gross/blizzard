@@ -154,7 +154,7 @@ def test_no_provider_token_is_ever_set_as_a_cookie(tmp_path: Path) -> None:
 # --- linking rule -----------------------------------------------------------------
 
 
-def _login(hub, provider: FakeOAuthProvider, code: str) -> None:  # type: ignore[no-untyped-def]
+def _login(hub, provider: FakeOAuthProvider, code: str) -> None:  #
     authorize_resp = hub.client.get(f"/api/auth/{provider.name}/authorize", follow_redirects=False)
     state = _state_from_redirect(authorize_resp.headers["location"])
     resp = hub.client.get(f"/api/auth/{provider.name}/callback?code={code}&state={state}", follow_redirects=False)

@@ -153,7 +153,7 @@ class _Clock:
 
 def _refusal(since: datetime, until: datetime) -> str | None:
     try:
-        refuse_bad_window(since, until, _Clock())  # type: ignore[arg-type]
+        refuse_bad_window(since, until, _Clock())  #
     except click.ClickException as exc:
         return exc.message
     return None

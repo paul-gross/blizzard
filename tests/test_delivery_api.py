@@ -16,7 +16,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _marker(conn, chunk_id: str, name: str, data: str, index: int) -> None:  # type: ignore[no-untyped-def]
+def _marker(conn, chunk_id: str, name: str, data: str, index: int) -> None:  #
     conn.execute(
         s.artifacts.insert().values(
             stamp(
@@ -56,7 +56,7 @@ def test_delivery_survives_reread_and_partial_multi_repo_land(tmp_path: Path) ->
         )
         _marker(conn, chunk_id, "merged/acme/one", "actual-merge-sha", 3)
 
-    def read() -> tuple[dict, dict]:  # type: ignore[type-arg]
+    def read() -> tuple[dict, dict]:  #
         page = hub.client.get("/api/chunks").json()["chunks"][0]
         detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
         return page, detail
@@ -112,9 +112,9 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
             chunk_id = ingest(hub, [{"source": "default", "ref": str(i)}])
             with hub.engine.begin() as conn:
                 _marker(conn, chunk_id, "merged/acme/one", f"sha-{i}", i)
-        delivery_params: list[tuple] = []  # type: ignore[type-arg]
+        delivery_params: list[tuple] = []  #
 
-        def watch(conn, cursor, statement, parameters, context, executemany, *, observed=delivery_params):  # type: ignore[no-untyped-def]
+        def watch(conn, cursor, statement, parameters, context, executemany, *, observed=delivery_params):  #
             if "FROM artifacts" in statement and " LIKE " in statement:
                 observed.append(tuple(parameters))
 
@@ -122,7 +122,7 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
         try:
             result = []
 
-            def call(current=hub, rows=result) -> None:  # type: ignore[no-untyped-def]
+            def call(current=hub, rows=result) -> None:  #
                 response = current.client.get("/api/chunks", params={"limit": 2})
                 assert response.status_code == 200, response.text
                 rows.extend(response.json()["chunks"])
@@ -175,7 +175,7 @@ def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Pa
             )
         )
 
-    def views():  # type: ignore[no-untyped-def]
+    def views():  #
         return (hub.client.get("/api/chunks").json()["chunks"][0], hub.client.get(f"/api/chunks/{chunk_id}").json())
 
     for view in views():

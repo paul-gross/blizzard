@@ -868,7 +868,7 @@ def github_double(
 
     @app.post("/repos/{owner}/{repo}/pulls")
     def create_pull(owner: str, repo: str, body: dict) -> JSONResponse:
-        pulls = state["pulls"]  # type: ignore[index]
+        pulls = state["pulls"]  #
         if any(p["state"] == "open" and p["head"] == body["head"] for p in pulls.values()):  # type: ignore[union-attr]
             # GitHub 422s a second PR for the same head — the redelivery reuse path.
             return JSONResponse(status_code=422, content={"message": "A pull request already exists"})
@@ -892,7 +892,7 @@ def github_double(
 
     @app.get("/repos/{owner}/{repo}/pulls")
     def list_pulls(owner: str, repo: str, state_: str = "open") -> list[dict]:
-        pulls = state["pulls"]  # type: ignore[index]
+        pulls = state["pulls"]  #
         return [
             {
                 "number": n,
@@ -2298,7 +2298,7 @@ def capture_statements(engine: Engine) -> Iterator[list[tuple[str, Any]]]:
     ``EXPLAIN QUERY PLAN``) with no drift from what was actually sent."""
     statements: list[tuple[str, Any]] = []
 
-    def _listener(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+    def _listener(conn, cursor, statement, parameters, context, executemany):  #
         statements.append((statement, parameters))
 
     event.listen(engine, "before_cursor_execute", _listener)

@@ -349,14 +349,14 @@ def test_real_compactor_requires_a_new_transition_after_successful_summarize(tmp
     fresh = next(result for result in report.results if result.probe is CompatibilityProbe.FRESH_TURN)
     assert fresh.state is EvidenceState.FAILED
     assert "new compaction transition" in fresh.summary
-    assert probe.evidence["compaction"] == {  # type: ignore[comparison-overlap]
+    assert probe.evidence["compaction"] == {  #
         "request_succeeded": True,
         "request_status": 200,
         "transition_observed": False,
         "effective": False,
     }
     summarize = next(item for item in probe.evidence["operations"] if item["operation"] == "compaction_summarize")  # type: ignore[index]
-    assert summarize["http"] == {"method": "POST", "path": "/session/ses_fake/summarize", "status": 200}  # type: ignore[index]
+    assert summarize["http"] == {"method": "POST", "path": "/session/ses_fake/summarize", "status": 200}  #
 
 
 def _cli_args(binary: str, evidence: Path) -> list[str]:
@@ -640,7 +640,7 @@ def test_takeover_triggers_local_activity_to_complete_a_gated_upstream_handshake
     takeover = next(result for result in report.results if result.probe is CompatibilityProbe.TAKEOVER)
     assert takeover.state is EvidenceState.OBSERVED
     trigger = next(item for item in probe.evidence["operations"] if item["operation"] == "takeover_event_trigger")  # type: ignore[index]
-    assert trigger["http"] == {"method": "POST", "path": "/session", "status": 200}  # type: ignore[index]
+    assert trigger["http"] == {"method": "POST", "path": "/session", "status": 200}  #
 
 
 def test_takeover_requires_client_liveness_after_the_real_sse_handshake(tmp_path: Path) -> None:

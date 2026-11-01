@@ -67,7 +67,7 @@ def _live_credentials(path: Path, clock: FixedClock) -> Path:
 
 def _sampler(
     credentials_path: Path,
-    handler,  # type: ignore[no-untyped-def]
+    handler,  #
     *,
     clock: FixedClock | None = None,
 ) -> OpenAISubscriptionSampler:

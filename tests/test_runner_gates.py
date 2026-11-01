@@ -38,11 +38,11 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  # type: ignore[no-untyped-def]
+def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  #
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -66,7 +66,7 @@ def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  # typ
 
 
 @pytest.mark.unit
-def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # type: ignore[no-untyped-def]
+def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  #
     """A gated node's exited worker submits a decision (not a transition) and parks."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -115,7 +115,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
 
 
 @pytest.mark.unit
-def test_runner_config_gate_runs_the_nodes_checks_and_buffers_their_results(tmp_path):  # type: ignore[no-untyped-def]
+def test_runner_config_gate_runs_the_nodes_checks_and_buffers_their_results(tmp_path):  #
     """The worker exit runs the gated node's `checks:` and the decision carries `(command, passed)`."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -145,7 +145,7 @@ def test_runner_config_gate_runs_the_nodes_checks_and_buffers_their_results(tmp_
 
 
 @pytest.mark.unit
-def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path):  # type: ignore[no-untyped-def]
+def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -181,7 +181,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
 
 
 @pytest.mark.unit
-def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # type: ignore[no-untyped-def]
+def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  #
     """A held chunk whose gate the human resolved: the runner records the resolving
     transition and continues in place from the returned envelope."""
     store = _store(tmp_path)
@@ -225,7 +225,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
 
 
 @pytest.mark.unit
-def test_resolved_gate_after_a_later_claim_submits_at_the_current_epoch(tmp_path):  # type: ignore[no-untyped-def]
+def test_resolved_gate_after_a_later_claim_submits_at_the_current_epoch(tmp_path):  #
     """A decision opened at a landing epoch, with a claim since reserved a later one: the resolving
     transition is fenced at the current epoch yet still names the landing decision."""
     store = _store(tmp_path)
@@ -255,7 +255,7 @@ def test_resolved_gate_after_a_later_claim_submits_at_the_current_epoch(tmp_path
 
 
 @pytest.mark.unit
-def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def]
+def test_unresolved_gate_keeps_waiting(tmp_path):  #
     """A parked chunk whose decision is not yet resolved advances nothing."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -289,7 +289,7 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
 
 
 @pytest.mark.unit
-def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  #
     """FILL's interrupted-claim reconciler must not adopt a chunk parked on a resolved
     gate — its bound-env, no-active-lease shape matches what FILL's crash reconciler
     recovers, so it must skip and leave the resolving transition to ADVANCE."""
@@ -335,7 +335,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     assert submission.decision_id == "dec_1" and submission.choice == "approve" and submission.epoch == 1
 
 
-def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ignore[no-untyped-def]
+def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  #
     return ChunkState(
         chunk_id="ch_1",
         status=status,
@@ -357,7 +357,7 @@ def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ig
     [(ChunkStatus.WAITING_ON_HUMAN, None), (ChunkStatus.READY, "approve")],
     ids=["open-decision", "resolved-decision"],
 )
-def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, status, resolved_choice):  # type: ignore[no-untyped-def]
+def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, status, resolved_choice):  #
     """A detach keeps the decision but drops the route: the park has nothing left to resolve here."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -376,7 +376,7 @@ def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, st
 
 
 @pytest.mark.unit
-def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  #
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
@@ -394,7 +394,7 @@ def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  
 
 
 @pytest.mark.unit
-def test_a_stopped_gate_park_with_its_decision_present_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_stopped_gate_park_with_its_decision_present_releases_its_envs(tmp_path):  #
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()

@@ -49,7 +49,7 @@ nodes:
 """
 
 
-def _asked(hub, *, question_id: str = "qn_1") -> str:  # type: ignore[no-untyped-def]
+def _asked(hub, *, question_id: str = "qn_1") -> str:  #
     """Mint the graph, claim a chunk, and land an open question; return the chunk id."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]

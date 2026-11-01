@@ -19,7 +19,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "364"}
 
 
-def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _claim(hub, chunk_id: str) -> None:  #
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
@@ -28,7 +28,7 @@ def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
-def _delete_chunk(hub, chunk_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
+def _delete_chunk(hub, chunk_id: str, *, by: str | None = None):  #
     """``DELETE /api/chunks/{id}`` with its JSON body — ``httpx2``'s own
     ``delete()`` refuses a ``json`` keyword, so this goes through ``request`` instead,
     the way ``CliContext.send`` itself now has to for the same reason."""

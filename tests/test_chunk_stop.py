@@ -59,7 +59,7 @@ nodes:
 """
 
 
-def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _claim(hub, chunk_id: str) -> None:  #
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
@@ -68,7 +68,7 @@ def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
-def _ask(hub, chunk_id: str, *, question_id: str = "qn_1") -> None:  # type: ignore[no-untyped-def]
+def _ask(hub, chunk_id: str, *, question_id: str = "qn_1") -> None:  #
     resp = hub.client.post(
         "/api/questions",
         json={
@@ -86,7 +86,7 @@ def _ask(hub, chunk_id: str, *, question_id: str = "qn_1") -> None:  # type: ign
     assert resp.status_code == 201, resp.text
 
 
-def _ingest_and_deliver(hub) -> str:  # type: ignore[no-untyped-def]
+def _ingest_and_deliver(hub) -> str:  #
     assert hub.client.post("/api/graphs", json={"definition_yaml": _MERGE_YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
     _claim(hub, chunk_id)
@@ -227,7 +227,7 @@ def test_stop_publishes_both_chunk_changed_and_queue_changed(tmp_path: Path) -> 
     assert any(chunk_id in e["data"] and '"status": "stopped"' in e["data"] for e in events)
 
 
-def _peek_ids(hub) -> list[str]:  # type: ignore[no-untyped-def]
+def _peek_ids(hub) -> list[str]:  #
     resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     return [e["chunk_id"] for e in resp.json()["entries"]]

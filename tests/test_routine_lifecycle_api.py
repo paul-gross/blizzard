@@ -47,12 +47,12 @@ nodes:
 """
 
 
-def _mint_graph(hub, definition_yaml: str = _GRAPH_A) -> None:  # type: ignore[no-untyped-def]
+def _mint_graph(hub, definition_yaml: str = _GRAPH_A) -> None:  #
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create(hub, **overrides: object) -> dict:  # type: ignore[no-untyped-def, type-arg]
+def _create(hub, **overrides: object) -> dict:  #
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",
@@ -302,7 +302,7 @@ def test_list_returns_every_routine(tmp_path: Path) -> None:
 # --- The routine_scopes join sub-resource -----------------------------
 
 
-def _mint_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]
+def _mint_scope(hub, slug: str) -> None:  #
     resp = hub.client.post("/api/scopes", json={"slug": slug, "description": ""})
     assert resp.status_code == 201, resp.text
 

@@ -135,7 +135,7 @@ def _events(hub: HubHarness, chunk_id: str, kind: str) -> list[object]:
     return [e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == kind]
 
 
-def _advance(hub: HubHarness, chunk_id: str) -> dict:  # type: ignore[type-arg]
+def _advance(hub: HubHarness, chunk_id: str) -> dict:  #
     advanced = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert advanced.status_code == 200, advanced.text
     return advanced.json()

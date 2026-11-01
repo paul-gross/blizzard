@@ -34,14 +34,14 @@ _SLUG = "anthropic"
 class _StoreSink:
     """Records through the store's own runner-lane write, as an unregistered host's first runner does."""
 
-    def __init__(self, store) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, store) -> None:  #
         self._store = store
 
-    def record(self, **attempt) -> None:  # type: ignore[no-untyped-def]
+    def record(self, **attempt) -> None:  #
         self._store.record_external_usage_attempt(**attempt)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -51,7 +51,7 @@ def _declared(
     return SampledSubscription(slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler)
 
 
-def _pass(store, clock: FixedClock, *subscriptions: SampledSubscription) -> ExternalUsageSamplePass:  # type: ignore[no-untyped-def]
+def _pass(store, clock: FixedClock, *subscriptions: SampledSubscription) -> ExternalUsageSamplePass:  #
     host = make_host_stores(store, clock)
     return ExternalUsageSamplePass(
         subscriptions=subscriptions,
@@ -79,7 +79,7 @@ def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapsh
     )
 
 
-def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
+def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):  #
     return _pass(store, clock, _declared(interval_seconds=interval_seconds, sampler=sampler))
 
 
@@ -88,7 +88,7 @@ def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval
 
 
 @pytest.mark.unit
-def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -101,7 +101,7 @@ def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: igno
 
 
 @pytest.mark.unit
-def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -116,7 +116,7 @@ def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  # typ
 
 
 @pytest.mark.unit
-def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -131,7 +131,7 @@ def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  # typ
 
 
 @pytest.mark.unit
-def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -149,7 +149,7 @@ def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ign
 
 
 @pytest.mark.unit
-def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_report(tmp_path) -> None:  #
     store = _store(tmp_path)
     snapshot = _snapshot()
     sampler = FakeSubscriptionSampler(snapshot=snapshot)
@@ -184,7 +184,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
 )
 def test_an_invalid_utilization_window_is_dropped_before_it_is_persisted_or_buffered(
     tmp_path, invalid_pct: float
-) -> None:  # type: ignore[no-untyped-def]
+) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(
         snapshot=ExternalSubscriptionUsageSnapshot(
@@ -216,7 +216,7 @@ def test_an_invalid_utilization_window_is_dropped_before_it_is_persisted_or_buff
     json.dumps(payload, allow_nan=False)
 
 
-def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collection(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collection(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=()))
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -227,7 +227,7 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
     assert payload["windows"] == []
 
 
-def test_a_no_limit_window_reaches_the_levers_sample_and_never_the_hubs_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_no_limit_window_reaches_the_levers_sample_and_never_the_hubs_report(tmp_path) -> None:  #
     store = _store(tmp_path)
     week = _snapshot().windows[1]
     sampler = FakeSubscriptionSampler(
@@ -252,7 +252,7 @@ def test_a_no_limit_window_reaches_the_levers_sample_and_never_the_hubs_report(t
 
 
 @pytest.mark.unit
-def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
     clock = FixedClock(_NOW)
@@ -277,7 +277,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report
 
 
 @pytest.mark.unit
-def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_path) -> None:  #
     """The `missed` fact payload carries no token, refresh token, or path — this pins its
     exact key set."""
     store = _store(tmp_path)
@@ -302,7 +302,7 @@ def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_pat
 
 
 @pytest.mark.unit
-def test_a_successful_sample_enqueues_no_missed_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_successful_sample_enqueues_no_missed_report(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -313,7 +313,7 @@ def test_a_successful_sample_enqueues_no_missed_report(tmp_path) -> None:  # typ
 
 
 @pytest.mark.unit
-def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -331,7 +331,7 @@ def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) ->
 
 
 @pytest.mark.unit
-def test_a_raising_adapter_is_logged_and_records_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_raising_adapter_is_logged_and_records_nothing(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(raises=RuntimeError("boom"))
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -351,7 +351,7 @@ def test_a_raising_adapter_is_logged_and_records_nothing(tmp_path) -> None:  # t
 
 
 @pytest.mark.unit
-def test_several_passes_sample_at_the_expected_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_several_passes_sample_at_the_expected_cadence(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -371,7 +371,7 @@ def test_several_passes_sample_at_the_expected_cadence(tmp_path) -> None:  # typ
 
 
 @pytest.mark.unit
-def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_path) -> None:  #
     """A short-interval and a long-interval declaration both sample on the first ever
     tick (neither has an anchor yet), but only the short one is due on the second."""
     store = _store(tmp_path)
@@ -397,7 +397,7 @@ def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_p
 
 
 @pytest.mark.unit
-def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_other_readable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_other_readable(tmp_path) -> None:  #
     """A slug whose sample this tick failed (``None``) still gets a NULL-payload attempt
     row, advancing only ITS anchor — the other slug's last successful sample and cadence
     anchor are untouched."""
@@ -436,7 +436,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
 
 
 @pytest.mark.unit
-def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_path) -> None:  #
     """A slug whose provider names no known sampler binding carries a ``None`` sampler
      — no crash, no attempt row for it, and the other declared subscription
     is sampled normally in the same tick."""
@@ -461,14 +461,14 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
 # --------------------------------------------------------------------------- #
 
 
-def _mark(store, at: datetime, *, resets_in: timedelta | None = timedelta(hours=1), generation: int = 1) -> None:  # type: ignore[no-untyped-def]
+def _mark(store, at: datetime, *, resets_in: timedelta | None = timedelta(hours=1), generation: int = 1) -> None:  #
     make_host_stores(store).usage_limits.record_usage_limit_mark(
         _SLUG, usage_limit_mark(at, resets_in=resets_in, generation=generation)
     )
 
 
 @pytest.mark.unit
-def test_a_mark_newer_than_the_newest_attempt_samples_early_once(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_mark_newer_than_the_newest_attempt_samples_early_once(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -488,7 +488,7 @@ def test_a_mark_newer_than_the_newest_attempt_samples_early_once(tmp_path) -> No
 
 
 @pytest.mark.unit
-def test_a_mark_older_than_the_newest_attempt_waits_for_the_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_mark_older_than_the_newest_attempt_waits_for_the_cadence(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -503,7 +503,7 @@ def test_a_mark_older_than_the_newest_attempt_waits_for_the_cadence(tmp_path) ->
 
 
 @pytest.mark.unit
-def test_a_passed_reset_with_no_attempt_since_samples_early_once(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_passed_reset_with_no_attempt_since_samples_early_once(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -526,7 +526,7 @@ def test_a_passed_reset_with_no_attempt_since_samples_early_once(tmp_path) -> No
 
 
 @pytest.mark.unit
-def test_a_missed_early_sample_counts_as_the_attempt_and_falls_back_to_the_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_missed_early_sample_counts_as_the_attempt_and_falls_back_to_the_cadence(tmp_path) -> None:  #
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.ENDPOINT_UNREACHABLE)
     clock = FixedClock(_NOW)

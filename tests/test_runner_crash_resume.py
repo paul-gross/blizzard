@@ -33,11 +33,11 @@ _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(  # type: ignore[no-untyped-def]
+def _seed_running_lease(  #
     store,
     *,
     chunk="ch_1",
@@ -72,7 +72,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=created)
 
 
-def _crashed_at(store, when):  # type: ignore[no-untyped-def]
+def _crashed_at(store, when):  #
     """Stamp the daemon's last liveness beat — the crash-time reference the scan reads back."""
     store.record_daemon_liveness(alive_at=when)
 
@@ -82,7 +82,7 @@ def _crashed_at(store, when):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_marks_worker_killed_mid_work(tmp_path):  # type: ignore[no-untyped-def]
+def test_marks_worker_killed_mid_work(tmp_path):  #
     """Dead pid, no session-end, fresh heartbeat → a crash to resume in place."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -95,7 +95,7 @@ def test_marks_worker_killed_mid_work(tmp_path):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_skips_worker_that_declared_done(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_worker_that_declared_done(tmp_path):  #
     """A dead pid **with** a recorded session-end is a clean exit ADVANCE judges — never resumed."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -109,7 +109,7 @@ def test_skips_worker_that_declared_done(tmp_path):  # type: ignore[no-untyped-d
 
 
 @pytest.mark.unit
-def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_stalled_worker(tmp_path):  #
     """A worker already stalled at crash time (stale heartbeat) is not marked — the gap the
     classifier judges is the worker's own idleness, with no outage in it. Where an unmarked
     lease then goes is the loop's business, not this unit's; ``marked`` is all that is pinned."""
@@ -127,7 +127,7 @@ def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-untyped-def]
+def test_marks_worker_killed_before_a_long_outage(tmp_path):  #
     """The reboot case: staleness is judged against the daemon's last liveness beat, not
     the clock at recovery, so a worker beating up to the crash resumes however long down."""
     store = _store(tmp_path)
@@ -145,7 +145,7 @@ def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-
 
 
 @pytest.mark.unit
-def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[no-untyped-def]
+def test_marks_crash_after_an_earlier_session_ended(tmp_path):  #
     """A lease that asked a question earlier still crash-resumes: session-end is scoped
     to the spawn it belongs to, not the lease as a whole — a stale session-end fact must
     not permanently disable crash-resume once the lease respawns."""
@@ -174,7 +174,7 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.unit
-def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  # type: ignore[no-untyped-def]
+def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  #
     """A lease resumed after its last heartbeat and killed before its fresh
     worker's first tool call still resumes — the spawn fact, not the stale heartbeat,
     describes the running process."""
@@ -202,7 +202,7 @@ def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tm
 
 
 @pytest.mark.unit
-def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  # type: ignore[no-untyped-def]
+def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  #
     """The skip the classifier was written for survives: when the newest **spawn** and the
     newest beat both predate the crash by more than the threshold, the worker really had
     wedged, and resuming it would only wedge it again."""
@@ -229,7 +229,7 @@ def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  # typ
 
 
 @pytest.mark.unit
-def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  #
     """The scoping cuts only one way: a session-end *after* the current spawn still means done."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -256,7 +256,7 @@ def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_skips_orphaned_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_orphaned_but_alive_worker(tmp_path):  #
     """A running lease whose worker process is still alive gets no resume intent."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -271,7 +271,7 @@ def test_skips_orphaned_but_alive_worker(tmp_path):  # type: ignore[no-untyped-d
 
 
 @pytest.mark.unit
-def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_parked_pending_and_unspawned(tmp_path):  #
     """The same non-crash shapes the graceful marker skips: dormant / already-elicited / never-spawned."""
     store = _store(tmp_path)
     # Parked (dormant on a question) — its resume is the answer, not a restart.
@@ -312,7 +312,7 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
 
 
 @pytest.mark.unit
-def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
+def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  #
     """On the ungraceful crash-recovery path too: a lease whose
     exited worker's verdict elicitation is already in flight is not this scan's to mark — a
     crash-orphan resume here would leave the elicitation's own stale record misread as the
@@ -332,7 +332,7 @@ def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[
 
 
 @pytest.mark.unit
-def test_marked_crash_lease_resumes_in_place(tmp_path):  # type: ignore[no-untyped-def]
+def test_marked_crash_lease_resumes_in_place(tmp_path):  #
     """A crash-marked lease re-attaches under the same lease/epoch/session — only the pid rewritten, no retry."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -359,7 +359,7 @@ def test_marked_crash_lease_resumes_in_place(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
-def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-untyped-def]
+def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  #
     """Over a full tick, RESUME re-attaches the crash lease before ADVANCE could fail it verdict-less."""
     store = _store(tmp_path)
     _seed_running_lease(store)

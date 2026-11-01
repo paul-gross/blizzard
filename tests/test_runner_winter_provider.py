@@ -28,13 +28,13 @@ class _FakeWinter:
     def ensure_ready(self, workspace_root: Path) -> None:
         self.ready += 1
 
-    def run(self, workspace_root: Path, args) -> None:  # type: ignore[no-untyped-def]
+    def run(self, workspace_root: Path, args) -> None:  #
         args = list(args)
         if self.fail_on is not None and args[: len(self.fail_on)] == self.fail_on:
             raise RuntimeError("scripted winter failure")
         self.runs.append(args)
 
-    def capture(self, workspace_root: Path, args) -> str:  # type: ignore[no-untyped-def]
+    def capture(self, workspace_root: Path, args) -> str:  #
         self.captures.append(list(args))
         if list(args)[:2] == ["ws", "worktrees"]:
             return json.dumps(self.worktrees)
@@ -56,7 +56,7 @@ class _FakeGit:
         return self._origins.get(str(repo_workdir), f"file:///origins/{Path(repo_workdir).name}.git")
 
 
-def _provider(root: str, pool, **kw):  # type: ignore[no-untyped-def]
+def _provider(root: str, pool, **kw):  #
     return WinterWorkspaceProvider(root, env_pool=pool, winter=_FakeWinter(), git=_FakeGit(), **kw)
 
 
@@ -193,7 +193,7 @@ def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
     resume = threading.Event()
 
     class BlockingWinter(_FakeWinter):
-        def run(self, workspace_root: Path, args) -> None:  # type: ignore[no-untyped-def]
+        def run(self, workspace_root: Path, args) -> None:  #
             if list(args) == ["ws", "init", "e1"]:
                 entered.set()
                 assert resume.wait(timeout=5)

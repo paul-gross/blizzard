@@ -90,21 +90,21 @@ def test_entry_naming_a_missing_node_is_an_error() -> None:
 
 def test_choice_to_that_resolves_nowhere_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "ghost"  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "ghost"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("resolves to no node" in e for e in result.errors)
 
 
 def test_choice_to_done_terminal_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "done"  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "done"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok
 
 
 def test_worker_node_without_judgement_prompt_is_an_error() -> None:
     doc = _min_build_deliver()
-    del doc["nodes"]["build"]["judgement"]["prompt"]  # type: ignore[attr-defined]
+    del doc["nodes"]["build"]["judgement"]["prompt"]  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("judgement.prompt" in e for e in result.errors)
 
@@ -119,7 +119,7 @@ def test_human_gate_with_a_judgement_prompt_is_an_error() -> None:
             "choices": {"approve": {"description": "ship", "to": "deliver"}},
         },
     }
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("must not declare `judgement.prompt`" in e for e in result.errors)
 
@@ -129,7 +129,7 @@ def test_hub_node_choice_with_an_arbitrary_name_is_legal() -> None:
     generically like a worker node's — any choice name is legal, not just a
     machinery-known outcome."""
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"] = {  #
         "choices": {
             "bogus": {"description": "x", "to": "build"},
             "failure": {"description": "failed", "to": "build"},
@@ -141,7 +141,7 @@ def test_hub_node_choice_with_an_arbitrary_name_is_legal() -> None:
 
 def test_hub_node_overriding_conflict_routing_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"] = {  #
         "choices": {
             "conflict": {"description": "merge conflicted", "to": "build"},
             "failure": {"description": "failed", "to": "build"},
@@ -156,7 +156,7 @@ def test_hub_node_choice_routing_straight_to_the_terminal_is_legal() -> None:
     deliver node's "only `landed` finalizes" rule is retired along with the rest of the
     special case; a hub node's routing is checked exactly like a worker node's."""
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"] = {  #
         "choices": {
             "conflict": {"description": "merge conflicted", "to": "done"},
             "failure": {"description": "failed", "to": "build"},
@@ -168,7 +168,7 @@ def test_hub_node_choice_routing_straight_to_the_terminal_is_legal() -> None:
 
 def test_hub_node_without_a_failure_choice_is_an_error() -> None:
     doc = _min_build_deliver()
-    del doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]  # type: ignore[attr-defined]
+    del doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`deliver`" in e and "`failure`" in e for e in result.errors)
@@ -176,41 +176,41 @@ def test_hub_node_without_a_failure_choice_is_an_error() -> None:
 
 def test_hub_node_with_a_failure_choice_and_no_success_choice_mints() -> None:
     doc = _min_build_deliver()
-    assert "success" not in doc["nodes"]["deliver"]["judgement"]["choices"]  # type: ignore[index]
+    assert "success" not in doc["nodes"]["deliver"]["judgement"]["choices"]  #
     assert Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result.ok
 
 
 def test_bad_retries_exhausted_target_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["retries"]["exhausted"] = "retry-forever"  # type: ignore[index]
+    doc["nodes"]["build"]["retries"]["exhausted"] = "retry-forever"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("retries.exhausted" in e for e in result.errors)
 
 
 def test_bare_resume_session_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["session"] = "resume"  # type: ignore[index]
+    doc["nodes"]["build"]["session"] = "resume"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok
 
 
 def test_fresh_session_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["session"] = "fresh"  # type: ignore[index]
+    doc["nodes"]["build"]["session"] = "fresh"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok
 
 
 def test_targeted_resume_naming_an_existing_node_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["session"] = "resume:deliver"  # type: ignore[index]
+    doc["nodes"]["build"]["session"] = "resume:deliver"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok
 
 
 def test_targeted_resume_naming_an_absent_node_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["session"] = "resume:ghost"  # type: ignore[index]
+    doc["nodes"]["build"]["session"] = "resume:ghost"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     # `resume:<name>` resolves declared-session-first, node-second (#144), so the
@@ -223,7 +223,7 @@ def test_targeted_resume_naming_an_absent_node_is_an_error() -> None:
 @pytest.mark.parametrize("bad", ["resume:", "fresh:", "bogus"])
 def test_malformed_session_forms_are_validation_errors(bad: str) -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["session"] = bad  # type: ignore[index]
+    doc["nodes"]["build"]["session"] = bad  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("malformed session" in e for e in result.errors), result.errors
@@ -246,7 +246,7 @@ def test_entry_reaching_no_terminal_is_a_warning_not_an_error() -> None:
     definition still mints — the reachability warning's second arm, distinct from an
     unreachable node."""
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["to"] = "build"  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["to"] = "build"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok  # warnings do not reject
     assert not any("unreachable" in w for w in result.warnings)  # both nodes are reached
@@ -258,7 +258,7 @@ def test_entry_reaching_no_terminal_is_a_warning_not_an_error() -> None:
 
 def test_choice_to_escalate_on_a_runner_node_mints_with_no_errors_or_warnings() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["judgement"]["choices"]["unfulfillable"] = {  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["unfulfillable"] = {  #
         "description": "no worker can complete a step",
         "to": "escalate",
     }
@@ -269,22 +269,22 @@ def test_choice_to_escalate_on_a_runner_node_mints_with_no_errors_or_warnings() 
 
 def test_choice_to_escalate_on_a_hub_node_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]["to"] = "escalate"  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]["to"] = "escalate"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("`to: escalate` is only legal on a runner node" in e for e in result.errors)
 
 
 def test_a_node_named_escalate_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["escalate"] = doc["nodes"].pop("deliver")  # type: ignore[index]
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "escalate"  # type: ignore[index]
+    doc["nodes"]["escalate"] = doc["nodes"].pop("deliver")  #
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "escalate"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert any("name is reserved" in e for e in result.errors)
 
 
 def test_an_escalate_edge_does_not_satisfy_the_path_to_the_terminal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"] = {  # type: ignore[index]
+    doc["nodes"]["deliver"] = {  #
         "executor": "runner",
         "prompt": "p",
         "judgement": {"prompt": "j", "choices": {"stuck": {"description": "x", "to": "escalate"}}},
@@ -299,24 +299,24 @@ def test_an_escalate_edge_does_not_satisfy_the_path_to_the_terminal() -> None:
 
 def test_requires_checks_on_a_node_with_checks_is_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  # type: ignore[index]
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  #
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_checks_cwd_and_timeout_on_a_node_with_checks_are_legal() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
-    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  # type: ignore[index]
-    doc["nodes"]["build"]["checks_timeout"] = 300  # type: ignore[index]
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  #
+    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  #
+    doc["nodes"]["build"]["checks_timeout"] = 300  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_requires_checks_on_a_node_with_no_checks_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any(
@@ -334,7 +334,7 @@ def test_requires_checks_on_a_human_gate_is_an_error() -> None:
             "choices": {"approve": {"description": "ship", "to": "deliver", "requires_checks": True}},
         },
     }
-    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("not legal on a human-judged (gate) node" in e for e in result.errors), result.errors
@@ -344,7 +344,7 @@ def test_requires_checks_on_a_hub_node_choice_is_an_error() -> None:
     # A hub node can never declare `checks:` (rejected on its own), so a `requires_checks`
     # choice there is doubly illegal — at minimum the no-`checks:` rule fires.
     doc = _min_build_deliver()
-    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["requires_checks"] = True  # type: ignore[index]
+    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["requires_checks"] = True  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any(
@@ -354,7 +354,7 @@ def test_requires_checks_on_a_hub_node_choice_is_an_error() -> None:
 
 def test_checks_cwd_on_a_node_with_no_checks_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  # type: ignore[index]
+    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`checks_cwd` is only legal on a node that declares `checks:`" in e for e in result.errors), (
@@ -364,7 +364,7 @@ def test_checks_cwd_on_a_node_with_no_checks_is_an_error() -> None:
 
 def test_checks_timeout_on_a_node_with_no_checks_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["checks_timeout"] = 300  # type: ignore[index]
+    doc["nodes"]["build"]["checks_timeout"] = 300  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`checks_timeout` is only legal on a node that declares `checks:`" in e for e in result.errors), (
@@ -374,8 +374,8 @@ def test_checks_timeout_on_a_node_with_no_checks_is_an_error() -> None:
 
 def test_non_positive_checks_timeout_is_an_error() -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
-    doc["nodes"]["build"]["checks_timeout"] = 0  # type: ignore[index]
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  #
+    doc["nodes"]["build"]["checks_timeout"] = 0  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`checks_timeout` must be a positive number of seconds" in e for e in result.errors), result.errors
@@ -387,7 +387,7 @@ def test_non_positive_checks_timeout_is_an_error() -> None:
 @pytest.mark.parametrize("value", [True, False])
 def test_a_node_declaring_the_retired_proposes_work_items_key_is_refused_naming_it(value: bool) -> None:
     doc = _min_build_deliver()
-    doc["nodes"]["build"]["proposes_work_items"] = value  # type: ignore[index]
+    doc["nodes"]["build"]["proposes_work_items"] = value  #
     result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
     assert not result.ok
     assert any("node `build`: retired key `proposes_work_items`" in e for e in result.errors), result.errors

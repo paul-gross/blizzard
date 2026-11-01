@@ -14,7 +14,7 @@ from blizzard.runner.transcripts.internal.http_archived_transcript_repository im
 )
 
 
-def _repo(handler) -> HttpArchivedTranscriptRepository:  # type: ignore[no-untyped-def]
+def _repo(handler) -> HttpArchivedTranscriptRepository:  #
     transport = httpx2.MockTransport(handler)
     client = httpx2.Client(base_url="http://hub.test", transport=transport, headers={"Authorization": "Bearer tok"})
     return HttpArchivedTranscriptRepository(client)

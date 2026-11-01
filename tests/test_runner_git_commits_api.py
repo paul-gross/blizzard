@@ -49,7 +49,7 @@ _PROVIDER = FakeProvider({"e1": "/ws/e1"})
 _WORKSPACES = single_workspace(_PROVIDER, workspace_id=DEFAULT_WORKSPACE_ID)
 
 
-def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _app_with_declarations(tmp_path: Path):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store)
@@ -58,7 +58,7 @@ def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store, **overrides: object) -> None:  #
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

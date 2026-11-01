@@ -56,7 +56,7 @@ _ARTIFACT = {
 _NOTE = "fix the flaky test only"
 
 
-def _running(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
+def _running(hub) -> tuple[str, dict[str, str]]:  #
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
@@ -70,7 +70,7 @@ def _running(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
     return chunk_id, nodes
 
 
-def _gated(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _gated(hub) -> tuple[str, str]:  #
     chunk_id, nodes = _running(hub)
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
@@ -86,20 +86,20 @@ def _gated(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
 
-def _escalated(hub) -> str:  # type: ignore[no-untyped-def]
+def _escalated(hub) -> str:  #
     chunk_id, _ = _running(hub)
     assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     hub.clock.advance(timedelta(seconds=1))
     return chunk_id
 
 
-def _fleet_detail(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _fleet_detail(hub, chunk_id: str) -> dict:  #
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _stored_notes(hub, table: sa.Table) -> list[str | None]:  # type: ignore[no-untyped-def]
+def _stored_notes(hub, table: sa.Table) -> list[str | None]:  #
     with hub.engine.connect() as conn:
         return list(conn.execute(hub_scoped(sa.select(table.c.note))).scalars().all())
 

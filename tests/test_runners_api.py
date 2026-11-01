@@ -49,7 +49,7 @@ _NEVER_CONNECTED = (
 )
 
 
-def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:  # type: ignore[no-untyped-def]
+def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:  #
     resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
     assert resp.status_code == 201, resp.text
 

@@ -62,7 +62,7 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
         # passed every other test here. Attached before the first connection so every
         # connection this engine ever opens, seeding included, enforces FKs.
         @event.listens_for(engine, "connect")
-        def _enable_fk(dbapi_connection, connection_record) -> None:  # type: ignore[no-untyped-def]
+        def _enable_fk(dbapi_connection, connection_record) -> None:  #
             dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
     with engine.begin() as conn:

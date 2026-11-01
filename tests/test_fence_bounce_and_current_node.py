@@ -37,7 +37,7 @@ from tests.test_write_fence import _Chunk, _held_by_a_writer, _restart_under_loc
 pytestmark = pytest.mark.component
 
 
-def _count(hub, table, chunk_id: str, **where) -> int:  # type: ignore[no-untyped-def]
+def _count(hub, table, chunk_id: str, **where) -> int:  #
     with hub.engine.begin() as conn:
         query = hub_store_connections(hub.engine).select(table, func.count()).where(table.c.chunk_id == chunk_id)
         for name, value in where.items():
@@ -79,7 +79,7 @@ nodes:
 """
 
 
-def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _bounce_capped_chunk(tmp_path: Path):  #
     """A chunk on the poll graph one poll-timeout away from crossing its ``bounce_cap``: each ``merge`` visit's
     first turn answers ``pending``, and the next turn past ``poll_timeout`` kicks it back."""
     hub = build_hub(tmp_path)
@@ -139,13 +139,13 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     landed: list[bool] = []
     outcomes: list[BounceEscalationOutcome] = []
 
-    def _after_the_writer(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def _after_the_writer(self, *args, **kwargs):  #
         with stores.exclusive.locked([chunk_id]) as handle:
             writer(standing)(handle)  # type: ignore[arg-type]
         landed.append(True)
         return real_route(self, *args, **kwargs)
 
-    def _observed(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def _observed(self, *args, **kwargs):  #
         outcomes.append(real_escalate(self, *args, **kwargs))
         return outcomes[-1]
 
@@ -169,7 +169,7 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
     real = ChunkEscalationsStore.record_bounce_escalation_locked
     outcomes: list[BounceEscalationOutcome] = []
 
-    def _twice(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def _twice(self, *args, **kwargs):  #
         outcomes.append(real(self, *args, **kwargs))
         outcomes.append(real(self, *args, **kwargs))
         return outcomes[-1]
@@ -185,7 +185,7 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
 def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_twice(tmp_path: Path) -> None:
     chunk = _Chunk(build_hub(tmp_path))
 
-    def _land_the_first(handle) -> None:  # type: ignore[no-untyped-def]
+    def _land_the_first(handle) -> None:  #
         chunk.stores.movement.record_transition_locked(
             handle,
             transition_id="tr_raced",
@@ -210,7 +210,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
 def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: Path) -> None:
     chunk = _Chunk(build_hub(tmp_path))
 
-    def _open_the_first(handle) -> None:  # type: ignore[no-untyped-def]
+    def _open_the_first(handle) -> None:  #
         chunk.stores.decisions.record_decision_locked(
             handle,
             decision_id="dec_raced",

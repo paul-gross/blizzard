@@ -28,13 +28,13 @@ class _RowCountingConnections(RunnerStoreConnections):
 
     rows_read = 0
 
-    def all(self, stmt):  # type: ignore[no-untyped-def]
+    def all(self, stmt):  #
         rows = super().all(stmt)
         self.rows_read += len(rows)
         return rows
 
 
-def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path) -> None:  #
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     _create_all(runner_metadata, engine)
     counting = _RowCountingConnections(engine, runner_store_errors(), FIXTURE_RUNNER_ID)

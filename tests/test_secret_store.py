@@ -48,7 +48,7 @@ class _World:
     def create(self, name: str, value: str) -> None:
         self.authoring.create_secret(SecretName.parse(name), value, OP)
 
-    def raw(self, name: str):  # type: ignore[no-untyped-def]
+    def raw(self, name: str):  #
         with self.engine.connect() as conn:
             return conn.execute(hub_store_connections(self.engine).select(secrets).where(secrets.c.name == name)).one()
 

@@ -25,7 +25,7 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     assert services.findings is services.finding_exit._repo
     assert services.garden_proposals is services.garden_proposal_authoring._proposals
     assert services.garden_proposal_closures is services.garden_proposal_authoring._closures
-    assert services.delete is services.garden_proposal_closure._items._delete  # type: ignore[attr-defined]
+    assert services.delete is services.garden_proposal_closure._items._delete  #
     assert services.registry is services.claim._registry
     assert services.registry is services.fleet._registry
     assert services.registry is services.claim._exclusive._registry  # type: ignore[attr-defined]

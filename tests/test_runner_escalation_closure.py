@@ -31,11 +31,11 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):  # type: ignore[no-untyped-def]
+def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):  #
     """A lease minted, spawned, then closed ``escalated`` — the parked needs-human shape,
     with no later mint to supersede it."""
     store.record_lease(
@@ -60,7 +60,7 @@ def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW): 
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=at)
 
 
-def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
+def _chunk(chunk="ch_1", *, status: ChunkStatus):  #
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -69,7 +69,7 @@ def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def
     )
 
 
-def _ctx(store, hub, *, clock=None):  # type: ignore[no-untyped-def]
+def _ctx(store, hub, *, clock=None):  #
     return make_context(
         store,
         hub=hub,
@@ -81,7 +81,7 @@ def _ctx(store, hub, *, clock=None):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_pull_closes_an_escalation_the_hub_stopped(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_an_escalation_the_hub_stopped(tmp_path):  #
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
@@ -95,7 +95,7 @@ def test_pull_closes_an_escalation_the_hub_stopped(tmp_path):  # type: ignore[no
 
 
 @pytest.mark.unit
-def test_pull_closes_an_escalation_whose_chunk_the_hub_landed(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_an_escalation_whose_chunk_the_hub_landed(tmp_path):  #
     # The chunk was requeued away and landed by another runner (#293): no later lease is
     # minted here, so `done` is the only arm that can close this box's escalation.
     store = _store(tmp_path)
@@ -109,7 +109,7 @@ def test_pull_closes_an_escalation_whose_chunk_the_hub_landed(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_pull_leaves_an_escalation_the_hub_still_holds(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_leaves_an_escalation_the_hub_still_holds(tmp_path):  #
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
@@ -121,7 +121,7 @@ def test_pull_leaves_an_escalation_the_hub_still_holds(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
-def test_an_unreachable_hub_leaves_the_escalation_open(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_unreachable_hub_leaves_the_escalation_open(tmp_path):  #
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
@@ -133,7 +133,7 @@ def test_an_unreachable_hub_leaves_the_escalation_open(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
-def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  #
     # A 404 is not the hub asserting the hold is resolved — the escalation stands.
     store = _store(tmp_path)
     _seed_escalated(store)
@@ -146,7 +146,7 @@ def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  # type: i
 
 
 @pytest.mark.unit
-def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  #
     # Requeued and not yet re-claimed by anyone: no restart, no epoch bump, no terminal
     # status — the only signal is that the hub no longer routes it here (#396).
     store = _store(tmp_path)
@@ -165,7 +165,7 @@ def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  # type: ign
 
 
 @pytest.mark.unit
-def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path):  #
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
@@ -182,7 +182,7 @@ def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path
 
 
 @pytest.mark.unit
-def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  #
     # Handed back at its own fresh epoch, still routed to this runner — the restart itself,
     # not a route change, is the signal (#396).
     store = _store(tmp_path)
@@ -196,7 +196,7 @@ def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_a_re_escalation_after_a_close_reads_open_again(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_re_escalation_after_a_close_reads_open_again(tmp_path):  #
     # The mark supersedes only escalations that precede it — strict ``>``, so a later
     # escalation on a fresh lease is never masked by an older close.
     store = _store(tmp_path)

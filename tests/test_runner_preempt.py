@@ -37,11 +37,11 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # type: ignore[no-untyped-def]
+def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  #
     """A build lease with a live worker and its env binding — the shape a restart preempts."""
     store.record_lease(
         NewLease(
@@ -66,7 +66,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # ty
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):  # type: ignore[no-untyped-def]
+def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):  #
     """The hub's view after a restart: still routed here, at a strictly higher epoch."""
     del node_id  # no runner-loop-visible field carries the node id on ChunkState
     return ChunkState(
@@ -77,7 +77,7 @@ def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):  # type: ignore[
     )
 
 
-def _ctx(store, hub, *, provider=None, probe=None, harness=None):  # type: ignore[no-untyped-def]
+def _ctx(store, hub, *, provider=None, probe=None, harness=None):  #
     return make_context(
         store,
         hub=hub,
@@ -87,7 +87,7 @@ def _ctx(store, hub, *, provider=None, probe=None, harness=None):  # type: ignor
     )
 
 
-def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode.FRESH):  # type: ignore[no-untyped-def]
+def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode.FRESH):  #
     hub = FakeHub()
     hub.chunks["ch_1"] = _moved_chunk(node_id=node_id)
     hub.envelopes["ch_1"] = make_envelope(
@@ -96,7 +96,7 @@ def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode
     return hub
 
 
-def _brake(store, *, paused):  # type: ignore[no-untyped-def]
+def _brake(store, *, paused):  #
     """Set the runner's own local brake, the way ``PATCH /runner`` does — fact + report."""
     store.record_local_pause(
         paused=paused,
@@ -107,7 +107,7 @@ def _brake(store, *, paused):  # type: ignore[no-untyped-def]
     )
 
 
-def test_pull_preempts_a_lease_the_hub_fenced_out_and_re_enters_the_node(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_preempts_a_lease_the_hub_fenced_out_and_re_enters_the_node(tmp_path):  #
     """Preemption keeps the route and environments while minting above the fence."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -128,7 +128,7 @@ def test_pull_preempts_a_lease_the_hub_fenced_out_and_re_enters_the_node(tmp_pat
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_the_re_entry_mints_a_session_rather_than_resuming_the_pool_head(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_re_entry_mints_a_session_rather_than_resuming_the_pool_head(tmp_path):  #
     """The fresh envelope must not resume the preempted lease's pool head."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -143,7 +143,7 @@ def test_the_re_entry_mints_a_session_rather_than_resuming_the_pool_head(tmp_pat
     assert fresh is not None and fresh.session_id == "sess-b"
 
 
-def test_pull_preempts_a_lease_whose_chunk_was_moved_to_another_node(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_preempts_a_lease_whose_chunk_was_moved_to_another_node(tmp_path):  #
     """Re-entry follows the envelope, not the stale lease node."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -156,7 +156,7 @@ def test_pull_preempts_a_lease_whose_chunk_was_moved_to_another_node(tmp_path): 
     assert fresh is not None and fresh.node_name == "plan"
 
 
-def test_pull_leaves_a_lease_at_the_hubs_own_epoch_untouched(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_leaves_a_lease_at_the_hubs_own_epoch_untouched(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -171,7 +171,7 @@ def test_pull_leaves_a_lease_at_the_hubs_own_epoch_untouched(tmp_path):  # type:
     assert lease is not None and lease.pid == 100
 
 
-def test_pull_never_preempts_a_session_a_person_is_inside(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_never_preempts_a_session_a_person_is_inside(tmp_path):  #
     """A forced takeover's epoch must not cause the operator's terminal to be killed."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -193,7 +193,7 @@ def test_pull_never_preempts_a_session_a_person_is_inside(tmp_path):  # type: ig
     assert store.active_lease("lease_1") is not None
 
 
-def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):  #
     """Reconcile before draining the queued completion; its rejection spends no retry."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -217,7 +217,7 @@ def test_a_queued_submission_still_reaches_the_hub_behind_the_preempt(tmp_path):
     assert store.attempt_count("ch_1", "nd_build") == 1  # the rejection spent nothing
 
 
-def test_a_local_pause_still_kills_and_closes_the_fenced_out_worker(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_local_pause_still_kills_and_closes_the_fenced_out_worker(tmp_path):  #
     """The displaced worker is fenced out already, so the brake does not keep it running at a
     stale epoch: it is killed and closed now, and only the re-entry spawn waits."""
     store = _store(tmp_path)
@@ -234,7 +234,7 @@ def test_a_local_pause_still_kills_and_closes_the_fenced_out_worker(tmp_path):  
     assert store.attempt_count("ch_1", "nd_build") == 0  # a preempted attempt spends no retry
 
 
-def test_the_re_entry_spawns_once_the_local_brake_clears(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_re_entry_spawns_once_the_local_brake_clears(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     _brake(store, paused=True)
@@ -248,7 +248,7 @@ def test_the_re_entry_spawns_once_the_local_brake_clears(tmp_path):  # type: ign
     assert fresh is not None and fresh.lease_id != "lease_1"
 
 
-def test_a_crash_between_the_kill_and_the_closure_still_costs_no_retry(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_crash_between_the_kill_and_the_closure_still_costs_no_retry(tmp_path):  #
     """A crash after the kill leaves an active lease; the next PULL closes it as preempted."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # the crash state: an active lease whose pid no longer exists
@@ -261,7 +261,7 @@ def test_a_crash_between_the_kill_and_the_closure_still_costs_no_retry(tmp_path)
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_an_operator_pause_outranks_a_restart(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_operator_pause_outranks_a_restart(tmp_path):  #
     """The pause parks the lease without discarding the pending move."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -275,7 +275,7 @@ def test_an_operator_pause_outranks_a_restart(tmp_path):  # type: ignore[no-unty
     assert "lease_1" in store.pause_parked_lease_ids()
 
 
-def test_a_preempted_ask_park_is_retired_with_the_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_preempted_ask_park_is_retired_with_the_lease(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_ask(
@@ -295,7 +295,7 @@ def test_a_preempted_ask_park_is_retired_with_the_lease(tmp_path):  # type: igno
     assert store.open_park("lease_1") is None
 
 
-def test_a_restart_does_not_spend_the_nodes_retry_budget(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_restart_does_not_spend_the_nodes_retry_budget(tmp_path):  #
     """Repeated preempts do not consume the node's retry budget."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # retries_max=2
@@ -329,7 +329,7 @@ def test_a_restart_does_not_spend_the_nodes_retry_budget(tmp_path):  # type: ign
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_a_restart_level_with_the_lease_still_fences_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_restart_level_with_the_lease_still_fences_it(tmp_path):  #
     """A buffered lease mint can be level with the hub's restart, which still fences it."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # epoch 1, its mint not yet drained to the hub
@@ -347,7 +347,7 @@ def test_a_restart_level_with_the_lease_still_fences_it(tmp_path):  # type: igno
     assert fresh is not None and fresh.epoch > 1  # strictly above the move — never re-fenced
 
 
-def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path):  #
     """The move must not re-fence a lease already minted above it."""
     store = _store(tmp_path)
     _seed_running_lease(store, epoch=2)  # the lease a restart at epoch 1 already produced
@@ -362,7 +362,7 @@ def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path
     assert store.active_lease("lease_1") is not None
 
 
-def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_path):  # type: ignore[no-untyped-def]
+def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_path):  #
     """After the pause lifts, the pending move mints a fresh lease and session."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -386,7 +386,7 @@ def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_p
     assert harness.resume_froms == [None]
 
 
-def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  #
     """The forced visit stays fresh even after its first re-entry is orphaned."""
     store = _store(tmp_path)
     store.record_lease(
@@ -416,7 +416,7 @@ def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: igno
     assert harness.resume_froms == [None]  # minted again, not resumed off a pool head
 
 
-def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_next_past_it_re_enters(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_next_past_it_re_enters(tmp_path):  #
     """A full braked tick kills and closes the fenced-out worker but starts nothing; the re-entry
     waits until the brake lifts."""
     store = _store(tmp_path)
@@ -441,12 +441,12 @@ def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_n
     assert fresh is not None and fresh.lease_id != "lease_1" and fresh.session_id == "sess-b"
 
 
-def _marked_for_restart_resume(store):  # type: ignore[no-untyped-def]
+def _marked_for_restart_resume(store):  #
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     assert store.resume_intent_lease_ids() == {"lease_1"}
 
 
-def test_restart_resume_after_downtime_preempts_a_fenced_out_session_rather_than_waking_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_after_downtime_preempts_a_fenced_out_session_rather_than_waking_it(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     _marked_for_restart_resume(store)
@@ -467,7 +467,7 @@ def test_restart_resume_after_downtime_preempts_a_fenced_out_session_rather_than
     assert store.resume_intent_lease_ids() == set()
 
 
-def test_the_local_brake_does_not_defer_a_restart_resume_preempt(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_local_brake_does_not_defer_a_restart_resume_preempt(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     _marked_for_restart_resume(store)

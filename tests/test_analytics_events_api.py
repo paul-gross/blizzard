@@ -86,13 +86,13 @@ def _record(
     }
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  # type: ignore[no-untyped-def]
+def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  #
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])
 
 
-def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seeded_hub(tmp_path: Path):  #
     """A contributor session, one chunk carrying a file_read/skill_invocation/agent_spawn
     triad derived and stored, ready for the routes' own auth/filter/paging assertions."""
     hub = build_hub(tmp_path, auth_mode="oauth")

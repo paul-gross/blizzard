@@ -57,7 +57,7 @@ class RaisingArchivedTranscriptRepository:
         raise AssertionError("the runner-plane segment routes must never call the hub")
 
 
-def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None = None):  # type: ignore[no-untyped-def]
+def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None = None):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = TranscriptService(
@@ -73,7 +73,7 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
     ), store
 
 
-def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", runner_id="r1"):  # type: ignore[no-untyped-def]
+def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", runner_id="r1"):  #
     store.record_lease(
         NewLease(
             lease_id=lease,

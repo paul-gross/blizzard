@@ -259,7 +259,7 @@ def _unlinked_sidechain(agent_id: str) -> SidechainConversation:
     )
 
 
-def _ctx(  # type: ignore[no-untyped-def]
+def _ctx(  #
     *,
     ship: bool,
     batches: dict[str, TranscriptBatch] | None = None,
@@ -290,7 +290,7 @@ def _ctx(  # type: ignore[no-untyped-def]
     return ctx, source
 
 
-def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
+def _spawn_one_segment(ctx) -> str:  #
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -1123,7 +1123,7 @@ class _RaisingTranscriptSource:
     exception-isolation case, which no fixture can script through
     :class:`FakeTranscriptSource` alone."""
 
-    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  #
         raise RuntimeError("transcript source unavailable (scripted)")
 
     def read_raw_lines(
@@ -1223,7 +1223,7 @@ class _PartiallyRaisingTranscriptSource:
         self._raising_session = raising_session
         self._batch = batch
 
-    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  #
         if session_id == self._raising_session:
             raise RuntimeError("transcript source unavailable (scripted)")
         return self._batch
@@ -1906,7 +1906,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
         ctx,
         stores=replace(
             ctx.stores,
-            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES),  #
         ),
     )
 
@@ -1922,7 +1922,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
         ctx,
         stores=replace(
             ctx.stores,
-            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES - 1),  # type: ignore[arg-type]
+            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES - 1),  #
         ),
     )
     TranscriptPump(under_cap_ctx).run()
@@ -1964,7 +1964,7 @@ def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_lo
     assert set(open_segments) == {"sess-a", "sess-b"}
     segment_b_id = open_segments["sess-b"]
     stub = StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES - 1)
-    budgeted_ctx = replace(ctx, stores=replace(ctx.stores, transcript_ledger=stub))  # type: ignore[arg-type]
+    budgeted_ctx = replace(ctx, stores=replace(ctx.stores, transcript_ledger=stub))  #
 
     TranscriptPump(budgeted_ctx).run()
 
@@ -1996,7 +1996,7 @@ def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read
         ctx,
         stores=replace(
             ctx.stores,
-            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+            transcript_ledger=StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES),  #
         ),
     )
 
@@ -2190,7 +2190,7 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
 # --- cross-window correlation ----------------------------------------
 
 
-def _shipped_turns(ctx) -> list[dict]:  # type: ignore[no-untyped-def]
+def _shipped_turns(ctx) -> list[dict]:  #
     """Every turn the pump actually enqueued, in wire order across all its records."""
     return [
         turn

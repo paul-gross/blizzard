@@ -23,7 +23,7 @@ def _repository(tmp_path: Path) -> JtiCacheRepository:
     return JtiCacheRepository(RunnerStoreConnections(_engine(tmp_path), runner_store_errors()), SystemClock())
 
 
-def _engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _engine(tmp_path: Path):  #
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
     return engine

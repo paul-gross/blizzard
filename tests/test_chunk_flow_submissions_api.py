@@ -22,7 +22,7 @@ _AT = datetime(2026, 10, 27, 12, 0, 0, tzinfo=UTC)
 _MAIN = FlowResource("repo_a", "main")
 
 
-def _flows(hub) -> FlowStore:  # type: ignore[no-untyped-def]
+def _flows(hub) -> FlowStore:  #
     return FlowStore(hub_store_connections(hub.engine), FixedClock(_AT))
 
 

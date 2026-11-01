@@ -56,7 +56,7 @@ _NOW = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
 _CHOICES = [("pass", "ok"), ("fail", "no")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -69,7 +69,7 @@ def _pooled(
     effort=None,
     compaction_window=None,
     pool: str = "code",
-):  # type: ignore[no-untyped-def]
+):  #
     """An envelope for a node referencing a named pool (`code` by default), in either mode."""
     return make_envelope(
         "ch_1",
@@ -85,7 +85,7 @@ def _pooled(
     )
 
 
-def _ctx(store, hub, provider, harness, *, minutes: int = 0):  # type: ignore[no-untyped-def]
+def _ctx(store, hub, provider, harness, *, minutes: int = 0):  #
     return make_context(
         store,
         hub=hub,
@@ -100,7 +100,7 @@ def _ctx(store, hub, provider, harness, *, minutes: int = 0):  # type: ignore[no
 
 
 @pytest.mark.component
-def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp_path):  #
     """The core of the pool: `build` is `fresh:code`, `verify` is `resume:code`. The
     mint's session must be the one `verify` continues, even though `verify` has never run
     at its own node before — which is exactly what `resume:<node>` could not express."""
@@ -137,7 +137,7 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
 
 
 @pytest.mark.component
-def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  #
     """First arrival at a `resume:<name>` node with no pool yet — best-effort, like
     #115's resume target."""
     store = _store(tmp_path)
@@ -159,7 +159,7 @@ def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # 
 
 
 @pytest.mark.component
-def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_linear(tmp_path):  # type: ignore[no-untyped-def]
+def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_linear(tmp_path):  #
     """A cyclic graph: build(`fresh:code`) → verify(`resume:code`) → build → verify.
     Two assertions: `fresh:<name>` is a **forced rotation point** (re-entry mints a
     second head), and the pool-member sequence stays **linear**, never forking."""
@@ -220,7 +220,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     assert pool_sessions == ["sess-code-1", "sess-code-1", "sess-code-2", "sess-code-2"]
 
 
-def _pool_leases(store, chunk_id: str, session_name: str):  # type: ignore[no-untyped-def]
+def _pool_leases(store, chunk_id: str, session_name: str):  #
     """Every lease this chunk minted into ``session_name``'s pool, oldest first."""
     from sqlalchemy import select
 
@@ -239,7 +239,7 @@ def _pool_leases(store, chunk_id: str, session_name: str):  # type: ignore[no-un
 
 
 @pytest.mark.component
-def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[no-untyped-def]
+def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  #
     """The shape adv-dwf declares: build(`resume:code`) → verify(`resume:verification`) →
     build. Verify mints its own head, and the loop-back into build resumes build's own
     prior session rather than the verify turns that ran in between."""
@@ -294,7 +294,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.component
-def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_path):  #
     """A `fresh:code` node fails and retries; the retry's session, not the failed first
     attempt's, is what the next `resume:code` member continues — without the retry
     stamping `session_name`, a later member would resume the **failed** attempt."""
@@ -345,7 +345,7 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
 
 
 @pytest.mark.component
-def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_mint_stamps_what_it_resolved(tmp_path):  #
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -377,7 +377,7 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
 
 
 @pytest.mark.component
-def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tmp_path):  #
     """The case that makes stamp-inheritance load-bearing: a node carrying a bare
     `resume:` (no pool, no declaration) that resumes the `code` pool's session —
     stamping the fresh preference would switch models and misattribute spend."""
@@ -434,7 +434,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
 
 
 @pytest.mark.component
-def test_resumed_session_keeps_its_stamp_for_judgement_and_lost_judgement_relaunch(tmp_path):  # type: ignore[no-untyped-def]
+def test_resumed_session_keeps_its_stamp_for_judgement_and_lost_judgement_relaunch(tmp_path):  #
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -483,7 +483,7 @@ def test_resumed_session_keeps_its_stamp_for_judgement_and_lost_judgement_relaun
 
 @pytest.mark.component
 @pytest.mark.parametrize("mode", ["bare", "named", "rotated", "fresh"])
-def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode):  # type: ignore[no-untyped-def]
+def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode):  #
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -566,7 +566,7 @@ def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path, mode)
 
 
 @pytest.mark.component
-def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path):  #
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
@@ -599,7 +599,7 @@ def test_rebound_claim_with_same_clock_instant_adopts_despite_old_lease(tmp_path
 
 
 @pytest.mark.component
-def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_path):  #
     """A session first spawned before the stamps existed reads NULL — *unknown*. Both
     consumers decline to guess, so the resume inherits `None` rather than substituting a
     default it would then present as the fact of what the session ran."""
@@ -636,7 +636,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     assert h2.spawn_compaction_windows == [None]
 
 
-def _mint_lease(tmp_path, **envelope_kwargs):  # type: ignore[no-untyped-def]
+def _mint_lease(tmp_path, **envelope_kwargs):  #
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope(
@@ -654,7 +654,7 @@ def _mint_lease(tmp_path, **envelope_kwargs):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.component
-def test_a_mint_records_the_graph_name_and_labelled_work_refs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_mint_records_the_graph_name_and_labelled_work_refs(tmp_path) -> None:  #
     lease = _mint_lease(
         tmp_path,
         graph_name="advanced",
@@ -666,7 +666,7 @@ def test_a_mint_records_the_graph_name_and_labelled_work_refs(tmp_path) -> None:
 
 
 @pytest.mark.component
-def test_a_mint_with_no_work_refs_reads_back_an_empty_tuple(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_mint_with_no_work_refs_reads_back_an_empty_tuple(tmp_path) -> None:  #
     lease = _mint_lease(tmp_path, graph_name="advanced")
 
     assert lease.graph_name == "advanced"
@@ -674,12 +674,12 @@ def test_a_mint_with_no_work_refs_reads_back_an_empty_tuple(tmp_path) -> None:  
 
 
 @pytest.mark.component
-def test_a_mint_from_an_envelope_without_a_graph_name_reads_back_none(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_mint_from_an_envelope_without_a_graph_name_reads_back_none(tmp_path) -> None:  #
     assert _mint_lease(tmp_path).graph_name is None
 
 
 @pytest.mark.component
-def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unknown(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unknown(tmp_path) -> None:  #
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope(
@@ -704,7 +704,7 @@ def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unk
     assert (lease.graph_name, lease.work_refs) == (None, None)
 
 
-def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _blank_stamps(store, chunk_id: str) -> None:  #
     from sqlalchemy import update
 
     from blizzard.runner.store import schema as s
@@ -729,11 +729,11 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
 # threshold is under bound AND its stamped model matches; an unreadable signal is not a breach.
 
 
-def _rotate(**bounds):  # type: ignore[no-untyped-def]
+def _rotate(**bounds):  #
     return RotateBounds(**bounds)
 
 
-def _bounded(mode: SessionMode, rotate=None, model=None):  # type: ignore[no-untyped-def]
+def _bounded(mode: SessionMode, rotate=None, model=None):  #
     return make_envelope(
         "ch_1",
         "verify",
@@ -798,7 +798,7 @@ def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int 
 
 
 def _resolve(
-    store,  # type: ignore[no-untyped-def]
+    store,  #
     envelope,
     *,
     transcript_source: IHarnessTranscriptSource | None = None,
@@ -824,7 +824,7 @@ def _resolve(
 
 
 @pytest.mark.component
-def test_a_head_under_every_declared_bound_is_resumed(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_head_under_every_declared_bound_is_resumed(tmp_path):  #
     store = _store(tmp_path)
     head = _seed_head(store)
     _seed_usage(store, tokens=10)
@@ -835,7 +835,7 @@ def test_a_head_under_every_declared_bound_is_resumed(tmp_path):  # type: ignore
 
 
 @pytest.mark.component
-def test_a_declaration_with_no_rotate_block_bounds_nothing(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_declaration_with_no_rotate_block_bounds_nothing(tmp_path):  #
     store = _store(tmp_path)
     head = _seed_head(store)
     for generation in range(1, 20):
@@ -850,7 +850,7 @@ def test_a_declaration_with_no_rotate_block_bounds_nothing(tmp_path):  # type: i
     [(99, 100, True), (100, 100, True), (101, 100, False)],
     ids=["under", "at", "over"],
 )
-def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, bound, resumed):  # type: ignore[no-untyped-def]
+def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, bound, resumed):  #
     """At the bound is still under it — a threshold is a ceiling, not a trigger point."""
     store = _store(tmp_path)
     head = _seed_head(store)
@@ -862,7 +862,7 @@ def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, boun
 
 @pytest.mark.component
 @pytest.mark.parametrize(("bound", "resumed"), [(100, False), (102, True)])
-def test_opencode_context_rotates_or_resumes_pool_head(tmp_path, bound, resumed):  # type: ignore[no-untyped-def]
+def test_opencode_context_rotates_or_resumes_pool_head(tmp_path, bound, resumed):  #
     store = _store(tmp_path)
     head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
     raw = json.dumps(
@@ -908,7 +908,7 @@ def test_opencode_context_rotates_or_resumes_pool_head(tmp_path, bound, resumed)
 
 
 @pytest.mark.component
-def test_opencode_rotation_reads_growth_after_resume_boundary(tmp_path):  # type: ignore[no-untyped-def]
+def test_opencode_rotation_reads_growth_after_resume_boundary(tmp_path):  #
     store = _store(tmp_path)
     head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
 
@@ -958,7 +958,7 @@ def test_opencode_rotation_reads_growth_after_resume_boundary(tmp_path):  # type
 
 
 @pytest.mark.component
-def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  #
     """A usage fact carries one invocation's cumulative tokens, far above the context the
     session holds; the bound reads the transcript's context size, so a head whose usage
     is past the bound but whose context is under it still resumes."""
@@ -978,7 +978,7 @@ def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  
     [(2, 3, True), (3, 3, True), (4, 3, False)],
     ids=["under", "at", "over"],
 )
-def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path, invocations, bound, resumed):  # type: ignore[no-untyped-def]
+def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path, invocations, bound, resumed):  #
     """Every `usage_facts` row counts toward the bound, whatever its kind — here `spawn`
     and `judge` rows alike."""
     store = _store(tmp_path)
@@ -996,7 +996,7 @@ def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path, inv
     [(99, 100, True), (100, 100, True), (101, 100, False)],
     ids=["under", "at", "over"],
 )
-def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, bound, resumed):  # type: ignore[no-untyped-def]
+def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, bound, resumed):  #
     store = _store(tmp_path)
     head = _seed_head(store)
     env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=bound))
@@ -1006,7 +1006,7 @@ def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, boun
 
 
 @pytest.mark.component
-def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  #
     """A head whose transcript cannot be read — not yet written, or gone — measures `None`.
     Reading that as 0 would be right by accident; reading it as a breach would make every
     freshly minted head instantly ineligible. A harness with no source scripted at all
@@ -1020,7 +1020,7 @@ def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  # type: ignore
 
 
 @pytest.mark.component
-def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  #
     """A session absent from the source's map (or a harness with no transcript source
     scripted at all, the default) reads its size as `None` — *not measured*, exactly
     like a missing file — never a zero that would make the threshold silently inert."""
@@ -1033,7 +1033,7 @@ def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  # type: ignor
 
 
 @pytest.mark.component
-def test_model_drift_rotates_even_with_every_threshold_under_bound(tmp_path):  # type: ignore[no-untyped-def]
+def test_model_drift_rotates_even_with_every_threshold_under_bound(tmp_path):  #
     """A resolved model differing from the head's stamped one rotates the head, with every
     threshold still under bound — a resume never crosses models."""
     store = _store(tmp_path)
@@ -1045,14 +1045,14 @@ def test_model_drift_rotates_even_with_every_threshold_under_bound(tmp_path):  #
 
 
 @pytest.mark.component
-def test_no_drift_when_the_resolved_model_still_matches_the_stamp(tmp_path):  # type: ignore[no-untyped-def]
+def test_no_drift_when_the_resolved_model_still_matches_the_stamp(tmp_path):  #
     store = _store(tmp_path)
     head = _seed_head(store, model="sonnet")
 
     assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="sonnet") == head
 
 
-def _rotation_rig(tmp_path, *, owner_model: str = "opus"):  # type: ignore[no-untyped-def]
+def _rotation_rig(tmp_path, *, owner_model: str = "opus"):  #
     """A breached `other`-owned head beside the default harness; returns the store, ctx, both harnesses."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
@@ -1081,12 +1081,12 @@ def _rotation_rig(tmp_path, *, owner_model: str = "opus"):  # type: ignore[no-un
     return store, ctx, default, other
 
 
-def _enter(ctx, envelope):  # type: ignore[no-untyped-def]
+def _enter(ctx, envelope):  #
     Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
 
 
 @pytest.mark.component
-def test_rotation_with_no_authored_set_mints_under_the_runner_default(tmp_path):  # type: ignore[no-untyped-def]
+def test_rotation_with_no_authored_set_mints_under_the_runner_default(tmp_path):  #
     """A rotated replacement is a fresh mint: with no authored set it takes the runner default, not the head's owner."""
     store, ctx, default, other = _rotation_rig(tmp_path)
 
@@ -1099,7 +1099,7 @@ def test_rotation_with_no_authored_set_mints_under_the_runner_default(tmp_path):
 
 
 @pytest.mark.component
-def test_rotation_mints_under_the_first_member_when_the_owner_left_the_set(tmp_path):  # type: ignore[no-untyped-def]
+def test_rotation_mints_under_the_first_member_when_the_owner_left_the_set(tmp_path):  #
     _, ctx, default, other = _rotation_rig(tmp_path)
     envelope = replace(
         _bounded(SessionMode.RESUME, model=["blizzard:basic"]),
@@ -1113,7 +1113,7 @@ def test_rotation_mints_under_the_first_member_when_the_owner_left_the_set(tmp_p
 
 
 @pytest.mark.component
-def test_rotation_stays_on_the_owner_when_it_is_the_sets_sole_member(tmp_path):  # type: ignore[no-untyped-def]
+def test_rotation_stays_on_the_owner_when_it_is_the_sets_sole_member(tmp_path):  #
     _, ctx, default, other = _rotation_rig(tmp_path)
     base = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
     envelope = replace(base, node=replace(base.node, session_harnesses=["other"]))
@@ -1126,7 +1126,7 @@ def test_rotation_stays_on_the_owner_when_it_is_the_sets_sole_member(tmp_path): 
 
 
 @pytest.mark.component
-def test_rotation_escalates_when_no_set_member_qualifies(tmp_path):  # type: ignore[no-untyped-def]
+def test_rotation_escalates_when_no_set_member_qualifies(tmp_path):  #
     store, ctx, default, other = _rotation_rig(tmp_path)
     base = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
     envelope = replace(base, node=replace(base.node, session_harnesses=["gone"]))
@@ -1138,7 +1138,7 @@ def test_rotation_escalates_when_no_set_member_qualifies(tmp_path):  # type: ign
 
 
 @pytest.mark.component
-def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path):  #
     """An unresolvable *transcript source* is an unreadable signal, never a breach — distinct
     from the owner's own adapter being unresolvable, which does escalate. A rotate declaration
     leaves every check it cannot measure unmeasured, not forced every node entry."""
@@ -1183,7 +1183,7 @@ def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path):
 
 @pytest.mark.component
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path, unavailable):  # type: ignore[no-untyped-def]
+def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path, unavailable):  #
     """An existing-session operation: the pool's head owner cannot be
     dispatched to, so the chunk escalates in place at node entry — never a blocked mint
     that loops forever, and never a substituted default harness."""
@@ -1245,7 +1245,7 @@ def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path,
 
 
 @pytest.mark.component
-def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_retry(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_retry(tmp_path):  #
     """The owner-unresolvable escalation mints a zero-budget, never-spawned lease at the SAME
     node a later real attempt resumes at. Once the owner is restored, that mint must not have
     spent any of the node's own retry budget — real attempts still get their full count."""
@@ -1320,7 +1320,7 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
 
 
 @pytest.mark.component
-def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  #
     """A pre-#144 lease reads NULL — *unknown*. Comparing an unknown against a resolved
     name would rotate every such session once, for no reason anyone could name."""
     store = _store(tmp_path)
@@ -1330,7 +1330,7 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-u
 
 
 @pytest.mark.component
-def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
+def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  #
     """The threshold end to end over the **real** transcript source, at a
     production path shape — not a scripted size. Pins that the comparison actually reads
     the thing it thinks it is, since a silently-``None`` ``size_bytes`` would stay green."""

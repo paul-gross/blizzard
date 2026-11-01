@@ -53,7 +53,7 @@ class _Workspaces:
         return getattr(self._real, name)
 
 
-def _rig(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+def _rig(tmp_path, monkeypatch):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     # A prior lease for the chunk, so the recovery owner is one the spawn must carry.
     store.record_lease(
@@ -103,7 +103,7 @@ def _rig(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     )
 
 
-def test_the_claim_names_the_chunk_the_held_workspace_and_every_held_environment(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+def test_the_claim_names_the_chunk_the_held_workspace_and_every_held_environment(tmp_path, monkeypatch):  #
     rig = _rig(tmp_path, monkeypatch)
 
     InterruptedClaims(rig.ctx)._reclaim("ch_1", rig.bindings)
@@ -115,7 +115,7 @@ def test_the_claim_names_the_chunk_the_held_workspace_and_every_held_environment
     assert claim.environment_ids == ["e1", "e2"]
 
 
-def test_a_won_reclaim_spawns_the_claimed_envelope_into_the_held_environments_under_the_prior_owner(  # type: ignore[no-untyped-def]
+def test_a_won_reclaim_spawns_the_claimed_envelope_into_the_held_environments_under_the_prior_owner(  #
     tmp_path, monkeypatch
 ):
     rig = _rig(tmp_path, monkeypatch)

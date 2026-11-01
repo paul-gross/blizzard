@@ -35,7 +35,7 @@ pytestmark = pytest.mark.component
 _PEEKS = [("/api/queue", True), ("/api/backlog", False)]
 
 
-def _seed(hub, n: int, *, promote: bool) -> None:  # type: ignore[no-untyped-def]
+def _seed(hub, n: int, *, promote: bool) -> None:  #
     for i in range(n):
         ingest(hub, [{"source": "default", "ref": str(i)}], promote=promote)
 
@@ -51,7 +51,7 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, path: str
 
     results: dict[str, int] = {}
 
-    def call(hub, key: str) -> None:  # type: ignore[no-untyped-def]
+    def call(hub, key: str) -> None:  #
         resp = hub.client.get(path)
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json()["entries"])
@@ -126,7 +126,7 @@ class _CountingFactsStore(ChunkFactsStore):
         return super().load_facts(chunk_id)
 
 
-def _wire_counting_facts(hub) -> _CountingFactsStore:  # type: ignore[no-untyped-def]
+def _wire_counting_facts(hub) -> _CountingFactsStore:  #
     """Swap the hub's facts seam for a counting one, wiring the queue service's own
     record store over the same counting instance — `list_ready`/`list_not_ready` no
     longer touch facts at all (they take an already-derived ``statuses`` map), but the
@@ -245,7 +245,7 @@ def test_whole_order_replace_writes_every_position_in_one_transaction_regardless
     large = build_hub(tmp_path / "large")
     large_ids = [ingest(large, [{"source": "default", "ref": str(i)}], promote=promote) for i in range(9)]
 
-    def call(hub, ids: list[str]) -> None:  # type: ignore[no-untyped-def]
+    def call(hub, ids: list[str]) -> None:  #
         resp = hub.client.put(replace_path, json={"chunk_ids": list(reversed(ids))})
         assert resp.status_code == 200, resp.text
 

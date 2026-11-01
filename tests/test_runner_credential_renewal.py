@@ -39,7 +39,7 @@ _SLUG = "codex"
 _INTERVAL = 300
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
+def _store(tmp_path) -> SqlAlchemyRunnerStore:  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -70,7 +70,7 @@ class _FailingWrites:
         return getattr(self._store, name)
 
 
-def test_a_due_renewal_is_claimed_then_renewed_and_its_outcome_recorded(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_due_renewal_is_claimed_then_renewed_and_its_outcome_recorded(tmp_path) -> None:  #
     store = _store(tmp_path)
     claims_seen_by_renew: list[datetime | None] = []
     renewer = FakeCredentialRenewer(
@@ -84,7 +84,7 @@ def test_a_due_renewal_is_claimed_then_renewed_and_its_outcome_recorded(tmp_path
     assert (summary.attempted_at, summary.result, summary.failure_reason) == (_NOW, RenewalResult.RENEWED, None)
 
 
-def test_a_failed_renewal_records_its_typed_reason(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_failed_renewal_records_its_typed_reason(tmp_path) -> None:  #
     store = _store(tmp_path)
     renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
 
@@ -94,7 +94,7 @@ def test_a_failed_renewal_records_its_typed_reason(tmp_path) -> None:  # type: i
     assert (summary.result, summary.failure_reason) == (RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT)
 
 
-def test_a_not_due_check_writes_nothing_and_never_renews(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_not_due_check_writes_nothing_and_never_renews(tmp_path) -> None:  #
     store = _store(tmp_path)
     renewer = FakeCredentialRenewer(due=False)
 
@@ -106,7 +106,7 @@ def test_a_not_due_check_writes_nothing_and_never_renews(tmp_path) -> None:  # t
     assert store.latest_credential_renewals_by_slug([_SLUG]) == {}
 
 
-def test_a_failed_claim_write_never_calls_the_renewer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_failed_claim_write_never_calls_the_renewer(tmp_path) -> None:  #
     store = _store(tmp_path)
     renewer = FakeCredentialRenewer()
 
@@ -117,7 +117,7 @@ def test_a_failed_claim_write_never_calls_the_renewer(tmp_path) -> None:  # type
 
 
 def test_a_failed_outcome_write_leaves_the_claim_standing_so_no_renewal_repeats_inside_the_cadence(
-    tmp_path,  # type: ignore[no-untyped-def]
+    tmp_path,  #
 ) -> None:
     store = _store(tmp_path)
     renewer = FakeCredentialRenewer()
@@ -139,7 +139,7 @@ def test_a_failed_outcome_write_leaves_the_claim_standing_so_no_renewal_repeats_
     )
 
 
-def test_a_renewal_repeats_only_on_the_slugs_own_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_renewal_repeats_only_on_the_slugs_own_cadence(tmp_path) -> None:  #
     store = _store(tmp_path)
     renewer = FakeCredentialRenewer()
     clock = FixedClock(_NOW)
@@ -155,7 +155,7 @@ def test_a_renewal_repeats_only_on_the_slugs_own_cadence(tmp_path) -> None:  # t
     assert renewer.renew_calls == 2
 
 
-def test_one_slugs_failure_never_skips_the_next(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_one_slugs_failure_never_skips_the_next(tmp_path) -> None:  #
     store = _store(tmp_path)
 
     def _boom() -> None:
@@ -179,7 +179,7 @@ def test_one_slugs_failure_never_skips_the_next(tmp_path) -> None:  # type: igno
     assert renewals[_SLUG].result is RenewalResult.RENEWED
 
 
-def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path) -> None:  #
     store = _store(tmp_path)
     entered, release = threading.Event(), threading.Event()
 

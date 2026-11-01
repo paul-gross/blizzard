@@ -73,7 +73,7 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -87,14 +87,14 @@ class _BlipOnceHub(FakeHub):
         super().__init__()
         self.get_chunk_calls = 0
 
-    def chunk_statuses(self, chunk_ids):  # type: ignore[no-untyped-def]
+    def chunk_statuses(self, chunk_ids):  #
         self.get_chunk_calls += 1
         if self.get_chunk_calls == 1:
             raise HubClientError("transient blip during the ownership check")
         return super().chunk_statuses(chunk_ids)
 
 
-def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
+def _pause_locally(store, ctx, *, paused: bool):  #
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write."""
     store.record_local_pause(
         paused=paused,
@@ -105,7 +105,7 @@ def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
     )
 
 
-def _ctx_with_a_claimable_chunk(tmp_path, *, paused: bool):  # type: ignore[no-untyped-def]
+def _ctx_with_a_claimable_chunk(tmp_path, *, paused: bool):  #
     store = _store(tmp_path)
     hub = FakeHub()
     hub.paused = paused
@@ -122,7 +122,7 @@ def _ctx_with_a_claimable_chunk(tmp_path, *, paused: bool):  # type: ignore[no-u
     return ctx, hub, store
 
 
-def test_pull_mirrors_the_hub_pause_brake_and_registers(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_mirrors_the_hub_pause_brake_and_registers(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()
     # PULL registered the runner (liveness heartbeat) and mirrored the brake locally.
@@ -130,7 +130,7 @@ def test_pull_mirrors_the_hub_pause_brake_and_registers(tmp_path):  # type: igno
     assert store.hub_paused() is True
 
 
-def test_pull_reports_the_configured_env_capacity(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_reports_the_configured_env_capacity(tmp_path):  #
     """PULL's registration (the heartbeat) carries the runner's env-pool size so
     the board's slot bar has a `total`; a changed pool converges on the next pull."""
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
@@ -143,7 +143,7 @@ def test_pull_reports_the_configured_env_capacity(tmp_path):  # type: ignore[no-
     assert hub.registered_capacities == [4, 6]
 
 
-def test_fill_claims_nothing_while_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_claims_nothing_while_paused(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()  # mirror paused=True
     Fill(ctx).run()
@@ -152,7 +152,7 @@ def test_fill_claims_nothing_while_paused(tmp_path):  # type: ignore[no-untyped-
     assert store.list_active_leases() == []
 
 
-def test_fill_claims_again_after_resume(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_claims_again_after_resume(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()
     Fill(ctx).run()
@@ -166,7 +166,7 @@ def test_fill_claims_again_after_resume(tmp_path):  # type: ignore[no-untyped-de
     assert len(store.list_active_leases()) == 1
 
 
-def test_in_flight_chunk_runs_on_while_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_in_flight_chunk_runs_on_while_paused(tmp_path):  #
     """Pausing stops new claims; an already-claimed chunk is untouched by FILL."""
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()
@@ -180,7 +180,7 @@ def test_in_flight_chunk_runs_on_while_paused(tmp_path):  # type: ignore[no-unty
     assert len(store.list_active_leases()) == 1
 
 
-def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no-untyped-def]
+def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()  # mirror paused=True
     assert store.hub_paused() is True
@@ -197,7 +197,7 @@ def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no
 # is the OR of both, each cleared only where it was set.
 
 
-def test_fill_claims_nothing_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_claims_nothing_while_locally_paused(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()  # the hub's brake is off — only the local one stops this claim
     _pause_locally(store, ctx, paused=True)
@@ -206,7 +206,7 @@ def test_fill_claims_nothing_while_locally_paused(tmp_path):  # type: ignore[no-
     assert store.list_active_leases() == []
 
 
-def test_fill_claims_again_after_a_local_start(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_claims_again_after_a_local_start(tmp_path):  #
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()
     _pause_locally(store, ctx, paused=True)
@@ -220,7 +220,7 @@ def test_fill_claims_again_after_a_local_start(tmp_path):  # type: ignore[no-unt
     assert len(store.list_active_leases()) == 1
 
 
-def test_a_local_start_does_not_clear_the_hubs_brake(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_local_start_does_not_clear_the_hubs_brake(tmp_path):  #
     """Each brake is cleared only on the surface that set it — the OR still holds."""
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
     Pull(ctx).run()  # mirror the hub's brake on
@@ -232,7 +232,7 @@ def test_a_local_start_does_not_clear_the_hubs_brake(tmp_path):  # type: ignore[
     assert hub.claims == []
 
 
-def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  #
     """Pausing drains rather than kills — the same contract the hub's brake honors."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -262,7 +262,7 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore
 # restart-resume, answer-resume, and every ``_spawn_attempt`` caller.
 
 
-def _seed_running_lease(  # type: ignore[no-untyped-def]
+def _seed_running_lease(  #
     store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1
 ):
     """A build lease spawned into env e1 with a live worker, plus its binding."""
@@ -289,7 +289,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
+def _running_chunk(chunk="ch_1", *, runner_id="r1"):  #
     return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
@@ -298,7 +298,7 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
     )
 
 
-def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
+def _seed_exited_lease(store):  #
     """A build lease spawned into env e1; the worker has already exited (no probe entry)."""
     store.record_lease(
         NewLease(
@@ -322,7 +322,7 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _answered_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-untyped-def]
+def _answered_question(question_id="qn_1") -> HubQuestion:  #
     return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
@@ -337,7 +337,7 @@ def _answered_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-un
     )
 
 
-def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_suppressed_while_locally_paused(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -371,7 +371,7 @@ def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: igno
     assert store.resume_intent_lease_ids() == set()
 
 
-def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path):  #
     """A suppressed restart-resume must not leak the lease to ADVANCE,
     which would otherwise spawn a harness process and judge a killed worker as done."""
     store = _store(tmp_path)
@@ -416,7 +416,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     assert lease is not None and lease.pid == 4321
 
 
-def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_answer_resume_suppressed_while_locally_paused(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -453,7 +453,7 @@ def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignor
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
-def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  #
     """ADVANCE's judgement resume is the fourth spawn primitive: a
     worker that exits naturally while paused must not be judged, since judging it
     resumes its session headlessly."""
@@ -484,7 +484,7 @@ def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # t
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
 
 
-def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
+def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -526,7 +526,7 @@ def test_apply_response_next_spawn_suppressed_then_entered_by_advance_at_unpause
     assert lease is not None and lease.node_name == "review"
 
 
-def test_hub_paused_only_restart_resume_still_spawns(tmp_path):  # type: ignore[no-untyped-def]
+def test_hub_paused_only_restart_resume_still_spawns(tmp_path):  #
     """The mirror image: hub brake on, local brake off — restart-resume is unaffected."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -553,7 +553,7 @@ def test_hub_paused_only_restart_resume_still_spawns(tmp_path):  # type: ignore[
     assert lease is not None and lease.pid == 4321
 
 
-def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-untyped-def]
+def test_hub_paused_only_requeue_still_spawns(tmp_path):  #
     """The mirror image: hub brake on, local brake off — a requeue respawn is unaffected."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -576,7 +576,7 @@ def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-unty
     assert store.attempt_count("ch_1", "nd_build") == 2
 
 
-def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type: ignore[no-untyped-def]
+def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store, chunk="ch_1", lease="lease_1")
     _seed_running_lease(store, chunk="ch_2", lease="lease_2", pid=101, start="start-101", session="sess-b")
@@ -608,7 +608,7 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type:
 # the orphan case (no process to kill) self-defers both branches.
 
 
-def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, epoch=1):  # type: ignore[no-untyped-def]
+def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, epoch=1):  #
     """A lease minted at FILL but never spawned (no pid/session) — REAP's orphan case."""
     store.record_lease(
         NewLease(
@@ -625,7 +625,7 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, e
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path):  #
     """REAP's orphan case reaps and requeues as always; only the respawn is suppressed,
     leaving the chunk shaped like an interrupted claim that FILL adopts once unpaused."""
     store = _store(tmp_path)
@@ -658,7 +658,7 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
     assert lease is not None and lease.pid == 202
 
 
-def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyped-def]
+def test_hub_paused_only_reap_still_requeues(tmp_path):  #
     """The mirror image: hub brake on, local brake off — REAP reaps/requeues as today."""
     store = _store(tmp_path)
     _seed_orphan_lease(store)
@@ -679,7 +679,7 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
     assert lease.pid == 202
 
 
-def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  #
     """REAP's orphan case reaches `Attempt.fail` even while paused,
     and an exhausted budget lands on the escalate branch, where the deferral lives."""
     store = _store(tmp_path)
@@ -709,7 +709,7 @@ def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused
     assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]
 
 
-def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_path):  #
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)  # retries_max=2
@@ -761,7 +761,7 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
 # between two steps that are each green alone needs the composed pass to surface.
 
 
-def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):  # type: ignore[no-untyped-def]
+def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):  #
     """Driven as a full tick (REAP -> RESUME -> PULL -> FILL -> ADVANCE), not hand-picked
     steps. Hub brake off: the local brake alone must stop all four spawn primitives."""
     store = _store(tmp_path)
@@ -826,7 +826,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
     assert len(hub.claims) == 1  # FILL is claiming again
 
 
-def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_path):  #
     """ADVANCE's resume-intent skip is a general correctness rule, not a pause artifact,
     proven here with no pause anywhere: a transient hub blip leaves an intent open on a
     dead-pid lease that only the resume-intent skip stops from being judged."""
@@ -867,7 +867,7 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
     assert store.resume_intent_lease_ids() == set()
 
 
-def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  #
     """The escalate gate's third `Attempt.fail` caller: a completion
     buffered just before pause flushes during it, the hub rejects it as stale, and the
     exhausted budget must not open the escalate door while paused."""
@@ -931,7 +931,7 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
 # --------------------------------------------------------------------------- #
 
 
-def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone(tmp_path):  #
     """The two brakes are independent authorities: the chunk resumes only
     when both clear. `_kill_and_park_paused` is ungated (a kill is not a spawn);
     `_resume_if_unpaused` is gated, since its resume is a real spawn primitive."""
@@ -1001,7 +1001,7 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
 # --------------------------------------------------------------------------- #
 
 
-def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  #
     """The tick-window gap closes: the hub pauses after PULL last mirrored
     ``paused=False`` but before FILL's claim lands, and the hub refuses it anyway."""
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
@@ -1018,7 +1018,7 @@ def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ig
     assert store.held_environment_ids() == []  # the binding was released, not left dangling
 
 
-def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  #
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()
     hub.claim_outcome = RouteClaimOutcome(denied_paused=PausedDenial(chunk_id="ch_1", runner_id="r1"))
@@ -1064,7 +1064,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     ],
     ids=["unregistered", "not-ready", "ended"],
 )
-def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields):  # type: ignore[no-untyped-def]
+def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields):  #
     """Each refusal logs the hub's own status and detail, so an unregistered runner or a not-ready
     chunk never reads as a paused runner or an ended chunk."""
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
@@ -1083,7 +1083,7 @@ def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields)
 # --------------------------------------------------------------------------- #
 
 
-def _ceiling_config(cap, *, window_hours=24.0, agents=1):  # type: ignore[no-untyped-def]
+def _ceiling_config(cap, *, window_hours=24.0, agents=1):  #
     return LoopConfig(
         runner_name="r1",
         runner_id="rn_1",
@@ -1094,7 +1094,7 @@ def _ceiling_config(cap, *, window_hours=24.0, agents=1):  # type: ignore[no-unt
     )
 
 
-def _sample(*, cost, kind: UsageKind = "spawn"):  # type: ignore[no-untyped-def]
+def _sample(*, cost, kind: UsageKind = "spawn"):  #
     return UsageSample(
         kind=kind,
         model="claude-x",
@@ -1106,7 +1106,7 @@ def _sample(*, cost, kind: UsageKind = "spawn"):  # type: ignore[no-untyped-def]
     )
 
 
-def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_at):  # type: ignore[no-untyped-def]
+def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_at):  #
     record_usage(
         store,
         lease_id=lease_id,
@@ -1120,7 +1120,7 @@ def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_
 
 
 @pytest.mark.unit
-def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp_path):  #
     """Crossing `runner_ceiling_usd` engages the SAME local pause brake `blizzard runner
     pause` sets, and the log line names both the configured ceiling and the spend that
     tripped it (the escalation the plan calls for)."""
@@ -1153,7 +1153,7 @@ def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp
 
 
 @pytest.mark.unit
-def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  #
     """`runner_ceiling_usd` unset (today's default) never engages the brake, however much
     this runner has spent — mirroring the per-chunk cap's identical absent-means-off rule."""
     store = _store(tmp_path)
@@ -1174,7 +1174,7 @@ def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  # type: ig
 
 
 @pytest.mark.unit
-def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_under_cap_does_not_engage(tmp_path):  #
     store = _store(tmp_path)
     _record_usage(store, cost=1.0, recorded_at=_NOW)
     ctx = make_context(
@@ -1193,7 +1193,7 @@ def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped
 
 
 @pytest.mark.unit
-def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path):  #
     """A cost-absent row contributes tokens but $0 to the cost sum; the ceiling trips
     on that lower bound, and both the log line and report mark the figure ``+``."""
     store = _store(tmp_path)
@@ -1220,7 +1220,7 @@ def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path)
 
 
 @pytest.mark.unit
-def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  #
     """Once engaged, a later tick's check must neither re-engage nor re-log — engaging is a
     one-time transition, not a per-tick assertion, even while the window's sum stays over
     the ceiling for as long as it holds (the engage-once requirement)."""
@@ -1250,7 +1250,7 @@ def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
-def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_cap(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_cap(tmp_path):  #
     """Once engaged, the brake stays engaged even after the rolling window later excludes
     the very usage fact that tripped it (the sum genuinely drops back under the cap) —
     `blizzard runner start` is the ONLY conscious clear (the locked design)."""
@@ -1281,7 +1281,7 @@ def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_c
 
 
 @pytest.mark.unit
-def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(tmp_path):  #
     """Driven as a full tick: a live worker whose runner just crossed its ceiling is left
     running untouched, and a second, otherwise-claimable chunk is not spawned into either."""
     store = _store(tmp_path)
@@ -1318,7 +1318,7 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
 
 
 @pytest.mark.unit
-def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path):  # type: ignore[no-untyped-def]
+def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path):  #
     """`blizzard runner start` clears a ceiling-engaged brake exactly as it clears an
     operator's own pause, with no ceiling-specific code path."""
     store = _store(tmp_path)
@@ -1363,7 +1363,7 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
 # --- Usage-limit mark ----------------------------------------
 
 
-def _limited_ctx(store, harness, *, clock=None, subscription=None):  # type: ignore[no-untyped-def]
+def _limited_ctx(store, harness, *, clock=None, subscription=None):  #
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     subscriptions = (
@@ -1383,11 +1383,11 @@ def _limited_ctx(store, harness, *, clock=None, subscription=None):  # type: ign
     )
 
 
-def _clear_runner_floor(store, at):  # type: ignore[no-untyped-def]
+def _clear_runner_floor(store, at):  #
     store.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
 
 
-def _exhausted_sample(store, *, sampled_at, resets_at, payload=True):  # type: ignore[no-untyped-def]
+def _exhausted_sample(store, *, sampled_at, resets_at, payload=True):  #
     window = {"window": "5h", "utilization_pct": 100.0, "resets_at": resets_at.isoformat(), "window_seconds": 18000}
     store.record_external_usage_attempt(
         slug="anthropic",
@@ -1398,7 +1398,7 @@ def _exhausted_sample(store, *, sampled_at, resets_at, payload=True):  # type: i
     )
 
 
-def test_usage_limited_worker_generation_marks_the_runner_and_parks_no_brake_no_retry_no_epoch(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_limited_worker_generation_marks_the_runner_and_parks_no_brake_no_retry_no_epoch(tmp_path):  #
     """A usage-limited worker of a runner naming no subscription marks the runner itself — no brake, no judgement,
     no retry."""
     store = _store(tmp_path)
@@ -1429,7 +1429,7 @@ def test_usage_limited_worker_generation_marks_the_runner_and_parks_no_brake_no_
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
 
 
-def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):  #
     """Keep the harness's free-text detail in the park log."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -1444,7 +1444,7 @@ def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):
     assert warnings[0]["detail"] == limit.detail
 
 
-def test_a_spenders_mark_lands_on_its_subscription_holding_the_window_the_harness_named(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_spenders_mark_lands_on_its_subscription_holding_the_window_the_harness_named(tmp_path):  #
     """A runner spending a subscription marks the subscription, not itself, holding the window whose reset in the
     newest sample at or before the mark is the harness's, to the minute — a failed sample never masking it."""
     store = _store(tmp_path)
@@ -1466,7 +1466,7 @@ def test_a_spenders_mark_lands_on_its_subscription_holding_the_window_the_harnes
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
 
-def test_a_mark_naming_a_reset_no_window_carries_holds_no_window(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_mark_naming_a_reset_no_window_carries_holds_no_window(tmp_path):  #
     store = _store(tmp_path)
     _seed_exited_lease(store)
     _exhausted_sample(store, sampled_at=_NOW - timedelta(minutes=5), resets_at=_NOW + timedelta(hours=3))
@@ -1479,7 +1479,7 @@ def test_a_mark_naming_a_reset_no_window_carries_holds_no_window(tmp_path):  # t
     assert mark is not None and (mark.window, mark.window_resets_at) == (None, None)
 
 
-def test_usage_limited_judge_elicitation_marks_and_parks(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_limited_judge_elicitation_marks_and_parks(tmp_path):  #
     """A usage-limited judge leaves its elicitation record for unpause to distinguish
     a judge-side park from a worker-side one, without spending an attempt."""
     store = _store(tmp_path)
@@ -1504,7 +1504,7 @@ def test_usage_limited_judge_elicitation_marks_and_parks(tmp_path):  # type: ign
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
 
 
-def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_once_the_floor_opens(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_once_the_floor_opens(tmp_path):  #
     """A judge-side park elicits a fresh verdict once its floor opens, not a worker wake."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -1539,7 +1539,7 @@ def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_once_the_floor_
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
 
 
-def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path):  #
     """A crash before the fresh elicitation launches leaves the stale one standing: the retry
     carries the same superseded identity, so it appends nothing a second time."""
     store = _store(tmp_path)
@@ -1565,7 +1565,7 @@ def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_on
     assert first.at == _NOW + timedelta(minutes=1)
 
 
-def test_a_usage_limit_park_resumes_the_same_lease_in_place_once_the_floor_opens(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_usage_limit_park_resumes_the_same_lease_in_place_once_the_floor_opens(tmp_path):  #
     """The floor opening wakes the same session and epoch without consuming a retry."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -1593,7 +1593,7 @@ def test_a_usage_limit_park_resumes_the_same_lease_in_place_once_the_floor_opens
     assert store.local_paused() is False
 
 
-def test_a_mark_written_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asleep(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_mark_written_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asleep(tmp_path):  #
     """Every park reads the floor fresh: lease_1 wakes ahead of the limit, lease_2's exit marks it, lease_3 must stay
     parked."""
     store = _store(tmp_path)
@@ -1645,7 +1645,7 @@ def test_a_mark_written_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asl
     assert store.pause_parked_lease_ids() == {"lease_2", "lease_3"}  # lease_2 parked by its own usage limit
 
 
-def test_a_usage_limit_over_an_operator_pause_marks_and_leaves_the_brake_as_it_stood(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_usage_limit_over_an_operator_pause_marks_and_leaves_the_brake_as_it_stood(tmp_path):  #
     """A usage limit never touches the brake: an operator's standing pause keeps its one fact."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -1662,7 +1662,7 @@ def test_a_usage_limit_over_an_operator_pause_marks_and_leaves_the_brake_as_it_s
     assert json.loads(reports[0].payload)["by"] == "operator"
 
 
-def test_a_usage_limit_park_wakes_on_its_own_once_the_reset_passes(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_usage_limit_park_wakes_on_its_own_once_the_reset_passes(tmp_path):  #
     """A runner naming no subscription has no sample to wait on: its hold opens at the reset the harness named, with
     nobody acting."""
     store = _store(tmp_path)
@@ -1687,7 +1687,7 @@ def test_a_usage_limit_park_wakes_on_its_own_once_the_reset_passes(tmp_path):  #
     assert store.local_paused() is False
 
 
-def test_a_replayed_mark_and_park_writes_one_mark(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_replayed_mark_and_park_writes_one_mark(tmp_path):  #
     """A crash between the mark and the park re-classifies the exit and marks again: the invocation is already
     marked, so the replay writes nothing."""
     store = _store(tmp_path)
@@ -1706,7 +1706,7 @@ def test_a_replayed_mark_and_park_writes_one_mark(tmp_path):  # type: ignore[no-
     assert mark is not None and mark.marked_at == _NOW  # the replay, stamped later, wrote nothing
 
 
-def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path):  #
     """The runner's own engagement reads the brake under its lock and writes once: a second engagement finds it
     engaged and writes nothing."""
     store = _store(tmp_path)
@@ -1730,7 +1730,7 @@ def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path):
     assert [json.loads(f.payload)["reason"] for f in _local_pause_reports(spy)] == ["spend ceiling"]
 
 
-def test_a_reasoned_engage_over_an_operator_pause_keeps_the_operators_fact(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_reasoned_engage_over_an_operator_pause_keeps_the_operators_fact(tmp_path):  #
     store = _store(tmp_path)
     PauseService(store, FixedClock(_NOW)).set_local_pause(paused=True, by="operator")
 
@@ -1740,7 +1740,7 @@ def test_a_reasoned_engage_over_an_operator_pause_keeps_the_operators_fact(tmp_p
     assert [json.loads(f.payload)["by"] for f in _local_pause_reports(store)] == ["operator"]
 
 
-def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: ignore[no-untyped-def]
+def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  #
     """`PauseService.engage` carries the ceiling's own behavior unchanged — the migration
     off a direct store call changes no observable fact."""
     store = _store(tmp_path)
@@ -1768,7 +1768,7 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: 
 # Interrupted-claim reclaim is a new claim, stopped by either brake.
 
 
-def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = None):  # type: ignore[no-untyped-def]
+def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = None):  #
     """A binding left by a crash between env acquire and claim, on a chunk the hub still reads READY."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -1785,7 +1785,7 @@ def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = No
     return ctx, hub, store, harness, provider
 
 
-def test_a_locally_paused_runner_does_not_reclaim_a_crash_left_binding_until_it_starts(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_locally_paused_runner_does_not_reclaim_a_crash_left_binding_until_it_starts(tmp_path):  #
     ctx, hub, store, harness, provider = _ctx_with_a_crash_left_binding(tmp_path)
     _pause_locally(store, ctx, paused=True)
 
@@ -1803,7 +1803,7 @@ def test_a_locally_paused_runner_does_not_reclaim_a_crash_left_binding_until_it_
     assert len(harness.spawns) == 1
 
 
-def test_a_hub_paused_runner_does_not_reclaim_a_crash_left_binding(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_hub_paused_runner_does_not_reclaim_a_crash_left_binding(tmp_path):  #
     ctx, hub, store, harness, _provider = _ctx_with_a_crash_left_binding(tmp_path)
     hub.paused = True
     Pull(ctx).run()  # mirror the hub's brake on
@@ -1815,7 +1815,7 @@ def test_a_hub_paused_runner_does_not_reclaim_a_crash_left_binding(tmp_path):  #
     assert store.held_environment_ids() == ["e1"]
 
 
-def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp_path):  #
     ctx, hub, store, harness, provider = _ctx_with_a_crash_left_binding(tmp_path)
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r_other"
@@ -1833,11 +1833,11 @@ def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp
 # --- Operator pause/start over the standing brake ------------------------
 
 
-def _local_pause_reports(store):  # type: ignore[no-untyped-def]
+def _local_pause_reports(store):  #
     return [f for f in store.pending_outbound() if f.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED)]
 
 
-def test_an_operator_pause_over_a_reasoned_brake_keeps_the_reason_and_reports_nothing(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_operator_pause_over_a_reasoned_brake_keeps_the_reason_and_reports_nothing(tmp_path):  #
     """An operator's pause over a usage-limit or spend brake writes nothing: the standing reason
     survives locally and no second report reaches the hub."""
     store = _store(tmp_path)
@@ -1853,7 +1853,7 @@ def test_an_operator_pause_over_a_reasoned_brake_keeps_the_reason_and_reports_no
     assert json.loads(reports[0].payload)["reason"] == "usage limit: claude-code"
 
 
-def test_a_repause_and_a_start_when_released_write_nothing(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_repause_and_a_start_when_released_write_nothing(tmp_path):  #
     """Setting the brake to the state it already holds writes no fact and no report."""
     store = _store(tmp_path)
     service = PauseService(store, FixedClock(_NOW))

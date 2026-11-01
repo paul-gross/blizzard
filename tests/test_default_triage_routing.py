@@ -19,7 +19,7 @@ from tests.support import build_hub, pointer_token, report_lease
 pytestmark = pytest.mark.component
 
 
-def _reconciled_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _reconciled_hub(tmp_path: Path):  #
     """A hub with the whole packaged set minted, the way a deploy's reconcile does."""
     hub = build_hub(tmp_path)
     outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC).outcomes()
@@ -28,7 +28,7 @@ def _reconciled_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
     return hub
 
 
-def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:  #
     """Ingest + promote + claim one default-pinned chunk; returns (chunk_id, node_id)."""
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}
@@ -43,7 +43,7 @@ def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:  # type: ignore[
     return chunk_id, envelope["node"]["node_id"]
 
 
-def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:  # type: ignore[no-untyped-def]
+def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:  #
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

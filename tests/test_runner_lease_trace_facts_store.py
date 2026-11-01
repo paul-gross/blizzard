@@ -45,7 +45,7 @@ _REGISTERED = RunnerIdentity(fx.REGISTERED.runner_id, fx.REGISTERED.runner_name,
 _LATER_ID = "rn_01JREGISTERED"
 
 
-def _store(tmp_path, *, registered: bool = True) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
+def _store(tmp_path, *, registered: bool = True) -> SqlAlchemyRunnerStore:  #
     store = make_store(
         f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_REGISTERED.runner_id if registered else _LATER_ID
     )
@@ -196,7 +196,7 @@ def _expected() -> LeaseTraceFacts:
     )
 
 
-def test_written_facts_read_back_and_assemble_as_the_fixture(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_written_facts_read_back_and_assemble_as_the_fixture(tmp_path) -> None:  #
     store = _store(tmp_path)
     _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
     reader = _reader(store)
@@ -211,7 +211,7 @@ def test_written_facts_read_back_and_assemble_as_the_fixture(tmp_path) -> None: 
     assert reader.lease_trace_facts_for([fx.LEASE_ID]) == {fx.LEASE_ID: read}
 
 
-def test_an_open_or_unknown_lease_is_absent_from_both_forms(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_open_or_unknown_lease_is_absent_from_both_forms(tmp_path) -> None:  #
     store = _store(tmp_path)
     _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
     _write_lease(store, "lease_open", "ch_open", close=False)
@@ -223,7 +223,7 @@ def test_an_open_or_unknown_lease_is_absent_from_both_forms(tmp_path) -> None:  
     assert reader.lease_trace_facts_for([]) == {}
 
 
-def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> None:  #
     store = _store(tmp_path, registered=False)
     _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
     reader = _reader(store)
@@ -239,7 +239,7 @@ def test_facts_wait_for_the_first_registration_then_carry_its_id(tmp_path) -> No
     assert reader.lease_trace_facts_for([fx.LEASE_ID])[fx.LEASE_ID].lease == read.lease
 
 
-def test_facts_carry_the_tenant_the_identity_row_records(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_facts_carry_the_tenant_the_identity_row_records(tmp_path) -> None:  #
     store = _store(tmp_path, registered=False)
     _write_lease(store, fx.LEASE_ID, fx.CHUNK_ID)
     store.record_runner_identity(
@@ -252,7 +252,7 @@ def test_facts_carry_the_tenant_the_identity_row_records(tmp_path) -> None:  # t
     assert (read.runner.tenant_id, read.runner.tenant_name) == ("tn_bravo", "bravo")
 
 
-def test_each_lease_keeps_only_its_own_rows(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_each_lease_keeps_only_its_own_rows(tmp_path) -> None:  #
     store = _store(tmp_path)
     _write_lease(store, "lease_a", "ch_a")
     _write_lease(store, "lease_b", "ch_b")
@@ -264,7 +264,7 @@ def test_each_lease_keeps_only_its_own_rows(tmp_path) -> None:  # type: ignore[n
     assert read["lease_b"].spawns[0].session_id == "lease_b-sess-1"
 
 
-def test_the_plural_read_issues_the_same_statements_for_one_lease_as_for_many(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_the_plural_read_issues_the_same_statements_for_one_lease_as_for_many(tmp_path) -> None:  #
     store = _store(tmp_path)
     ids = [f"lease_{n}" for n in range(5)]
     for n, lease_id in enumerate(ids):
@@ -278,7 +278,7 @@ def test_the_plural_read_issues_the_same_statements_for_one_lease_as_for_many(tm
     assert len(reader.lease_trace_facts_for(ids)) == len(ids)
 
 
-def test_the_closure_read_never_scans_lease_closures_whatever_the_unrelated_history(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_the_closure_read_never_scans_lease_closures_whatever_the_unrelated_history(tmp_path) -> None:  #
     store = _store(tmp_path)
     for n in range(20):
         _write_lease(store, f"lease_other_{n}", f"ch_other_{n}")

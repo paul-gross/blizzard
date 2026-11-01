@@ -46,7 +46,7 @@ def _seed_legacy_row(store, *, lease_id: str = "lease_a") -> None:
         )
 
 
-def test_record_identified_spawn_refuses_a_lease_with_only_a_legacy_row(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_identified_spawn_refuses_a_lease_with_only_a_legacy_row(tmp_path) -> None:  #
     """A legacy row (every two-phase column NULL) is not an open provisional generation, so
     identification refuses rather than landing on it."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -57,7 +57,7 @@ def test_record_identified_spawn_refuses_a_lease_with_only_a_legacy_row(tmp_path
         store.record_identified_spawn("lease_a", session=SessionReference("claude_code", "sess-1"), identified_at=_NOW)
 
 
-def test_record_identity_failed_is_a_silent_no_op_for_a_lease_with_only_a_legacy_row(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_identity_failed_is_a_silent_no_op_for_a_lease_with_only_a_legacy_row(tmp_path) -> None:  #
     """``record_identity_failed``'s own ``required=False`` lookup must stay silent here too
     — a legacy row is not a provisional generation to close, one way or the other."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -75,7 +75,7 @@ def test_record_identity_failed_is_a_silent_no_op_for_a_lease_with_only_a_legacy
     assert row.identity_failed_at is None  # the legacy row, untouched
 
 
-def test_record_identified_spawn_finds_the_genuine_row_beside_a_legacy_one(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_identified_spawn_finds_the_genuine_row_beside_a_legacy_one(tmp_path) -> None:  #
     """The realistic combination: a lease minted before the two-phase design still active
     today, now given a real provisional spawn — the genuine row, not the legacy one
     sitting beside it, is what gets identified."""

@@ -20,7 +20,7 @@ _BEFORE = "20260928_1100_runner_retirement"  # the head just before this revisio
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _seed(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seed(tmp_path: Path):  #
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         seed_graph(conn, "g_1", at=_T0)

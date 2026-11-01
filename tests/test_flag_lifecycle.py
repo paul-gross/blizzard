@@ -117,7 +117,7 @@ def test_tombstone_removable_once_no_supported_release_holds_it() -> None:
     gone = derive(releases, head, "pr", supported=frozenset({"v1.1.0"}))[1]
     assert [(f.rule, f.severity) for f in gone] == [("tombstone-removable", "NOTE")]
     for mode in ("cut", "tag"):
-        assert [f.rule for f in derive(releases, head, mode, supported=frozenset({"v1.1.0"}))[1]] == [  # type: ignore[arg-type]
+        assert [f.rule for f in derive(releases, head, mode, supported=frozenset({"v1.1.0"}))[1]] == [  #
             "tombstone-removable"
         ]
 
@@ -142,7 +142,7 @@ def test_flip_without_note_is_judged_in_pr_mode_only() -> None:
     assert derive([], on, "pr", base=on)[1] == []
     assert derive([], off, "pr", base=off)[1] == []
     for mode in ("cut", "tag"):
-        assert derive([], on, mode, base=off)[1] == []  # type: ignore[arg-type]
+        assert derive([], on, mode, base=off)[1] == []  #
 
 
 def stub_compat(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tags: list[str], *, exit_code: int = 0) -> Path:

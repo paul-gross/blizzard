@@ -47,15 +47,15 @@ _EVEN_LATER = datetime(2026, 7, 17, 14, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store, *, clock=None):  # type: ignore[no-untyped-def]
+def _service(store, *, clock=None):  #
     return RequeueService(store, clock or FixedClock(_LATER))
 
 
-def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-untyped-def]
+def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  #
     """The edge resolution `chunk_scope.resolved_requeue_scope` performs in production."""
     return RequeueScope(
         chunk_id=chunk_id,
@@ -66,7 +66,7 @@ def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-un
     )
 
 
-def _seed_escalated_chunk(  # type: ignore[no-untyped-def]
+def _seed_escalated_chunk(  #
     store,
     *,
     chunk="ch_1",
@@ -103,7 +103,7 @@ def _seed_escalated_chunk(  # type: ignore[no-untyped-def]
 # The domain service — happy path, the two 409s, and the pasted-command flow
 
 
-def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path) -> None:  #
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
 
@@ -115,7 +115,7 @@ def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path
     assert store.open_escalation_for_chunk("ch_1") is not None
 
 
-def test_requeue_refuses_while_a_takeover_is_open(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_requeue_refuses_while_a_takeover_is_open(tmp_path) -> None:  #
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
     store.record_takeover(
@@ -134,7 +134,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path) -> None:  # type: ig
     assert store.pending_requeue_chunk_ids() == set()
 
 
-def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path) -> None:  #
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -155,7 +155,7 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path) -> None:  # t
     assert store.pending_requeue_chunk_ids() == set()
 
 
-def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_change(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_change(tmp_path) -> None:  #
     """The pasted-command flow: a takeover opened, worked, and ended — the closure
     reason underneath never changed, so the same needs_human read covers it."""
     store = _store(tmp_path)
@@ -176,7 +176,7 @@ def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_chang
     assert "ch_1" in store.pending_requeue_chunk_ids()
 
 
-def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  #
     """An escalated chunk with no takeover ever recorded still takes a requeue mark."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
@@ -190,7 +190,7 @@ def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # 
 # FILL — the fresh attempt spawned after a pending requeue mark, and its consumption
 
 
-def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_path) -> None:  #
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
     _service(store).requeue(_scope(store))
@@ -226,7 +226,7 @@ def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_pat
     assert hub.claims == []
 
 
-def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_path) -> None:  #
     """The requeue-resume path (``InterruptedClaims._resume_requeued``) mints its fresh
     lease under the escalated lease's recorded owner (``_latest_owner`` in ``src/blizzard/runner/lifecycle/claim.py``)
     — never the default harness, even though a fresh mint carries no session yet."""
@@ -271,7 +271,7 @@ def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_pat
     assert fresh is not None and fresh.session == SessionReference("other", "sess-c")
 
 
-def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_here(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_here(tmp_path) -> None:  #
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
     _service(store).requeue(_scope(store))
@@ -299,7 +299,7 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
     assert store.held_environment_ids() == []
 
 
-def _rows(tmp_path, stmt):  # type: ignore[no-untyped-def]
+def _rows(tmp_path, stmt):  #
     engine = create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     try:
         with engine.connect() as conn:
@@ -308,7 +308,7 @@ def _rows(tmp_path, stmt):  # type: ignore[no-untyped-def]
         engine.dispose()
 
 
-def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:  #
     """One mark, untouched by the second ask; one fill, one lease, one retry charged."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store)

@@ -185,7 +185,7 @@ def test_truncation_mark_replaces_an_incomparable_current() -> None:
 # --- the pump's window decisions ----------------------------------------------------
 
 
-def _pre_read(segment: TranscriptSegmentState, *, shipped: int = 0, outstanding: int = 0):  # type: ignore[no-untyped-def]
+def _pre_read(segment: TranscriptSegmentState, *, shipped: int = 0, outstanding: int = 0):  #
     return pre_read(
         segment, chunk_shipped_bytes=shipped, chunk_max_bytes=100, outstanding_bytes=outstanding, max_buffered_bytes=50
     )
@@ -214,7 +214,7 @@ def test_pre_read_backpressure_skips() -> None:
     assert _pre_read(_segment(), shipped=99, outstanding=49).action == "read"
 
 
-def _plan(**overrides: object):  # type: ignore[no-untyped-def]
+def _plan(**overrides: object):  #
     fields: dict[str, object] = {
         "cursor": "c1",
         "new_cursor": "c2",

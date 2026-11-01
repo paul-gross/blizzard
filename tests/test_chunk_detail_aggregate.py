@@ -192,7 +192,7 @@ def test_a_repository_on_an_unhandled_forge_has_no_github_shaped_branch_link(
     forges = hub.services.forge_records
     get_many = forges.get_many
 
-    def other_kind(ids):  # type: ignore[no-untyped-def]
+    def other_kind(ids):  #
         return {key: replace(forge, kind="other") for key, forge in get_many(ids).items()}
 
     monkeypatch.setattr(forges, "get_many", other_kind)

@@ -17,7 +17,7 @@ from tests.test_analytics_events_api import _ingest_chunk, _record, _tool_turn
 pytestmark = pytest.mark.component
 
 
-def _hub_with_one_segment(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _hub_with_one_segment(tmp_path: Path):  #
     hub = build_hub(tmp_path)
     chunk_id = _ingest_chunk(hub)
     turns = [_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
@@ -52,7 +52,7 @@ def test_a_stored_segment_is_counted(tmp_path: Path) -> None:
     assert by_chunk.derived == 0  # the forced derive left its marker current: no candidate remains
 
 
-def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True) -> None:  # type: ignore[no-untyped-def]
+def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True) -> None:  #
     turns = [_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
     record = _record(chunk_id, turns=turns, segment_id=segment_id)
     record["supersedes"] = supersedes
@@ -61,12 +61,12 @@ def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None,
     assert push.status_code == 200, push.text
 
 
-def _count(hub, table) -> int:  # type: ignore[no-untyped-def]
+def _count(hub, table) -> int:  #
     with hub.engine.connect() as conn:
         return int(conn.execute(hub_store_connections(hub.engine).select(table, func.count())).scalar_one())
 
 
-def _force(hub, segment_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _force(hub, segment_id: str) -> dict:  #
     resp = hub.client.post("/api/analytics/re-derive", json={"segment_id": segment_id})
     assert resp.status_code == 200, resp.text
     return resp.json()

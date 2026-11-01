@@ -45,7 +45,7 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
     assert resp.status_code == 202, resp.text
 
 
-def _detail(hub: HubHarness, chunk_id: str) -> dict:  # type: ignore[type-arg]
+def _detail(hub: HubHarness, chunk_id: str) -> dict:  #
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()

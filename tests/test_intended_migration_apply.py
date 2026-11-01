@@ -213,13 +213,13 @@ nodes:
 """
 
 
-def _mint(hub, yaml: str) -> str:  # type: ignore[no-untyped-def]
+def _mint(hub, yaml: str) -> str:  #
     resp = hub.client.post("/api/graphs", json={"definition_yaml": yaml})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]
 
 
-def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  #
     """Mint the source graph, ingest + promote + claim a chunk on it. Returns
     ``(chunk_id, build_node_id)``."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": src_yaml}).status_code == 201
@@ -233,7 +233,7 @@ def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  # type: ignor
     return chunk_id, node_id
 
 
-def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx2.Response:  # type: ignore[no-untyped-def]
+def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx2.Response:  #
     body = {"to_graph": to_graph}
     if node is not None:
         body["node"] = node
@@ -242,7 +242,7 @@ def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -
     return resp
 
 
-def _complete(  # type: ignore[no-untyped-def]
+def _complete(  #
     hub, chunk_id: str, node_id: str, *, choice: str = "pass", epoch: int = 1, artifacts: list | None = None
 ) -> httpx2.Response:
     return hub.client.post(

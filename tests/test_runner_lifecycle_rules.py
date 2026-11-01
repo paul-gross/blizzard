@@ -756,7 +756,7 @@ def test_crash_orphaned() -> None:
 
 
 def test_lease_reconcile_move() -> None:
-    def move(view: ChunkState, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False):  # type: ignore[no-untyped-def]
+    def move(view: ChunkState, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False):  #
         return lease_reconcile_move(view, lease or _lease(), runner_id=_ME, pause_parked=parked or set(), fenced=fenced)
 
     assert move(_view(ChunkStatus.STOPPED)) is LeaseReconcileMove.ABANDON

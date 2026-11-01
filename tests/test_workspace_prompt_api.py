@@ -22,7 +22,7 @@ from tests.support_child_launch import workspace_launch
 _PROMPT = f"/api/host/workspaces/{DEFAULT_WORKSPACE_ID}/prompt"
 
 
-def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ignore[no-untyped-def]
+def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(
         root=tmp_path,

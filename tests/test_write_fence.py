@@ -175,14 +175,14 @@ def _held_by_a_writer(chunk: _Chunk, submit: Callable[[], object], write: Callab
 
 
 def _stop_under_lock(chunk: _Chunk) -> Callable[[object], None]:
-    def write(handle) -> None:  # type: ignore[no-untyped-def]
+    def write(handle) -> None:  #
         chunk.stores.lifecycle.record_stop_locked(handle, chunk.chunk_id, by="operator", at=chunk.hub.clock.now())
 
     return write
 
 
 def _restart_under_lock(chunk: _Chunk) -> Callable[[object], None]:
-    def write(handle) -> None:  # type: ignore[no-untyped-def]
+    def write(handle) -> None:  #
         chunk.stores.movement.record_restart_locked(
             handle,
             chunk.chunk_id,

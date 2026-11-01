@@ -154,7 +154,7 @@ class _World:
     def __init__(self, tmp_path: Path) -> None:
         self.hooked = _Hooked()
         actions = HubActions.of(
-            [*TEST_HUB_ACTIONS.implementations.values(), self.hooked, _BlockThenMark(), _Mark()]  # type: ignore[list-item]
+            [*TEST_HUB_ACTIONS.implementations.values(), self.hooked, _BlockThenMark(), _Mark()]  #
         )
         self.hub: HubHarness = build_hub(
             tmp_path, actions=actions, action_pass_seconds=_BOUND, action_pass_grace=_GRACE

@@ -19,12 +19,12 @@ pytestmark = pytest.mark.unit
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
 def _record(
-    store,  # type: ignore[no-untyped-def]
+    store,  #
     *,
     lease_id: str = "lease_1",
     chunk_id: str = "ch_1",
@@ -49,7 +49,7 @@ def _record(
     )
 
 
-def test_record_overload_is_idempotent_for_the_same_invocation(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_overload_is_idempotent_for_the_same_invocation(tmp_path) -> None:  #
     """Re-classifying the same exit on a later pass must write nothing — keyed on
     (lease_id, epoch, invocation_kind, invocation_identity)."""
     store = _store(tmp_path)
@@ -61,7 +61,7 @@ def test_record_overload_is_idempotent_for_the_same_invocation(tmp_path) -> None
     assert facts[0].resume_after == _NOW + timedelta(seconds=60)
 
 
-def test_record_overload_answers_none_on_insert_and_the_standing_exit_on_a_re_record(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_overload_answers_none_on_insert_and_the_standing_exit_on_a_re_record(tmp_path) -> None:  #
     """The port's return: nothing on the first write; on a re-record, the exit already standing
     — its own ordinal and resume instant, not the re-record's."""
     store = _store(tmp_path)
@@ -75,7 +75,7 @@ def test_record_overload_answers_none_on_insert_and_the_standing_exit_on_a_re_re
     assert (standing.lease_id, standing.epoch, standing.invocation_identity) == ("lease_1", 1, "1")
 
 
-def test_a_different_invocation_identity_records_its_own_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_different_invocation_identity_records_its_own_fact(tmp_path) -> None:  #
     store = _store(tmp_path)
     _record(store, invocation_identity="1", generation=1, resume_after=_NOW + timedelta(seconds=60))
     _record(
@@ -90,7 +90,7 @@ def test_a_different_invocation_identity_records_its_own_fact(tmp_path) -> None:
     assert store.overload_streak("lease_1", 1) == 2
 
 
-def test_open_overload_facts_excludes_a_fallen_through_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_open_overload_facts_excludes_a_fallen_through_fact(tmp_path) -> None:  #
     """A streak-limit fall-through's own fact carries no ``resume_after`` — never a
     backing-off candidate."""
     store = _store(tmp_path)
@@ -99,7 +99,7 @@ def test_open_overload_facts_excludes_a_fallen_through_fact(tmp_path) -> None:  
     assert store.open_overload_facts() == []
 
 
-def test_a_later_overload_supersedes_an_earlier_one_on_the_same_lease_epoch(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_later_overload_supersedes_an_earlier_one_on_the_same_lease_epoch(tmp_path) -> None:  #
     store = _store(tmp_path)
     _record(
         store,
@@ -123,7 +123,7 @@ def test_a_later_overload_supersedes_an_earlier_one_on_the_same_lease_epoch(tmp_
     assert facts[0].streak_ordinal == 2
 
 
-def test_record_reset_closes_every_open_fact_on_the_lease_epoch(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_record_reset_closes_every_open_fact_on_the_lease_epoch(tmp_path) -> None:  #
     store = _store(tmp_path)
     _record(store, resume_after=_NOW + timedelta(seconds=60))
 
@@ -133,7 +133,7 @@ def test_record_reset_closes_every_open_fact_on_the_lease_epoch(tmp_path) -> Non
     assert store.overload_streak("lease_1", 1) == 0
 
 
-def test_overload_streak_counts_only_since_the_latest_reset(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_overload_streak_counts_only_since_the_latest_reset(tmp_path) -> None:  #
     """A fresh overload after a clean-exit reset starts a new streak at ordinal 1, not a
     continuation of the one the reset closed."""
     store = _store(tmp_path)
@@ -153,7 +153,7 @@ def test_overload_streak_counts_only_since_the_latest_reset(tmp_path) -> None:  
     assert store.overload_streak("lease_1", 1) == 1
 
 
-def test_overload_streak_is_scoped_per_epoch(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_overload_streak_is_scoped_per_epoch(tmp_path) -> None:  #
     """A restart under a fresh epoch owes the prior epoch's own streak nothing — a new
     epoch always starts clean."""
     store = _store(tmp_path)

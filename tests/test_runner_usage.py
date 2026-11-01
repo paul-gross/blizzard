@@ -57,15 +57,15 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path):  #
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):  # type: ignore[no-untyped-def]
+def _build_envelope(chunk="ch_1"):  #
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
-def _seed_running_lease(  # type: ignore[no-untyped-def]
+def _seed_running_lease(  #
     store,
     *,
     chunk="ch_1",
@@ -111,16 +111,16 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _write_stdout(stdout_dir, lease_id, generation, content="<envelope>") -> None:  # type: ignore[no-untyped-def]
+def _write_stdout(stdout_dir, lease_id, generation, content="<envelope>") -> None:  #
     (stdout_dir / f"{lease_id}.{generation}.stdout").write_text(content)
 
 
-def _usage_payloads(store):  # type: ignore[no-untyped-def]
+def _usage_payloads(store):  #
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
 @pytest.mark.unit
-def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  #
     """The happy path: an exited worker's own invocation (kind=spawn, generation 1) and
     the judgement resume (kind=judge) each land their own fact, buffered outbound."""
     store = _store(tmp_path)
@@ -172,7 +172,7 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
 
 @pytest.mark.unit
 def test_advance_carries_an_estimate_on_the_outbound_payload_and_into_the_runner_window(
-    tmp_path,  # type: ignore[no-untyped-def]
+    tmp_path,  #
 ) -> None:
     """An estimate rides the outbound payload beside, never inside, the billed figure;
     ``usage_since`` sums it as its own column and does not mark the window PARTIAL."""
@@ -237,7 +237,7 @@ _SIGINT_ENVELOPE = json.dumps(
 @pytest.mark.unit
 def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(
     tmp_path, spawn_executor: Executor
-):  # type: ignore[no-untyped-def]
+):  #
     """The drain's own SIGINT leaves this envelope on stdout — through the REAL
     adapter, `record_worker` still reads its real cost, not the NULL-cost fallback."""
     store = _store(tmp_path)
@@ -278,7 +278,7 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
 @pytest.mark.unit
 def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omits_it(
     tmp_path, spawn_executor: Executor
-):  # type: ignore[no-untyped-def]
+):  #
     store = _store(tmp_path)
     _seed_running_lease(store, resolved_model="claude-opus-5")
     store.record_boundary_open(
@@ -384,7 +384,7 @@ def _opencode_step_finish(part_id: str, *, cost: float, input_tokens: int, outpu
 @pytest.mark.unit
 def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_billed_steps(
     tmp_path, spawn_executor: Executor
-):  # type: ignore[no-untyped-def]
+):  #
     """Through the REAL OpenCode adapter and a priced catalog, `record_worker` puts a billed
     step's cost on ``cost_usd`` and a subscription step's estimate on ``estimated_cost_usd``
     of the one outbound payload — each step priced alone, neither folded into the other."""
@@ -435,7 +435,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
 
 
 @pytest.mark.unit
-def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  #
     """A resume within the same lease (a later spawn generation) records kind=resume —
     a genuinely new fact, distinct from a fresh lease's kind=spawn."""
     store = _store(tmp_path)
@@ -481,7 +481,7 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
 
 
 @pytest.mark.unit
-def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_generations(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_generations(tmp_path):  #
     """A generation-2 resume that exits with no envelope of its own must fall through
     to the transcript-sum fallback, never replay generation 1's still-present file."""
     store = _store(tmp_path)
@@ -565,7 +565,7 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
 
 
 @pytest.mark.unit
-def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  #
     """A worker killed/reaped before writing a result envelope: ADVANCE sums the raw
     session transcript instead, cost left absent — never fabricated."""
     store = _store(tmp_path)
@@ -616,7 +616,7 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
 
 
 @pytest.mark.unit
-def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_path):  #
     """No envelope and no transcript lines: no fact at all — never a fabricated zero."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -639,7 +639,7 @@ def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_pa
 
 
 @pytest.mark.unit
-def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-untyped-def]
+def test_usage_replay_after_crash_is_idempotent(tmp_path):  #
     """A crash between the usage write and the completion buffer, replayed by the next
     tick reaching the same exited worker again, records nothing a second time."""
     store = _store(tmp_path)
@@ -678,7 +678,7 @@ def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-un
 
 
 @pytest.mark.unit
-def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type: ignore[no-untyped-def]
+def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  #
     """A worker that asked-and-exited burned its spawn tokens: ADVANCE parks the chunk
     and also records that spawn usage; no judgement ran, so no judge fact."""
     store = _store(tmp_path)
@@ -727,7 +727,7 @@ def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type: ignore[no-untyped-def]
+def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  #
     """Re-reaching the ask-park site (a crash between the usage write and the park,
     replayed next tick) records the worker's spawn usage only once — keyed on
     ``(lease, generation, kind)``, so the re-park drops the duplicate."""
@@ -775,7 +775,7 @@ def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # type: ignore[no-untyped-def]
+def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  #
     """A dead worker with no parseable ``<Choice>`` fails and requeues, but burned the
     same spawn + judge invocations a passing one does, so ADVANCE records both first."""
     store = _store(tmp_path)
@@ -827,7 +827,7 @@ def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # 
 
 
 @pytest.mark.unit
-def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path):  # type: ignore[no-untyped-def]
+def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path):  #
     """A killed/reaped worker that also fails verdict-less: no envelope survived, so its
     spawn usage sums from the raw transcript with cost absent (never fabricated) — and it
     is still recorded rather than lost to the requeue."""
@@ -878,7 +878,7 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
 
 
 @pytest.mark.unit
-def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type: ignore[no-untyped-def]
+def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  #
     """Tenure-end release no longer removes any lease's per-generation stdout file
     — only the periodic age-based sweep prunes it now
     (`tests/test_runner_retention_step.py`)."""
@@ -916,7 +916,7 @@ def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type: ignore[no-untyped-def]
+def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  #
     """No ``worker_stdout_dir`` (the default) — release still runs cleanly."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -938,7 +938,7 @@ def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path):  # type: ignore[no-untyped-def]
+def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -979,7 +979,7 @@ def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path)
 
 
 @pytest.mark.unit
-def test_restart_resume_records_the_crashed_generations_usage_before_waking(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_records_the_crashed_generations_usage_before_waking(tmp_path):  #
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)

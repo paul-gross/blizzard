@@ -75,11 +75,11 @@ def _row(
     )
 
 
-def _resolve(origins: list[CommitOrigin], rows: list[ConfiguredRepository]):  # type: ignore[no-untyped-def]
+def _resolve(origins: list[CommitOrigin], rows: list[ConfiguredRepository]):  #
     return resolve_chunk_repositories(origins, rows, _FORGES, minted_at=_MINTED, linked=None)
 
 
-def _in_project(origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str):  # type: ignore[no-untyped-def]
+def _in_project(origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str):  #
     return resolve_chunk_repositories(
         origins, rows, _FORGES, minted_at=_MINTED, linked=frozenset(_id(n) for n in linked), project="widgets"
     )

@@ -51,7 +51,7 @@ _COMPLETION_PAYLOAD = json.dumps(
 )
 
 
-def _ctx(hub: FakeHub, *, store=None):  # type: ignore[no-untyped-def]
+def _ctx(hub: FakeHub, *, store=None):  #
     store = store if store is not None else make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
@@ -65,13 +65,13 @@ def _ctx(hub: FakeHub, *, store=None):  # type: ignore[no-untyped-def]
     )
 
 
-def _enqueue_generic(ctx, *, kind: str = "event.recorded", chunk_id: str = "ch_1") -> int:  # type: ignore[no-untyped-def]
+def _enqueue_generic(ctx, *, kind: str = "event.recorded", chunk_id: str = "ch_1") -> int:  #
     return ctx.stores.outbound.enqueue_outbound(
         kind=kind, chunk_id=chunk_id, lease_id=None, payload="{}", created_at=_NOW
     )
 
 
-def _enqueue_completion(ctx, *, chunk_id: str = "ch_1", lease_id: str = "lease_gone") -> int:  # type: ignore[no-untyped-def]
+def _enqueue_completion(ctx, *, chunk_id: str = "ch_1", lease_id: str = "lease_gone") -> int:  #
     """Buffers a completion whose lease never exists locally — `_completion` reads that as
     already advanced on an earlier flush and returns early, so this drives the drain's own
     run-then-arm sequencing without standing up a full lease/attempt fixture."""
@@ -157,11 +157,11 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
 
     real_push_facts = hub.push_facts
 
-    def _reject_middle(facts):  # type: ignore[no-untyped-def]
+    def _reject_middle(facts):  #
         ack = real_push_facts(facts)
         return replace(ack, applied=[s for s in ack.applied if s != seqs[1]], rejected=[seqs[1]])
 
-    hub.push_facts = _reject_middle  # type: ignore[method-assign]
+    hub.push_facts = _reject_middle  #
 
     OutboundDrain(ctx).run()
 
@@ -177,11 +177,11 @@ def test_run_logs_a_route_ended_rejection_at_warning_and_any_other_at_error() ->
 
     real_push_facts = hub.push_facts
 
-    def _reject_two(facts):  # type: ignore[no-untyped-def]
+    def _reject_two(facts):  #
         ack = real_push_facts(facts)
         return replace(ack, applied=[seqs[0]], rejected=[seqs[1], seqs[2]], route_ended=[seqs[1]])
 
-    hub.push_facts = _reject_two  # type: ignore[method-assign]
+    hub.push_facts = _reject_two  #
 
     with capture_logs() as logs:
         OutboundDrain(ctx).run()
@@ -198,7 +198,7 @@ def test_run_contains_a_non_transport_failure_so_pull_returns_and_the_tick_goes_
     ctx = _ctx(hub)
     seqs = [_enqueue_generic(ctx) for _ in range(2)]
 
-    def explode(batch):  # type: ignore[no-untyped-def]
+    def explode(batch):  #
         raise RuntimeError("not a transport failure")
 
     hub.push_facts = explode  # type: ignore[method-assign]

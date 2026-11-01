@@ -53,7 +53,7 @@ def _past_expiry_ms(clock: FixedClock, hours: float = 1) -> float:
 
 def _sampler(
     credentials_path: Path,
-    handler,  # type: ignore[no-untyped-def]
+    handler,  #
     *,
     clock: FixedClock | None = None,
 ) -> AnthropicSubscriptionSampler:

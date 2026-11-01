@@ -93,23 +93,23 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 
 def test_a_zero_events_cursor_decodes_to_offset_zero() -> None:
-    assert store_module._decode_cursor(encode_cursor(0)) == 0  # type: ignore[attr-defined]
+    assert store_module._decode_cursor(encode_cursor(0)) == 0  #
 
 
 def test_a_negative_events_cursor_is_malformed() -> None:
     with pytest.raises(MalformedCursor):
-        store_module._decode_cursor(encode_cursor(-1))  # type: ignore[attr-defined]
+        store_module._decode_cursor(encode_cursor(-1))  #
 
 
 def test_an_events_cursor_of_the_wrong_arity_is_malformed_naming_the_cursor() -> None:
     cursor = encode_cursor(7, 8)
     with pytest.raises(MalformedCursor) as exc_info:
-        store_module._decode_cursor(cursor)  # type: ignore[attr-defined]
+        store_module._decode_cursor(cursor)  #
     assert exc_info.value.cursor == cursor
 
 
 def test_a_counts_limit_follows_the_grouping_and_ordering() -> None:
-    stmt = store_module._counts_stmt(  # type: ignore[attr-defined]
+    stmt = store_module._counts_stmt(  #
         _STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read", limit=5
     )
     for dialect in (postgresql.dialect(), sqlite.dialect()):

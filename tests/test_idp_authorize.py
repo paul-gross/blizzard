@@ -123,7 +123,7 @@ def test_authorize_with_session_delivers_a_signed_jwt_via_form_post(tmp_path: Pa
     jwks = hub.client.get("/api/auth/jwks.json").json()
     header = jwt.get_unverified_header(token)
     key_jwk = next(k for k in jwks["keys"] if k["kid"] == header["kid"])
-    public_key = RSAAlgorithm.from_jwk(key_jwk)  # type: ignore[arg-type]
+    public_key = RSAAlgorithm.from_jwk(key_jwk)  #
     claims = jwt.decode(
         token,
         key=public_key,  # type: ignore[arg-type]
@@ -283,7 +283,7 @@ def _claims(hub: HubHarness, resp: Response, audience: str) -> dict[str, object]
     assert token_match is not None
     jwks = hub.client.get("/api/auth/jwks.json").json()
     kid = jwt.get_unverified_header(token_match.group(1))["kid"]
-    public_key = RSAAlgorithm.from_jwk(next(k for k in jwks["keys"] if k["kid"] == kid))  # type: ignore[arg-type]
+    public_key = RSAAlgorithm.from_jwk(next(k for k in jwks["keys"] if k["kid"] == kid))  #
     return jwt.decode(
         token_match.group(1),
         key=public_key,  # type: ignore[arg-type]

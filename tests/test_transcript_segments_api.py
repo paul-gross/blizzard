@@ -73,7 +73,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  # type: ignore[no-untyped-def]
+def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  #
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
     ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
@@ -81,7 +81,7 @@ def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a")
     return _enroll(hub, runner_id)
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  # type: ignore[no-untyped-def]
+def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  #
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])

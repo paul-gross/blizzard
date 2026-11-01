@@ -31,18 +31,18 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
     with TestClient(build_hosted_hub_app(config)) as c:
 
-        def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+        def forward(method: str, url: str, *, timeout: float, **kwargs):  #
             return c.request(method.upper(), urlsplit(url).path, **kwargs)
 
         _bound["hub"] = bind_stubs(request=forward)
         yield c
 
 
-def _cli(group: str, args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
+def _cli(group: str, args: list[str], *, stdin: str | None = None):  #
     return _bound["hub"].runner.invoke(hub_group, [group, *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 
-def _repo(args: list[str]):  # type: ignore[no-untyped-def]
+def _repo(args: list[str]):  #
     return _cli("repo", args)
 
 

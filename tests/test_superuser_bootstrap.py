@@ -28,7 +28,7 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _seed_user(config, *, user_id: str, email: str) -> None:  # type: ignore[no-untyped-def]
+def _seed_user(config, *, user_id: str, email: str) -> None:  #
     engine = create_engine_from_url(config.db_url)
     with engine.begin() as conn:
         conn.execute(
@@ -36,7 +36,7 @@ def _seed_user(config, *, user_id: str, email: str) -> None:  # type: ignore[no-
         )
 
 
-def _with_superuser(config, email: str | None):  # type: ignore[no-untyped-def]
+def _with_superuser(config, email: str | None):  #
     config = replace(config, auth=AuthConfig(mode="oauth", superuser=email))
     config.config_path.write_text(config.to_toml())
     return load_hub_config(config.root)
@@ -69,13 +69,13 @@ def test_boot_reports_unclaimed_again_on_a_second_boot(tmp_path: Path) -> None:
     assert kinds.count("superuser_bootstrap_unclaimed") == 2
 
 
-def _hub_admins(config) -> list[str]:  # type: ignore[no-untyped-def]
+def _hub_admins(config) -> list[str]:  #
     engine = create_engine_from_url(config.db_url)
     with engine.connect() as conn:
         return list(conn.execute(select(s.hub_admin_facts.c.user_id).where(s.hub_admin_facts.c.granted)).scalars())
 
 
-def _claimed(config, *, user_id: str, email: str) -> None:  # type: ignore[no-untyped-def]
+def _claimed(config, *, user_id: str, email: str) -> None:  #
     engine = create_engine_from_url(config.db_url)
     with engine.begin() as conn:
         conn.execute(insert(s.superuser_bootstrap).values(email=email, claimed_user_id=user_id, updated_at=_T0))
@@ -128,7 +128,7 @@ def test_changing_auth_superuser_records_a_new_target_and_revokes_nobody(tmp_pat
     assert _hub_admins(config) == ["usr_alice"]
 
 
-def _sign_in(services, *, handle: str) -> User:  # type: ignore[no-untyped-def]
+def _sign_in(services, *, handle: str) -> User:  #
     return services.auth.link_or_mint(
         ProviderIdentity(
             subject=f"gh-{handle}",
@@ -141,7 +141,7 @@ def _sign_in(services, *, handle: str) -> User:  # type: ignore[no-untyped-def]
     )
 
 
-def _admin_memberships(config) -> list[str]:  # type: ignore[no-untyped-def]
+def _admin_memberships(config) -> list[str]:  #
     engine = create_engine_from_url(config.db_url)
     with engine.connect() as conn:
         rows = conn.execute(select(s.membership_facts.c.user_id).where(s.membership_facts.c.role == "admin"))
@@ -188,11 +188,11 @@ def test_unsetting_a_changed_target_before_it_signs_in_grants_it_nothing(tmp_pat
     assert _admin_memberships(config) == []
 
 
-def _before_the_claims_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  # type: ignore[no-untyped-def]
+def _before_the_claims_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  #
     """Run ``step`` once, after the claim's unlocked check and before its unit of work takes the identity lock."""
     begin = IdentityTransactions.begin
 
-    def begin_after_step(self: IdentityTransactions):  # type: ignore[no-untyped-def]
+    def begin_after_step(self: IdentityTransactions):  #
         monkeypatch.setattr(IdentityTransactions, "begin", begin)
         step()
         return begin(self)

@@ -44,13 +44,13 @@ _SESSION_ID = "ses_a"
 _LUNA_STEP_ESTIMATE = (40 * 0.20 + 8 * 1.20) / 1_000_000
 
 
-def _usage_payloads(store):  # type: ignore[no-untyped-def]
+def _usage_payloads(store):  #
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
 def _seed_lease(
     store, *, harness_id: str, resolved_model: str | None, judge_boundary: bool = False, started_at: datetime = _NOW
-) -> None:  # type: ignore[no-untyped-def]
+) -> None:  #
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -136,7 +136,7 @@ _EXPORT_LINE = json.dumps(
 )
 
 
-def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts_wired: bool = True):  # type: ignore[no-untyped-def]
+def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts_wired: bool = True):  #
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     (stdout_dir / "lease_1.1.stdout").write_text(_RUN_EVENT_STDOUT)
@@ -166,7 +166,7 @@ def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts
 
 def test_an_unpinned_opencode_generation_is_priced_from_the_model_its_export_names(
     tmp_path, spawn_executor: Executor
-) -> None:  # type: ignore[no-untyped-def]
+) -> None:  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model=None)
     recorder, source = _opencode_recorder(spawn_executor, tmp_path, store)
@@ -186,7 +186,7 @@ def test_an_unpinned_opencode_generation_is_priced_from_the_model_its_export_nam
     assert len(source.read_raw_lines_calls) == 1
 
 
-def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
+def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path, spawn_executor: Executor) -> None:  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model="openai/gpt-5.6-luna")
     recorder, source = _opencode_recorder(spawn_executor, tmp_path, store)
@@ -202,7 +202,7 @@ def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path, sp
     assert source.read_raw_lines_calls == []
 
 
-def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(tmp_path, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
+def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(tmp_path, spawn_executor: Executor) -> None:  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model=None)
     recorder, source = _opencode_recorder(spawn_executor, tmp_path, store, transcripts_wired=False)
@@ -218,7 +218,7 @@ def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(tmp_path
     assert source.read_raw_lines_calls == []
 
 
-def _fake_recorder(tmp_path, store, harness: FakeHarness, source: FakeTranscriptSource, *, transcripts_wired: bool):  # type: ignore[no-untyped-def]
+def _fake_recorder(tmp_path, store, harness: FakeHarness, source: FakeTranscriptSource, *, transcripts_wired: bool):  #
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     (stdout_dir / "lease_1.1.stdout").write_text("<envelope>")
@@ -247,7 +247,7 @@ def _sample(kind: str) -> UsageSample:
     )
 
 
-def test_the_judge_sample_is_attributed_to_the_model_its_own_range_names(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_the_judge_sample_is_attributed_to_the_model_its_own_range_names(tmp_path) -> None:  #
     """`record_attempt` follows the worker's rule over the judge's own boundary-to-tail
     range: the observation rides into the judge's `parse_usage` as `model`."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -274,7 +274,7 @@ def test_the_judge_sample_is_attributed_to_the_model_its_own_range_names(tmp_pat
     assert len(_usage_payloads(store)) == 2
 
 
-def test_a_pinned_lease_hands_its_stamp_to_both_samples_without_observing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_pinned_lease_hands_its_stamp_to_both_samples_without_observing(tmp_path) -> None:  #
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=CLAUDE_CODE_HARNESS_ID, resolved_model="claude-pinned", judge_boundary=True)
     handle = WorkerHandle(session_id=_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
@@ -299,7 +299,7 @@ def test_a_pinned_lease_hands_its_stamp_to_both_samples_without_observing(tmp_pa
 
 def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one_fact(
     tmp_path, spawn_executor: Executor
-) -> None:  # type: ignore[no-untyped-def]
+) -> None:  #
     capture = repo_root() / "src/blizzard/runner/harness/contracts/opencode/1.18.32"
     child = "ses_f6070f70bffeyvhNqEiKNcjN1F"
     exporter = FakeExporter(
@@ -359,7 +359,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 
 def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
     tmp_path, spawn_executor: Executor
-) -> None:  # type: ignore[no-untyped-def]
+) -> None:  #
     from tests.test_runner_harness_opencode_subagents import _events, _session, _step, _task
 
     def at(ms: int) -> datetime:

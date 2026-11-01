@@ -37,7 +37,7 @@ def _hub(
     return hub, exporter
 
 
-def _status(hub: HubHarness) -> dict:  # type: ignore[type-arg]
+def _status(hub: HubHarness) -> dict:  #
     resp = hub.client.get("/api/traces/status")
     assert resp.status_code == 200, resp.text
     return resp.json()

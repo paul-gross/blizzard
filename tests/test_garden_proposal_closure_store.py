@@ -34,7 +34,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignore[no-untyped-def]
+def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  #
     with hub.engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
@@ -62,7 +62,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
     )
 
 
-def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-untyped-def]
+def _seed_proposals(hub, proposal_ids: list[str]) -> None:  #
     with hub.engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)

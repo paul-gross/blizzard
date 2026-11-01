@@ -164,7 +164,7 @@ class _Chunk:
     def detach(self) -> None:
         assert self.hub.client.post(f"/api/chunks/{self.chunk_id}/detach").status_code == 202
 
-    def rows(self, table) -> int:  # type: ignore[no-untyped-def]
+    def rows(self, table) -> int:  #
         with self.hub.engine.connect() as conn:
             return conn.execute(
                 hub_store_connections(self.hub.engine)

@@ -96,7 +96,7 @@ class _World:
         ForgeRecordStore(connections).create(forge, change=change)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-planted", OP)
 
-    def changes(self) -> list:  # type: ignore[type-arg]
+    def changes(self) -> list:  #
         """The change log past the store's default project, whose ``create`` row the migration wrote, and the forge
         the world stores first."""
         page = self.log.page(before=None, limit=100, record_kind=None, record_key=None)
@@ -518,7 +518,7 @@ def _repo_declaration(slug: str, **stated: object) -> RepositoryDeclaration:
     )
 
 
-def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _APPLY, *, dry_run: bool = False):  # type: ignore[no-untyped-def]
+def _apply(world: _World, declaration: ConfigDeclaration, ctx: ChangeContext = _APPLY, *, dry_run: bool = False):  #
     stored = StoredConfig(
         work_sources={
             s.slug: s

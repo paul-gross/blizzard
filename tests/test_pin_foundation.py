@@ -27,7 +27,7 @@ from tests.support import hub_scoped, stamp
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 
-def _runner_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _runner_engine(tmp_path: Path):  #
     """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
     engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
@@ -37,7 +37,7 @@ def _runner_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     return engine
 
 
-def _hub_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _hub_engine(tmp_path: Path):  #
     return create_engine_from_url(init_hub(tmp_path / "hub").db_url)
 
 
@@ -85,7 +85,7 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
     assert runner_invariants(engine).run() == []
 
 
-def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int) -> None:  # type: ignore[no-untyped-def]
+def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int) -> None:  #
     """A chunk's one submission, holding ``flow_ids`` — each flow created if it does not yet exist."""
     with engine.begin() as conn:
         conn.execute(
@@ -126,12 +126,12 @@ def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tup
             )
 
 
-def _slugs(engine) -> list[str]:  # type: ignore[no-untyped-def]
+def _slugs(engine) -> list[str]:  #
     """The turn invariants' violations only — the seeded submissions carry no graph for the line-standing check."""
     return [v.invariant for v in hub_invariants(engine).run() if v.invariant.startswith("hub:one-turn-")]
 
 
-def _open_turn(engine, turn_id: str, submission_id: str) -> None:  # type: ignore[no-untyped-def]
+def _open_turn(engine, turn_id: str, submission_id: str) -> None:  #
     with engine.begin() as conn:
         conn.execute(
             insert(hub.hub_turns).values(
@@ -140,7 +140,7 @@ def _open_turn(engine, turn_id: str, submission_id: str) -> None:  # type: ignor
         )
 
 
-def _end_turn(engine, turn_id: str) -> None:  # type: ignore[no-untyped-def]
+def _end_turn(engine, turn_id: str) -> None:  #
     with engine.begin() as conn:
         conn.execute(hub_scoped(update(hub.hub_turns).where(hub.hub_turns.c.turn_id == turn_id).values(ended_at=_NOW)))
 

@@ -50,11 +50,11 @@ def _packaged(tmp_path: Path, name: str, *, prompt: str = "do the work", body: s
     return graph_yaml
 
 
-def _sync(hub: HubHarness, paths: list[Path]):  # type: ignore[no-untyped-def]
+def _sync(hub: HubHarness, paths: list[Path]):  #
     return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
 
 
-def _statuses(outcomes) -> list[tuple[str, str]]:  # type: ignore[no-untyped-def]
+def _statuses(outcomes) -> list[tuple[str, str]]:  #
     return [(o.name, o.status.value) for o in outcomes]
 
 

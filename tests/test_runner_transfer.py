@@ -109,17 +109,17 @@ def _contents(engine: sa.Engine, table: str, **where: object) -> list[dict[str, 
     return sorted((_content(table, r) for r in _rows(engine, table, **where)), key=repr)
 
 
-def _transfer(source: sa.Engine, destination: sa.Engine):  # type: ignore[no-untyped-def]
+def _transfer(source: sa.Engine, destination: sa.Engine):  #
     return build_runner_transfer(source, destination, errors=_errors(), runner_id=_MOVING, clock=_Clock())
 
 
 class _Clock:
-    def now(self):  # type: ignore[no-untyped-def]
+    def now(self):  #
         return T0
 
 
 @pytest.fixture
-def stores(tmp_path: Path):  # type: ignore[no-untyped-def]
+def stores(tmp_path: Path):  #
     here = _store(tmp_path, "here", _HERE, tag="a")
     source = _store(tmp_path, "there", _MOVING, tag="b")
     yield here, source
@@ -127,7 +127,7 @@ def stores(tmp_path: Path):  # type: ignore[no-untyped-def]
     source.dispose()
 
 
-def test_the_colliding_stores_collide(stores) -> None:  # type: ignore[no-untyped-def]
+def test_the_colliding_stores_collide(stores) -> None:  #
     here, source = stores
     for table in ("in_flight_elicitations", "env_bindings"):
         assert _rows(here, table)[0]["id"] == _rows(source, table)[0]["id"]
@@ -137,7 +137,7 @@ def test_the_colliding_stores_collide(stores) -> None:  # type: ignore[no-untype
     assert _rows(here, "graph_artifacts") == _rows(source, "graph_artifacts")
 
 
-def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_source_as_it_was(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_source_as_it_was(stores) -> None:  #
     here, source = stores
     held = {name: _contents(here, name, runner_id=_HERE) for name in _RUNNER_TABLES}
     hosts = _everything(here)
@@ -177,7 +177,7 @@ def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_sou
     assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
 
 
-def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> None:  #
     here, source = stores
     tables = ("env_bindings", "binding_releases", "pause_parks", "pause_park_resumes", "requeues", "leases")
     with source.begin() as conn:
@@ -192,7 +192,7 @@ def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> N
     assert [r["last_seq"] for r in _rows(here, "fact_counters", runner_id=_MOVING)] == [12]
 
 
-def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> None:  #
     here, source = stores
     with here.begin() as conn:
         shape = reflect(here).tables["outbox_counters"]
@@ -207,7 +207,7 @@ def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> No
     assert counters == {schema.OUTBOX_LANE_OUTBOUND: 9, schema.OUTBOX_LANE_TRANSCRIPT: 5}
 
 
-def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifacts_by_key(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifacts_by_key(stores) -> None:  #
     here, source = stores
     later = T0 + timedelta(days=1)
     with source.begin() as conn:
@@ -247,7 +247,7 @@ def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifact
     assert {r["graph_id"] for r in _rows(here, "graph_artifacts")} == {"graph_id-1", "gr_other"}
 
 
-def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores) -> None:  #
     here, source = stores
 
     _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"})
@@ -258,7 +258,7 @@ def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores) -
     assert prompts == {_WORKSPACE: "prompt-1", "ws-new": "prompt-1"}
 
 
-def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_changes_nothing(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_changes_nothing(stores) -> None:  #
     here, source = stores
     with source.begin() as conn:
         conn.execute(sa.update(reflect(source).tables["workspace_prompt"]).values(prompt="theirs"))
@@ -270,7 +270,7 @@ def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_c
     assert _everything(here) == before
 
 
-def test_a_copy_records_the_ingest_it_was_given(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_records_the_ingest_it_was_given(stores) -> None:  #
     here, source = stores
     ingest = HostIngest(runner_id=_MOVING, source="/hosts/there", source_alive_at=None, ingested_at=T0)
 
@@ -282,7 +282,7 @@ def test_a_copy_records_the_ingest_it_was_given(stores) -> None:  # type: ignore
 
 
 @pytest.mark.parametrize("keep_counters", [True, False])
-def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counters: bool) -> None:  # type: ignore[no-untyped-def]
+def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counters: bool) -> None:  #
     here, source = stores
     _transfer(source, here).copy_runner()
     held = {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES}
@@ -299,7 +299,9 @@ def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counte
     assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
 
 
-def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_no_row_of_it_names_it(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_no_row_of_it_names_it(
+    stores,
+) -> None:  #
     here, source = stores
     with source.begin() as conn:
         conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
@@ -310,7 +312,7 @@ def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_
     assert prompts == {_WORKSPACE: "prompt-1", "ws-new": "prompt-1"}
 
 
-def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carries_no_prompt(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carries_no_prompt(stores) -> None:  #
     here, source = stores
     with source.begin() as conn:
         conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
@@ -321,7 +323,7 @@ def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carrie
     assert _rows(here, "workspace_prompt") == before
 
 
-def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it_lacks(stores) -> None:  # type: ignore[no-untyped-def]
+def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it_lacks(stores) -> None:  #
     _, source = stores
     with source.begin() as conn:
         conn.execute(sa.text("DROP TABLE external_usage_samples"))

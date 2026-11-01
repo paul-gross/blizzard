@@ -132,7 +132,7 @@ def test_list_users_query_count_is_independent_of_user_count(tmp_path: Path) -> 
     large_token = seed_session(large, admin_large)
     _seed_users_with_identities(large, 6)  # 3x the small fixture
 
-    def call(hub, token: str) -> None:  # type: ignore[no-untyped-def]
+    def call(hub, token: str) -> None:  #
         resp = hub.client.get("/api/users", headers=_cookie(token))
         assert resp.status_code == 200, resp.text
 

@@ -31,20 +31,20 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
     with TestClient(build_hosted_hub_app(config)) as c:
 
-        def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+        def forward(method: str, url: str, *, timeout: float, **kwargs):  #
             return c.request(method.upper(), urlsplit(url).path, **kwargs)
 
         _bound["hub"] = bind_stubs(request=forward)
         yield c
 
 
-def _cli(group: str, args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
+def _cli(group: str, args: list[str], *, stdin: str | None = None):  #
     """Run one ``hub`` verb. Its ``output`` interleaves stdout with stderr, where the hosted app's sweeps log
     while the verb runs, so a ``--json`` payload is parsed from ``stdout`` alone."""
     return _bound["hub"].runner.invoke(hub_group, [group, *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 
-def _source(args: list[str]):  # type: ignore[no-untyped-def]
+def _source(args: list[str]):  #
     return _cli("source", args)
 
 
@@ -157,7 +157,7 @@ repositories:
 """
 
 
-def _config(args: list[str]):  # type: ignore[no-untyped-def]
+def _config(args: list[str]):  #
     return _cli("config", args)
 
 

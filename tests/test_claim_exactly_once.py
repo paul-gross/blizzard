@@ -104,7 +104,7 @@ def test_two_hub_processes_racing_a_claim_over_one_store_yield_exactly_one_winne
     start = threading.Barrier(2)
     results: dict[str, int] = {}
 
-    def claim(hub, runner: str) -> None:  # type: ignore[no-untyped-def]
+    def claim(hub, runner: str) -> None:  #
         body = _claim_body(runner) | {"chunk_id": chunk_id}
         start.wait()  # release both processes' threads together to maximize the race
         results[runner] = hub.client.post("/api/fleet/routes", json=body).status_code
