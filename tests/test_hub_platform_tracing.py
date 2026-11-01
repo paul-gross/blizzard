@@ -59,7 +59,7 @@ def _config(tmp_path: Path) -> HubConfig:
     return init_hub(tmp_path / "hub")
 
 
-def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list:
+def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[Any]:
     handle.shutdown(5.0)
     return list(exporter.get_finished_spans())
 
@@ -199,7 +199,7 @@ def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | N
     return seed_runner(tenant_services_of(build_hosted_hub_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
-def _server_span(spans: list, prefix: str):
+def _server_span(spans: list[Any], prefix: str):
     server = [s for s in spans if s.kind.name == "SERVER" and s.name.startswith(prefix)]
     assert len(server) == 1, [s.name for s in spans]
     return server[0]

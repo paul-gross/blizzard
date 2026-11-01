@@ -74,7 +74,13 @@ def _snapshot(root: Path) -> dict[str, bytes]:
     }
 
 
-def _cut(root: Path, version: str, monkeypatch: pytest.MonkeyPatch, breaks: list | None = None, tag_exit: int = 0):
+def _cut(
+    root: Path,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+    breaks: list[dict[str, str | None]] | None = None,
+    tag_exit: int = 0,
+):
     stub_compat(root, monkeypatch, breaks=[] if breaks is None else breaks, tag_exit=tag_exit)
     monkeypatch.chdir(root)
     return CliRunner().invoke(main, ["cut", version])

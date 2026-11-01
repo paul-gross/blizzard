@@ -113,7 +113,7 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
             chunk_id = ingest(hub, [{"source": "default", "ref": str(i)}])
             with hub.engine.begin() as conn:
                 _marker(conn, chunk_id, "merged/acme/one", f"sha-{i}", i)
-        delivery_params: list[tuple] = []
+        delivery_params: list[tuple[Any, ...]] = []
 
         def watch(conn, cursor, statement, parameters, context, executemany, *, observed=delivery_params):
             if "FROM artifacts" in statement and " LIKE " in statement:

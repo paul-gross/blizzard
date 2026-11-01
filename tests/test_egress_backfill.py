@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -292,7 +293,9 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     assert "backfill_max_window" in wide.output
 
 
-def _events_backfill(world: _Events, since: datetime, until: datetime, *, dry_run: bool = False) -> tuple:
+def _events_backfill(
+    world: _Events, since: datetime, until: datetime, *, dry_run: bool = False
+) -> tuple[Any, InMemoryEgressWriter]:
     written = InMemoryEgressWriter()
     config = EgressConfig(directory=Path("unused"), settle_seconds=0)
     result = _service(world.hub, config, written).backfill(since, until, dataset="events", dry_run=dry_run)

@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import httpx2
 import pytest
@@ -152,7 +152,7 @@ def _window(hub: HubHarness, **extra: object) -> dict[str, object]:
     return {"since": _T0.isoformat(), "until": until.isoformat(), **extra}
 
 
-def _cursor_rows(hub: HubHarness) -> list[tuple]:
+def _cursor_rows(hub: HubHarness) -> list[tuple[Any, ...]]:
     with hub.engine.connect() as conn:
         return [
             tuple(r)

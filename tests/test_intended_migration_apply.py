@@ -8,6 +8,7 @@ cleared intent) or falls through unchanged (`auto` with no destination-name matc
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -243,7 +244,13 @@ def _set_intent(hub: HubHarness, chunk_id: str, *, to_graph: str, node: str | No
 
 
 def _complete(
-    hub: HubHarness, chunk_id: str, node_id: str, *, choice: str = "pass", epoch: int = 1, artifacts: list | None = None
+    hub: HubHarness,
+    chunk_id: str,
+    node_id: str,
+    *,
+    choice: str = "pass",
+    epoch: int = 1,
+    artifacts: list[dict[str, Any]] | None = None,
 ) -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",

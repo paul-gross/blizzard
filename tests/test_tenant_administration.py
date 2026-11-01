@@ -8,6 +8,7 @@ with its state."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -98,7 +99,7 @@ def test_a_created_tenant_starts_with_the_packaged_graphs_and_its_hub_sequence_a
     assert _hub_sequence(hub, created.tenant_id) == [("hub", 1)]
 
 
-def _projects_and_changes(hub: HubHarness, tenant: TenantId) -> tuple[list[tuple], list[tuple]]:
+def _projects_and_changes(hub: HubHarness, tenant: TenantId) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
     p, c = schema.projects.c, schema.config_changes.c
     with hub.engine.connect() as conn:
         projects = conn.execute(
