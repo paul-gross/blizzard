@@ -109,11 +109,37 @@ def test_rendering_a_runner_and_loading_it_keeps_its_levers(tmp_path: Path) -> N
     assert built.config.throttle == _SETTINGS
 
 
+@pytest.mark.parametrize("lead", [-100, -5, 0, 100])
+def test_signed_leads_round_trip(tmp_path: Path, lead: int) -> None:
+    runner = f'subscription = "plan"\n[runner.throttle.pace]\nlead_pct = {lead}\n'
+    runner += f"[[runner.throttle.pace.taper]]\nfrom_pct = 50\nlead_pct = {lead}\n"
+    write_minimal_host(tmp_path / "a", top=_SUBSCRIPTION.format(provider="anthropic"), runner=runner)
+    rendered = load_host_config(tmp_path / "a").to_toml()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "blizzard-host.toml").write_text(rendered)
+    (built,) = load_host_config(tmp_path / "b").projections(_TOKEN)
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == ThrottleSettings(pace=PaceSettings(None, lead, (TaperStep(50, lead),)))
+
+
 @pytest.mark.parametrize(
     ("runner", "key"),
     [
         ("[runner.throttle.pace]\nlead_pct = 101", "throttle.pace.lead_pct"),
-        ("[runner.throttle.pace]\nlead_pct = -1", "throttle.pace.lead_pct"),
+        ("[runner.throttle.pace]\nlead_pct = -101", "throttle.pace.lead_pct"),
+        (
+            "[runner.throttle.pace]\n[[runner.throttle.pace.taper]]\nfrom_pct = 1\nlead_pct = -101",
+            "throttle.pace.taper[1].lead_pct",
+        ),
+        (
+            "[runner.throttle.pace]\n[[runner.throttle.pace.taper]]\nfrom_pct = 1\nlead_pct = 101",
+            "throttle.pace.taper[1].lead_pct",
+        ),
+        (
+            "[runner.throttle.pace]\n[[runner.throttle.pace.taper]]\nfrom_pct = -1\nlead_pct = -1",
+            "throttle.pace.taper[1].from_pct",
+        ),
+        ("[runner.throttle.utilization]\nbelow_pct = -1", "throttle.utilization.below_pct"),
         ("[runner.throttle.pace]\nwindow = ''", "throttle.pace.window"),
         ("[runner.throttle.pace]\n[[runner.throttle.pace.taper]]\nlead_pct = 1", "throttle.pace.taper[1].from_pct"),
         ("[runner.throttle.pace]\n[[runner.throttle.pace.taper]]\nfrom_pct = 1", "throttle.pace.taper[1].lead_pct"),

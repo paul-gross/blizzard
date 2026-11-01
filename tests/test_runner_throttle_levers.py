@@ -77,6 +77,34 @@ def test_pace_within_the_lead_admits_and_names_no_until() -> None:
     assert answer.until is None
 
 
+@pytest.mark.parametrize("lead", [5.0, 0.0, -5.0])
+def test_pace_catches_up_to_each_signed_lead(lead: float) -> None:
+    window = _week(40, elapsed_days=7 * 0.30)
+    answer = _pace(PaceSettings(window="7d", lead_pct=lead), _sample(window))
+    assert not answer.admits
+    assert answer.until == window.resets_at - timedelta(seconds=_WEEK * (100 - (40 - lead)) / 100)
+
+
+def test_negative_lead_holds_opening_and_admits_at_boundary() -> None:
+    settings = PaceSettings(window="7d", lead_pct=-5)
+    opening = _pace(settings, _sample(_week(0, elapsed_days=7 * 0.01)))
+    assert not opening.admits
+    assert opening.setting == "7d, lag 5 points"
+    assert opening.in_force == "lag 5"
+    assert _pace(settings, _sample(_week(40, elapsed_days=7 * 0.46))).admits
+    assert not _pace(settings, _sample(_week(40, elapsed_days=7 * 0.44))).admits
+
+
+def test_negative_taper_and_reset_cap() -> None:
+    settings = PaceSettings(window="7d", lead_pct=5, taper=(TaperStep(90, -5),))
+    window = _week(97, elapsed_days=7 * 0.98)
+    answer = _pace(settings, _sample(window))
+    assert not answer.admits
+    assert answer.until == window.resets_at
+    assert answer.in_force == "lag 5 above 90%"
+    assert answer.setting == "7d, lead 5 points, lag 5 above 90%"
+
+
 def test_pace_without_a_named_window_judges_the_longest_the_sample_reports() -> None:
     short = _window("5h", 99.0, timedelta(hours=1), seconds=5 * 3600)
 

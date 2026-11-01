@@ -156,8 +156,10 @@ hours = ["19:00-08:00"]
 
 - **Pace** admits while the window's spent share is at most its elapsed share plus the lead. Five days into a seven-day
   window the elapsed share is 71, so a window 86 percent spent declines under the default lead of 5. Each taper step
-  narrows the lead from its `from_pct` of spend onward. A window the provider reports as null has nothing to pace, and
-  admits.
+  sets the lead from its `from_pct` of spend onward. The lead and each taper lead accept -100 to 100 points: `-5` holds
+  spend at least five points behind elapsed, so even zero spend waits through the opening five percent of a new window.
+  A hold that cannot clear before reset reports the reset time. A window the provider reports as null has nothing to
+  pace, and admits.
 - **Utilization** admits while every named window, or every window the sample reports when none is named, is under
   `below_pct`. It waits for the soonest reset among the windows over the line. A named window the provider reports as
   null is a limit the plan does not impose: it stands under the line and reads `<window>: no limit`. Anthropic's top
