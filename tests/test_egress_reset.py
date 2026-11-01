@@ -94,8 +94,7 @@ def test_the_sweep_skips_its_tick_while_a_reset_holds_the_pass_lock(tmp_path: Pa
     hub, graph = egress_hub(tmp_path, SETTLED)
     writer = InMemoryEgressWriter()
     lock = threading.Lock()
-    sweep = egress_sweep(hub, writer)
-    sweep._pass_lock = lock
+    sweep = egress_sweep(hub, writer, pass_lock=lock)
     sweep.sweep()
     closed_step(hub, graph, 1)
     cursors = egress_cursor_rows(hub)

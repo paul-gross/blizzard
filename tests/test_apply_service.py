@@ -314,8 +314,7 @@ def test_a_fenced_migration_write_answers_the_refusal() -> None:
 
 
 def test_a_migration_locks_reads_and_writes_the_submitted_chunk_through_the_lock_handle() -> None:
-    service, ports, _clock = _apply_service(replace(AT_BUILD, promoted=False))
-    exclusive = cast(_FakeExclusiveWrites, service._exclusive)
+    service, ports, _clock, exclusive = _apply_service_with_lock(replace(AT_BUILD, promoted=False))
 
     service.apply(CHUNK, GRAPH, completion_submission("hand-off"), targets=_HAND_OFF)
 

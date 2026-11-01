@@ -108,7 +108,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
 ) -> None:
     hub, exporter = _hub(tmp_path)
     sweep = trace_export_sweep(hub)
-    append = sweep._steps.append_cursor
+    append = sweep.steps.append_cursor
     attempts = 0
 
     def append_once_failed(record: TraceCheckpoint) -> None:
@@ -348,7 +348,7 @@ def test_a_failed_jump_write_retries_and_records_the_skipped_window_once(
 ) -> None:
     restarted = _gapped_restart(tmp_path)
     sweep = trace_export_sweep(restarted)
-    append = sweep._steps.append_cursor
+    append = sweep.steps.append_cursor
     attempts = 0
 
     def append_once_failed(record: TraceCheckpoint) -> None:
