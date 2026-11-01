@@ -473,10 +473,10 @@ def test_the_selftest_canary_env_withholds_otel_passthrough_under_the_graphs_tra
     seams = runner_seams(
         config,
         clock=FixedClock(_NOW),
-        process=None,  # type: ignore[arg-type]
+        process=LinuxProcessProbe(),
         children=CHILDREN,
         runner_stores=stores,
         tracing=TracingSettings.of({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}),
     )
 
-    assert "OTEL_CANARY_PROBE" not in seams.seams.selftests._scratch_git._env.variables  # type: ignore[union-attr]
+    assert "OTEL_CANARY_PROBE" not in seams.seams.selftests._scratch_git._env.variables
