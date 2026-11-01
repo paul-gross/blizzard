@@ -19,7 +19,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -436,7 +435,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
         session = app.state.services.auth.mint_session(
             seed_user(harness, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # type: ignore[arg-type]
         )[0]
-        SessionFile.of().save("http://testserver", session)
+        bound.sessions.save("http://testserver", session)
         result = bound.runner.invoke(
             hub_group,
             ["chunk", "list"],
