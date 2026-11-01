@@ -249,6 +249,13 @@ export function hubWorkItemsBatchKey(chunkIds: readonly string[]): readonly unkn
   return ['hub', 'work-items-batch', chunkIds];
 }
 
+/** One chunk's work items as the board's bulk read answered them, without comments. Board-owned, outside the
+ * `[hub, chunk, id]` prefix and apart from {@link hubChunkWorkItemsKey}: the dock reads that entry for its comments,
+ * which a bulk answer does not carry, so the board never writes it. */
+export function hubBoardChunkWorkItemsKey(chunkId: string): readonly unknown[] {
+  return ['hub', 'board-work-items', chunkId];
+}
+
 /** One minted graph's full structure, keyed by id. */
 export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];

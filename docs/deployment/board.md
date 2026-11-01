@@ -37,11 +37,11 @@ out to its item at the work source.
 The titles are a second read, made after the chunk list has answered, so the lanes fill first. The board reads its
 chunks in batches of 100, and each batch's cards gain their titles as that batch answers. Until then each title is a
 one-line placeholder under its label; a chunk whose items failed to read keeps its labels alone. While the chunk list
-itself is first loading, each lane and the list fill with placeholder cards and rows. Each chunk's items are read
-through its work source as the chunk page reads them ([work-sources.md](./work-sources.md)), and the board reuses what
-it read for five minutes, across live updates and reconnects alike. For a GitHub source a read costs two API requests
-per item, so loading the board spends the source's rate limit in proportion to the items on it not read in the last five
-minutes.
+itself is first loading, each lane and the list fill with placeholder cards and rows. Each batch is one request to the
+hub's bulk read of work items ([work-sources.md](./work-sources.md)), which asks each work source once however many of
+the batch's items it holds, and the board reuses what it read for five minutes, across live updates and reconnects
+alike. For a GitHub source a batch costs one GraphQL request, so loading the board spends the source's rate limit in
+proportion to the batches on it not read in the last five minutes, not to its items.
 
 ## The Delivery band
 

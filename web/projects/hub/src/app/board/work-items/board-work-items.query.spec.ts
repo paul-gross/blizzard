@@ -2,10 +2,10 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, hubChunkWorkItemsKey, hubClient, type WorkItemsView } from 'fleet';
+import { FLEET_CLOCK, hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey, hubClient, type WorkItemsView } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient, workItemEntry } from 'fleet/testing';
 import { WORK_ITEMS_BATCH_SIZE } from './board-work-items.model';
-import { injectBoardWorkItemsQuery, WORK_ITEMS_READ_CONCURRENCY } from './board-work-items.query';
+import { injectBoardWorkItemsQuery } from './board-work-items.query';
 
 @Component({
   selector: 'app-test-board-work-items-host',
@@ -20,13 +20,30 @@ class TestHost {
 const NOW = 10_000_000;
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `ch_${String(i).padStart(4, '0')}`);
 
-/** The chunk id a `/api/chunks/{id}/work-items` path names. */
-const chunkOf = (path: string) => path.split('/')[3];
+/** The chunk ids a bulk `/api/work-items` request names. */
+const idsOf = (search: string) => new URLSearchParams(search).getAll('chunk_id');
 
 const titled = (chunkId: string): WorkItemsView => ({
   items: [
-    workItemEntry({ source: 'hub', ref: chunkId, title: chunkId, fetched_at: 't', label: null, body: null, web_url: null }),
+    workItemEntry({
+      source: 'hub',
+      ref: chunkId,
+      title: chunkId,
+      fetched_at: 't',
+      label: null,
+      body: null,
+      web_url: null,
+    }),
   ],
+});
+
+/** The bulk answer for the chunks a request names, omitting any in `omit`. */
+const bulkAnswer = (search: string, omit: readonly string[] = []) => ({
+  chunks: Object.fromEntries(
+    idsOf(search)
+      .filter((id) => !omit.includes(id))
+      .map((id) => [id, titled(id).items]),
+  ),
 });
 
 describe('injectBoardWorkItemsQuery', () => {
@@ -35,7 +52,9 @@ describe('injectBoardWorkItemsQuery', () => {
   afterEach(() => stub?.restore());
 
   const mount = (seed?: (client: QueryClient) => void) => {
-    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     seed?.(queryClient);
     TestBed.configureTestingModule({
       imports: [TestHost],
@@ -58,60 +77,88 @@ describe('injectBoardWorkItemsQuery', () => {
     return fixture.componentInstance.workItems();
   };
 
-  it('answers every chunk past one batch, keyed by chunk id, and fills the dock entry', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => titled(chunkOf(path)));
+  it('reads 20 chunks in one request', async () => {
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
+    const all = ids(20);
+    const found = await readAll(all);
+
+    expect(found.size).toBe(20);
+    expect(found.get('ch_0019')?.items?.[0].title).toBe('ch_0019');
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0].path).toBe('/api/work-items');
+    expect(idsOf(stub.requests[0].search)).toEqual(all);
+  });
+
+  it('answers every chunk past one batch with one request per batch', async () => {
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
     const all = ids(WORK_ITEMS_BATCH_SIZE + 5);
     const found = await readAll(all);
 
     expect(found.size).toBe(all.length);
     expect(found.get('ch_0104')?.items?.[0].title).toBe('ch_0104');
-    expect(stub.requests).toHaveLength(all.length);
-    expect(queryClient.getQueryData(hubChunkWorkItemsKey('ch_0000'))).toEqual(titled('ch_0000'));
+    expect(stub.requests).toHaveLength(2);
+    expect(stub.requests.map((r) => idsOf(r.search).length).sort((a, b) => a - b)).toEqual([5, WORK_ITEMS_BATCH_SIZE]);
+  });
+
+  it('never writes the dock entry, holding what it read under its own key', async () => {
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
+    await readAll(['ch_a']);
+
+    expect(queryClient.getQueryData(hubChunkWorkItemsKey('ch_a'))).toBeUndefined();
+    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a'))).toEqual(titled('ch_a'));
   });
 
   it('reuses a chunk read within the hold even once a live update has invalidated it', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => titled(chunkOf(path)));
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
     const found = await readAll(['ch_held', 'ch_new'], (client) => {
-      client.setQueryData(hubChunkWorkItemsKey('ch_held'), titled('ch_held'), { updatedAt: NOW - 60_000 });
-      void client.invalidateQueries({ queryKey: hubChunkWorkItemsKey('ch_held') });
+      client.setQueryData(hubChunkWorkItemsKey('ch_held'), titled('ch_held'), {
+        updatedAt: NOW - 60_000,
+      });
+      void client.invalidateQueries({
+        queryKey: hubChunkWorkItemsKey('ch_held'),
+      });
     });
 
-    expect(stub.requests.map((r) => chunkOf(r.path))).toEqual(['ch_new']);
+    expect(stub.requests.flatMap((r) => idsOf(r.search))).toEqual(['ch_new']);
     expect(found.get('ch_held')).toEqual(titled('ch_held'));
   });
 
+  it("reuses a chunk the board's own earlier read holds", async () => {
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
+    await readAll(['ch_held'], (client) => {
+      client.setQueryData(hubBoardChunkWorkItemsKey('ch_held'), titled('ch_held'), { updatedAt: NOW - 60_000 });
+    });
+
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('re-reads a chunk whose last read is past the hold', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => titled(chunkOf(path)));
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search));
     await readAll(['ch_old'], (client) => {
-      client.setQueryData(hubChunkWorkItemsKey('ch_old'), titled('ch_old'), { updatedAt: NOW - 6 * 60_000 });
+      client.setQueryData(hubChunkWorkItemsKey('ch_old'), titled('ch_old'), {
+        updatedAt: NOW - 6 * 60_000,
+      });
     });
 
-    expect(stub.requests.map((r) => chunkOf(r.path))).toEqual(['ch_old']);
+    expect(stub.requests.flatMap((r) => idsOf(r.search))).toEqual(['ch_old']);
   });
 
-  it('answers a chunk whose read fails as carrying no items, keeping the rest', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) =>
-      chunkOf(path) === 'ch_bad' ? stubError(502, { detail: 'forge down' }) : titled(chunkOf(path)),
-    );
-    const found = await readAll(['ch_bad', 'ch_ok']);
+  it('answers a chunk the bulk answer omits as carrying no items, keeping the rest, and holds only the answered', async () => {
+    stub = stubRequestClient(hubClient, (_method, _path, search) => bulkAnswer(search, ['ch_gone']));
+    const found = await readAll(['ch_gone', 'ch_ok']);
 
-    expect(found.get('ch_bad')).toEqual({ items: [] });
+    expect(found.get('ch_gone')).toEqual({ items: [] });
     expect(found.get('ch_ok')?.items?.length).toBeGreaterThan(0);
+    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_gone'))).toBeUndefined();
   });
 
-  it(`never has more than ${WORK_ITEMS_READ_CONCURRENCY} reads of a batch in flight`, async () => {
-    let inFlight = 0;
-    let peak = 0;
-    stub = stubRequestClient(hubClient, async (_method, path) => {
-      inFlight += 1;
-      peak = Math.max(peak, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      inFlight -= 1;
-      return titled(chunkOf(path));
-    });
-    await readAll(ids(20));
+  it('answers every unheld chunk as carrying no items when the bulk call fails, holding none', async () => {
+    stub = stubRequestClient(hubClient, () => stubError(502, { detail: 'hub down' }));
+    const found = await readAll(['ch_a', 'ch_b']);
 
-    expect(peak).toBe(WORK_ITEMS_READ_CONCURRENCY);
+    expect(found.get('ch_a')).toEqual({ items: [] });
+    expect(found.get('ch_b')).toEqual({ items: [] });
+    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a'))).toBeUndefined();
   });
 
   it("shows a batch's titles as soon as it answers, while a later batch still reads", async () => {
@@ -119,9 +166,9 @@ describe('injectBoardWorkItemsQuery', () => {
     const held = new Promise<void>((resolve) => (release = resolve));
     const all = ids(WORK_ITEMS_BATCH_SIZE + 1);
     const last = all[all.length - 1];
-    stub = stubRequestClient(hubClient, async (_method, path) => {
-      if (chunkOf(path) === last) await held;
-      return titled(chunkOf(path));
+    stub = stubRequestClient(hubClient, async (_method, _path, search) => {
+      if (idsOf(search).includes(last)) await held;
+      return bulkAnswer(search);
     });
     const fixture = mount();
     fixture.componentInstance.chunkIds.set(all);

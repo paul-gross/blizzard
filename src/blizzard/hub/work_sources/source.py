@@ -8,10 +8,10 @@ so a registry can loop over every binding."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.models import User
@@ -104,6 +104,21 @@ class IWorkSource(Protocol):
         ...
 
 
+@runtime_checkable
+class IWorkSourceBatchReader(Protocol):
+    """A binding's batch read — many pointers in a bounded number of calls to its source, a capability beside
+    :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator`, not part of :class:`IWorkSource`: a binding with
+    none is read pointer by pointer through :meth:`IWorkSource.fetch`."""
+
+    def fetch_many(
+        self, pointers: Sequence[WorkRef], *, include_comments: bool
+    ) -> Mapping[WorkRef, WorkItem | WorkSourceError]:
+        """Every pointer's item, or the :class:`WorkSourceError` that pointer alone failed with — never an
+        exception for a per-pointer failure. ``include_comments`` false leaves each item's ``comments`` empty and
+        spares the source the read."""
+        ...
+
+
 class IWorkSourceRegistry(Protocol):
     """The hub's work sources, each looked up by its key — ``hub`` for the built-in source, a configured source's id
     otherwise; only :meth:`resolve` reads a slug."""
@@ -149,6 +164,11 @@ class IWorkSourceRegistry(Protocol):
     def editor(self, source: str) -> IWorkEditor | None:
         """The editor half of the binding keyed ``source``, or ``None`` when that source has no browsable item
         surface — the structural "never edited" a non-editing source gets."""
+        ...
+
+    def batch_reader(self, source: str) -> IWorkSourceBatchReader | None:
+        """The batch read of the binding keyed ``source``, or ``None`` when that source is unconfigured or its
+        binding reads only pointer by pointer."""
         ...
 
     def resolve(self, token: str) -> WorkRef | None:

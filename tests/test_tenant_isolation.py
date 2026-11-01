@@ -250,6 +250,11 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/chunks/{chunk_id}/transcripts"): _f(),
     ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): _f(),
     ("GET", "/api/chunks/{chunk_id}/work-items"): _f(),
+    ("GET", "/api/work-items"): _f(
+        status=200,
+        params={"chunk_id": "{chunk_id}"},
+        reason="answers the work items of the named chunks it holds: another tenant's chunk is left out as unknown",
+    ),
     ("GET", "/api/runs"): _LIST,
     ("GET", "/api/runs/{chunk_id}"): _f(ids=_RUN),
     # -- configuration ---------------------------------------------------------------------------------------

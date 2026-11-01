@@ -61,9 +61,18 @@ class _World:
         return GitHubWorkSource(client, source_id="widget", slug="widget", repo="acme/widget", web_base="x", gate=gate)
 
 
+def _batch(source: GitHubWorkSource) -> object:
+    """``fetch_many`` answers a per-pointer error rather than raising it; surfaced here so it joins the table."""
+    outcome = source.fetch_many([_POINTER], include_comments=False)[_POINTER]
+    if isinstance(outcome, WorkSourceError):
+        raise outcome
+    return outcome
+
+
 def _calls(source: GitHubWorkSource) -> list[tuple[Callable[[], object], type[Exception]]]:
     return [
         (lambda: source.fetch(_POINTER), WorkSourceError),
+        (lambda: _batch(source), WorkSourceError),
         (lambda: source.set_status(_POINTER, WorkStatusMarker.INGESTED), WorkAnnotateError),
         (lambda: source.clear_status(_POINTER), WorkAnnotateError),
         (source.marked_refs, WorkAnnotateError),

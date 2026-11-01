@@ -30,7 +30,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceBatchReader, IWorkSourceRegistry, WorkSourceError
 
 
 class IBuiltInWorkSource(IWorkSource, IWorkEditor, IWorkCloser, Protocol):
@@ -157,6 +157,10 @@ class StoreWorkSourceRegistry:
 
     def editor(self, source: str) -> IWorkEditor | None:
         return self._built_in if source == RESERVED_HUB_SOURCE_NAME else None
+
+    def batch_reader(self, source: str) -> IWorkSourceBatchReader | None:
+        bound = self.get(source)
+        return bound if isinstance(bound, IWorkSourceBatchReader) else None
 
     def resolve(self, token: str) -> WorkRef | None:
         for sep in (":", "#"):

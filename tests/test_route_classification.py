@@ -171,6 +171,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("PATCH", "/api/chunks/{chunk_id}"): Permission.CHUNK_CONTROL,
     ("DELETE", "/api/chunks/{chunk_id}"): Permission.CHUNK_CONTROL,
     ("GET", "/api/chunks/{chunk_id}/work-items"): Permission.FLEET_VIEW,
+    ("GET", "/api/work-items"): Permission.FLEET_VIEW,
     # The issue-#55 deprecated alias onto the same handler — classified identically,
     # because an alias that fell into a different plane would be an authz hole.
     ("GET", "/api/chunks/{chunk_id}/pm-items"): Permission.FLEET_VIEW,
