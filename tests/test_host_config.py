@@ -720,6 +720,8 @@ def test_a_tools_table_decides_the_host_tool_profile_whatever_the_runners_say(tm
     other = '[runner.worker]\npath_prepend = ["/opt/other"]\n'
     config = load_host_config(_write(tmp_path / "host", _two_runners(_XPS_WORKER, other, tools)))
 
+    assert config.tool_path_prepend == ("/opt/host",)
+    assert config.tool_env_passthrough == ("HOST_VAR",)
     assert config.host_view().worker_path_prepend == ("/opt/host",)
     assert config.host_view().worker_env_passthrough == ("HOST_VAR",)
 
