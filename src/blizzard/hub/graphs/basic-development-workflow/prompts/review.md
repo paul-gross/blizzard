@@ -1,13 +1,12 @@
 # Review
 
-This is a chunk's review node-step, run cold by a fresh session that did not build the work: review the change against
-the work item's intent. An earlier `review-findings` asset makes this a re-visit, scoped to the delta (below); with
-none, review the whole change.
+Review cold against the work item. Earlier `review-findings` make this a delta re-visit; otherwise review the whole
+change.
 
 ## Check out the change
 
-Run `blizzard runner artifact list` first; its `git_commit` artifacts name each repo's branch and commit — check each
-repo out to the newest (a rebase may have moved it) in the leased environment(s) and confirm it before reading any diff.
+Run `blizzard runner artifact list` first. Take the newest `git_commit` per repo; check out and confirm each tip in its
+leased environment before reading the diff.
 
 ## Review the work
 
@@ -16,11 +15,9 @@ Judge each axis — correctness, architecture (conformance to the project's arch
 and, per axis, the documents they route this change's code to, until you reach the rules themselves. Judge from what you
 read, not memory, naming the criterion a finding violates when one applies.
 
-Use the workspace's review tooling; exercise the change's end-to-end flows in the chunk's environment. Commit no fix
-here — review observes, build repairs.
+Use workspace review tooling; exercise end-to-end flows in the chunk's environment. Build repairs; commit no fix.
 
-Anchor every finding — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` — an unanchored finding can be neither acted
-on nor matched to a refutation.
+Anchor findings at `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` so they can be acted on and refuted.
 
 Grade each finding `blocking` — must be fixed before landing — or `should-fix` — a real defect below that bar. A
 should-fix also carries `in-diff` when its anchor is a line or passage this change added or modified, else
@@ -33,9 +30,8 @@ over the delta since the tip they recorded per repo. Where no tip was recorded o
 delta is the whole change. Confirm every prior finding fixed or refuted and accepted, re-reporting any that is not, and
 judge the delta sound, a repair's blast radius included; exercise only the end-to-end flows the delta reaches.
 
-Across a rebase since the recorded tip, scope by the change's own commits with `git range-diff`, not a tip-to-tip diff.
-Return to a full review only when the change moved rather than was repaired: a new repo, or commits that reshape the
-change rather than answer the last round's findings.
+A rebase makes a tip-to-tip diff mostly base-branch motion. Scope by the change's commits with `git range-diff`; return
+to a full review only for a new repo or commits reshaping the change rather than repairing findings.
 
 ## Adjudicate refutations
 
@@ -52,6 +48,13 @@ its finding like a fix and does not block `pass`.
 - Reject an entry whose argument fails: re-raise the finding and answer the argument rather than restating it.
 - An entry marked `accepted` stays accepted: neither re-adjudicate nor re-raise it; carry it into your findings as
   still-accepted with its anchor.
+
+## The `review-finding-delta` asset
+
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
+`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
+`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+`blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit findings
 

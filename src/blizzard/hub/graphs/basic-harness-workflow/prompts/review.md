@@ -1,20 +1,16 @@
 # Review
 
-You work a chunk's `review` node-step in a fresh session that did not build it, reading the change cold against the work
-item's intent. Review observes and iterate repairs: commit no fix here.
+Review cold against the work item. Review observes; iterate repairs. Commit no fix here.
 
 ## Open the pass
 
-Open with `blizzard runner artifact list`. Its `git_commit` artifacts name each repo's branch and commit; check out the
-newest per repo (a rebase may move one) before reading any diff.
+Run `blizzard runner artifact list`. Take the newest `git_commit` per repo; check it out before reading any diff.
 
 ## Judge the change
 
-Judge the change across correctness, architecture, and design quality, each against the project's review criteria,
-weighed for prose and convention as well as code: this lane's subject is harness work — agent-facing conventions,
-skills, prompts, docs. Before judging, open those criteria and, per axis, the documents they route this change to, until
-you reach the rules themselves. Judge from what you read, not memory, naming the criterion a finding violates when one
-applies.
+Judge correctness, architecture, and design quality against project review criteria, for prose and convention as well as
+code. Before judging, open the criteria and, per axis, the documents they route this change to, down to the rules. Judge
+from what you read, not memory; name the violated criterion when one applies.
 
 - **Correctness** — does the text say what it means? Follow each instruction literally; one that only works when read
   charitably is a defect.
@@ -22,8 +18,8 @@ applies.
 - **Design quality** — is the change the shortest thing that changes behavior? Prose restating what an agent already
   does costs without effect.
 
-The first round also judges it against the authoring conventions the workspace declares for this material, reporting
-departures, not preferences, and runs any review method declared for it; else the three axes stand alone.
+On the first round, follow workspace routing to its authoring conventions and review method. Report departures from
+conventions, not preferences; run that method when declared.
 
 Grade each finding `blocking` (must be fixed to land) or `should-fix` (a real defect below that bar). A should-fix also
 carries `in-diff` when its anchor is a line or passage this change added or modified, else `outside-diff` (an untouched
@@ -31,10 +27,10 @@ passage or exposed defect); the round decides if it blocks.
 
 ## A re-visit reviews the delta
 
-An earlier round's `review-findings` asset makes this a re-visit; without one, read the whole change. Read the newest
-with `blizzard runner artifact get review-findings --content` and judge only the delta since the tip it recorded per
-repo — the whole change if none was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and
-accepted, re-reporting any that is not.
+Earlier `review-findings` make this a re-visit; otherwise read the whole change. Read the newest with
+`blizzard runner artifact get review-findings --content` and judge the delta since its recorded tip per repo — the whole
+change if no tip was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and accepted,
+re-reporting any that is not.
 
 Reworded prose changes how the text around it reads: read each changed passage within its whole section and follow
 anything it renames or re-routes.
@@ -44,8 +40,8 @@ only when it moved rather than was repaired: a new repo, or commits that reshape
 
 ## Adjudicate refutations
 
-The `review-finding-refutes` asset holds findings a prior `iterate` visit declined, with its arguments; absent on a
-first pass, else its newest submission is the whole record.
+`review-finding-refutes` holds findings a prior `iterate` declined and its arguments; absent on a first pass, else its
+newest submission is the whole record.
 
 Match a refutation to its finding by anchor, never id; every pass renumbers. A refutation is a claim to adjudicate,
 never a veto; good-faith disagreement over prose is ordinary; neither reflexive deference nor re-raising is review.
@@ -54,6 +50,13 @@ Answer every entry explicitly: silence is not acceptance. One marked `accepted` 
 round's findings with its anchor. An `open` entry is accepted when its argument holds — wrong finding, false premise, or
 work beyond this change's scale — recorded with anchor and reason, never raised again; else rejected, the finding
 re-raised and the argument answered. An accepted refutation resolves its finding like a fix.
+
+## The `review-finding-delta` asset
+
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
+`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
+`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+`blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit the findings
 
