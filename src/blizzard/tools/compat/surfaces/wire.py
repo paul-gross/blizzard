@@ -468,7 +468,10 @@ def _diff_parameters(
 
 
 def classify_spec_diff(
-    base: dict[str, Any], head: dict[str, Any], select: Selection = is_wire_operation, surface: str = "wire"
+    base: Mapping[str, object],
+    head: Mapping[str, object],
+    select: Selection = is_wire_operation,
+    surface: str = "wire",
 ) -> list[Violation]:
     """Every breaking change (bzh:fleet-wire-additive's declared classes) from ``base`` to
     ``head`` on the operations ``select`` keeps, reported under ``surface``. An empty list

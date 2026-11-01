@@ -18,6 +18,7 @@ from sqlalchemy import Table, func, select
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.delivery.flows import (
@@ -160,9 +161,9 @@ def test_a_visit_holding_nothing_takes_a_turn_whenever_it_has_none_open(world: _
 # --- ending a turn ----------------------------------------------------------------------------------------------------
 
 
-def _transition(world: _World, handle: object, chunk_id: str, *, epoch: int = 0) -> bool:
+def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch: int = 0) -> bool:
     return world.chunks.hub_exec.record_hub_step_transition_locked(
-        handle,  # type: ignore[arg-type]
+        handle,
         chunk_id,
         from_node_id=_NODE,
         to_node_id="nd_done",

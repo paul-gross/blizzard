@@ -8,7 +8,7 @@ same path ``POST /scopes`` uses — the ``tests/test_graph_lifecycle_api.py`` sh
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -53,7 +53,15 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH_A) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create(hub: HubHarness, **overrides: object) -> dict[str, Any]:
+class _RoutineBodyFields(TypedDict, total=False):
+    name: str
+    default_scope_slug: str
+    default_model: list[str]
+    default_effort: str | None
+    default_harnesses: list[str]
+
+
+def _create(hub: HubHarness, **overrides: Unpack[_RoutineBodyFields]) -> dict:  # type: ignore[type-arg]
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",

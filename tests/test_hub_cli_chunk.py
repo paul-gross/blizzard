@@ -5,6 +5,7 @@ clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with the client stubb
 from __future__ import annotations
 
 import json
+from typing import TypedDict, Unpack
 
 import httpx2
 import pytest
@@ -457,7 +458,15 @@ def test_show_reads_default_harnesses_back_in_text_mode() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _detail(chunk_id: str, **extra: object) -> _FakeResponse:
+class _DetailFields(TypedDict, total=False):
+    status: str
+    blocked: dict[str, str] | None
+    neighborhood: dict[str, list[dict[str, str | bool]]]
+    route: dict[str, str | list[str]]
+    cost: dict[str, float | bool]
+
+
+def _detail(chunk_id: str, **extra: Unpack[_DetailFields]) -> _FakeResponse:
     return _FakeResponse(
         200,
         {

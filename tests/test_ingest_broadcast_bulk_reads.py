@@ -89,29 +89,30 @@ def test_before_ingest_and_publish_query_counts_are_independent_of_batch_size(tm
     large = build_hub(tmp_path / "large")
     large_ids = _seed_scale(large, 6)
 
-    holder: dict[str, object] = {}
+    batches: dict[str, RunnerFactBatch] = {}
+    broadcasts: dict[str, IngestBroadcast] = {}
 
     def before(hub: HubHarness, ids: list[str], key: str) -> None:
         batch = _scaled_batch(ids)
-        holder[f"{key}_batch"] = batch
-        holder[f"{key}_broadcast"] = IngestBroadcast.before_ingest(hub.services, "counter", batch)
+        batches[key] = batch
+        broadcasts[key] = IngestBroadcast.before_ingest(hub.services, "counter", batch)
 
     small_before_count = count_queries(small.engine, lambda: before(small, small_ids, "small"))
     large_before_count = count_queries(large.engine, lambda: before(large, large_ids, "large"))
     assert small_before_count == large_before_count
 
-    small_result = small.services.facts.ingest("counter", pushed_facts(holder["small_batch"]))  # type: ignore[arg-type]
-    large_result = large.services.facts.ingest("counter", pushed_facts(holder["large_batch"]))  # type: ignore[arg-type]
+    small_result = small.services.facts.ingest("counter", pushed_facts(batches["small"]))
+    large_result = large.services.facts.ingest("counter", pushed_facts(batches["large"]))
     assert len(small_result.applied) == 4
     assert len(large_result.applied) == 12
 
     small_publish_count = count_queries(
         small.engine,
-        lambda: holder["small_broadcast"].publish(small_result),  # type: ignore[attr-defined]
+        lambda: broadcasts["small"].publish(small_result),
     )
     large_publish_count = count_queries(
         large.engine,
-        lambda: holder["large_broadcast"].publish(large_result),  # type: ignore[attr-defined]
+        lambda: broadcasts["large"].publish(large_result),
     )
     assert small_publish_count == large_publish_count
 

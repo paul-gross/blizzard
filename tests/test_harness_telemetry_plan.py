@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, TypedDict, Unpack
 
 import pytest
 
@@ -18,7 +18,12 @@ from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEM
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
-from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names, publish_harness_bundle
+from blizzard.runner.harness.wiring import (
+    HarnessSections,
+    combined_telemetry_plan,
+    declared_telemetry_names,
+    publish_harness_bundle,
+)
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
 from tests.config_inputs import host_runtime_of
@@ -39,10 +44,17 @@ RUNNER_ENV = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
 _HARNESS_NAMES = ("CLAUDE_CODE_ENABLE_TELEMETRY", "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA")
 
 
-def _config(tmp_path: Path, *, worker_settings_path: str | None = None, **overrides: object) -> RunnerConfig:
+class _ConfigFields(TypedDict, total=False):
+    harness_sections: HarnessSections
+    worker_env_passthrough: tuple[str, ...]
+
+
+def _config(
+    tmp_path: Path, *, worker_settings_path: str | None = None, **overrides: Unpack[_ConfigFields]
+) -> RunnerConfig:
     if worker_settings_path is not None:
         overrides["harness_sections"] = sections(ClaudeCodeSection(worker_settings_path=worker_settings_path))
-    return RunnerConfig(root=tmp_path, db_url="sqlite://", **overrides)  # type: ignore[arg-type]
+    return RunnerConfig(root=tmp_path, db_url="sqlite://", **overrides)
 
 
 def _settings(tmp_path: Path, env: Mapping[str, str]) -> str:

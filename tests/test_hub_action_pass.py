@@ -8,8 +8,10 @@ import asyncio
 import json
 import threading
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from sqlalchemy import insert, select
@@ -31,6 +33,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     TEST_HUB_ACTIONS,
     HubHarness,
+    RepositorySeed,
     build_hub,
     create_repositories,
     default_project,
@@ -101,9 +104,15 @@ class _Raises:
         raise RuntimeError("the pass broke")
 
 
-def _hub(tmp_path: Path, *extra: IHubAction, **kwargs: object) -> HubHarness:
+class _HubFields(TypedDict, total=False):
+    repositories: Sequence[RepositorySeed] | None
+    action_pass_seconds: float
+    action_pass_grace: timedelta
+
+
+def _hub(tmp_path: Path, *extra: IHubAction, **kwargs: Unpack[_HubFields]) -> HubHarness:
     actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), *extra])
-    return build_hub(tmp_path, actions=actions, **kwargs)  # type: ignore[arg-type]
+    return build_hub(tmp_path, actions=actions, **kwargs)
 
 
 def _graph(action: str, choices: tuple[str, ...], *, extra: str = "") -> str:

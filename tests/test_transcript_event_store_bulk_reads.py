@@ -11,6 +11,7 @@ import json
 import zlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Unpack
 
 import pytest
 from sqlalchemy import Engine
@@ -24,6 +25,7 @@ from blizzard.hub.store.internal.transcript_event_store import TranscriptEventSt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.factory_fields import TranscriptSliceFields
 from tests.support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -33,8 +35,8 @@ _EXTRACTOR_VERSION = "blizzard-analytics/1"
 _PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
 
 
-def _segment_record(**overrides: object) -> TranscriptSlice:
-    values: dict[str, object] = {
+def _segment_record(**overrides: Unpack[TranscriptSliceFields]) -> TranscriptSlice:
+    values: TranscriptSliceFields = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -71,7 +73,7 @@ def _segment_record(**overrides: object) -> TranscriptSlice:
         ),
     }
     values.update(overrides)
-    return TranscriptSlice(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)
 
 
 def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2", "ch_3")) -> Engine:

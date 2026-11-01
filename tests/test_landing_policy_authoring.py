@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from sqlalchemy import Engine, func
@@ -181,7 +182,11 @@ def test_an_edit_leaving_the_policy_and_forge_asks_nothing(world: _World) -> Non
     assert world.offers.asked == []
 
 
-def _declaration(forge: ForgeId, **stated: object) -> ConfigDeclaration:
+class _StatedRepositoryFields(TypedDict, total=False):
+    forge_id: ForgeId
+
+
+def _declaration(forge: ForgeId, **stated: Unpack[_StatedRepositoryFields]) -> ConfigDeclaration:
     return ConfigDeclaration(
         secrets=("gh",),
         repositories=(
@@ -189,7 +194,7 @@ def _declaration(forge: ForgeId, **stated: object) -> ConfigDeclaration:
                 slug="demo",
                 name=None,
                 fields=RepositoryFields(forge, "acme", "demo", "master", "gh"),
-                edit=RepositoryEdit(**stated),  # type: ignore[arg-type]
+                edit=RepositoryEdit(**stated),
                 repository_id=RepositoryId("repo_demo"),
             ),
         ),

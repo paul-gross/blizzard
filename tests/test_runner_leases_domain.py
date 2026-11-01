@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Unpack
 
 import pytest
 from sqlalchemy import Engine
@@ -31,13 +32,14 @@ from blizzard.runner.leases.activity import (
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
+from tests.factory_fields import LeaseFields
 from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _lease_record(**overrides: object) -> Lease:
-    fields: dict[str, object] = {
+def _lease_record(**overrides: Unpack[LeaseFields]) -> Lease:
+    fields: LeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -51,7 +53,7 @@ def _lease_record(**overrides: object) -> Lease:
         "session_id": "sess-a",
     }
     fields.update(overrides)
-    return Lease(**fields)  # type: ignore[arg-type]
+    return Lease(**fields)
 
 
 # LeaseActivity.state — pure, all seven states + precedence

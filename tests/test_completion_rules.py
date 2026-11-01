@@ -6,8 +6,10 @@ transition, and the artifact rows a submission lands."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -131,8 +133,16 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
 _AT_BUILD = ChunkFacts(minted=True, promoted=True, leases=[LeaseFact(epoch=1, minted_at=_T0)])
 
 
-def _submission(choice: str, *, from_node_id: str = "nd_build", **fields: object) -> Completion:
-    return Completion(choice=choice, epoch=1, runner_id="runner-a", from_node_id=from_node_id, **fields)  # type: ignore[arg-type]
+class _SubmissionFields(TypedDict, total=False):
+    check_results: Sequence[CheckOutcome]
+    artifacts: Sequence[CompletionArtifact]
+    decision_id: str | None
+    route_token: str | None
+    lease_id: str | None
+
+
+def _submission(choice: str, *, from_node_id: str = "nd_build", **fields: Unpack[_SubmissionFields]) -> Completion:
+    return Completion(choice=choice, epoch=1, runner_id="runner-a", from_node_id=from_node_id, **fields)
 
 
 def _gate(

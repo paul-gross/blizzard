@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
 import pytest
 
@@ -483,17 +483,21 @@ def test_edit_links_the_new_default_scope_but_does_not_unlink_the_old_one() -> N
     assert [scope.slug for scope, _ in routines.mints] == ["blizzard", "other"]
 
 
-def _routine(**overrides: object) -> Routine:
-    fields: dict[str, object] = {
-        "routine_id": "rtn_1",
-        "name": "nightly",
-        "graph_name": "alpha",
-        "default_scope_slug": "blizzard",
-        "created_at": _T0,
-        "project_id": _PROJECT,
-    }
-    fields.update(overrides)
-    return Routine(**fields)  # type: ignore[arg-type]
+class _RoutineFields(TypedDict, total=False):
+    revision: int
+    retired: bool
+
+
+def _routine(**overrides: Unpack[_RoutineFields]) -> Routine:
+    return Routine(
+        routine_id="rtn_1",
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug="blizzard",
+        created_at=_T0,
+        project_id=_PROJECT,
+        **overrides,
+    )
 
 
 class TestRoutineScopeMembership:

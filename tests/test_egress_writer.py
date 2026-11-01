@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -39,8 +40,21 @@ SCHEMA = DatasetSchema(
 PASS = EgressPass(datetime(2026, 10, 1, 6, 15, tzinfo=UTC))
 
 
-def row(position: str = "p1", /, **overrides: object) -> EgressValues:
-    values: dict[str, object] = {
+class RowFields(TypedDict, total=False):
+    """The test schema's columns, plus a column it does not declare. Every value stays wide:
+    the writer's own validation is what these tests feed malformed values to."""
+
+    id: object
+    n: object
+    ok: object
+    at: object
+    cost: object
+    tags: object
+    extra: object
+
+
+def row(position: str = "p1", /, **overrides: Unpack[RowFields]) -> EgressValues:
+    values: RowFields = {
         "id": "a",
         "n": 1,
         "ok": True,
@@ -85,7 +99,7 @@ def test_a_conforming_batch_is_recorded_and_its_manifest_lists_what_was_passed()
         {"tags": ["a", 1]},
     ],
 )
-def test_a_value_a_format_could_not_hold_exactly_is_an_invalid_row(overrides: dict[str, object]) -> None:
+def test_a_value_a_format_could_not_hold_exactly_is_an_invalid_row(overrides: RowFields) -> None:
     result = InMemoryEgressWriter().write(batch(row(**overrides)))
     assert isinstance(result, EgressFailure)
     assert result.cause is EgressFailureCause.INVALID_ROW
@@ -114,7 +128,7 @@ def test_a_value_a_format_could_not_hold_exactly_is_an_invalid_row(overrides: di
         ({"tags": ["ok", "b\udfff"]}, "column tags: not encodable as UTF-8"),
     ],
 )
-def test_a_refused_value_names_the_branch_that_refused_it(overrides: dict[str, object], problem: str) -> None:
+def test_a_refused_value_names_the_branch_that_refused_it(overrides: RowFields, problem: str) -> None:
     result = InMemoryEgressWriter().write(batch(row(**overrides)))
     assert isinstance(result, EgressFailure)
     assert result.cause is EgressFailureCause.INVALID_ROW

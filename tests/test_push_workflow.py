@@ -8,12 +8,12 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
-import yaml
 
+from tests.ci_workflows import Job, Step, load_workflow
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -22,16 +22,15 @@ _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "push.yml"
 
 
-def _jobs() -> dict[str, Any]:
-    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
-    return workflow["jobs"]
+def _jobs() -> dict[str, Job]:
+    return load_workflow(_WORKFLOW_PATH)["jobs"]
 
 
-def _dev_image_job() -> dict[str, Any]:
+def _dev_image_job() -> Job:
     return _jobs()["dev-image"]
 
 
-def _step_index(steps: list[dict[str, Any]], predicate) -> int:
+def _step_index(steps: list[Step], predicate: Callable[[Step], bool]) -> int:
     for i, step in enumerate(steps):
         if predicate(step):
             return i
@@ -160,7 +159,7 @@ def test_derived_tags_include_edge_and_a_sha_tag_referencing_github_sha() -> Non
     assert "sha-${GITHUB_SHA}" in run or "sha-$GITHUB_SHA" in run
 
 
-def _build_push_step() -> dict[str, Any]:
+def _build_push_step() -> Step:
     steps = _dev_image_job()["steps"]
     return steps[_step_index(steps, lambda s: "docker buildx build" in str(s.get("run", "")))]
 
@@ -192,7 +191,7 @@ def test_only_dev_image_holds_the_signing_permissions() -> None:
     """Keyless signing and attestation need `id-token: write` and
     `attestations: write`; granting either anywhere else widens who can mint
     the master identity."""
-    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
+    workflow = load_workflow(_WORKFLOW_PATH)
     assert "id-token" not in workflow.get("permissions", {})
     assert "attestations" not in workflow.get("permissions", {})
     for name, job in _jobs().items():
@@ -224,8 +223,8 @@ def test_dev_image_signing_actions_are_pinned_by_sha() -> None:
 
 
 def test_push_triggers_on_master_alone() -> None:
-    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
-    assert workflow[True] == {"push": {"branches": ["master"]}}
+    workflow = load_workflow(_WORKFLOW_PATH)
+    assert workflow["on"] == {"push": {"branches": ["master"]}}
 
 
 def test_proven_against_records_both_shas_after_the_gate_and_upper_tiers() -> None:

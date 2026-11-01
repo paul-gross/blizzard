@@ -7,6 +7,7 @@ by a later lease is no longer ``needs_human``, and a released route re-derives `
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -87,7 +88,12 @@ def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
     assert facts.status() is ChunkStatus.READY
 
 
-def _detached_route(**extra: object) -> ChunkFacts:
+class _DetachedRouteFields(TypedDict, total=False):
+    escalations: list[EscalationFact]
+    questions: list[QuestionFact]
+
+
+def _detached_route(**extra: Unpack[_DetachedRouteFields]) -> ChunkFacts:
     """A route created then released — detach's fact shape: one write, no
     supersession, no epoch bump. Used to pin that detach clears only the running
     branch and leaves every higher-precedence branch untouched."""
@@ -96,7 +102,7 @@ def _detached_route(**extra: object) -> ChunkFacts:
         promoted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         routes_released=[RouteReleasedFact(released_at=_at(2))],
-        **extra,  # type: ignore[arg-type]
+        **extra,
     )
 
 

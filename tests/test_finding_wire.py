@@ -5,6 +5,8 @@ wire edge, mechanically, before any delivery logic ever sees it."""
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,7 +15,13 @@ from blizzard.wire.finding import FindingCandidate, FindingDelta, FindingDetailV
 pytestmark = pytest.mark.unit
 
 
-def _delta(**overrides: object) -> dict[str, object]:
+class _DeltaFields(TypedDict, total=False):
+    findings: list[dict[str, str]]
+    revisions: dict[str, str]
+    measurement: str
+
+
+def _delta(**overrides: Unpack[_DeltaFields]) -> dict[str, object]:
     return {"scope": "blizzard", **overrides}
 
 
@@ -88,7 +96,11 @@ def test_a_candidate_omitting_introduced_parses() -> None:
     assert candidate.introduced is None
 
 
-def _detail(**overrides: object) -> dict[str, object]:
+class _DetailFields(TypedDict, total=False):
+    facts: list[dict[str, str]]
+
+
+def _detail(**overrides: Unpack[_DetailFields]) -> dict[str, object]:
     fields: dict[str, object] = {
         "finding_id": "fin_1",
         "routine_name": "nightly",

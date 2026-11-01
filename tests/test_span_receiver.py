@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
@@ -18,6 +19,7 @@ from blizzard.foundation.platform_tracing.received import (
     PROTOBUF_CONTENT_TYPE,
     OtlpDecodeError,
     ReceivedSpan,
+    Scalar,
     decode_otlp,
 )
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -57,8 +59,33 @@ def _trace(chunk_id: str = "ch_1") -> int:
     return chunk_trace_id(chunk_id)
 
 
-def _span(**changes: object) -> ReceivedSpan:
-    fields: dict[str, object] = {
+class _SpanFields(TypedDict, total=False):
+    trace_id: int
+    span_id: int
+    parent_span_id: int | None
+    name: str
+    kind: int
+    start_time_ns: int
+    end_time_ns: int
+    status_code: int
+    scope_name: str
+    scope_version: str
+    attributes: dict[str, Scalar]
+
+
+class _JsonSpanFields(TypedDict, total=False):
+    """OTLP/JSON span keys a test feeds a malformed value — each kept wide on purpose."""
+
+    name: object
+    startTimeUnixNano: object
+    attributes: object
+    traceId: object
+    spanId: object
+    parentSpanId: object
+
+
+def _span(**changes: Unpack[_SpanFields]) -> ReceivedSpan:
+    fields: _SpanFields = {
         "trace_id": _trace(),
         "span_id": _SPAN_ID,
         "parent_span_id": None,
@@ -72,7 +99,7 @@ def _span(**changes: object) -> ReceivedSpan:
         "attributes": {"blizzard.cli.command": "artifact create", "process.exit.code": 0},
     }
     fields.update(changes)
-    return ReceivedSpan(**fields)  # type: ignore[arg-type]
+    return ReceivedSpan(**fields)
 
 
 def _otlp_json(trace: int, *, parent: int | None = _SPAN_ID) -> bytes:
@@ -152,7 +179,7 @@ def test_a_malformed_body_is_a_typed_decode_error(body: bytes, content_type: str
         decode_otlp(body, content_type)
 
 
-def _json_span(**fields: object) -> bytes:
+def _json_span(**fields: Unpack[_JsonSpanFields]) -> bytes:
     span = {"traceId": f"{_trace():032x}", "spanId": f"{_SPAN_ID:016x}", **fields}
     return json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": [span]}]}]}).encode()
 
@@ -196,10 +223,10 @@ def test_a_protobuf_span_with_a_short_id_is_a_decode_error() -> None:
 
 def test_admit_checks_each_declared_value_type() -> None:
     allowlist = Allowlist(scope=SCOPE_NAME, attributes={"i": "int", "d": "double", "s": "string", "u": "other"})
-    attributes = {"i": True, "d": 1, "s": 1, "u": "x"}
+    attributes: dict[str, Scalar] = {"i": True, "d": 1, "s": 1, "u": "x"}
     (kept,) = admit([_span(attributes=attributes)], _lease(), allowlist, runner=_RUNNER).kept
     assert set(kept.attributes) == {"blizzard.caller", "blizzard.chunk.id", "blizzard.lease.id"}
-    good = {"i": 3, "d": 1.5, "s": "x"}
+    good: dict[str, Scalar] = {"i": 3, "d": 1.5, "s": "x"}
     (kept,) = admit([_span(attributes=good)], _lease(), allowlist, runner=_RUNNER).kept
     assert {k: kept.attributes[k] for k in good} == good
 
@@ -281,7 +308,7 @@ def test_admit_keeps_a_span_with_the_root_id_of_a_later_epoch() -> None:
 
 
 def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> None:
-    attributes = {
+    attributes: dict[str, Scalar] = {
         "blizzard.cli.command": "x",
         "process.exit.code": "0",
         "url.full": "http://runner/api",
@@ -299,14 +326,18 @@ def test_admit_keeps_only_allowlisted_attributes_of_their_declared_type() -> Non
 
 
 def test_admit_overwrites_a_planted_caller_chunk_and_lease() -> None:
-    planted = {"blizzard.caller": "operator", "blizzard.chunk.id": "ch_9", "blizzard.lease.id": "lease_9"}
+    planted: dict[str, Scalar] = {
+        "blizzard.caller": "operator",
+        "blizzard.chunk.id": "ch_9",
+        "blizzard.lease.id": "lease_9",
+    }
     allowlist = Allowlist(scope=SCOPE_NAME, attributes={**CLI_ATTRIBUTES, **dict.fromkeys(planted, "string")})
     (kept,) = admit([_span(attributes=planted)], _lease(), allowlist, runner=_RUNNER).kept
     assert kept.attributes == {"blizzard.caller": "worker", "blizzard.chunk.id": "ch_1", "blizzard.lease.id": "lease_1"}
 
 
 def test_admit_truncates_long_strings_and_caps_the_attribute_count() -> None:
-    many = {f"k{i}": "v" for i in range(MAX_ATTRIBUTES + 10)}
+    many: dict[str, Scalar] = {f"k{i}": "v" for i in range(MAX_ATTRIBUTES + 10)}
     allowlist = Allowlist(scope=SCOPE_NAME, attributes=dict.fromkeys(many, "string"))
     long = "x" * (MAX_STRING_CHARS + 5)
     (kept,) = admit([_span(name=long, scope_version=long, attributes=many)], _lease(), allowlist, runner=_RUNNER).kept

@@ -4,6 +4,8 @@ closing routes, driven here with the client stubbed (the
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import httpx2
 import pytest
 
@@ -26,7 +28,24 @@ class _FakeResponse:
             raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
-def _proposal_view(**overrides: object) -> dict[str, object]:
+class _ProposalViewFields(TypedDict, total=False):
+    origin: str
+    routine_name: str | None
+    title: str
+    findings: list[str]
+    created_by: str
+    closure: dict[str, object] | None
+
+
+class _ClosureFields(TypedDict, total=False):
+    closure: str
+    reason: str | None
+    item_outcome: str | None
+    source: str | None
+    ref: str | None
+
+
+def _proposal_view(**overrides: Unpack[_ProposalViewFields]) -> dict[str, object]:
     body: dict[str, object] = {
         "proposal_id": "gprop_1",
         "origin": "routine-run",
@@ -42,7 +61,7 @@ def _proposal_view(**overrides: object) -> dict[str, object]:
     return body
 
 
-def _closure(**overrides: object) -> dict[str, object]:
+def _closure(**overrides: Unpack[_ClosureFields]) -> dict[str, object]:
     closure: dict[str, object] = {
         "closure": "passed",
         "reason": "not worth it",

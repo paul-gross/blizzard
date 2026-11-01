@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Unpack
 
 import pytest
 
@@ -28,6 +29,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
 )
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
 from tests.host_files import one_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
@@ -59,8 +61,10 @@ def _app_with_declarations(tmp_path: Path):
     ), store
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
-    fields: dict[str, object] = {
+def _seed_lease(
+    store: SqlAlchemyRunnerStore, *, workspace_id: str = DEFAULT_WORKSPACE_ID, **overrides: Unpack[NewLeaseFields]
+) -> None:
+    fields: NewLeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -71,9 +75,8 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
         "created_at": _NOW,
     }
     fields.update(overrides)
-    workspace_id = str(fields.pop("workspace_id", DEFAULT_WORKSPACE_ID))
-    store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
+    store.record_lease(NewLease(**fields))
+    store.record_lease_token(fields["lease_id"], TokenHash(_TOKEN).hex, _NOW)
     # A declaration resolves its environment from the chunk's bindings, so a lease
     # without one has nothing to declare against.
     store.record_binding(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -22,10 +23,24 @@ pytestmark = pytest.mark.component
 _RUNNER = "runner-a"
 
 
-def _register(hub: HubHarness, **overrides: object) -> Registered:
+class _RegisterFields(TypedDict, total=False):
+    name: str | None
+    env_capacity: int | None
+    public_url: str | None
+    redirect_uris: tuple[str, ...]
+    capabilities: tuple[RunnerCapability, ...]
+    subscriptions: tuple[DeclaredSubscription, ...] | None
+    gates: tuple[str, ...]
+    projects: tuple[str, ...] | None
+    bindings: tuple[RunnerBinding, ...] | None
+    subscription: str | None
+    declining: tuple[RunnerDeclining, ...] | None
+
+
+def _register(hub: HubHarness, **overrides: Unpack[_RegisterFields]) -> Registered:
     held = hub.services.registry.get_runner(_RUNNER)
     assert held is not None
-    fields: dict[str, object] = {
+    fields: _RegisterFields = {
         "name": "r-a",
         "env_capacity": 2,
         "public_url": "http://r-a",
@@ -36,7 +51,7 @@ def _register(hub: HubHarness, **overrides: object) -> Registered:
         "projects": ("proj",),
     }
     fields.update(overrides)
-    return hub.services.fleet.register(held, "w1", **fields)  # type: ignore[arg-type]
+    return hub.services.fleet.register(held, "w1", **fields)
 
 
 def _hub(tmp_path: Path) -> HubHarness:
@@ -52,7 +67,7 @@ def test_first_registration_is_a_change_and_an_identical_repeat_is_not(tmp_path:
     assert not _register(hub).changed
 
 
-_CHANGES: dict[str, dict[str, object]] = {
+_CHANGES: dict[str, _RegisterFields] = {
     "name": {"name": "renamed"},
     "env_capacity": {"env_capacity": 3},
     "public_url": {"public_url": "http://other"},

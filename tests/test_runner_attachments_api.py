@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Unpack
 
 import pytest
 
@@ -19,6 +20,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.attachments import AttachmentService
 from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
 from tests.runner_client import runner_client
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
@@ -35,8 +37,8 @@ def _app_with_attachments(tmp_path: Path):
     ), store
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
-    fields: dict[str, object] = {
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -47,8 +49,8 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
+    store.record_lease(NewLease(**fields))
+    store.record_lease_token(fields["lease_id"], TokenHash(_TOKEN).hex, _NOW)
 
 
 @pytest.mark.component

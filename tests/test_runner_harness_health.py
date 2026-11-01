@@ -5,6 +5,8 @@ admitted-but-unclassifiable carve-out."""
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import pytest
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification, CompatibilityProbe
@@ -21,9 +23,23 @@ pytestmark = pytest.mark.unit
 _HARNESS_ID = "opencode"
 
 
-def _evidence(**overrides: object) -> HarnessHealthEvidence:
+class _EvidenceFields(TypedDict, total=False):
+    harness_id: str
+    binary_present: bool
+    version_declared: bool
+    version_admitted: bool | None
+    version_classification: CompatibilityClassification | None
+    authenticated: bool
+    unmapped_tiers: tuple[str, ...]
+    selftest_failed: bool | None
+    corpus_backed: bool
+    degradations: tuple[DeclaredDegradation, ...]
+    config_conflicts: tuple[str, ...]
+
+
+def _evidence(**overrides: Unpack[_EvidenceFields]) -> HarnessHealthEvidence:
     """A fully-healthy baseline, one field overridden per case."""
-    defaults: dict[str, object] = {
+    defaults: _EvidenceFields = {
         "harness_id": _HARNESS_ID,
         "binary_present": True,
         "version_declared": True,
@@ -32,10 +48,8 @@ def _evidence(**overrides: object) -> HarnessHealthEvidence:
         "authenticated": True,
         "unmapped_tiers": (),
         "selftest_failed": None,
-        "degradations": (),
     }
-    defaults.update(overrides)
-    return HarnessHealthEvidence(**defaults)  # type: ignore[arg-type]
+    return HarnessHealthEvidence(**(defaults | overrides))
 
 
 def test_healthy_evidence_is_available_with_no_cause() -> None:
@@ -200,7 +214,7 @@ def test_a_binding_declaring_no_version_range_has_no_version_cause() -> None:
     ],
 )
 def test_priority_order_reports_only_the_highest_priority_cause(
-    overrides: dict[str, object], expected_cause: HarnessHealthCause
+    overrides: _EvidenceFields, expected_cause: HarnessHealthCause
 ) -> None:
     result = evaluate_harness_health(_evidence(**overrides))
     assert result.available is False

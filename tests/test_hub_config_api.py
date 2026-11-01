@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
+import httpx2
 import pytest
 
 from blizzard.auth_core import Role
@@ -21,7 +22,36 @@ from tests.support import HubHarness, build_hub, hub_store_connections, seed_ses
 pytestmark = pytest.mark.component
 
 _SENTINEL = "tok-planted-840"
-_DEMO = {"slug": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
+
+
+class _WorkSourceBody(TypedDict, total=False):
+    slug: str
+    name: str
+    provider: str
+    locator: str
+    secret: str | None
+    annotate: bool
+    api_base: str
+    web_base: str
+
+
+class _RepositoryBody(TypedDict, total=False):
+    slug: str
+    name: str
+    forge_api_url: str
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str | None
+
+
+_DEMO: _WorkSourceBody = {
+    "slug": "demo",
+    "provider": "github",
+    "locator": "acme/demo",
+    "secret": "gh",
+    "annotate": True,
+}
 
 
 @pytest.fixture
@@ -31,12 +61,15 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
-def _create(hub: HubHarness, **overrides: object):
+def _create(hub: HubHarness, **overrides: Unpack[_WorkSourceBody]) -> httpx2.Response:
     return hub.client.post("/api/work-sources", json={**_DEMO, **overrides})
 
 
-def _changes(hub: HubHarness, **params: object) -> list[dict[str, Any]]:
-    resp = hub.client.get("/api/config/changes", params=params)  # type: ignore[arg-type]
+def _changes(hub: HubHarness, *, record_kind: str | None = None, record_key: str | None = None) -> list[dict]:
+    query = {
+        key: value for key, value in (("record_kind", record_kind), ("record_key", record_key)) if value is not None
+    }
+    resp = hub.client.get("/api/config/changes", params=query)
     assert resp.status_code == 200, resp.text
     return resp.json()["changes"]
 
@@ -80,7 +113,7 @@ def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
 
 
 def test_the_create_422s_name_the_offending_field(hub: HubHarness) -> None:
-    for overrides, field in (
+    cases: tuple[tuple[_WorkSourceBody, str], ...] = (
         ({"slug": "a:b"}, "slug"),
         ({"slug": "Demo"}, "slug"),
         ({"slug": "hub"}, "slug"),
@@ -89,8 +122,9 @@ def test_the_create_422s_name_the_offending_field(hub: HubHarness) -> None:
         ({"locator": "nope"}, "locator"),
         ({"secret": "absent"}, "secret"),
         ({"secret": None}, "secret"),
-    ):
-        resp = _create(hub, **overrides)
+    )
+    for overrides, field in cases:
+        resp = hub.client.post("/api/work-sources", json={**_DEMO, **overrides})
         assert resp.status_code == 422, (overrides, resp.text)
         assert resp.json()["detail"][0]["loc"][-1] == field, overrides
     assert hub.client.post("/api/work-sources", json={**_DEMO, "bogus": 1}).status_code == 422
@@ -405,7 +439,7 @@ def test_writes_need_config_edit_and_reads_need_fleet_view(tmp_path: Path) -> No
 
 # --- Repositories ------------------------------------------------------------------
 
-_REPO = {
+_REPO: _RepositoryBody = {
     "slug": "blizzard",
     "forge_api_url": "https://api.github.com",
     "owner": "acme",
@@ -415,7 +449,7 @@ _REPO = {
 }
 
 
-def _create_repo(hub: HubHarness, **overrides: object):
+def _create_repo(hub: HubHarness, **overrides: Unpack[_RepositoryBody]) -> httpx2.Response:
     return hub.client.post("/api/repositories", json={**_REPO, **overrides})
 
 
@@ -437,7 +471,7 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
 
 
 def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) -> None:
-    for overrides, field in (
+    cases: tuple[tuple[_RepositoryBody, str], ...] = (
         ({"name": " "}, "name"),
         ({"slug": "Not A Slug"}, "slug"),
         ({"owner": ""}, "owner"),
@@ -445,8 +479,9 @@ def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) ->
         ({"forge_api_url": "api.github.com"}, "forge_api_url"),
         ({"secret_name": "absent"}, "secret_name"),
         ({"secret_name": None}, "secret_name"),
-    ):
-        resp = _create_repo(hub, **overrides)
+    )
+    for overrides, field in cases:
+        resp = hub.client.post("/api/repositories", json={**_REPO, **overrides})
         assert resp.status_code == 422, (overrides, resp.text)
         assert resp.json()["detail"][0]["loc"][-1] == field, overrides
     assert hub.client.post("/api/repositories", json={**_REPO, "bogus": 1}).status_code == 422
@@ -956,8 +991,10 @@ def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: P
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=ada_headers).status_code == 201
     alpha = hub.client.get("/api/projects/alpha", headers=guest).json()["project_id"]
 
-    def read(**params: object) -> dict[str, Any]:
-        resp = hub.client.get("/api/config/changes", params=params, headers=guest)  # type: ignore[arg-type]
+    def read(*, limit: int | None = None, before: int | None = None, project: str | None = None) -> dict:
+        pairs = (("limit", limit), ("before", before), ("project", project))
+        query = {key: value for key, value in pairs if value is not None}
+        resp = hub.client.get("/api/config/changes", params=query, headers=guest)
         assert resp.status_code == 200, resp.text
         return resp.json()
 

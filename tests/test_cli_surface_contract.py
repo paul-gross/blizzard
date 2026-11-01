@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import click
 import pytest
 
 from blizzard.tools.cli_surface import ROOTS, build
@@ -53,8 +54,8 @@ def _diff(path: str, live: Any, committed: Any) -> list[str]:
 
 
 @pytest.mark.parametrize("name,root", ROOTS, ids=[name for name, _ in ROOTS])
-def test_live_tree_matches_the_committed_surface_contract(name: str, root: object) -> None:
-    live = build(name, root)  # type: ignore[arg-type]
+def test_live_tree_matches_the_committed_surface_contract(name: str, root: click.Group) -> None:
+    live = build(name, root)
     committed = _committed(name)
     offenders = _diff(name, live, committed)
     assert not offenders, "\n".join(

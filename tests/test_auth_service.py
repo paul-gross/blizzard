@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -266,8 +267,14 @@ def _identities(service: AuthService) -> _Identity:
     return _IDENTITIES[id(service)]
 
 
+class _SessionPolicy(TypedDict, total=False):
+    idle_ttl: timedelta
+    absolute_max_age: timedelta
+    touch_granularity: timedelta
+
+
 def _service(
-    clock: FixedClock, **kwargs: object
+    clock: FixedClock, **kwargs: Unpack[_SessionPolicy]
 ) -> tuple[
     AuthService,
     _FakeUserRepository,
@@ -306,7 +313,7 @@ def _service(
         hub_admins=identity.hub_admins,
         transactions=_FakeTransactions(writes),
         invitations=_no_invitations,
-        **kwargs,  # type: ignore[arg-type]
+        **kwargs,
     )
     _IDENTITIES[id(service)] = identity
     return service, users, sessions, identities, superuser_bootstrap, auth_facts

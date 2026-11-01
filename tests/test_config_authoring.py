@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from sqlalchemy import Engine, func
@@ -499,22 +500,26 @@ def test_referrers_union_every_kind_ordered_by_kind_then_key(world: _World) -> N
 _APPLY = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_ONE")
 
 
-def _source_declaration(name: str, locator: str, **stated: object) -> WorkSourceDeclaration:
+class _StatedSourceFields(TypedDict, total=False):
+    annotate: bool
+
+
+def _source_declaration(name: str, locator: str, **stated: Unpack[_StatedSourceFields]) -> WorkSourceDeclaration:
     return WorkSourceDeclaration(
         slug=name,
         name=None,
         fields=replace(_FIELDS, locator=locator),
-        edit=WorkSourceEdit(**stated),  # type: ignore[arg-type]
+        edit=WorkSourceEdit(**stated),
         work_source_id=WorkSourceId(f"wsrc_{name}"),
     )
 
 
-def _repo_declaration(slug: str, **stated: object) -> RepositoryDeclaration:
+def _repo_declaration(slug: str) -> RepositoryDeclaration:
     return RepositoryDeclaration(
         slug=slug,
         name=None,
         fields=_REPO,
-        edit=RepositoryEdit(**stated),  # type: ignore[arg-type]
+        edit=RepositoryEdit(),
         repository_id=RepositoryId(f"repo_{slug}"),
     )
 

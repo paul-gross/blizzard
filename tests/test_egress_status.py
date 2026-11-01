@@ -19,9 +19,9 @@ from tests.worker_http import bind_stubs
 pytestmark = pytest.mark.component
 
 
-def _on(tmp_path: Path, **extra: object) -> EgressConfig:
+def _on(tmp_path: Path) -> EgressConfig:
     (tmp_path / "out").mkdir(exist_ok=True)
-    return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)  # type: ignore[arg-type]
+    return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0)
 
 
 def _status(hub: HubHarness) -> dict[str, Any]:

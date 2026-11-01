@@ -9,6 +9,7 @@ from decimal import Decimal
 import pytest
 
 from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.hub.domain.chunk.model import UsageFact
 from blizzard.hub.domain.observability.egress.rows import (
     AttributedUsage,
     ExportedInvocation,
@@ -67,8 +68,8 @@ def _named_scenarios() -> dict[str, StepFacts]:
     return {name: replace(facts, runner_names=NAMES) for name, facts in fx.scenarios().items()}
 
 
-def _usage_row(fact: object, usage_id: int = 1, chunk_id: str = "ch_1") -> AttributedUsage:
-    return AttributedUsage(usage_id, chunk_id, "r-1", fact)  # type: ignore[arg-type]
+def _usage_row(fact: UsageFact, usage_id: int = 1, chunk_id: str = "ch_1") -> AttributedUsage:
+    return AttributedUsage(usage_id, chunk_id, "r-1", fact)
 
 
 def test_row_fields_are_the_contract_columns_in_order() -> None:

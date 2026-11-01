@@ -3,13 +3,16 @@ store, no harness, no clock (``blizzard.runner.lifecycle.takeover``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import TypedDict, Unpack
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.model import TakeoverHolds
@@ -78,17 +81,25 @@ def _takeover(
     )
 
 
-def _scope(**overrides: object) -> TakeoverOpenScope:
-    fields: dict[str, object] = {
-        "chunk_id": "ch_1",
+class _ScopeFields(TypedDict, total=False):
+    open_takeover: OpenTakeover | None
+    bindings: list[EnvBinding]
+    active_lease: Lease | None
+    latest_lease_with_session: Lease | None
+    latest_epoch: int
+    requeue_pending: bool
+
+
+def _scope(**overrides: Unpack[_ScopeFields]) -> TakeoverOpenScope:
+    fields: _ScopeFields = {
         "open_takeover": None,
         "bindings": [_BINDING],
         "active_lease": None,
         "latest_lease_with_session": _lease(),
         "latest_epoch": 3,
-        **overrides,
     }
-    return TakeoverOpenScope(**fields)  # type: ignore[arg-type]
+    fields.update(overrides)
+    return TakeoverOpenScope(chunk_id="ch_1", **fields)
 
 
 def _admit(scope: TakeoverOpenScope, *, force: bool = False, parked: bool = False, pending: bool = False):
@@ -221,23 +232,32 @@ class _ResumeHarness:
 _SESSION = SessionReference("cc", "sess-a")
 
 
-def _resolve(**overrides: object) -> str:
-    fields: dict[str, object] = {
+class _ResolveFields(TypedDict, total=False):
+    session: SessionReference | None
+    bindings: Sequence[EnvBinding]
+    harness: IHarnessWorkerLifecycle | None
+
+
+def _resolve(**overrides: Unpack[_ResolveFields]) -> str:
+    fields: _ResolveFields = {
         "session": _SESSION,
         "bindings": [_BINDING],
-        "harness": _ResumeHarness(),
-        "model": "opus",
-        "effort": "high",
-        "workspace_root": "/ws",
+        "harness": _ResumeHarness(),  # type: ignore[typeddict-item]
     }
     fields.update(overrides)
-    return resolve_resume_command(**fields)  # type: ignore[arg-type]
+    return resolve_resume_command(model="opus", effort="high", workspace_root="/ws", **fields)
 
 
-def _compose(**overrides: object) -> EscalationCommands:
-    fields: dict[str, object] = {"resume": "resume sess-a", "runner_dir": "/runner"}
+class _ComposeFields(TypedDict, total=False):
+    resume: str
+    runner_dir: str
+    runner: str
+
+
+def _compose(**overrides: Unpack[_ComposeFields]) -> EscalationCommands:
+    fields: _ComposeFields = {"resume": "resume sess-a", "runner_dir": "/runner"}
     fields.update(overrides)
-    return EscalationCommands.compose("ch_1", **fields)  # type: ignore[arg-type]
+    return EscalationCommands.compose("ch_1", **fields)
 
 
 def test_escalation_commands_compose_resume_and_wrapped() -> None:
@@ -262,7 +282,7 @@ def test_resolve_resume_command_uses_the_escalations_stamps() -> None:
     [{"session": None}, {"bindings": []}, {"harness": None}],
     ids=["no-session", "no-held-binding", "unresolved-owner"],
 )
-def test_resolve_resume_command_is_empty_without_a_precondition(overrides: dict[str, object]) -> None:
+def test_resolve_resume_command_is_empty_without_a_precondition(overrides: _ResolveFields) -> None:
     assert _resolve(**overrides) == ""
 
 

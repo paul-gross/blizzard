@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import (
+    Release,
     Window,
     line_of,
     newest_stable,
@@ -26,7 +28,7 @@ pytestmark = pytest.mark.unit
 _TAGS = ["v0.2.0-rc.1", "v0.2.0", "v0.3.0-rc.1"]
 
 
-def _tags(releases) -> list[str]:
+def _tags(releases: Iterable[Release]) -> list[str]:
     return [r.tag for r in releases]
 
 
@@ -210,9 +212,11 @@ def test_git_runs_under_the_c_locale_whatever_the_callers_locale_is(
     seen: list[str] = []
     real_run = subprocess.run
 
-    def spy(*args, **kwargs):
-        seen.append(kwargs["env"]["LC_ALL"])
-        return real_run(*args, **kwargs)
+    def spy(
+        args: list[str], *, capture_output: bool, text: bool, timeout: float, env: Mapping[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        seen.append(env["LC_ALL"])
+        return real_run(args, capture_output=capture_output, text=text, timeout=timeout, env=env)
 
     monkeypatch.setattr(subprocess, "run", spy)
     assert Repository(repo).previous_tag("v0.1.0") is None

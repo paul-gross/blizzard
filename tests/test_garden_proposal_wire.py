@@ -5,6 +5,8 @@ refused at the wire edge, mechanically, before any delivery logic ever sees it."
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,7 +15,11 @@ from blizzard.wire.garden_proposal import GardenProposalCandidate
 pytestmark = pytest.mark.unit
 
 
-def _candidate(**overrides: object) -> dict[str, object]:
+class _CandidateOverrides(TypedDict, total=False):
+    findings: list[str]
+
+
+def _candidate(**overrides: Unpack[_CandidateOverrides]) -> dict[str, object]:
     return {
         "ref": "P1",
         "class": "fix-the-source",

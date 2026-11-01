@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import pytest
 from click.testing import CliRunner, Result
@@ -14,14 +15,21 @@ from click.testing import CliRunner, Result
 from blizzard.tools.compat import allowances, gate
 from blizzard.tools.compat.cli import main
 from blizzard.tools.compat.releases import Window
+from blizzard.tools.compat.surfaces.wire import Document, Operation, Schema
 from blizzard.tools.compat.violation import Violation
 
 pytestmark = pytest.mark.unit
 
 _ROUTE = "/api/fleet/widgets"
-_EMPTY = {
-    "openapi/hub.openapi.json": {"openapi": "3.1.0", "paths": {}, "components": {"schemas": {}}},
-    "openapi/runner.openapi.json": {"openapi": "3.1.0", "paths": {}, "components": {"schemas": {}}},
+
+
+def _empty_spec() -> Document:
+    return {"paths": {}, "components": {"schemas": {}}}
+
+
+_EMPTY: dict[str, object] = {
+    "openapi/hub.openapi.json": _empty_spec(),
+    "openapi/runner.openapi.json": _empty_spec(),
     "contracts/config/hub.json": {"daemon": "hub", "keys": [], "paths": []},
     "contracts/config/host.json": {"daemon": "host", "keys": [], "paths": []},
     "contracts/traces/dictionary.json": {},
@@ -32,13 +40,13 @@ _EMPTY = {
 _WINDOW = "src/blizzard/wire/window.toml"
 
 
-def _spec(*, route: bool, deprecated: bool = False) -> dict[str, Any]:
-    document = json.loads(json.dumps(_EMPTY["openapi/hub.openapi.json"]))
+def _spec(*, route: bool, deprecated: bool = False) -> Document:
+    document = _empty_spec()
     if route:
-        operation: dict[str, Any] = {"responses": {"204": {"description": "ok"}}}
+        operation: Operation = {"responses": {"204": {}}}
         if deprecated:
             operation["deprecated"] = True
-        document["paths"][_ROUTE] = {"get": operation}
+        document["paths"] = {_ROUTE: {"get": operation}}
     return document
 
 
@@ -61,13 +69,17 @@ class _Repo:
         *,
         floor: str = "0.2",
         opening: str | None = None,
-        hub: dict[str, Any] | None = None,
+        hub: Document | None = None,
         drop: tuple[str, ...] = (),
         notes: dict[str, str] | None = None,
-        store: dict[str, Any] | None = None,
-        **extra,
+        store: Mapping[str, object] | None = None,
+        **extra: object,
     ) -> str:
-        documents = {**_EMPTY, "openapi/hub.openapi.json": hub or _EMPTY["openapi/hub.openapi.json"], **extra}
+        documents: dict[str, object] = {
+            **_EMPTY,
+            "openapi/hub.openapi.json": hub or _EMPTY["openapi/hub.openapi.json"],
+            **extra,
+        }
         if store is not None:
             documents["contracts/store/hub.json"] = store
         for path, document in documents.items():
@@ -358,7 +370,7 @@ def test_a_finding_the_base_already_carries_is_inherited_and_passes(
 
 def test_a_new_finding_beside_an_inherited_one_still_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _Repo(tmp_path / "r")
-    table = {"tables": {"t": {"columns": {}}}}
+    table: dict[str, object] = {"tables": {"t": {"columns": {}}}}
     repo.commit("chore: cut", hub=_spec(route=True), store=table)
     repo.git("tag", "v0.2.0")
     repo.commit("feat: remove the widgets route", store=table)
@@ -415,7 +427,12 @@ def test_a_note_already_at_the_base_declares_nothing(tmp_path: Path, monkeypatch
 # --- tag mode -----------------------------------------------------------------------------------
 
 
-def _breaks_file(repo: _Repo) -> dict[str, Any]:
+class _BreaksFile(TypedDict):
+    tag: str
+    breaks: list[object]
+
+
+def _breaks_file(repo: _Repo) -> _BreaksFile:
     return json.loads((repo.root / "compat-breaks.json").read_text())
 
 
@@ -576,8 +593,9 @@ def test_a_declared_break_passes_only_when_declarable_and_acknowledged() -> None
     findings = {"v0.2.0": [_finding(deprecated=False)]}
     declared = {("wire", _ROUTE)}
 
-    def passes(**kwargs: bool) -> bool:
-        return gate.judge(findings, line=False, declared=declared, **kwargs)[0].passes  # type: ignore[arg-type]
+    def passes(*, acknowledged: bool, declarable: bool) -> bool:
+        verdicts = gate.judge(findings, acknowledged=acknowledged, line=False, declarable=declarable, declared=declared)
+        return verdicts[0].passes
 
     assert passes(acknowledged=True, declarable=True)
     assert not passes(acknowledged=True, declarable=False)
@@ -606,20 +624,21 @@ _STATE_GAIN = ("wire", "State", "response enum gained value(s) ['paused']")
 _ALLOWANCES = "contracts/compat/allowances.toml"
 
 
-def _enum_spec(values: list[str], *, marked: bool = False) -> dict[str, Any]:
+def _enum_spec(values: list[str], *, marked: bool = False) -> Document:
     """A wire route answering a ``Widget`` whose ``state`` is the ``State`` enum, open-marked or not."""
-    document = json.loads(json.dumps(_EMPTY["openapi/hub.openapi.json"]))
-    position: dict[str, Any] = {"$ref": "#/components/schemas/State", **({"x-blizzard-open": True} if marked else {})}
-    document["paths"][_ROUTE] = {
-        "get": {
-            "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Widget"}}}}}
-        }
+    position: Schema = {"$ref": "#/components/schemas/State"}
+    if marked:
+        position["x-blizzard-open"] = True
+    widget: Schema = {"$ref": "#/components/schemas/Widget"}
+    return {
+        "paths": {_ROUTE: {"get": {"responses": {"200": {"content": {"application/json": {"schema": widget}}}}}}},
+        "components": {
+            "schemas": {
+                "Widget": {"type": "object", "properties": {"state": position}},
+                "State": {"type": "string", "enum": values},
+            }
+        },
     }
-    document["components"]["schemas"] = {
-        "Widget": {"type": "object", "properties": {"state": position}},
-        "State": {"type": "string", "enum": values},
-    }
-    return document
 
 
 def _allowance(line: str = "0.2", *, where: str = "State") -> str:

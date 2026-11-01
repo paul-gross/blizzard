@@ -5,6 +5,7 @@ source-addressed work-item routes, driven here with the client factory stubbed.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import httpx2
 import pytest
@@ -28,7 +29,11 @@ class _FakeResponse:
             raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
-def _item_view(**overrides: object) -> dict[str, object]:
+class _ItemViewFields(TypedDict, total=False):
+    title: str
+
+
+def _item_view(**overrides: Unpack[_ItemViewFields]) -> dict[str, object]:
     body: dict[str, object] = {
         "source": "hub",
         "ref": "42",

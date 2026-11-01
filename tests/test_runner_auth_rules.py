@@ -5,6 +5,7 @@ claims a federation token must carry, its expiry against the injected instant, a
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -46,8 +47,18 @@ def test_gated_uses_presented() -> None:
     assert resolve_human_session(socket_peer=False, gated=lambda: True, presented=lambda: None) is None
 
 
-def _claims(**overrides: object) -> dict[str, object]:
-    claims: dict[str, object] = {
+class _ClaimFields(TypedDict, total=False):
+    jti: str | None
+    sub: str | None
+    username: str | None
+    email: str | None
+    role: str | None
+    #: Wide: a test feeds it a malformed value.
+    exp: object
+
+
+def _claims(**overrides: Unpack[_ClaimFields]) -> dict[str, object]:
+    claims: _ClaimFields = {
         "jti": "jti-1",
         "sub": "usr_1",
         "username": "alice",

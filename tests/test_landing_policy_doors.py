@@ -6,8 +6,9 @@ configuration document carries both, an exported document applying back without 
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,7 +32,16 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
-def _repository(slug: str, **extra: object) -> dict[str, object]:
+class _RepositoryBody(TypedDict, total=False):
+    forge_api_url: str
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str
+    landing_policy: str
+
+
+def _repository(slug: str, **extra: Unpack[_RepositoryBody]) -> dict[str, object]:
     return {
         "slug": slug,
         "forge_api_url": "https://forge.example",
@@ -204,7 +214,7 @@ def test_a_repository_the_project_does_not_link_is_refused_repository_not_linked
 # --- The configuration document ----------------------------------------------------------------------------------
 
 
-def _apply(client: TestClient, document: dict[str, object]) -> Any:
+def _apply(client: TestClient, document: Mapping[str, object]) -> Any:
     return client.post("/api/config/apply", json=document)
 
 

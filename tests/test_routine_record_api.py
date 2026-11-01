@@ -6,6 +6,7 @@ writing nothing — a real hub app driven through ``TestClient``."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 import sqlalchemy as sa
@@ -48,8 +49,18 @@ def _mint_graph(hub: HubHarness, name: str = "alpha", headers: dict[str, str] | 
     assert resp.status_code == 201, resp.text
 
 
-def _create(hub: HubHarness, headers: dict[str, str] | None = None, **overrides: object) -> dict[str, object]:
-    body = {"name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard", **overrides}
+class _RoutineBody(TypedDict, total=False):
+    name: str
+    graph_name: str
+    default_scope_slug: str
+    default_model: list[str]
+    default_effort: str
+
+
+def _create(
+    hub: HubHarness, headers: dict[str, str] | None = None, **overrides: Unpack[_RoutineBody]
+) -> dict[str, object]:
+    body: _RoutineBody = {"name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard", **overrides}
     resp = hub.client.post("/api/routines", json=body, headers=headers)
     assert resp.status_code == 201, resp.text
     return resp.json()

@@ -10,8 +10,10 @@ import inspect
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from types import MappingProxyType, ModuleType
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -119,14 +121,30 @@ _FORGE = ConfiguredForge(
 )
 
 
-def _visit(**overrides: object) -> Visit:
+class _VisitFields(TypedDict, total=False):
+    chunk: VisitChunk
+    node: VisitNode
+    epoch: int
+    artifacts: tuple[StoredArtifact, ...]
+    markers: tuple[StoredArtifact, ...]
+    git_commits: GitCommits
+    resolution: RepositoryResolution
+    work_items: tuple[Mapping[str, str | None], ...]
+    feature_title: str | None
+    public_url: str | None
+    project: LandingProject
+    first_turn_at: datetime
+    now: datetime
+
+
+def _visit(**overrides: Unpack[_VisitFields]) -> Visit:
     """A visit exercising every field."""
     commit = _artifact(ArtifactKind.GIT_COMMIT, "w", f"feat/x:{'a' * 40}", repo="acme/widget")
     marker = _artifact(ArtifactKind.ASSET, "ci-rerun/1", "done")
     target = ResolvedRepository(
         forge_id=_FORGE.forge_id, owner="acme", base_branch="main", secret_name="s", record="re_1"
     )
-    fields: dict[str, object] = {
+    defaults: _VisitFields = {
         "chunk": VisitChunk(
             chunk_id="ch_1",
             project_id=ProjectId("pr_1"),
@@ -158,7 +176,7 @@ def _visit(**overrides: object) -> Visit:
         "first_turn_at": datetime(2026, 10, 24, tzinfo=UTC),
         "now": datetime(2026, 10, 24, tzinfo=UTC),
     }
-    return Visit(**{**fields, **overrides})  # type: ignore[arg-type]
+    return Visit(**(defaults | overrides))
 
 
 def test_a_visit_is_frozen_all_the_way_down() -> None:
@@ -180,7 +198,7 @@ def test_a_visit_is_frozen_all_the_way_down() -> None:
         ),
     ],
 )
-def test_the_frozen_walk_finds_a_mutable_part(overrides: dict[str, object], found: str) -> None:
+def test_the_frozen_walk_finds_a_mutable_part(overrides: _VisitFields, found: str) -> None:
     assert found in _mutable_parts(_visit(**overrides))
 
 
@@ -189,7 +207,7 @@ def test_the_frozen_walk_finds_a_dataclass_that_is_not_frozen() -> None:
     class Loose:
         n: int
 
-    assert _mutable_parts(_visit(feature_title=Loose(1))) == ["visit.feature_title is a mutable Loose"]
+    assert _mutable_parts(_visit(feature_title=Loose(1))) == ["visit.feature_title is a mutable Loose"]  # type: ignore[arg-type]  # a deliberately mutable non-str title
 
 
 # --- nothing smuggled in -----------------------------------------------------

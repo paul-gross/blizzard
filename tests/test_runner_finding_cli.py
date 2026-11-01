@@ -49,7 +49,7 @@ class _RejectingResponse:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
-        raise httpx2.HTTPStatusError("404 not found", request=object(), response=self)  # type: ignore[arg-type]
+        raise httpx2.HTTPStatusError("404 not found", request=httpx2.Request("GET", "http://hub.test"), response=self)  # type: ignore[arg-type]
 
     def json(self) -> object:
         return self._detail

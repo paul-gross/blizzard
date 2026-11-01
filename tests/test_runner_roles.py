@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import pytest
 
 from blizzard.auth_core import Role
@@ -11,10 +13,16 @@ from blizzard.runner.config import RunnerConfig
 pytestmark = pytest.mark.unit
 
 
-def _config(**kwargs: object) -> RunnerConfig:
+class _ConfigFields(TypedDict, total=False):
+    auth_superuser: str | None
+    auth_hub_role_default: str
+    auth_users: tuple[tuple[str, str], ...]
+
+
+def _config(**kwargs: Unpack[_ConfigFields]) -> RunnerConfig:
     from pathlib import Path
 
-    return RunnerConfig(root=Path("."), db_url="sqlite://", **kwargs)  # type: ignore[arg-type]
+    return RunnerConfig(root=Path("."), db_url="sqlite://", **kwargs)
 
 
 def test_per_user_override_beats_the_hub_claim() -> None:

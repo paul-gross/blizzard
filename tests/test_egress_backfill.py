@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 import httpx2
 import pytest
@@ -41,12 +41,23 @@ pytestmark = pytest.mark.component
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 
 
-def _real(tmp_path: Path, **extra: object) -> EgressConfig:
+class _RealFields(TypedDict, total=False):
+    datasets: tuple[str, ...]
+    max_rows_per_file: int
+    backfill_max_window: int
+
+
+class _BackfillBody(TypedDict, total=False):
+    dataset: str
+    dry_run: bool
+
+
+def _real(tmp_path: Path, **extra: Unpack[_RealFields]) -> EgressConfig:
     (tmp_path / "out").mkdir(exist_ok=True)
-    return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)  # type: ignore[arg-type]
+    return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)
 
 
-def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object) -> httpx2.Response:
+def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: Unpack[_BackfillBody]) -> httpx2.Response:
     body = {"since": iso_utc(since), "until": iso_utc(until), **extra}
     return hub.client.post("/api/egress/backfill", json=body)
 

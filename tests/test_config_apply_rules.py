@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -28,7 +29,7 @@ from blizzard.hub.domain.config.repositories import ConfiguredRepository, Reposi
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
-from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit
+from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
 from blizzard.hub.domain.kernel.unset import UNSET
 
 pytestmark = pytest.mark.unit
@@ -71,22 +72,35 @@ def _repo(name: str = "blizzard", *, retired: bool = False) -> ConfiguredReposit
     )
 
 
-def _declared_repo(slug: str = "blizzard", **stated: object) -> RepositoryDeclaration:
+class _RepositoryStated(TypedDict, total=False):
+    base_branch: str
+
+
+def _declared_repo(slug: str = "blizzard", **stated: Unpack[_RepositoryStated]) -> RepositoryDeclaration:
     return RepositoryDeclaration(
         slug=slug,
         name=None,
         fields=_REPO,
-        edit=RepositoryEdit(**stated),  # type: ignore[arg-type]
+        edit=RepositoryEdit(**stated),
         repository_id=RepositoryId(f"repo_{slug}"),
     )
 
 
-def _declared_source(slug: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: object) -> WorkSourceDeclaration:
+class _WorkSourceStated(TypedDict, total=False):
+    provider: str
+    locator: str
+    annotate: bool
+    secret: str | None
+
+
+def _declared_source(
+    slug: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: Unpack[_WorkSourceStated]
+) -> WorkSourceDeclaration:
     return WorkSourceDeclaration(
         slug=slug,
         name=None,
         fields=fields,
-        edit=WorkSourceEdit(**stated),  # type: ignore[arg-type]
+        edit=WorkSourceEdit(**stated),
         work_source_id=WorkSourceId(f"wsrc_{slug}"),
     )
 
@@ -244,22 +258,32 @@ def test_an_edit_that_leaves_every_field_unset_compares_nothing() -> None:
 # --- Scopes and routines, reached through the record Protocol ---------------------
 
 
-def _scope_entry(slug: str = "core", description: str = "", **stated: object) -> ScopeDeclaration:
-    edit = ScopeEdit(**stated)  # type: ignore[arg-type]
+def _scope_entry(slug: str = "core", description: str = "") -> ScopeDeclaration:
+    edit = ScopeEdit()
     return ScopeDeclaration(name=slug, description=description, edit=edit, project_id=_PROJECT)
 
 
-def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: object) -> RoutineDeclaration:
-    declared: dict[str, object] = {"graph_name": "alpha", "default_scope_slug": "core", **fields}
+class _RoutineDeclared(TypedDict, total=False):
+    graph_name: str
+    default_scope_slug: str
+
+
+def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: Unpack[_RoutineDeclared]) -> RoutineDeclaration:
+    declared: _RoutineDeclared = {"graph_name": "alpha", "default_scope_slug": "core"}
+    declared.update(fields)
     return RoutineDeclaration(
         name="nightly",
         default_model=(),
         default_effort=None,
         default_harnesses=(),
-        edit=RoutineEdit(name="nightly", **declared),  # type: ignore[arg-type]
+        edit=RoutineEdit(
+            name="nightly",
+            graph_name=declared["graph_name"],
+            default_scope_slug=ScopeSlug(declared["default_scope_slug"]),
+        ),
         scopes=scopes,
         project_id=_PROJECT,
-        **declared,  # type: ignore[arg-type]
+        **declared,
     )
 
 

@@ -4,6 +4,7 @@ never the committed ones."""
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable
 from typing import Any
 
 import pytest
@@ -12,11 +13,12 @@ from blizzard.tools.compat.surfaces.config import classify_config
 from blizzard.tools.compat.surfaces.egress import classify_egress
 from blizzard.tools.compat.surfaces.store import classify_store
 from blizzard.tools.compat.surfaces.traces import classify_traces
+from blizzard.tools.compat.violation import Violation
 
 pytestmark = pytest.mark.unit
 
 
-def _reasons(findings) -> list[tuple[str, str, bool]]:
+def _reasons(findings: Iterable[Violation]) -> list[tuple[str, str, bool]]:
     return [(f.where, f.reason, f.deprecated) for f in findings]
 
 

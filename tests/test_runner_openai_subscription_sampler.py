@@ -56,8 +56,10 @@ def _credentials_text(
     return json.dumps({"auth_mode": "chatgpt", "tokens": tokens})
 
 
-def _write_credentials(path: Path, **kwargs: object) -> Path:
-    path.write_text(_credentials_text(**kwargs))  # type: ignore[arg-type]
+def _write_credentials(
+    path: Path, *, access_token: str | None, account_id: str | None = _ACCOUNT_ID, tokens_block: bool = True
+) -> Path:
+    path.write_text(_credentials_text(access_token=access_token, account_id=account_id, tokens_block=tokens_block))
     return path
 
 
@@ -115,10 +117,17 @@ def _guard_against_writes(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
     """Fail the test if anything opens ``path`` in a write-capable mode."""
     original_open = Path.open
 
-    def guarded_open(self: Path, mode: str = "r", *args: object, **kwargs: object) -> object:
+    def guarded_open(
+        self: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> object:
         if self == path and any(flag in mode for flag in "wax+"):
             raise AssertionError(f"credentials file opened in a write-capable mode: {mode!r}")
-        return original_open(self, mode, *args, **kwargs)  # type: ignore[arg-type]
+        return original_open(self, mode, buffering, encoding, errors, newline)
 
     monkeypatch.setattr(Path, "open", guarded_open)
 

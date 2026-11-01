@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -41,15 +40,14 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, Any]:
+def _create_routine(hub: HubHarness, *, name: str = "nightly") -> dict:  # type: ignore[type-arg]
     body: dict[str, object] = {
-        "name": "nightly",
+        "name": name,
         "graph_name": "alpha",
         "default_scope_slug": "blizzard",
         "default_model": [],
         "default_effort": None,
     }
-    body.update(overrides)
     resp = hub.client.post("/api/routines", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()

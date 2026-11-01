@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -96,7 +97,12 @@ def _write_cache(path: Path, document: dict[str, object]) -> None:
     path.write_text(json.dumps(document), encoding="utf-8")
 
 
-def _luna_cost(**overrides: object) -> dict[str, object]:
+class _CostOverrides(TypedDict, total=False):
+    input: float
+    output: float
+
+
+def _luna_cost(**overrides: Unpack[_CostOverrides]) -> dict[str, object]:
     cost: dict[str, object] = {"input": 0.20, "output": 1.20, "cache_read": 0.02, "cache_write": 0.25}
     cost.update(overrides)
     return cost

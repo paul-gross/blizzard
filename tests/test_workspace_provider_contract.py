@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -28,8 +29,17 @@ class _Case:
     pool: tuple[str, ...]
 
 
-def _settings(tmp_path: Path, **fields: object) -> WorkspaceSettings:
-    return HostWorkspace("ws", **fields).settings(tmp_path)  # type: ignore[arg-type]
+class _WorkspaceFields(TypedDict, total=False):
+    root: str
+    provider: str
+    envs: tuple[str, ...]
+    max_environments: int
+    repos: tuple[WorkspaceRepo, ...]
+    base_branch: str
+
+
+def _settings(tmp_path: Path, **fields: Unpack[_WorkspaceFields]) -> WorkspaceSettings:
+    return HostWorkspace("ws", **fields).settings(tmp_path)
 
 
 _CASES = {

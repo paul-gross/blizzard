@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
 from click.testing import CliRunner
@@ -21,8 +22,16 @@ from tests.test_change_notes_render import _commit, _git
 pytestmark = pytest.mark.unit
 
 
-def _note(version: str, note_id: str, kind: str, **fields: object) -> Note:
-    return Note(f"changes/{version}/{note_id}.md", version, note_id, {"kind": kind, **fields}, f"{note_id} prose.\n")
+_NoteFront = TypedDict(
+    "_NoteFront",
+    {"breaking": bool, "postpones": str, "retires": str, "removes-in": str, "upgrade-guide": str},
+    total=False,
+)
+
+
+def _note(version: str, note_id: str, kind: str, front: _NoteFront | None = None) -> Note:
+    fields = {"kind": kind, **(front or {})}
+    return Note(f"changes/{version}/{note_id}.md", version, note_id, fields, f"{note_id} prose.\n")
 
 
 def _file(kind: str, body: str, **fields: str) -> str:
@@ -42,16 +51,16 @@ def test_guide_heading_joins_wrapped_first_sentence_without_link() -> None:
     assert "### The first sentence spans two lines.\n\n" in text
     assert "The first sentence spans\ntwo lines. Another sentence follows." in text
     assert "### [The first sentence spans two lines.]" in render("v2.0.0", [note], {}, "")
-    assert "### simple prose.\n\n" in guide([_note("2.0.0", "simple", "changed", breaking=True)], "2")
+    assert "### simple prose.\n\n" in guide([_note("2.0.0", "simple", "changed", {"breaking": True})], "2")
 
 
 def test_guide_uses_numeric_history_latest_postponement_and_only_current_removal() -> None:
     notes = [
-        _note("1.10.0", "delay", "changed", postpones="old", **{"removes-in": "4"}),
-        _note("1.9.0", "old", "deprecated", **{"removes-in": "2"}),
-        _note("3.0.0", "premature", "removed", retires="old"),
-        _note("4.0.0", "gone", "removed", retires="old"),
-        _note("4.0.0", "direct", "changed", breaking=True),
+        _note("1.10.0", "delay", "changed", {"postpones": "old", "removes-in": "4"}),
+        _note("1.9.0", "old", "deprecated", {"removes-in": "2"}),
+        _note("3.0.0", "premature", "removed", {"retires": "old"}),
+        _note("4.0.0", "gone", "removed", {"retires": "old"}),
+        _note("4.0.0", "direct", "changed", {"breaking": True}),
     ]
     assert due_without_removal(notes, "4") == ()
     text = guide(reversed(notes), "4", tag="v4.0.0")
@@ -64,10 +73,10 @@ def test_guide_uses_numeric_history_latest_postponement_and_only_current_removal
 
 def test_pre_one_guide_orders_deprecations_by_numeric_release_and_links_boundaries() -> None:
     notes = [
-        _note("0.10.0", "a", "deprecated", **{"removes-in": "0.12"}),
-        _note("0.9.0", "z", "deprecated", **{"removes-in": "0.12"}),
-        _note("0.12.0", "remove-a", "removed", retires="a", **{"upgrade-guide": "steps"}),
-        _note("0.12.0", "remove-z", "removed", retires="z"),
+        _note("0.10.0", "a", "deprecated", {"removes-in": "0.12"}),
+        _note("0.9.0", "z", "deprecated", {"removes-in": "0.12"}),
+        _note("0.12.0", "remove-a", "removed", {"retires": "a", "upgrade-guide": "steps"}),
+        _note("0.12.0", "remove-z", "removed", {"retires": "z"}),
     ]
     text = guide(notes, "0.12", tag="v0.12.0")
     assert text.index("z prose") < text.index("a prose")
@@ -143,9 +152,9 @@ def test_guide_refuses_only_when_due_has_neither_released_nor_pending_removal(
 
 def test_retirement_of_another_line_is_not_a_standalone_breaking_entry() -> None:
     notes = [
-        _note("1.9.0", "old", "deprecated", **{"removes-in": "3"}),
-        _note("2.0.0", "premature", "removed", retires="old", breaking=True),
-        _note("2.0.0", "direct", "changed", breaking=True),
+        _note("1.9.0", "old", "deprecated", {"removes-in": "3"}),
+        _note("2.0.0", "premature", "removed", {"retires": "old", "breaking": True}),
+        _note("2.0.0", "direct", "changed", {"breaking": True}),
     ]
     text = guide(notes, "2")
     assert "premature prose" not in text
@@ -155,9 +164,9 @@ def test_retirement_of_another_line_is_not_a_standalone_breaking_entry() -> None
 
 def test_earlier_retirement_does_not_block_later_line() -> None:
     notes = [
-        _note("0.9.0", "old", "deprecated", **{"removes-in": "0.12"}),
-        _note("0.12.0", "gone", "removed", retires="old"),
-        _note("0.12.0", "next", "deprecated", **{"removes-in": "1"}),
+        _note("0.9.0", "old", "deprecated", {"removes-in": "0.12"}),
+        _note("0.12.0", "gone", "removed", {"retires": "old"}),
+        _note("0.12.0", "next", "deprecated", {"removes-in": "1"}),
     ]
     assert due_without_removal(notes, "1") == ("next",)
 
@@ -212,7 +221,7 @@ def test_tagged_render_sees_history_at_tag_not_working_tree_and_candidate_is_rep
     postponed = CliRunner().invoke(main, ["render", "v1.9.0"])
     assert "Removal planned for 2." in postponed.output
     assert "Removal planned for 3." in render(
-        "v3.0.0", [_note("1.9.0", "old", "deprecated", **{"removes-in": "2"})], {}, "", schedule={"old": "3"}
+        "v3.0.0", [_note("1.9.0", "old", "deprecated", {"removes-in": "2"})], {}, "", schedule={"old": "3"}
     )
     assert CliRunner().invoke(main, ["render", "v3.0.0-rc.1"]).output == first.output
     assert subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout == ""

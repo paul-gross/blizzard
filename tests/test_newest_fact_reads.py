@@ -6,6 +6,7 @@ the rows fetched are identical."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sized
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -96,7 +97,7 @@ def _engine(tmp_path: Path, *, depth: int) -> Engine:
     return engine
 
 
-def _reads(engine: Engine) -> dict[str, object]:
+def _reads(engine: Engine) -> dict[str, Callable[[], object]]:
     store = hub_store_connections(engine)
 
     def registry(fn):
@@ -150,7 +151,7 @@ def _retirement_engine(tmp_path: Path, *, depth: int) -> Engine:
     return engine
 
 
-def _retirement_reads(engine: Engine) -> dict[str, object]:
+def _retirement_reads(engine: Engine) -> dict[str, Callable[[], Sized]]:
     store = hub_store_connections(engine)
     return {
         "secret": lambda: SecretStore(store).retired_names(),
@@ -180,10 +181,10 @@ def test_retirement_reads_are_flat_across_history_depth(tmp_path: Path) -> None:
     deep = _retirement_reads(deep_engine)
     for name in shallow:
         bounded = name.endswith("bounded")
-        answer = deep[name]()  # type: ignore[operator]
-        assert answer == shallow[name](), name  # type: ignore[operator]
+        answer = deep[name]()
+        assert answer == shallow[name](), name
         assert len(answer) == (1 if bounded else 2), name
-        assert count_rows_read(deep_engine, deep[name]) <= (2 if bounded else len(_KEYS)), name  # type: ignore[arg-type]
+        assert count_rows_read(deep_engine, deep[name]) <= (2 if bounded else len(_KEYS)), name
 
 
 def test_newest_fact_reads_are_flat_across_history_depth(tmp_path: Path) -> None:
@@ -191,8 +192,8 @@ def test_newest_fact_reads_are_flat_across_history_depth(tmp_path: Path) -> None
     deep_engine = _engine(tmp_path / "deep", depth=6)
     deep = _reads(deep_engine)
     for name in shallow:
-        assert shallow[name]() == deep[name](), name  # type: ignore[operator]
-        assert count_rows_read(deep_engine, deep[name]) == len(_KEYS), name  # type: ignore[arg-type]
+        assert shallow[name]() == deep[name](), name
+        assert count_rows_read(deep_engine, deep[name]) == len(_KEYS), name
 
 
 def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ import os
 import zlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Unpack
 
 import pytest
 from sqlalchemy.dialects import postgresql, sqlite
@@ -23,6 +24,7 @@ from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.factory_fields import TranscriptSliceFields
 from tests.support import hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.unit
@@ -32,8 +34,8 @@ _STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 _NOW = datetime(2026, 8, 9, tzinfo=UTC)
 
 
-def _record(**overrides: object) -> TranscriptSlice:
-    values: dict[str, object] = {
+def _record(**overrides: Unpack[TranscriptSliceFields]) -> TranscriptSlice:
+    values: TranscriptSliceFields = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -49,7 +51,7 @@ def _record(**overrides: object) -> TranscriptSlice:
         "turns_json": '[{"index": 0, "kind": "asst"}]',
     }
     values.update(overrides)
-    return TranscriptSlice(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)
 
 
 def _migrated_engine(tmp_path: Path):

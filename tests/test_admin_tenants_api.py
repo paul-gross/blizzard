@@ -7,6 +7,7 @@ refused all of it; a rename reaches a runner's next registration; the tenant-sco
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 import sqlalchemy as sa
@@ -47,7 +48,11 @@ def _hub_admin(hub: HubHarness) -> str:
     return seed_session(hub, user)
 
 
-def _create(hub: HubHarness, session: str, name: str, **extra: object) -> dict[str, object]:
+class _TenantExtras(TypedDict, total=False):
+    admin_user_id: str
+
+
+def _create(hub: HubHarness, session: str, name: str, **extra: Unpack[_TenantExtras]) -> dict[str, object]:
     resp = hub.client.post("/api/admin/tenants", json={"name": name, **extra}, headers=_bearer(session))
     assert resp.status_code == 201, resp.text
     return resp.json()
