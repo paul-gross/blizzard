@@ -11,7 +11,7 @@ import httpx2
 from click.testing import CliRunner
 
 from blizzard.cli.collaborators import CliCollaborators
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.span_clock import Clock
 
 
@@ -146,7 +146,9 @@ def bind_stubs(
         "stream": stream,
     }
     factory = _StubFactory({name: call for name, call in given.items() if call is not None})
-    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())
+    collaborators = CliCollaborators(
+        client_factory=factory, clock=Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
+    )
     return Bound(collaborators, _BoundRunner(collaborators), factory.built)
 
 
@@ -167,7 +169,9 @@ def bind_transport(handler: Callable[[httpx2.Request], httpx2.Response], *, cloc
         built.append(client)
         return client
 
-    collaborators = CliCollaborators(client_factory=factory, clock=clock or Clock(), wall_clock=SystemClock())
+    collaborators = CliCollaborators(
+        client_factory=factory, clock=clock or Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
+    )
     return Bound(collaborators, _BoundRunner(collaborators), built)
 
 
@@ -193,5 +197,7 @@ def bind_local_only(*, allow_base_urls: tuple[str, ...] = ()) -> Bound:
         local_timeout = _IN_PROCESS_DAEMON_TIMEOUT if uds is not None else timeout
         return real(base_url=base_url, timeout=local_timeout, headers=headers, uds=uds)
 
-    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())
+    collaborators = CliCollaborators(
+        client_factory=factory, clock=Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
+    )
     return Bound(collaborators, _BoundRunner(collaborators), [])

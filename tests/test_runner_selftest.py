@@ -14,6 +14,7 @@ import time
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Executor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,10 @@ from typing import Any
 import httpx2
 import pytest
 import uvicorn
+from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -53,7 +55,7 @@ from tests.runner_client import runner_client
 from tests.runner_fakes import NO_TRACING
 from tests.runner_init_fakes import init_runner
 from tests.support_child_launch import CHILDREN, tool_env, version_probe
-from tests.worker_http import bind_local_only
+from tests.worker_http import bind_local_only, bind_transport
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
@@ -830,3 +832,27 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
 
         assert run["status"] == "passed", (harness_id, run)
         assert all(c["passed"] for c in run["checks"]), (harness_id, run["checks"])
+
+
+@pytest.mark.component
+def test_cli_selftest_refuses_a_daemon_that_never_finishes_once_the_poll_deadline_passes_in_virtual_time(
+    tmp_path: Path,
+) -> None:
+    def answers_running_forever(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/api/host/runners":
+            return httpx2.Response(
+                200, json={"items": [{"name": "r1", "runner_id": "rn_1", "state": "serving", "served": True}]}
+            )
+        return httpx2.Response(200, json={"id": "st_1", "status": "running", "checks": []})
+
+    bound = bind_transport(answers_running_forever)
+    monotonic = ManualMonotonicClock()
+    carrier = replace(bound.collaborators, monotonic_clock=monotonic)
+
+    result = CliRunner().invoke(
+        runner_group, ["selftest", "claude_code", "--runner-url", "http://runner.test"], obj=carrier
+    )
+
+    assert result.exit_code != 0
+    assert "selftest st_1 did not finish within 600s" in result.output
+    assert monotonic.reading > 600.0
