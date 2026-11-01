@@ -66,10 +66,17 @@ def test_dev_image_needs_exactly_the_gate_the_upper_tiers_the_dev_build_and_the_
 def test_the_rehearsal_upgrades_to_the_wheel_dev_build_uploaded() -> None:
     job = _jobs()["rehearsal"]
     assert job["uses"] == "./.github/workflows/rehearsal.yml"
-    assert job["needs"] == ["gate", "dev-build"]
+    assert job["needs"] == ["dev-build"]
     upload = next(s for s in _jobs()["dev-build"]["steps"] if "upload-artifact" in str(s.get("uses", "")))
     assert job["with"] == {"candidate_artifact": "blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}"}
     assert upload["with"]["name"] == "blizzard-dev-wheel-${{ steps.ver.outputs.version }}"
+
+
+def test_the_wheel_and_its_rehearsal_run_alongside_the_gate() -> None:
+    """Pinned because waiting on the gate is the natural-looking edge to add back, and it puts the
+    wheel build and the rehearsal behind the gate's slowest pytest shard on the run's longest path."""
+    assert "needs" not in _jobs()["dev-build"]
+    assert "gate" not in _jobs()["rehearsal"]["needs"]
 
 
 def test_dev_build_job_exposes_its_version_as_an_output() -> None:

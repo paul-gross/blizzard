@@ -286,10 +286,10 @@ runs nothing: `push.yml` is `master`'s alone. A pull request that changes a stor
 store baseline proof.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate, the service tier and the
-bounded crash sweep, then uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently
-cut `X.Y.Z` as a workflow artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags, multi-arch like
-the release image: `edge`, mutable — the newest proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is
-the dogfooding pointer; `latest` never follows `master` and moves only on a stable release cut —
+bounded crash sweep, and alongside them uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the
+most recently cut `X.Y.Z` as a workflow artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags,
+multi-arch like the release image: `edge`, mutable — the newest proven `master` image — and `sha-<full-git-sha>`,
+immutable. `edge` is the dogfooding pointer; `latest` never follows `master` and moves only on a stable release cut —
 [`docs/versioning.md`](./versioning.md) owns the channel semantics.
 
 The `proven-against` job, after the gate and upper tiers, uploads a `proven-against` artifact holding one JSON file that
@@ -306,11 +306,13 @@ The dev-build wheel is downloaded from its run with:
 gh run download --repo paul-gross/blizzard <run-id>
 ```
 
-The `dev-image` job needs `[gate, upper-tiers, dev-build, rehearsal]` — the tiers and the upgrade rehearsal so the
-channel advances only on proven commits, and `dev-build` solely to reuse its computed dev version for the image's
-`org.opencontainers.image.version` annotation rather than recomputing it. Unlike the release fan-out, the dev tags and
-OCI annotations are inlined in the `dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py`
-pins the job.
+`dev-build` waits on nothing and the upgrade rehearsal only on it: the wheel needs no gate result to build, and the
+rehearsal needs only the wheel, so both run alongside the gate instead of after its slowest shard. A red run still
+uploads its wheel, which is why a dogfood build is a green run's. The `dev-image` job needs
+`[gate, upper-tiers, dev-build, rehearsal]` — the tiers and the upgrade rehearsal so the channel advances only on proven
+commits, and `dev-build` solely to reuse its computed dev version for the image's `org.opencontainers.image.version`
+annotation rather than recomputing it. Unlike the release fan-out, the dev tags and OCI annotations are inlined in the
+`dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) opens with `proof`, which asks
 [`scripts/borrowed-proof.sh`](../scripts/borrowed-proof.sh), unit-tested by `tests/test_borrowed_proof.py`, whether the
