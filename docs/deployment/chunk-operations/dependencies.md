@@ -40,12 +40,13 @@ itself grouped away or deleted — is 404.
 A standing, unsatisfied dependency derives a **blocked marking** — a nullable field carried beside `status` on
 `GET /api/chunks`, `GET /api/chunks/{chunk_id}`, `GET /api/queue`, and `GET /api/backlog`, naming the earliest-declared
 prerequisite that has not reached `done`. What the marking means, its one-hop scope, and the `not_ready`/`ready` window
-it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Satisfaction is not stored: an edge is met
-when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge itself,
-so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A prerequisite
-absent from the fleet's statuses still blocks, the conservative read — but deletion now refuses a standing edge onto a
-live prerequisite, so this conservative read only guards the accepted residual race between a status read and a
-concurrent write, not an ordinary reachable path.
+it is confined to are
+[`blizzard-context/domain/work/statuses.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/statuses.md#the-blocked-marking)'s
+to say. Satisfaction is not stored: an edge is met when its prerequisite reads `done`, read fresh at the point something
+consults it rather than cached on the edge itself, so declaring onto an already-`done` prerequisite is an ordinary
+accepted edge that names no marking. A prerequisite absent from the fleet's statuses still blocks, the conservative read
+— but deletion now refuses a standing edge onto a live prerequisite, so this conservative read only guards the accepted
+residual race between a status read and a concurrent write, not an ordinary reachable path.
 
 A chunk currently named as another's prerequisite cannot itself be deleted while that edge stands: deletion is refused
 409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
@@ -61,8 +62,9 @@ standing survivor edge that duplicates it is released and re-minted at the earli
 
 `GET /api/chunks/{chunk_id}` also carries a `neighborhood` field: `prerequisites` and `dependents`, each a list of
 `{chunk_id, status, satisfied}`, empty rather than null when a chunk names neither. What the two directions mean,
-`status`'s one residual-race null case, and how `satisfied` is derived are `blizzard-context:/domain/work/statuses.md`'s
-to say, §The neighborhood.
+`status`'s one residual-race null case, and how `satisfied` is derived are
+[`blizzard-context/domain/work/statuses.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/statuses.md#the-neighborhood)'s
+to say.
 
 ## What a standing edge does to claiming
 
@@ -97,7 +99,9 @@ The blocked marking renders beside a chunk's unchanged status everywhere the boa
 the chunk detail dock's header, the routed chunk page header the hub's mobile board and the runner app share, and a row
 of the board's list layout, where it is plain text that selects nothing. Clicking it selects the named prerequisite into
 the dock on the board and in the dock header; from the routed page, which has no dock to select into, it links there
-instead. `blizzard-context:/domain/work/statuses.md` owns what the marking means and which chunks can carry one.
+instead.
+[`blizzard-context/domain/work/statuses.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/statuses.md#the-blocked-marking)
+owns what the marking means and which chunks can carry one.
 
 The board carries no declare or release control — an operator reaches those two verbs only through
 `blizzard hub chunk depend`/`release-dependency` or the API routes above, never the dock.
