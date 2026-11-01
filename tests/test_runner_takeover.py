@@ -22,7 +22,7 @@ from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -70,7 +70,15 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=None, workspace_root="", workspaces=None):
+def _service(
+    store: SqlAlchemyRunnerStore,
+    *,
+    clock: FixedClock | None = None,
+    harness: IHarnessAdapter | None = None,
+    probe: FakeProbe | None = None,
+    workspace_root: str = "",
+    workspaces: WorkspaceRegistry | None = None,
+) -> TakeoverService:
     return TakeoverService(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
@@ -101,17 +109,17 @@ def _two_workspace_service(store: SqlAlchemyRunnerStore):
 def _seed_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    node_id="nd_build",
-    node_name="build",
-    epoch=1,
-    pid=100,
-    session="sess-a",
-    session_name=None,
-    resolved_model=None,
-    resolved_effort=None,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    node_id: str = "nd_build",
+    node_name: str = "build",
+    epoch: int = 1,
+    pid: int = 100,
+    session: str = "sess-a",
+    session_name: str | None = None,
+    resolved_model: str | None = None,
+    resolved_effort: str | None = None,
+) -> None:
     """A build lease, spawned and bound — the shape every scenario below starts from.
 
     The session stamps default to unset, i.e. the pre-#144 shape: every
@@ -176,7 +184,7 @@ def test_takeover_resumes_from_the_spawn_root_of_the_workspace_the_chunk_is_boun
 
 
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_takeover_opens_over_an_ask_parked_chunk(tmp_path: Path, workspace_root, expected_cwd) -> None:
+def test_takeover_opens_over_an_ask_parked_chunk(tmp_path: Path, workspace_root: str, expected_cwd: str) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -848,6 +856,6 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(
     assert not [n for n in opened.env if n.startswith(("OTEL_", "CLAUDE_CODE_"))]
 
 
-def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: set[str]) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

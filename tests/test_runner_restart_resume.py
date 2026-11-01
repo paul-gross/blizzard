@@ -43,13 +43,13 @@ def _store(tmp_path: Path):
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
+) -> None:
     """A build lease spawned into env e1 with a live worker, plus its binding."""
     store.record_lease(
         NewLease(
@@ -73,7 +73,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def running_chunk(chunk="ch_1", *, runner_id="r1"):
+def running_chunk(chunk: str = "ch_1", *, runner_id: str = "r1") -> ChunkState:
     return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
@@ -245,7 +245,17 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
 
-    def _raise(*args, **kwargs):
+    def _raise(
+        lease_id: str,
+        *,
+        pid: int,
+        process_start_time: str,
+        spawned_at: datetime,
+        session: SessionReference,
+        harness_version: str | None = None,
+        pgid: int | None = None,
+        spawn_cwd: str | None = None,
+    ) -> None:
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_spawn", _raise)
@@ -519,7 +529,7 @@ def test_resume_defers_when_hub_unreachable(tmp_path: Path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("known_but_unavailable", [False, True], ids=["unknown", "unavailable"])
-def test_resume_owner_failure_escalates_in_place(tmp_path: Path, known_but_unavailable):
+def test_resume_owner_failure_escalates_in_place(tmp_path: Path, known_but_unavailable: bool):
     """An unservable exact owner escalates the chunk in place — no other
     runner can resume this exact session, so RESUME kills the stale survivor, closes the
     lease escalated, and clears the resume intent rather than leaving either open forever."""

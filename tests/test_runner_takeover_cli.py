@@ -8,11 +8,10 @@ never shells out — the point is the CLI's own protocol (open, exec, mark ended
 from __future__ import annotations
 
 import shlex
-from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 import click
@@ -37,17 +36,25 @@ from tests.worker_http import bind_local_only
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
 
+class _ForegroundCall(Protocol):
+    """The foreground launch a test scripts: the command, cwd and resolved env it is handed."""
+
+    def __call__(
+        self, command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int: ...
+
+
 class _Launcher(SubprocessChildProcesses):
     """The launch seam with its foreground entry replaced by ``call``, so the interactive exec never shells out."""
 
-    def __init__(self, call: Callable[..., int]) -> None:
+    def __init__(self, call: _ForegroundCall) -> None:
         self._call = call
 
     def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
         return self._call(command.script, shell=True, cwd=str(cwd), env=env.variables)
 
 
-def _foreground(call: Callable[..., int]) -> CliRunner:
+def _foreground(call: _ForegroundCall) -> CliRunner:
     """A runner of in-process commands that reaches only the local API and launches through ``call``, which sees
     the command, cwd and resolved env."""
     local = bind_local_only().collaborators
@@ -207,7 +214,12 @@ def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: py
     store = registered_store(root)
     _seed_parked_lease(store)
 
-    runner = _foreground(lambda command, **_: 7)
+    def exits_seven(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        return 7
+
+    runner = _foreground(exits_seven)
 
     with serve_local_api(root):
         result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -267,7 +279,14 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     calls: list[str] = []
-    runner = _foreground(lambda command, **_: calls.append(command) or 0)
+
+    def record_command(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        calls.append(command)
+        return 0
+
+    runner = _foreground(record_command)
 
     with serve_local_api(root):
         result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -357,7 +376,14 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     calls: list[str] = []
-    runner = _foreground(lambda command, **_: calls.append(command) or 0)
+
+    def record_command(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        calls.append(command)
+        return 0
+
+    runner = _foreground(record_command)
 
     with serve_local_api(root):
         first = runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
@@ -389,7 +415,11 @@ def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeyp
         return resp
 
     monkeypatch.setattr(RunnerDaemon, "get", stale_list)
-    runner = _foreground(lambda command, **_: 0)
+
+    def exits_zero(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        return 0
+
+    runner = _foreground(exits_zero)
 
     with serve_local_api(root):
         result = runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])

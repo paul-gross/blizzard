@@ -7,6 +7,7 @@ park facts, ``spawning`` via a null pid) are the point.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Unpack
@@ -314,7 +315,9 @@ def _seed_closed(store: SqlAlchemyRunnerStore) -> None:
         (_seed_closed, _NOW, "closed"),
     ],
 )
-def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed, now: datetime, state: str) -> None:
+def test_every_lease_state_serializes_the_same_ordered_keys(
+    tmp_path: Path, seed: Callable[[SqlAlchemyRunnerStore], None], now: datetime, state: str
+) -> None:
     app, store = _app_with_leases(tmp_path, clock=FixedClock(now), probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
     seed(store)

@@ -8,11 +8,12 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, Unpack, cast
 
 import pytest
 import sqlalchemy as sa
 
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
@@ -84,7 +85,11 @@ def _held_chunk(hub: HubHarness, runner_id: str = "runner-a") -> str:
     return str(chunk_id)
 
 
-def _retire(hub: HubHarness, runner_id: str = "runner-a", **body):
+class _RetireBody(TypedDict, total=False):
+    force: bool
+
+
+def _retire(hub: HubHarness, runner_id: str = "runner-a", **body: Unpack[_RetireBody]):
     return hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "op", **body})
 
 
@@ -291,7 +296,7 @@ def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_f
 
     gated = [route for route in api_routes(hub.wired_app) if _GATE in dependency_names(route)]
     assert gated, "no route carries the fleet gate"
-    refused = []
+    refused: list[tuple[str, str]] = []
     for route in gated:
         path = re.sub(r"\{[^}]+\}", "placeholder", route.path)
         for method in sorted(set(route.methods or set()) - {"HEAD"}):
@@ -373,7 +378,7 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     release_held = detach.release_held
     retired_at_release: list[bool] = []
 
-    def observed(chunk, *, runner_id: str) -> int | None:
+    def observed(chunk: Chunk, *, runner_id: str) -> int | None:
         registration = hub.services.registry.get_runner(runner_id)
         assert registration is not None
         retired_at_release.append(registration.retired)

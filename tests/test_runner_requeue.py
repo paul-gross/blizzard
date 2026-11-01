@@ -7,12 +7,13 @@ FILL against a pending mark spawns a fresh attempt — new lease, epoch, carried
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import Row, Select, create_engine, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -49,11 +50,11 @@ _EVEN_LATER = datetime(2026, 7, 17, 14, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store: SqlAlchemyRunnerStore, *, clock=None):
+def _service(store: SqlAlchemyRunnerStore, *, clock: FixedClock | None = None) -> RequeueService:
     return RequeueService(store, clock or FixedClock(_LATER))
 
 
@@ -71,13 +72,13 @@ def _scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> RequeueScope
 def _seed_escalated_chunk(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    node_id="nd_build",
-    node_name="build",
-    epoch=1,
-    harness_id=CLAUDE_CODE_HARNESS_ID,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    node_id: str = "nd_build",
+    node_name: str = "build",
+    epoch: int = 1,
+    harness_id: str = CLAUDE_CODE_HARNESS_ID,
+) -> None:
     """A build lease, spawned, bound, then closed escalated — retries exhausted."""
     store.record_lease(
         NewLease(
@@ -301,7 +302,7 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
     assert store.held_environment_ids() == []
 
 
-def _rows(tmp_path: Path, stmt):
+def _rows[T: tuple[object, ...]](tmp_path: Path, stmt: Select[T]) -> Sequence[Row[T]]:
     engine = create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     try:
         with engine.connect() as conn:

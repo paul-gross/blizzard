@@ -6,7 +6,7 @@ Rows are read through reflected tables, outside the runner statement guard every
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,7 @@ from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
 from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import init_host
+from tests.runner_fakes import FakeProbe
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 
 pytestmark = pytest.mark.component
@@ -37,16 +38,6 @@ _OUTBOX_LANES = (schema.OUTBOX_LANE_OUTBOUND, schema.OUTBOX_LANE_TRANSCRIPT)
 
 def _errors() -> RunnerStoreErrorFactory:
     return RunnerStoreErrorFactory(get_logger("tests.runner_transfer"))
-
-
-class _NoProcess:
-    """No recorded process is alive: the seeded leases name pids of this machine's own processes."""
-
-    def is_alive(self, pid: int, start_time: str | None = None) -> bool:
-        return False
-
-    def start_time(self, pid: int) -> str | None:
-        return None
 
 
 def _global_key_columns(shapes: sa.MetaData) -> frozenset[str]:
@@ -87,7 +78,7 @@ def _rows(engine: sa.Engine, table: str, **where: object) -> list[dict[str, Any]
     shape = reflect(engine).tables[table]
     stmt = sa.select(shape).where(*(shape.c[k] == v for k, v in where.items()))
     with engine.connect() as conn:
-        return [dict(r._mapping) for r in conn.execute(stmt.order_by(*shape.primary_key.columns))]
+        return [dict(r) for r in conn.execute(stmt.order_by(*shape.primary_key.columns)).mappings()]
 
 
 def _everything(engine: sa.Engine) -> dict[str, list[dict[str, Any]]]:
@@ -119,7 +110,7 @@ class _Clock:
 
 
 @pytest.fixture
-def stores(tmp_path: Path):
+def stores(tmp_path: Path) -> Iterator[tuple[sa.Engine, sa.Engine]]:
     here = _store(tmp_path, "here", _HERE, tag="a")
     source = _store(tmp_path, "there", _MOVING, tag="b")
     yield here, source
@@ -127,7 +118,7 @@ def stores(tmp_path: Path):
     source.dispose()
 
 
-def test_the_colliding_stores_collide(stores) -> None:
+def test_the_colliding_stores_collide(stores: tuple[sa.Engine, sa.Engine]) -> None:
     here, source = stores
     for table in ("in_flight_elicitations", "env_bindings"):
         assert _rows(here, table)[0]["id"] == _rows(source, table)[0]["id"]
@@ -137,7 +128,9 @@ def test_the_colliding_stores_collide(stores) -> None:
     assert _rows(here, "graph_artifacts") == _rows(source, "graph_artifacts")
 
 
-def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_source_as_it_was(stores) -> None:
+def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_source_as_it_was(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
     here, source = stores
     held = {name: _contents(here, name, runner_id=_HERE) for name in _RUNNER_TABLES}
     hosts = _everything(here)
@@ -174,10 +167,10 @@ def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_sou
     for name in _HOST_TABLES:
         assert _rows(here, name) == hosts[name], f"{name}: an identical host row is not carried again"
     assert _everything(source) == untouched
-    assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+    assert runner_invariants(here, process=FakeProbe()).run() == []
 
 
-def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> None:
+def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores: tuple[sa.Engine, sa.Engine]) -> None:
     here, source = stores
     tables = ("env_bindings", "binding_releases", "pause_parks", "pause_park_resumes", "requeues", "leases")
     with source.begin() as conn:
@@ -192,7 +185,7 @@ def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> N
     assert [r["last_seq"] for r in _rows(here, "fact_counters", runner_id=_MOVING)] == [12]
 
 
-def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> None:
+def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores: tuple[sa.Engine, sa.Engine]) -> None:
     here, source = stores
     with here.begin() as conn:
         shape = reflect(here).tables["outbox_counters"]
@@ -207,7 +200,9 @@ def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> No
     assert counters == {schema.OUTBOX_LANE_OUTBOUND: 9, schema.OUTBOX_LANE_TRANSCRIPT: 5}
 
 
-def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifacts_by_key(stores) -> None:
+def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifacts_by_key(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
     here, source = stores
     later = T0 + timedelta(days=1)
     with source.begin() as conn:
@@ -247,7 +242,7 @@ def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifact
     assert {r["graph_id"] for r in _rows(here, "graph_artifacts")} == {"graph_id-1", "gr_other"}
 
 
-def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores) -> None:
+def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores: tuple[sa.Engine, sa.Engine]) -> None:
     here, source = stores
 
     _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"})
@@ -258,7 +253,9 @@ def test_a_copy_moves_the_runners_workspace_and_its_prompt_to_a_new_id(stores) -
     assert prompts == {_WORKSPACE: "prompt-1", "ws-new": "prompt-1"}
 
 
-def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_changes_nothing(stores) -> None:
+def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_changes_nothing(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
     here, source = stores
     with source.begin() as conn:
         conn.execute(sa.update(reflect(source).tables["workspace_prompt"]).values(prompt="theirs"))
@@ -270,7 +267,7 @@ def test_a_different_prompt_for_one_workspace_refuses_the_copy_naming_both_and_c
     assert _everything(here) == before
 
 
-def test_a_copy_records_the_ingest_it_was_given(stores) -> None:
+def test_a_copy_records_the_ingest_it_was_given(stores: tuple[sa.Engine, sa.Engine]) -> None:
     here, source = stores
     ingest = HostIngest(runner_id=_MOVING, source="/hosts/there", source_alive_at=None, ingested_at=T0)
 
@@ -282,7 +279,9 @@ def test_a_copy_records_the_ingest_it_was_given(stores) -> None:
 
 
 @pytest.mark.parametrize("keep_counters", [True, False])
-def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counters: bool) -> None:
+def test_a_removal_deletes_the_runners_rows_and_nothing_else(
+    stores: tuple[sa.Engine, sa.Engine], keep_counters: bool
+) -> None:
     here, source = stores
     _transfer(source, here).copy_runner()
     held = {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES}
@@ -296,11 +295,11 @@ def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counte
     assert _rows(here, "outbox_counters", runner_id=_MOVING) == (counters if keep_counters else [])
     assert {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES} == held
     assert {name: _rows(here, name) for name in _HOST_TABLES} == hosts
-    assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+    assert runner_invariants(here, process=FakeProbe()).run() == []
 
 
 def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_no_row_of_it_names_it(
-    stores,
+    stores: tuple[sa.Engine, sa.Engine],
 ) -> None:
     here, source = stores
     with source.begin() as conn:
@@ -312,7 +311,9 @@ def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_
     assert prompts == {_WORKSPACE: "prompt-1", "ws-new": "prompt-1"}
 
 
-def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carries_no_prompt(stores) -> None:
+def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carries_no_prompt(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
     here, source = stores
     with source.begin() as conn:
         conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
@@ -323,7 +324,9 @@ def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carrie
     assert _rows(here, "workspace_prompt") == before
 
 
-def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it_lacks(stores) -> None:
+def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it_lacks(
+    stores: tuple[sa.Engine, sa.Engine],
+) -> None:
     _, source = stores
     with source.begin() as conn:
         conn.execute(sa.text("DROP TABLE external_usage_samples"))
