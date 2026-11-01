@@ -33,6 +33,8 @@ from blizzard.hub.forge.landing import (
     Mergeability,
     MergeMethod,
     RepositoryForge,
+    Rerun,
+    RerunOutcome,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -342,8 +344,8 @@ class _Adapter:
 
         return self._double.answer("change_checks", self._repo, default, number=number)
 
-    async def rerun_check(self, id: str) -> bool:
-        return self._double.answer("rerun_check", self._repo, lambda: True, id=id)
+    async def rerun_check(self, id: str) -> Rerun:
+        return self._double.answer("rerun_check", self._repo, lambda: Rerun(RerunOutcome.ACCEPTED), id=id)
 
 
 def _conforms(x: _Adapter) -> IForgeAdapter:

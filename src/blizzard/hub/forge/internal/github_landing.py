@@ -39,6 +39,8 @@ from blizzard.hub.forge.landing import (
     ForgeUnavailable,
     Mergeability,
     MergeMethod,
+    Rerun,
+    RerunOutcome,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -352,14 +354,19 @@ class GitHubLanding:
     async def change_checks(self, number: int) -> tuple[Check, ...]:
         return await self.checks((await self.change(number)).head_revision)
 
-    async def rerun_check(self, id: str) -> bool:
+    async def rerun_check(self, id: str) -> Rerun:
         # A GitHub Actions check run's id is its job id, and a token can re-run a job; the check-run rerequest
         # route answers only the GitHub App that owns the run. A run that is no Actions job answers 404 or 422.
         response = await self._send("POST", f"{self._repo}/actions/jobs/{id}/rerun", write=True)
-        if response.status_code in (401, 403, 404, 422):
-            return False
+        status = response.status_code
+        if status in (401, 403, 404, 422):
+            message = _message(response)
+            detail = f"HTTP {status}: {message}"
+            if "already running" in message.lower():
+                return Rerun(RerunOutcome.RUN_IN_PROGRESS, detail)
+            return Rerun(RerunOutcome.REFUSED, detail)
         await self._answered(response, ForgeObject.CHECK)
-        return True
+        return Rerun(RerunOutcome.ACCEPTED)
 
     # Answers
 

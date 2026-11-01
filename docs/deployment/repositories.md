@@ -78,7 +78,8 @@ On GitHub, delivery needs a fine-grained token on the repository with these perm
 | Checks        | Read         | Read each check on a revision                                               |
 | Actions       | Read & write | Re-run, once, a GitHub Actions check that is failing on the base branch too |
 
-Without Actions write, an inherited failure is never re-run and routes as the change's own failure.
+`land` waits for every check on the change to finish before it asks for that re-run. Without Actions write, an inherited
+failure is never re-run and routes as the change's own failure.
 
 ## Verbs
 
