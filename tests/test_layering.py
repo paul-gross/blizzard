@@ -2492,6 +2492,7 @@ _ACTION_BLIZZARD = frozenset(
     {
         "blizzard.hub.domain.actions",
         "blizzard.hub.domain.graph.actions",
+        "blizzard.hub.domain.kernel.garden_delivery_fault",
         "blizzard.hub.domain.config.repositories",
         "blizzard.hub.domain.config.capabilities",
         "blizzard.hub.domain.config.landing_policies",

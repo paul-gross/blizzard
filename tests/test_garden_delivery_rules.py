@@ -31,6 +31,7 @@ from blizzard.hub.domain.garden.delivery.validation import (
 from blizzard.hub.domain.garden.formats import DeliveredDelta, ProposalCandidate
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from tests.garden_artifacts import candidate, delivered_delta
 
 _PROJECT = "proj_test"
@@ -92,8 +93,9 @@ def test_every_named_delta_resolving_is_selected_in_named_order() -> None:
 
 
 def test_one_missing_delta_refuses_naming_it() -> None:
-    with pytest.raises(GardenDeliveryRejected, match="missing: ghost"):
+    with pytest.raises(GardenDeliveryRejected, match="missing: ghost") as exc:
         select_delta_artifacts(["a", "ghost"], {"a": _artifact("a", "A")})
+    assert exc.value.fault is GardenDeliveryFault.DELTA
 
 
 def test_naming_no_delta_refuses() -> None:
@@ -117,6 +119,7 @@ def test_a_blank_proposal_field_refuses(field: str) -> None:
     with pytest.raises(GardenDeliveryRejected) as exc:
         check_proposal(_candidate(**{field: " \t"}), run=_RUN, live_findings={})
     assert str(exc.value) == f"proposal 'p1' has a blank {field}"
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
 
 def test_a_blank_title_is_refused_before_a_bad_citation() -> None:

@@ -232,7 +232,12 @@ def test_garden_routine_deliver_records_or_bounces_to_reconcile_with_the_addendu
     deliver = doc.node("deliver")
     assert deliver is not None and deliver.judgement is not None
     routes = {c.name: c.to for c in deliver.judgement.choices}
-    assert routes == {"recorded": "done", "invalid": "reconcile", "failure": "propose"}
+    assert routes == {"recorded": "done", "invalid": "reconcile", "invalid-proposals": "propose", "failure": "propose"}
+    invalid_proposals = next(c for c in deliver.judgement.choices if c.name == "invalid-proposals")
+    assert invalid_proposals.prompt_addendum is not None
+    assert "garden-delivery-failure" in invalid_proposals.prompt_addendum
+    assert "garden/proposal-format" in invalid_proposals.prompt_addendum
+    assert "count the `invalid-proposals` transitions" in invalid_proposals.prompt_addendum
     invalid = next(c for c in deliver.judgement.choices if c.name == "invalid")
     assert invalid.prompt_addendum is not None
     # The addendum names the failure artifact the rejected delivery recorded, so the

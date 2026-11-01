@@ -64,10 +64,13 @@ class EffectStatus(StrEnum):
 @dataclass(frozen=True)
 class EffectResult:
     """How the hub took one effect. ``detail`` is the service's or the fence's own explanation, empty on
-    :attr:`EffectStatus.RECORDED`."""
+    :attr:`EffectStatus.RECORDED`; ``refused`` is the part of the record that was refused, when the
+    service says."""
 
     status: EffectStatus
     detail: str = ""
+    #: On :attr:`EffectStatus.INVALID`, which part of the record the service refused; empty when it names none.
+    refused: str = ""
 
 
 @domain_model

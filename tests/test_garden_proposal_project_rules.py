@@ -22,6 +22,7 @@ from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejecte
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalFindingOtherProjectError
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -201,7 +202,8 @@ def test_a_delivery_citing_another_projects_finding_is_rejected_naming_it(tmp_pa
         ],
     )
 
-    with pytest.raises(GardenDeliveryRejected, match=_FOREIGN):
+    with pytest.raises(GardenDeliveryRejected, match=_FOREIGN) as exc:
         GardenDeliveryStore(hub_store_connections(hub.engine)).deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
     assert _proposal_rows(hub) == []

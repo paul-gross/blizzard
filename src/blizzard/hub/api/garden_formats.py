@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.formats import (
     SettledReviewEntry,
 )
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.wire.finding import (
     AddFindingOp,
     DeferredReviewFindingEntry,
@@ -48,7 +49,8 @@ class GardenFormats:
             wire = FindingDelta.model_validate_json(raw)
         except ValidationError as exc:
             raise GardenDeliveryRejected(
-                f"artifact {artifact_name!r} does not match the finding-delta shape: {_summarize(exc)}"
+                f"artifact {artifact_name!r} does not match the finding-delta shape: {_summarize(exc)}",
+                GardenDeliveryFault.DELTA,
             ) from exc
         return DeliveredDelta(
             scope=wire.scope,
@@ -62,7 +64,8 @@ class GardenFormats:
             wire = _PROPOSALS_ADAPTER.validate_json(raw)
         except ValidationError as exc:
             raise GardenDeliveryRejected(
-                f"artifact {artifact_name!r} does not match the garden-proposal-candidate shape: {_summarize(exc)}"
+                f"artifact {artifact_name!r} does not match the garden-proposal-candidate shape: {_summarize(exc)}",
+                GardenDeliveryFault.PROPOSALS,
             ) from exc
         return [
             ProposalCandidate(ref=c.ref, class_=c.class_, title=c.title, body=c.body, findings=list(c.findings))

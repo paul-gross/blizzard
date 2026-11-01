@@ -88,7 +88,7 @@ GARDEN_DELIVER = ActionSpec(
     name="garden-deliver",
     args=frozenset({"delta", "proposals"}),
     required_args=frozenset(),
-    answers=frozenset({"recorded", "invalid", "failure"}),
+    answers=frozenset({"recorded", "invalid", "invalid-proposals", "failure"}),
     answers_from_arg=None,
     lands=False,
 )

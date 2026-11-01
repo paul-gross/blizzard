@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
@@ -244,7 +245,9 @@ def _node_id(hub: HubHarness, chunk_id: str) -> str:
 
 def _garden_graph() -> str:
     return _graph(
-        "garden-deliver", ("recorded", "invalid", "failure"), extra="    with: {delta: delta, proposals: []}\n"
+        "garden-deliver",
+        ("recorded", "invalid", "invalid-proposals", "failure"),
+        extra="    with: {delta: delta, proposals: [docket]}\n",
     )
 
 
@@ -280,6 +283,54 @@ def test_garden_deliver_with_a_malformed_delta_answers_invalid_naming_it(tmp_pat
     assert failure is not None
     assert "delta" in failure
     assert _findings(hub) == 0
+
+
+def test_garden_deliver_with_a_missing_delta_answers_invalid(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _seed_scope(hub)
+    chunk_id = _at_deliver(hub, _garden_graph(), run_context=True)
+
+    assert _visit(hub, chunk_id) == "invalid"
+    assert _artifact(hub, chunk_id, "garden-delivery-failure") is not None
+
+
+def test_garden_deliver_with_a_malformed_docket_answers_invalid_proposals_and_records_the_marker(
+    tmp_path: Path,
+) -> None:
+    hub = _hub(tmp_path)
+    _seed_scope(hub)
+    chunk_id = _at_deliver(hub, _garden_graph(), run_context=True)
+    _record_asset(hub, chunk_id, "delta", _garden_delta([]))
+    _record_asset(hub, chunk_id, "docket", "not valid json")
+
+    assert _visit(hub, chunk_id) == "invalid-proposals"
+    failure = _artifact(hub, chunk_id, "garden-delivery-failure")
+    assert failure is not None
+    assert "docket" in failure
+
+
+def test_garden_deliver_citing_an_unknown_finding_answers_invalid_proposals(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _seed_scope(hub)
+    chunk_id = _at_deliver(hub, _garden_graph(), run_context=True)
+    _record_asset(hub, chunk_id, "delta", _garden_delta([]))
+    unknown = Id.mint_at(IdPrefix.FINDING, hub.clock.now()).value
+    docket = [{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": [unknown]}]
+    _record_asset(hub, chunk_id, "docket", json.dumps(docket))
+
+    assert _visit(hub, chunk_id) == "invalid-proposals"
+    assert _findings(hub) == 0
+
+
+def test_garden_deliver_citing_an_unknown_add_ref_answers_invalid_proposals(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _seed_scope(hub)
+    chunk_id = _at_deliver(hub, _garden_graph(), run_context=True)
+    _record_asset(hub, chunk_id, "delta", _garden_delta([]))
+    docket = [{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": ["ghost-ref"]}]
+    _record_asset(hub, chunk_id, "docket", json.dumps(docket))
+
+    assert _visit(hub, chunk_id) == "invalid-proposals"
 
 
 def test_garden_deliver_with_no_run_context_answers_invalid(tmp_path: Path) -> None:

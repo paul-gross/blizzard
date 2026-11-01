@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
 from blizzard.hub.store.internal.scope_store import scope_ids_of
@@ -255,7 +256,8 @@ class GardenDeliveryStore:
                     if outside:
                         raise GardenDeliveryRejected(
                             f"finding {outside[0]!r} belongs to another project than routine "
-                            f"{plan.run.routine_name!r}'s — nothing was written"
+                            f"{plan.run.routine_name!r}'s — nothing was written",
+                            GardenDeliveryFault.PROPOSALS,
                         )
                     conn.execute(self._store.insert(garden_proposal_findings), links)
 

@@ -109,7 +109,11 @@ nodes:
           description: The delta and proposals are durable; proposals are attached to the routine.
           to: done
         invalid:
-          description: An artifact failed shape validation — malformed entry or a citation where this graph never places one. Nothing was written.
+          description: The delta failed validation — a malformed entry. Nothing was written.
+          to: propose
+          prompt_addendum: ./prompts/propose.from-deliver-invalid.md
+        invalid-proposals:
+          description: The docket failed validation — a malformed entry, or a citation where this graph never places one. Nothing was written.
           to: propose
           prompt_addendum: ./prompts/propose.from-deliver-invalid.md
         failure:

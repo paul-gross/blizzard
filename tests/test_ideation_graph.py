@@ -197,10 +197,12 @@ def test_ideation_deliver_records_or_bounces_to_propose_with_the_addendum() -> N
     deliver = doc.node("deliver")
     assert deliver is not None and deliver.judgement is not None
     routes = {c.name: c.to for c in deliver.judgement.choices}
-    assert routes == {"recorded": "done", "invalid": "propose", "failure": "propose"}
+    assert routes == {"recorded": "done", "invalid": "propose", "invalid-proposals": "propose", "failure": "propose"}
+    invalid_proposals = next(c for c in deliver.judgement.choices if c.name == "invalid-proposals")
     invalid = next(c for c in deliver.judgement.choices if c.name == "invalid")
     assert invalid.prompt_addendum is not None
     assert "garden-delivery-failure" in invalid.prompt_addendum
+    assert invalid_proposals.prompt_addendum == invalid.prompt_addendum
     failure = next(c for c in deliver.judgement.choices if c.name == "failure")
     assert failure.prompt_addendum is not None
     # The two addenda are distinct prompts, not the same text reused.
@@ -208,14 +210,20 @@ def test_ideation_deliver_records_or_bounces_to_propose_with_the_addendum() -> N
 
 
 @pytest.mark.parametrize(
-    ("prompt", "transition"),
-    [("propose.from-deliver-failure.md", "failure"), ("propose.from-deliver-invalid.md", "invalid")],
+    ("prompt", "count_phrase"),
+    [
+        ("propose.from-deliver-failure.md", "count the `failure` transitions out of `deliver`"),
+        (
+            "propose.from-deliver-invalid.md",
+            "count the transitions out of `deliver` that carry the same answer as the one that sent you here",
+        ),
+    ],
 )
-def test_ideation_deliver_loop_bound_is_a_count_the_worker_can_evaluate(prompt: str, transition: str) -> None:
+def test_ideation_deliver_loop_bound_is_a_count_the_worker_can_evaluate(prompt: str, count_phrase: str) -> None:
     """The transition that sent the chunk back is itself in the history, so the bound is
     stated as a count: exactly one retries once, two or more escalates."""
     text = " ".join((_GRAPH.path.parent / "prompts" / prompt).read_text().split())
-    assert f"count the `{transition}` transitions out of `deliver`" in text
+    assert count_phrase in text
     assert "If exactly one appears" in text
     assert "If two or more appear" in text
     assert "has already left" not in text
