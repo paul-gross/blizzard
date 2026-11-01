@@ -101,6 +101,11 @@ test('test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_work
     expect(row).toMatchObject({ state: 'halted', served: true });
     expect(row?.halted_reasons).toHaveLength(1);
   }
+  const ready = (await host.api.ready()).body.runners ?? [];
+  const listed = (await host.api.runners()).body.items;
+  for (const runner of [refused, standalone]) {
+    expect(ready.find((item) => item.runner_id === runner.id)?.state).toBe(listed.find((item) => item.runner_id === runner.id)?.state);
+  }
   expect((await host.api.health()).status).toBe(200);
   const first = await seedChunk(mockHub);
   await passesUntil(host, 'runner-local', () => leased(host, 'runner-local', first));

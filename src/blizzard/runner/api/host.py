@@ -10,7 +10,6 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Request
 
-from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.control import throttle_view
@@ -18,7 +17,7 @@ from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import held_workspace_id
-from blizzard.runner.hub.identity import ICurrentIdentityVerdict
+from blizzard.runner.hub.identity import served_runner_state
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
@@ -75,8 +74,8 @@ def list_runners(request: Request) -> HostRunnerListResponse:
             HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=config.binding_agents(b))
             for b in config.bindings or ()
         ]
-        halted_reasons = _refusal(runner.maybe_identity_verdict())
-        state: HostRunnerState = "halted" if halted_reasons else "serving"
+        current = runner.maybe_identity_verdict()
+        state, halted_reasons = served_runner_state(current.verdict() if current is not None else None)
         service = runner.maybe_status()
         if service is None:
             # A store-free runner: listed, with nothing of its brake or capacity to read.
@@ -116,14 +115,6 @@ def list_runners(request: Request) -> HostRunnerListResponse:
         for halted in registry.halted
     )
     return HostRunnerListResponse(items=items)
-
-
-def _refusal(identity: ICurrentIdentityVerdict | None) -> list[str]:
-    """Why a served runner's identity verdict halts it, or nothing while it does not."""
-    if identity is None:
-        return []
-    refusal = identity.verdict().refusal()
-    return [] if refusal is None else [refusal]
 
 
 @router.get("/workspaces", response_model=HostWorkspaceListResponse)

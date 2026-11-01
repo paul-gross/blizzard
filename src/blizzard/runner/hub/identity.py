@@ -15,6 +15,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import ITokenIdentityReader
@@ -160,6 +161,13 @@ class IdentityVerdict:
     def remedy(self) -> str | None:
         """``reset_command`` for a refused or mismatched token, else ``None``."""
         return self.reset_command if self.state in _RESET_STATES else None
+
+
+def served_runner_state(verdict: IdentityVerdict | None) -> tuple[HostRunnerState, list[str]]:
+    """A served runner's state and the reasons it is halted: ``halted`` while its identity verdict refuses, naming
+    why, else ``serving``. A runner with no verdict — a store-free one — is ``serving``."""
+    refusal = verdict.refusal() if verdict is not None else None
+    return ("serving", []) if refusal is None else ("halted", [refusal])
 
 
 class ICurrentIdentityVerdict(Protocol):
