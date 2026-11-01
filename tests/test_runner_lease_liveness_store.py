@@ -41,7 +41,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_a", chun
 def _seed_legacy_row(store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_a") -> None:
     """Exactly what a pre-``20260916_1000_two_phase_spawn_ownership`` row reads as after
     that additive migration ran: every two-phase column NULL, never backfilled."""
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(
             insert(runner.lease_spawns).values(runner_id=FIXTURE_RUNNER_ID, lease_id=lease_id, spawned_at=_NOW)
         )

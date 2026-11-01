@@ -87,7 +87,7 @@ def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = 
 
 
 def _binding_statements(store: SqlAlchemyRunnerStore, fn) -> int:
-    with capture_statements(store._engine) as statements:
+    with capture_statements(store.engine) as statements:
         fn()
     return sum(1 for statement, _ in statements if "env_bindings" in statement)
 

@@ -136,12 +136,12 @@ def _floor_fact_row_counts(store: SqlAlchemyRunnerStore) -> list[int]:
         (runner_usage_limits, runner_usage_limits.c.runner_id == FIXTURE_RUNNER_ID),
         (runner_floor_clears, runner_floor_clears.c.runner_id == FIXTURE_RUNNER_ID),
     )
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         return [int(conn.execute(sa.select(sa.func.count()).select_from(t).where(k)).scalar_one()) for t, k in keyed]
 
 
 def _heartbeat_row_count(store: SqlAlchemyRunnerStore) -> int:
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         return int(
             conn.execute(
                 sa.select(sa.func.count())
@@ -152,7 +152,7 @@ def _heartbeat_row_count(store: SqlAlchemyRunnerStore) -> int:
 
 
 def _usage_sample_row_count(store: SqlAlchemyRunnerStore) -> int:
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         return int(
             conn.execute(
                 sa.select(sa.func.count())

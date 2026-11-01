@@ -228,7 +228,7 @@ def _pool_leases(store: SqlAlchemyRunnerStore, chunk_id: str, session_name: str)
 
     from blizzard.runner.store import schema as s
 
-    with store._engine.connect() as conn:  # a store-internal read, test-only
+    with store.engine.connect() as conn:  # a store-internal read, test-only
         rows = conn.execute(
             select(s.leases, s.lease_context.c.session_name)
             .join(s.lease_context, s.lease_context.c.lease_id == s.leases.c.lease_id)
@@ -711,7 +711,7 @@ def _blank_stamps(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
 
     from blizzard.runner.store import schema as s
 
-    with store._engine.begin() as conn:  # a store-internal write, test-only
+    with store.engine.begin() as conn:  # a store-internal write, test-only
         conn.execute(
             update(s.lease_context)
             .where(s.lease_context.c.chunk_id == chunk_id)
