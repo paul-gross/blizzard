@@ -256,7 +256,9 @@ def test_the_gate_fails_a_key_holding_neither_the_tenant_nor_a_hub_unique_column
             "notes", metadata, sa.Column("note_id", sa.String, primary_key=True, info={"hub_unique": True}), tenant
         )
     elif shape == "primary key a foreign key onto a hub-unique column":
-        sa.Table("notes", metadata, sa.Column("graph_id", sa.ForeignKey("graphs.graph_id"), primary_key=True), tenant)
+        sa.Table(
+            "notes", metadata, sa.Column[str]("graph_id", sa.ForeignKey("graphs.graph_id"), primary_key=True), tenant
+        )
     else:
         table = sa.Table(
             "notes", metadata, sa.Column("id", sa.Integer, primary_key=True), sa.Column("slug", sa.String), tenant

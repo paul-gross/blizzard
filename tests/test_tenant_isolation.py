@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 import httpx2
 import pytest
@@ -41,7 +41,7 @@ from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
-from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
+from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -98,8 +98,8 @@ class _Tenant:
 
     harness: TenantHarness
     label: str
-    ids: dict[str, str] = field(default_factory=dict)
-    markers: set[str] = field(default_factory=set)
+    ids: dict[str, str] = field(default_factory=dict[str, str])
+    markers: set[str] = field(default_factory=set[str])
 
     @property
     def client(self):
@@ -484,7 +484,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
                     "final": True,
                     "normalizer_version": "1",
                     "harness_version": "1",
-                    "turns": [],
+                    "turns": list[object](),
                 }
             ]
         },
@@ -539,7 +539,7 @@ def test_the_table_names_every_live_tenant_route_and_nothing_else(tmp_path: Path
 # --- seeding ------------------------------------------------------------------------------------------------------
 
 
-def _ok(response, status: int) -> dict[str, Any]:
+def _ok(response: httpx2.Response, status: int) -> dict[str, Any]:
     assert response.status_code == status, f"{response.request.method} {response.request.url}: {response.text}"
     return response.json() if response.content else {}
 
@@ -740,7 +740,7 @@ def seeded(hub: HubHarness, *labels: str) -> list[_Tenant]:
     them as a member and holds no hub-level role."""
     person = seed_user(hub, username="operator", role=Role.PENDING)
     session = seed_session(hub, person)
-    tenants = []
+    tenants: list[_Tenant] = []
     for label in labels:
         harness = hub.add_tenant(label)
         seed_membership(hub.engine, harness.tenant, person.user_id, Role.ADMIN)
@@ -799,14 +799,22 @@ def _url(path: str, tenant: _Tenant, ids: dict[str, str]) -> str:
     return _PARAM.sub(value, path)
 
 
+def _is_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_dict(value: object) -> TypeGuard[dict[object, object]]:
+    return isinstance(value, dict)
+
+
 def _fill(body: object, tenant: _Tenant, ids: dict[str, str]) -> object:
     if body == "{seq}":
         return int(tenant.ids["seq"])
     if isinstance(body, str):
         return re.sub(r"\{(\w+)\}", lambda m: tenant.ids[ids.get(m.group(1), m.group(1))], body)
-    if isinstance(body, list):
+    if _is_list(body):
         return [_fill(item, tenant, ids) for item in body]
-    if isinstance(body, dict):
+    if _is_dict(body):
         return {key: _fill(value, tenant, ids) for key, value in body.items()}
     return body
 
@@ -822,10 +830,10 @@ def _send(sender: _Tenant, owner: _Tenant, method: str, path: str, probe: _Probe
         return sender.client.post(url, content=export.content, headers={"Content-Type": content_type})
     if not path.startswith("/api/fleet/"):
         return sender.client.request(method, url, json=body, params=params)
-    if isinstance(body, dict):
+    if _is_dict(body):
         body = {"runner_id": sender.runner(), **body}
     bearer = {"Authorization": f"Bearer {runner_token(sender.runner())}"}
-    params = {"runner_id": sender.runner(), **(params if isinstance(params, dict) else {})}
+    params = {"runner_id": sender.runner(), **(params if _is_dict(params) else {})}
     return sender.client.request(method, url, json=body, params=params, headers=bearer)
 
 
@@ -970,7 +978,7 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) 
     tenant reads them."""
     core = build_hub_core(two.hub.engine, clock=two.hub.clock)
     stores = {t.label: core.open(StoreScope(t.harness.tenant)) for t in two.both()}
-    projects = {}
+    projects: dict[str, Project] = {}
     for t in two.both():
         own = stores[t.label]
         authoring = ProjectAuthoring(

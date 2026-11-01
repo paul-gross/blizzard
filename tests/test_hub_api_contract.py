@@ -91,7 +91,8 @@ def test_events_stream_excluded_from_openapi() -> None:
 
 def test_the_only_deprecated_operations_are_the_sanctioned_aliases() -> None:
     # An allow-list, not a relaxation — a *new* deprecated route fails until named.
-    paths = export_hub_app().openapi()["paths"]
+    # A path item maps HTTP methods to operation objects, plus a shared ``parameters`` list.
+    paths: dict[str, dict[str, dict[str, object] | list[object]]] = export_hub_app().openapi()["paths"]
     deprecated = {
         f"{method.upper()} {path}"
         for path, operations in paths.items()

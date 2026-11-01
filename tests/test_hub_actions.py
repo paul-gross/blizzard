@@ -16,6 +16,7 @@ from types import MappingProxyType, ModuleType
 from typing import TypedDict, Unpack
 
 import pytest
+from typing_extensions import TypeIs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.crash import ENV_CRASH_FENCE
@@ -70,24 +71,34 @@ def _served_names(env: dict[str, str]) -> set[str]:
     ],
 )
 def test_the_test_actions_are_served_only_behind_both_fences(env: dict[str, str], with_tests: bool) -> None:
-    expected = set(SHIPPED_CATALOGUE.names) | ({s.name for s in TEST_ACTION_SPECS} if with_tests else set())
+    expected = set(SHIPPED_CATALOGUE.names) | ({s.name for s in TEST_ACTION_SPECS} if with_tests else set[str]())
     assert _served_names(env) == expected
 
 
 # --- a frozen visit ----------------------------------------------------------
 
 
+def _is_mapping_proxy(value: object) -> TypeIs[MappingProxyType[object, object]]:
+    return isinstance(value, MappingProxyType)
+
+
+def _is_frozen_collection(value: object) -> TypeIs[tuple[object, ...] | frozenset[object]]:
+    return isinstance(value, (tuple, frozenset))
+
+
 def _mutable_parts(value: object, at: str = "visit") -> list[str]:
     """Every runtime value under ``value`` that could be mutated: a list, dict, set or bytearray, a dataclass
     instance that is not frozen, or a mapping other than a ``MappingProxyType`` over immutable values."""
+    kind = type(value).__name__
     if isinstance(value, (list, dict, set, bytearray)):
-        return [f"{at} is a {type(value).__name__}"]
-    if isinstance(value, MappingProxyType):
+        return [f"{at} is a {kind}"]
+    if _is_mapping_proxy(value):
         return [p for k, v in value.items() for p in (*_mutable_parts(k, at), *_mutable_parts(v, f"{at}[{k!r}]"))]
-    if isinstance(value, (tuple, frozenset)):
+    if _is_frozen_collection(value):
         return [p for i, item in enumerate(value) for p in _mutable_parts(item, f"{at}[{i}]")]
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        found = [] if type(value).__dataclass_params__.frozen else [f"{at} is a mutable {type(value).__name__}"]  # type: ignore[attr-defined]
+        frozen: bool = inspect.getattr_static(type(value), "__dataclass_params__").frozen
+        found = [] if frozen else [f"{at} is a mutable {kind}"]
         return found + [
             p for f in dataclasses.fields(value) for p in _mutable_parts(getattr(value, f.name), f"{at}.{f.name}")
         ]
@@ -207,7 +218,7 @@ def test_the_frozen_walk_finds_a_dataclass_that_is_not_frozen() -> None:
     class Loose:
         n: int
 
-    assert _mutable_parts(_visit(feature_title=Loose(1))) == ["visit.feature_title is a mutable Loose"]  # type: ignore[arg-type]  # a deliberately mutable non-str title
+    assert _mutable_parts(_visit(feature_title=Loose(1))) == ["visit.feature_title is a mutable Loose"]  # pyright: ignore[reportArgumentType]  # a deliberately mutable non-str title
 
 
 # --- nothing smuggled in -----------------------------------------------------

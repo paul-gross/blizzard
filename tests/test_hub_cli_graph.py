@@ -7,6 +7,7 @@ prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx2
@@ -29,7 +30,17 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.local")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
+
+
+def _answer_with(body: object) -> Callable[..., _FakeResponse]:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, body)
+
+    return fake_get
 
 
 @pytest.mark.unit
@@ -71,9 +82,9 @@ def test_graph_list_on_no_graphs_prints_a_friendly_message() -> None:
 
 @pytest.mark.unit
 def test_graph_retire_posts_to_the_retire_endpoint() -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"graph_id": "gr_1", "retired": True})
 
@@ -105,9 +116,9 @@ def test_graph_follow_latest_patches_the_graph(value: str, sent: object) -> None
 
 @pytest.mark.unit
 def test_graph_enable_posts_to_the_enable_endpoint() -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"graph_id": "gr_1", "retired": False})
 
@@ -177,7 +188,7 @@ def test_graph_show_renders_session_pools() -> None:
         "edges": [],
     }
 
-    bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
+    bound = bind_stubs(get=_answer_with(body))
     result = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -207,7 +218,7 @@ def test_graph_show_renders_a_sessions_harnesses_set() -> None:
         "edges": [],
     }
 
-    bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
+    bound = bind_stubs(get=_answer_with(body))
     result = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -229,7 +240,7 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json() -> None:
         "artifacts": ["zebra", "apple"],
     }
 
-    bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
+    bound = bind_stubs(get=_answer_with(body))
     env = {"BZ_HUB_URL": "http://hub.local:8421"}
     plain = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env=env)
     as_json = bound.runner.invoke(hub_group, ["graph", "get", "gr_1", "--json"], env=env)
@@ -288,9 +299,9 @@ def _write_graph_with_prompt_ref(tmp_path: Path) -> Path:
 @pytest.mark.unit
 def test_graph_mint_posts_the_prompt_inlined(tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
@@ -303,7 +314,6 @@ def test_graph_mint_posts_the_prompt_inlined(tmp_path: Path) -> None:
     assert len(calls) == 1
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/graphs"
-    assert isinstance(body, dict)
     posted_yaml = body["definition_yaml"]
     assert _PROMPT_PROSE in posted_yaml
     assert "./prompts/build.md" not in posted_yaml
@@ -397,9 +407,9 @@ def test_graph_mint_a_missing_artifact_file_is_a_click_exception_naming_the_entr
 @pytest.mark.unit
 def test_graph_mint_reads_the_definition_from_stdin() -> None:
     """``-`` reads stdin verbatim — no file, no prompt-ref inlining."""
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
@@ -484,7 +494,7 @@ def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed_in_any_tenant() 
                             {"name": "broken", "status": "failed", "graph_id": None, "detail": "entry node not found"},
                         ],
                     },
-                    {"tenant_id": "ten_b", "name": "bravo", "ok": True, "entries": []},
+                    {"tenant_id": "ten_b", "name": "bravo", "ok": True, "entries": list[object]()},
                 ],
             },
         )

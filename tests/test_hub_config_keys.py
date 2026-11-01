@@ -61,7 +61,11 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
     root = _initialised(tmp_path)
     document = document_carrying_every_key(HUB_REGISTRY, _SAMPLES)
     # Replaces the module's parser alone: the flag registry is parsed with the real one.
-    monkeypatch.setattr(hub_config, "tomllib", SimpleNamespace(loads=lambda _text: document))
+
+    def loads(_text: str) -> dict[str, object]:
+        return document
+
+    monkeypatch.setattr(hub_config, "tomllib", SimpleNamespace(loads=loads))
     load_hub_config(root, allow_external_db=True)
     hub_config.read_legacy_keys(
         root / hub_config.CONFIG_FILENAME, {}, strict=True

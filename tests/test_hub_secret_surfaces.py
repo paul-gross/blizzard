@@ -7,8 +7,10 @@ import os
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
+import httpx2
 import pytest
 import structlog.testing
 from fastapi.testclient import TestClient
@@ -50,7 +52,7 @@ _bound: dict[str, Bound] = {}
 def _route_cli_through(client: TestClient) -> None:
     """Send the CLI's requests to the in-process app."""
 
-    def forward(method: str, url: str, *, timeout: float, **kwargs):
+    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
         kwargs.pop("headers", None)
         return client.request(method.upper(), urlsplit(url).path, **kwargs)
 

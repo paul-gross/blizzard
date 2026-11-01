@@ -5,16 +5,20 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from dataclasses import replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, cast
 
 import httpx2
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import SpanContext
+from opentelemetry.util.types import AttributeValue
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.auth_core import Role
@@ -24,6 +28,7 @@ from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
+from blizzard.hub.auth.models import ResolvedIdentity, Session, User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -31,6 +36,8 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads, TenantRunner
+from blizzard.hub.tenancy import TenantId
 from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import RunnerFleetClient, hub_scoped, hub_scoped_engine, seed_runner, seed_user, tenant_services_of
 from tests.worker_http import bind_transport
@@ -59,7 +66,7 @@ def _config(tmp_path: Path) -> HubConfig:
     return init_hub(tmp_path / "hub")
 
 
-def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[Any]:
+def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[ReadableSpan]:
     handle.shutdown(5.0)
     return list(exporter.get_finished_spans())
 
@@ -74,8 +81,8 @@ def test_a_request_yields_a_route_template_server_span_with_parameterized_querie
     spans = _spans(handle, exporter)
     server = [s for s in spans if s.name == "GET /api/chunks/{chunk_id}"]
     assert len(server) == 1
-    assert server[0].attributes[_CHUNK_ID] == "ch_abc"
-    queries = [s for s in spans if s.parent is not None and s.parent.span_id == server[0].context.span_id]
+    assert _attributes(server[0])[_CHUNK_ID] == "ch_abc"
+    queries = [s for s in spans if s.parent is not None and s.parent.span_id == _context(server[0]).span_id]
     assert queries, "the request's store reads should be child spans"
     assert "tok-secret-9" not in repr([(s.name, dict(s.attributes or {})) for s in spans])
 
@@ -123,11 +130,11 @@ def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_it
     (server,) = [s for s in spans if s.name == "GET /api/chunks"]
     assert server.attributes is not None
     assert server.attributes[TENANT] == app.state.services.tenants.open_tenants.only()
-    sweep_traces = {s.context.trace_id for s in spans if s.name.startswith("sweep ")}
-    assert {s.name for s in spans if s.parent is None and s.context.trace_id in sweep_traces} == {
+    sweep_traces = {_context(s).trace_id for s in spans if s.name.startswith("sweep ")}
+    assert {s.name for s in spans if s.parent is None and _context(s).trace_id in sweep_traces} == {
         f"sweep {sweep.name}" for sweep in sweeps
     }
-    in_sweeps = [s for s in spans if s.context.trace_id in sweep_traces]
+    in_sweeps = [s for s in spans if _context(s).trace_id in sweep_traces]
     assert not [s.name for s in in_sweeps if {TENANT, TENANT_NAME} & set(s.attributes or {})]
 
 
@@ -146,9 +153,10 @@ def test_a_runner_bearer_stamps_caller_runner_id_and_name_and_a_forged_caller_he
         assert resp.status_code == 200
     server = [s for s in _spans(handle, exporter) if s.name.startswith("GET /api/fleet/queue/peek")]
     assert len(server) == 1
-    assert server[0].attributes[_CALLER] == "runner"
-    assert (server[0].attributes[_RUNNER_ID], server[0].attributes[_RUNNER_NAME]) == ("rn_01JRUNNERA", "runner-a")
-    assert "operator" not in {s.attributes.get(_CALLER) for s in server}
+    attributes = _attributes(server[0])
+    assert attributes[_CALLER] == "runner"
+    assert (attributes[_RUNNER_ID], attributes[_RUNNER_NAME]) == ("rn_01JRUNNERA", "runner-a")
+    assert "operator" not in [_attributes(s).get(_CALLER) for s in server]
 
 
 def test_an_outbound_call_through_an_injected_oauth_client_is_an_httpx_client_span(tmp_path: Path) -> None:
@@ -199,14 +207,39 @@ def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | N
     return seed_runner(tenant_services_of(build_hosted_hub_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
-def _server_span(spans: list[Any], prefix: str):
+def _server_span(spans: list[ReadableSpan], prefix: str) -> ReadableSpan:
     server = [s for s in spans if s.kind.name == "SERVER" and s.name.startswith(prefix)]
     assert len(server) == 1, [s.name for s in spans]
     return server[0]
 
 
-def _continues_planted(span) -> bool:
-    return span.context.trace_id == _PLANTED_TRACE and span.parent is not None and span.parent.span_id == _PLANTED_SPAN
+@dataclass(frozen=True)
+class _UserSeedRig:
+    """The two collaborators ``seed_user`` reads off a harness, over a hosted app's own store."""
+
+    engine: Engine
+    clock: FixedClock
+
+
+def _seed_operator(app: FastAPI) -> User:
+    rig = _UserSeedRig(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
+    return seed_user(rig, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # pyright: ignore[reportArgumentType]  # seed_user reads only engine and clock; a hosted app has no full HubHarness
+
+
+def _context(span: ReadableSpan) -> SpanContext:
+    assert span.context is not None
+    return span.context
+
+
+def _attributes(span: ReadableSpan) -> Mapping[str, AttributeValue]:
+    assert span.attributes is not None
+    return span.attributes
+
+
+def _continues_planted(span: ReadableSpan) -> bool:
+    return (
+        _context(span).trace_id == _PLANTED_TRACE and span.parent is not None and span.parent.span_id == _PLANTED_SPAN
+    )
 
 
 def test_a_registered_runner_bearer_continues_an_incoming_trace(tmp_path: Path) -> None:
@@ -230,13 +263,14 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    with TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client:
+    app = build_hosted_hub_app(config, platform_tracing=handle)
+    with TestClient(app) as client:
         token = _registered_runner_token(config, "runner-a")
-        credentials = client.app.state.services.hub_scoped_reads.credentials  # type: ignore[attr-defined]
+        credentials: CredentialReads = app.state.services.hub_scoped_reads.credentials
         resolutions: list[str] = []
         original = credentials.runner_for_token_hash
 
-        def counting(token_hash: str):
+        def counting(token_hash: str) -> TenantRunner | None:
             resolutions.append(token_hash)
             return original(token_hash)
 
@@ -261,7 +295,7 @@ def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, cre
         client.get("/api/fleet/queue/peek", headers=headers)
     server = _server_span(_spans(handle, exporter), "GET /api/fleet/queue/peek")
     assert server.parent is None
-    assert server.context.trace_id != _PLANTED_TRACE
+    assert _context(server).trace_id != _PLANTED_TRACE
 
 
 def test_a_human_route_under_auth_mode_none_starts_a_fresh_root(tmp_path: Path) -> None:
@@ -273,7 +307,7 @@ def test_a_human_route_under_auth_mode_none_starts_a_fresh_root(tmp_path: Path) 
         client.get("/api/chunks", headers=_TRACEPARENT)
     server = _server_span(_spans(handle, exporter), "GET /api/chunks")
     assert server.parent is None
-    assert server.context.trace_id != _PLANTED_TRACE
+    assert _context(server).trace_id != _PLANTED_TRACE
 
 
 _PASS_GRAPH_YAML = """
@@ -432,10 +466,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
             )
 
         bound = bind_transport(answer)
-        harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
-        session = app.state.services.auth.mint_session(
-            seed_user(harness, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # type: ignore[arg-type]
-        )[0]
+        session = app.state.services.auth.mint_session(_seed_operator(app))[0]
         SessionFile.of().save("http://testserver", session)
         result = bound.runner.invoke(
             hub_group,
@@ -446,7 +477,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
     [post] = posted
     cli_span = json.loads(post.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
     server = _server_span(_spans(handle, exporter), "GET /api/chunks")
-    assert f"{server.context.trace_id:032x}" == cli_span["traceId"]
+    assert f"{_context(server).trace_id:032x}" == cli_span["traceId"]
     assert server.parent is not None and f"{server.parent.span_id:016x}" == cli_span["spanId"]
 
 
@@ -457,15 +488,21 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
     app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         services = app.state.services
-        harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
-        user = seed_user(cast(Any, harness), username="op", role=Role.CONTRIBUTOR, email="op@example.com")
-        session = services.auth.mint_session(user)[0]
+        session = services.auth.mint_session(_seed_operator(app))[0]
         calls: list[str] = []
-        lookup, touch = services.sessions.get_by_hash, services.auth.touch_session
-        monkeypatch.setattr(services.sessions, "get_by_hash", lambda h: calls.append("get_by_hash") or lookup(h))
-        monkeypatch.setattr(
-            services.auth, "touch_session", lambda s, **kw: calls.append("touch_session") or touch(s, **kw)
-        )
+        lookup: Callable[[str], Session | None] = services.sessions.get_by_hash
+        touch: Callable[..., ResolvedIdentity | None] = services.auth.touch_session
+
+        def counted_lookup(id_hash: str) -> Session | None:
+            calls.append("get_by_hash")
+            return lookup(id_hash)
+
+        def counted_touch(session: Session, *, tenant: TenantId | None) -> ResolvedIdentity | None:
+            calls.append("touch_session")
+            return touch(session, tenant=tenant)
+
+        monkeypatch.setattr(services.sessions, "get_by_hash", counted_lookup)
+        monkeypatch.setattr(services.auth, "touch_session", counted_touch)
         response = client.get(
             "/api/chunks",
             headers={"Authorization": f"Bearer {session}", "traceparent": f"00-{'a' * 32}-{'b' * 16}-01"},

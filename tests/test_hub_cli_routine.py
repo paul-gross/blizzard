@@ -7,18 +7,18 @@ from __future__ import annotations
 import contextlib
 import os
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 
 import httpx2
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from blizzard.hub.cli import hub as hub_group
 from tests.worker_http import bind_stubs
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz
     time.tzset()
@@ -44,7 +44,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 def _in_one_project(fake_get: Callable[..., _FakeResponse]) -> Callable[..., _FakeResponse]:
@@ -103,9 +106,11 @@ def test_routine_create_posts_name_graph_and_scope() -> None:
 
 @pytest.mark.unit
 def test_routine_create_collects_repeated_model_options() -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], timeout: float, headers: dict[str, str] | None = None
+    ) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
@@ -115,15 +120,17 @@ def test_routine_create_collects_repeated_model_options() -> None:
         ["routine", "create", "nightly", "alpha", "blizzard", "--model", "a", "--model", "b", "--effort", "high"],
     )
 
-    assert calls[0][1]["default_model"] == ["a", "b"]  # type: ignore[index]
-    assert calls[0][1]["default_effort"] == "high"  # type: ignore[index]
+    assert calls[0][1]["default_model"] == ["a", "b"]
+    assert calls[0][1]["default_effort"] == "high"
 
 
 @pytest.mark.unit
 def test_routine_create_collects_repeated_harnesses_options() -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], timeout: float, headers: dict[str, str] | None = None
+    ) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
@@ -143,7 +150,7 @@ def test_routine_create_collects_repeated_harnesses_options() -> None:
         ],
     )
 
-    assert calls[0][1]["default_harnesses"] == ["claude_code", "codex"]  # type: ignore[index]
+    assert calls[0][1]["default_harnesses"] == ["claude_code", "codex"]
 
 
 @pytest.mark.unit
@@ -379,7 +386,7 @@ def test_routine_show_maps_an_unknown_routine() -> None:
     assert "rtn_ghost" in result.output
 
 
-def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[object, list[object]]:
+def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[Result, list[object]]:
     patch_calls: list[object] = []
 
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
@@ -400,7 +407,7 @@ def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[object, list[ob
 def test_routine_edit_patches_without_reading_or_restating_the_name() -> None:
     result, patch_calls = _invoke_routine_edit("--graph", "beta", "--scope", "blizzard")
 
-    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert result.exit_code == 0, result.output
     assert patch_calls == [{"graph_name": "beta", "default_scope_slug": "blizzard"}]
 
 
@@ -408,7 +415,7 @@ def test_routine_edit_patches_without_reading_or_restating_the_name() -> None:
 def test_routine_edit_sends_only_the_options_given() -> None:
     result, patch_calls = _invoke_routine_edit("--effort", "high", "--model", "a", "--model", "b")
 
-    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert result.exit_code == 0, result.output
     assert patch_calls == [{"default_model": ["a", "b"], "default_effort": "high"}]
 
 
@@ -416,7 +423,7 @@ def test_routine_edit_sends_only_the_options_given() -> None:
 def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest() -> None:
     result, patch_calls = _invoke_routine_edit("--clear", "effort", "--clear", "model", "--clear", "harnesses")
 
-    assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
+    assert result.exit_code == 0, result.output
     assert patch_calls == [{"default_effort": None, "default_model": [], "default_harnesses": []}]
 
 
@@ -429,7 +436,7 @@ def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest()
 def test_routine_edit_refuses_a_usage_error_before_any_request(args: list[str]) -> None:
     result, patch_calls = _invoke_routine_edit(*args)
 
-    assert result.exit_code == 2  # type: ignore[attr-defined]
+    assert result.exit_code == 2
     assert patch_calls == []
 
 
@@ -437,8 +444,8 @@ def test_routine_edit_refuses_a_usage_error_before_any_request(args: list[str]) 
 def test_routine_edit_maps_an_unknown_routine() -> None:
     result, _ = _invoke_routine_edit("--graph", "beta", status=404)
 
-    assert result.exit_code != 0  # type: ignore[attr-defined]
-    assert "unknown routine rtn_1" in result.output  # type: ignore[attr-defined]
+    assert result.exit_code != 0
+    assert "unknown routine rtn_1" in result.output
 
 
 @pytest.mark.unit
@@ -912,22 +919,21 @@ def test_routine_trend_renders_periods_and_age() -> None:
     assert "unattributed=1" in result.output
 
 
-_PROPOSAL_COUNTS_BODY = {
+_PROPOSAL_COUNTS_ROW: dict[str, object] = {
+    "origin": "routine-run",
+    "routine_name": "nightly",
+    "class": "lint",
+    "open": 1,
+    "passed": 2,
+    "accepted_with_item": 3,
+    "accepted_without_item": 4,
+    "created": 10,
+}
+_PROPOSAL_COUNTS_BODY: dict[str, object] = {
     "since": "2026-01-01T00:00:00+00:00",
     "until": "2026-01-15T00:00:00+00:00",
     "routine": "nightly",
-    "rows": [
-        {
-            "origin": "routine-run",
-            "routine_name": "nightly",
-            "class": "lint",
-            "open": 1,
-            "passed": 2,
-            "accepted_with_item": 3,
-            "accepted_without_item": 4,
-            "created": 10,
-        }
-    ],
+    "rows": [_PROPOSAL_COUNTS_ROW],
 }
 
 
@@ -1107,8 +1113,12 @@ def test_routine_proposal_counts_renders_the_origin_tokens_and_never_none(
     origin: str, routine_name: str | None, expected: str
 ) -> None:
     row = {"origin": origin, "routine_name": routine_name, "class": "lint"}
-    body = {**_PROPOSAL_COUNTS_BODY, "rows": [{**_PROPOSAL_COUNTS_BODY["rows"][0], **row}]}
-    bound = bind_stubs(get=lambda url, *, params, timeout: _FakeResponse(200, body))
+    body = {**_PROPOSAL_COUNTS_BODY, "rows": [{**_PROPOSAL_COUNTS_ROW, **row}]}
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, body)
+
+    bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(
         hub_group,
         ["routine", "proposal-counts", "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],
@@ -1133,7 +1143,11 @@ def test_routine_proposal_counts_header_names_the_routine_scope_only_when_there_
     argv: list[str], routine: str | None, header: str
 ) -> None:
     body = {**_PROPOSAL_COUNTS_BODY, "routine": routine}
-    bound = bind_stubs(get=lambda url, *, params, timeout: _FakeResponse(200, body))
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, body)
+
+    bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(
         hub_group,
         ["routine", "proposal-counts", *argv, "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],

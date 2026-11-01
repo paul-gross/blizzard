@@ -27,7 +27,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 class _FakeRegistry:
     """Only ``rotate_token`` is live; anything else is a bug."""
 
-    recorded: list[tuple[str, str, datetime]] = field(default_factory=list)
+    recorded: list[tuple[str, str, datetime]] = field(default_factory=list[tuple[str, str, datetime]])
 
     def rotate_token(self, rotation: TokenRotation) -> int | None:
         self.recorded.append((rotation.runner_id, rotation.token_hash, rotation.at))

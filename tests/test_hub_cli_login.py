@@ -7,11 +7,14 @@ needed here.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import click
 import httpx2
 import pytest
 from click.testing import CliRunner
 
+from blizzard.cli.collaborators import ClientFactory
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli import login as cli_login
@@ -32,7 +35,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.local")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 class _StubLogin:
@@ -45,12 +51,17 @@ class _StubLogin:
 
 def test_login_stores_the_loopback_token(monkeypatch: pytest.MonkeyPatch) -> None:
     saved: dict[str, str] = {}
-    monkeypatch.setattr(
-        cli_login.Login,
-        "loopback",
-        classmethod(lambda cls, base, *, client_factory, open_browser: _StubLogin("the-token")),
-    )
-    monkeypatch.setattr(SessionFile, "save", lambda self, base, token: saved.update({base: token}))
+
+    def fake_loopback(
+        cls: type[cli_login.Login], base: str, *, client_factory: ClientFactory, open_browser: bool
+    ) -> _StubLogin:
+        return _StubLogin("the-token")
+
+    def fake_save(self: SessionFile, base: str, token: str) -> None:
+        saved.update({base: token})
+
+    monkeypatch.setattr(cli_login.Login, "loopback", classmethod(fake_loopback))
+    monkeypatch.setattr(SessionFile, "save", fake_save)
 
     result = CliRunner().invoke(hub_group, ["login"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
@@ -62,15 +73,25 @@ def test_login_stores_the_loopback_token(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_login_paste_flag_uses_the_paste_code_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 
-    def fake_paste(cls: type, base: str, *, client_factory, prompt_for_code) -> _StubLogin:
+    def fake_paste(
+        cls: type[cli_login.Login], base: str, *, client_factory: ClientFactory, prompt_for_code: Callable[[], str]
+    ) -> _StubLogin:
         calls["base"] = base
         calls["code"] = prompt_for_code()
         return _StubLogin("pasted-token")
 
     monkeypatch.setattr(cli_login.Login, "paste_code", classmethod(fake_paste))
-    monkeypatch.setattr(click, "prompt", lambda *a, **k: "the-pasted-code")
+
+    def fake_prompt(*args: object, **kwargs: object) -> str:
+        return "the-pasted-code"
+
+    monkeypatch.setattr(click, "prompt", fake_prompt)
     saved: dict[str, str] = {}
-    monkeypatch.setattr(SessionFile, "save", lambda self, base, token: saved.update({base: token}))
+
+    def fake_save(self: SessionFile, base: str, token: str) -> None:
+        saved.update({base: token})
+
+    monkeypatch.setattr(SessionFile, "save", fake_save)
 
     result = CliRunner().invoke(hub_group, ["login", "--paste"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
@@ -80,7 +101,9 @@ def test_login_paste_flag_uses_the_paste_code_flow(monkeypatch: pytest.MonkeyPat
 
 
 def test_login_reports_a_login_error_as_a_clean_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_loopback(cls: type, base: str, *, client_factory: object, open_browser: bool) -> _StubLogin:
+    def fake_loopback(
+        cls: type[cli_login.Login], base: str, *, client_factory: object, open_browser: bool
+    ) -> _StubLogin:
         raise cli_login.LoginError("timed out waiting for the browser login to complete")
 
     monkeypatch.setattr(cli_login.Login, "loopback", classmethod(fake_loopback))
@@ -100,7 +123,11 @@ def test_logout_deletes_the_local_session_and_calls_the_revoke_route(monkeypatch
 
     deleted: list[str] = []
     bound = bind_stubs(post=fake_post)
-    monkeypatch.setattr(SessionFile, "delete", lambda self, base: deleted.append(base))
+
+    def fake_delete(self: SessionFile, base: str) -> None:
+        deleted.append(base)
+
+    monkeypatch.setattr(SessionFile, "delete", fake_delete)
 
     result = bound.runner.invoke(hub_group, ["logout"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
@@ -115,7 +142,11 @@ def test_logout_still_cleans_up_locally_when_the_hub_is_unreachable(monkeypatch:
 
     deleted: list[str] = []
     bound = bind_stubs(post=fake_post)
-    monkeypatch.setattr(SessionFile, "delete", lambda self, base: deleted.append(base))
+
+    def fake_delete(self: SessionFile, base: str) -> None:
+        deleted.append(base)
+
+    monkeypatch.setattr(SessionFile, "delete", fake_delete)
 
     result = bound.runner.invoke(hub_group, ["logout"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
@@ -138,12 +169,18 @@ def test_a_bare_401_maps_to_the_actionable_login_hint() -> None:
 def test_request_attaches_the_stored_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_get(url: str, *, timeout: float, headers: dict[str, str] | None = None, params=None) -> _FakeResponse:
+    def fake_get(
+        url: str, *, timeout: float, headers: dict[str, str] | None = None, params: dict[str, str] | None = None
+    ) -> _FakeResponse:
         captured["headers"] = headers
         return _FakeResponse(200, {"chunks": [], "next_cursor": None})
 
     bound = bind_stubs(get=fake_get)
-    monkeypatch.setattr(SessionFile, "load", lambda self, base: "stored-token")
+
+    def fake_load(self: SessionFile, base: str) -> str | None:
+        return "stored-token"
+
+    monkeypatch.setattr(SessionFile, "load", fake_load)
 
     result = bound.runner.invoke(hub_group, ["chunk", "list"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
@@ -152,13 +189,17 @@ def test_request_attaches_the_stored_bearer_token(monkeypatch: pytest.MonkeyPatc
 
 
 def test_request_omits_the_headers_kwarg_when_no_session_is_stored(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float, params=None) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
         # No `headers` kwarg accepted at all — proves `_request` doesn't pass one when
         # no session is stored (every existing CLI unit test's fake relies on this).
         return _FakeResponse(200, {"chunks": [], "next_cursor": None})
 
     bound = bind_stubs(get=fake_get)
-    monkeypatch.setattr(SessionFile, "load", lambda self, base: None)
+
+    def fake_load(self: SessionFile, base: str) -> str | None:
+        return None
+
+    monkeypatch.setattr(SessionFile, "load", fake_load)
 
     result = bound.runner.invoke(hub_group, ["chunk", "list"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 

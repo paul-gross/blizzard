@@ -160,10 +160,10 @@ def _epoch_owner_statements(hub: HubHarness, records: list[dict[str, object]]) -
 
 
 def test_transcript_ingest_reads_epoch_owners_once_across_record_counts(tmp_path: Path) -> None:
-    counts = []
+    counts: list[int] = []
     for n in (1, _N):
         hub = build_hub(_dir(tmp_path, n))
-        records = []
+        records: list[dict[str, object]] = []
         for i in range(n):
             chunk_id = ingest_chunk(hub, pointer_token=f"default:{i + 1}")
             record = record_transcript(
@@ -204,7 +204,8 @@ def test_standing_edges_touching_answers_the_chunk_s_edges_in_either_role(tmp_pa
 
 
 def test_standing_edges_touching_reads_flat_rows_as_other_chunks_edges_grow(tmp_path: Path) -> None:
-    rows, statements = [], []
+    rows: list[int] = []
+    statements: list[int] = []
     for others in (1, 6):
         chunks, engine = _edged(_dir(tmp_path, others), others=others)
 
@@ -272,14 +273,16 @@ def test_retire_reads_its_routes_records_once_across_route_counts(
     """Each route's release keeps its own lock and transaction; with it stubbed out, what is left
     of the pass — the holdings, the routes and their records — is flat across route counts."""
     released: list[str] = []
-    counts = []
+    counts: list[int] = []
     for n in (1, _N):
         hub = _holding_hub(_dir(tmp_path, n), n)
         registration = hub.services.registry.get_runner("runner-a")
         assert registration is not None
-        monkeypatch.setattr(
-            DetachService, "release_held", lambda self, chunk, *, runner_id: released.append(chunk.chunk_id)
-        )
+
+        def release_held(self: DetachService, chunk: Chunk, *, runner_id: str) -> None:
+            released.append(chunk.chunk_id)
+
+        monkeypatch.setattr(DetachService, "release_held", release_held)
         counts.append(
             count_queries(
                 hub.engine,
@@ -309,8 +312,8 @@ def _derived_hub(tmp_path: Path, *, others: int) -> tuple[HubHarness, str]:
     segment derived and its marker current."""
     hub = build_hub(tmp_path)
     turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
-    records = []
-    chunk_ids = []
+    records: list[dict[str, object]] = []
+    chunk_ids: list[str] = []
     for i in range(others + 1):
         chunk_id = ingest_chunk(hub, pointer_token=f"default:{i + 1}")
         chunk_ids.append(chunk_id)
@@ -325,7 +328,7 @@ def _derived_hub(tmp_path: Path, *, others: int) -> tuple[HubHarness, str]:
 
 
 def test_a_one_chunk_re_derive_reads_flat_rows_as_other_chunks_derived_segments_grow(tmp_path: Path) -> None:
-    rows = []
+    rows: list[int] = []
     for others in (1, 6):
         hub, chunk_id = _derived_hub(_dir(tmp_path, others), others=others)
         derive = hub.services.event_derivation_service

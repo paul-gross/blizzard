@@ -23,7 +23,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.local")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 @pytest.mark.unit
@@ -89,8 +92,8 @@ def test_garden_proposal_list_drains_every_page() -> None:
         "next_cursor": None,
     }
 
-    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
-        if isinstance(params, dict) and params.get("cursor") is not None:
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        if params is not None and params.get("cursor") is not None:
             return _FakeResponse(200, page_2)
         return _FakeResponse(200, page_1)
 
@@ -180,7 +183,11 @@ def _row(origin: str, routine_name: str | None, created_by: str | None) -> dict[
 
 def _render(row: dict[str, object], verb: list[str]) -> str:
     payload = {"proposals": [row], "next_cursor": None} if verb == ["list"] else row
-    bound = bind_stubs(get=lambda url, *, timeout, params=None: _FakeResponse(200, payload))
+
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        return _FakeResponse(200, payload)
+
+    bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["garden-proposal", *verb])
     assert result.exit_code == 0, result.output
     return result.output

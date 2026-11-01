@@ -4,11 +4,13 @@ a real hub app driven through ``TestClient``."""
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypedDict, Unpack
 
 import httpx2
 import pytest
+from sqlalchemy import Connection
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.user_names import user_names
@@ -65,13 +67,46 @@ def _create(hub: HubHarness, **overrides: Unpack[_WorkSourceBody]) -> httpx2.Res
     return hub.client.post("/api/work-sources", json={**_DEMO, **overrides})
 
 
-def _changes(hub: HubHarness, *, record_kind: str | None = None, record_key: str | None = None) -> list[dict]:
+class _FieldChange(TypedDict):
+    field: str
+    old: object
+    new: object
+    old_label: str | None
+    new_label: str | None
+
+
+class _ChangeRow(TypedDict):
+    """One served row of the change log."""
+
+    id: int
+    recorded_at: str
+    actor: str
+    actor_name: str | None
+    door: str
+    record_kind: str
+    record_key: str
+    record_label: str | None
+    revision: int
+    op: str
+    diff: list[_FieldChange]
+    apply_id: str | None
+    project_id: str | None
+
+
+class _ChangePage(TypedDict):
+    changes: list[_ChangeRow]
+    next_before: int | None
+    total: int
+
+
+def _changes(hub: HubHarness, *, record_kind: str | None = None, record_key: str | None = None) -> list[_ChangeRow]:
     query = {
         key: value for key, value in (("record_kind", record_kind), ("record_key", record_key)) if value is not None
     }
     resp = hub.client.get("/api/config/changes", params=query)
     assert resp.status_code == 200, resp.text
-    return resp.json()["changes"]
+    page: _ChangePage = resp.json()
+    return page["changes"]
 
 
 def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
@@ -158,14 +193,17 @@ def _bypass_in_write_checks(monkeypatch: pytest.MonkeyPatch, module: object, hol
     """Skip the store's in-write slug and holder checks, so a collision reaches the unique constraint the way a
     concurrent writer that committed first would; the holder read after the lost race still runs for real."""
     monkeypatch.undo()
-    real = getattr(module, holder_reader)
+    real: Callable[[Connection, object], str | None] = getattr(module, holder_reader)
     calls: list[object] = []
 
-    def first_blind(conn, record):
+    def first_blind(conn: Connection, record: object) -> str | None:
         calls.append(record)
         return None if len(calls) == 1 else real(conn, record)
 
-    monkeypatch.setattr(SlugTables, "refuse_held", lambda self, conn, record_id, slug: None)
+    def refuse_nothing(self: SlugTables, conn: Connection, record_id: str, slug: str) -> None:
+        return None
+
+    monkeypatch.setattr(SlugTables, "refuse_held", refuse_nothing)
     monkeypatch.setattr(module, holder_reader, first_blind)
 
 
@@ -237,11 +275,17 @@ def test_patch_is_sparse_and_tells_absent_from_null(hub: HubHarness) -> None:
 def test_if_match_is_checked_on_patch_retire_and_enable(hub: HubHarness) -> None:
     _create(hub)
     hub.client.patch("/api/work-sources/demo", json={"annotate": False})
-    for call in (
-        lambda h: hub.client.patch("/api/work-sources/demo", json={"annotate": True}, headers=h),
-        lambda h: hub.client.post("/api/work-sources/demo/retire", headers=h),
-        lambda h: hub.client.post("/api/work-sources/demo/enable", headers=h),
-    ):
+
+    def patch(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.patch("/api/work-sources/demo", json={"annotate": True}, headers=h)
+
+    def retire(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.post("/api/work-sources/demo/retire", headers=h)
+
+    def enable(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.post("/api/work-sources/demo/enable", headers=h)
+
+    for call in (patch, retire, enable):
         stale = call({"If-Match": "1"})
         assert stale.status_code == 409
         assert "revision 2" in stale.json()["detail"]
@@ -539,11 +583,17 @@ def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) ->
     assert hub.client.patch("/api/repositories/blizzard", json={"name": None}).status_code == 422
     assert hub.client.patch("/api/repositories/blizzard", json={"secret_name": "absent"}).status_code == 422
     assert hub.client.patch("/api/repositories/nope", json={}).status_code == 404
-    for call in (
-        lambda h: hub.client.patch("/api/repositories/blizzard", json={"base_branch": "dev"}, headers=h),
-        lambda h: hub.client.post("/api/repositories/blizzard/retire", headers=h),
-        lambda h: hub.client.post("/api/repositories/blizzard/enable", headers=h),
-    ):
+
+    def patch(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.patch("/api/repositories/blizzard", json={"base_branch": "dev"}, headers=h)
+
+    def retire(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.post("/api/repositories/blizzard/retire", headers=h)
+
+    def enable(h: dict[str, str]) -> httpx2.Response:
+        return hub.client.post("/api/repositories/blizzard/enable", headers=h)
+
+    for call in (patch, retire, enable):
         stale = call({"If-Match": "1"})
         assert stale.status_code == 409
         assert "revision 2" in stale.json()["detail"]
@@ -842,7 +892,7 @@ def _mint_graph(hub: HubHarness, name: str = "alpha") -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _rows(applied) -> list[tuple[str, str, str]]:
+def _rows(applied: httpx2.Response) -> list[tuple[str, str, str]]:
     assert applied.status_code == 200, applied.text
     return [(o["kind"], o["key"], o["op"]) for o in applied.json()["outcomes"]]
 
@@ -991,7 +1041,7 @@ def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: P
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=ada_headers).status_code == 201
     alpha = hub.client.get("/api/projects/alpha", headers=guest).json()["project_id"]
 
-    def read(*, limit: int | None = None, before: int | None = None, project: str | None = None) -> dict:
+    def read(*, limit: int | None = None, before: int | None = None, project: str | None = None) -> _ChangePage:
         pairs = (("limit", limit), ("before", before), ("project", project))
         query = {key: value for key, value in pairs if value is not None}
         resp = hub.client.get("/api/config/changes", params=query, headers=guest)

@@ -11,6 +11,7 @@ hub-level permission without a membership is named, with that permission, in :da
 from __future__ import annotations
 
 from pathlib import Path
+from types import FunctionType
 from typing import Protocol, runtime_checkable
 
 import pytest
@@ -476,9 +477,9 @@ def _permission_of(call: object) -> Permission | None:
     over, or ``None`` if ``call`` is not one — introspects the closure cell rather
     than trusting a second hand-maintained map, so this cannot silently drift from
     what the route actually enforces."""
-    if getattr(call, "__name__", None) in ("_dependency", "_hub_dependency"):
-        freevars = call.__code__.co_freevars  # type: ignore[union-attr]
-        closure = call.__closure__ or ()  # type: ignore[union-attr]
+    if isinstance(call, FunctionType) and call.__name__ in ("_dependency", "_hub_dependency"):
+        freevars = call.__code__.co_freevars
+        closure = call.__closure__ or ()
         for name, cell in zip(freevars, closure, strict=True):
             if name == "permission":
                 return cell.cell_contents

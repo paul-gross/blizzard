@@ -11,6 +11,7 @@ from typing import TypedDict, Unpack
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import (
@@ -41,12 +42,15 @@ from blizzard.hub.domain.delivery.flows import (
     LandingTerms,
     PollPolicy,
     Submission,
+    SubmissionRecord,
     Turn,
+    VisitStanding,
     held_resources,
     stamp_terms,
     withdrawal_for,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.invariants import FlowLineStanding
 
 pytestmark = pytest.mark.unit
@@ -421,7 +425,7 @@ def test_a_person_holding_the_chunk_after_it_left_the_node_does_not_keep_its_pla
 @dataclass
 class _Flows:
     submissions: list[Submission]
-    turns: list[Turn] = field(default_factory=list)
+    turns: list[Turn] = field(default_factory=list[Turn])
 
     def open_submissions_from(self, floor: int) -> list[Submission]:
         return [sub for sub in self.submissions if sub.arrival >= floor]
@@ -432,7 +436,22 @@ class _Flows:
     def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
         raise NotImplementedError
 
+    def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
+        raise NotImplementedError
+
     def facts_of(self, submission_id: str) -> list[FlowFact]:
+        raise NotImplementedError
+
+    def turn_outcomes(self, chunk_id: str, *, node_id: str, epoch: int) -> list[str]:
+        raise NotImplementedError
+
+    def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
+        raise NotImplementedError
+
+    def terms_of(self, submission_id: str) -> dict[str, LandingTerms]:
+        raise NotImplementedError
+
+    def first_turn_at(self, chunk_id: str, *, node_id: str, epoch: int) -> datetime | None:
         raise NotImplementedError
 
 
@@ -443,12 +462,33 @@ class _Facts:
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return {chunk_id: self.by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.by_id}
 
+    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+        raise NotImplementedError
+
+    def load_all_facts(self) -> dict[str, ChunkFacts]:
+        raise NotImplementedError
+
+    def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        raise NotImplementedError
+
+    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        raise NotImplementedError
+
+    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+        raise NotImplementedError
+
+    def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
+        raise NotImplementedError
+
+    def done_since_count(self, since: datetime, *, project: ProjectId | None = None) -> int:
+        raise NotImplementedError
+
 
 _SETTLED = _AT + RECONCILE_FLOOR + timedelta(seconds=1)
 
 
 def _standing(flows: _Flows, facts: dict[str, ChunkFacts], *, now: datetime = _SETTLED) -> list[str]:
-    check = FlowLineStanding(flows, _Facts(facts), FixedClock(now))  # type: ignore[arg-type]
+    check = FlowLineStanding(flows, _Facts(facts), FixedClock(now))
     return [found.invariant for found in check.run()]
 
 

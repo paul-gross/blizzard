@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import func, insert, inspect, select, update
+from sqlalchemy import Table, func, insert, inspect, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -20,12 +21,16 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission
-from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
+from blizzard.hub.domain.delivery.reconcile import (
+    FlowLineReconciler,
+    _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched seam's parameter type is module-private
+)
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
@@ -243,7 +248,7 @@ class World:
                 ).scalars()
             )
 
-    def count(self, table) -> int:
+    def count(self, table: Table) -> int:
         with self.hub.engine.connect() as conn:
             return int(conn.execute(hub_scoped(select(func.count()).select_from(table))).scalar() or 0)
 
@@ -640,7 +645,12 @@ def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_th
 # --- forge budget notices -----------------------------------------------------------------------------------------
 
 
-def _budget_events(world: World) -> list[tuple[str, str, dict]]:
+def _detail(raw: object) -> dict[str, object]:
+    # The column decodes to a dict on some dialects and stays a JSON string on others.
+    return json.loads(raw if isinstance(raw, str) else json.dumps(raw))
+
+
+def _budget_events(world: World) -> list[tuple[str, str, dict[str, object]]]:
     with world.hub.engine.connect() as conn:
         rows = conn.execute(
             hub_scoped(
@@ -649,7 +659,7 @@ def _budget_events(world: World) -> list[tuple[str, str, dict]]:
                 .order_by(s.event_log.c.id)
             )
         ).all()
-    return [(r.kind, r.severity, r.detail if isinstance(r.detail, dict) else json.loads(r.detail)) for r in rows]
+    return [(r.kind, r.severity, _detail(r.detail)) for r in rows]
 
 
 def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: World) -> None:
@@ -841,7 +851,7 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
     world.complete(sound, build_sound)
     submit = FlowLineReconciler.submit
 
-    def flaky(self: FlowLineReconciler, standing, artifacts):
+    def flaky(self: FlowLineReconciler, standing: _Standing, artifacts: Sequence[StoredArtifact]) -> Submission | None:
         if standing.chunk.chunk_id == broken:
             raise RuntimeError("unreadable visit")
         return submit(self, standing, artifacts)
@@ -861,7 +871,7 @@ def _artifact_reads(world: World) -> int:
 
 
 def test_a_reconcile_pass_reads_artifacts_in_a_constant_number_of_statements(tmp_path: Path) -> None:
-    reads = []
+    reads: list[int] = []
     for n in (1, 3):
         (tmp_path / str(n)).mkdir()
         world = World(tmp_path / str(n))

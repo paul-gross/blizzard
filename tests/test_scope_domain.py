@@ -70,10 +70,12 @@ class _FakeScopeRepo:
     """Only the seams ``ScopeRegistry``/``ScopeLifecycle`` use are live; anything else
     is a bug (``bzh:domain-core`` — no store, no tokens)."""
 
-    stored: dict[str, Scope] = field(default_factory=dict)
-    ensured: list[tuple[Scope, ConfigChange]] = field(default_factory=list)
-    updated: list[tuple[Scope, int, ConfigChange]] = field(default_factory=list)
-    recorded: list[tuple[Scope, bool, int, str, ConfigChange]] = field(default_factory=list)
+    stored: dict[str, Scope] = field(default_factory=dict[str, Scope])
+    ensured: list[tuple[Scope, ConfigChange]] = field(default_factory=list[tuple[Scope, ConfigChange]])
+    updated: list[tuple[Scope, int, ConfigChange]] = field(default_factory=list[tuple[Scope, int, ConfigChange]])
+    recorded: list[tuple[Scope, bool, int, str, ConfigChange]] = field(
+        default_factory=list[tuple[Scope, bool, int, str, ConfigChange]]
+    )
 
     def get(self, project_id: str, slug: str) -> Scope | None:
         stored = self.stored.get(slug)

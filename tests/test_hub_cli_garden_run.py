@@ -8,7 +8,7 @@ from __future__ import annotations
 import contextlib
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from datetime import timedelta
 from pathlib import Path
 from typing import TypedDict, Unpack
@@ -30,7 +30,7 @@ _CTX = ChangeContext(actor="operator", door=Door.API)
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz
     time.tzset()
@@ -56,7 +56,9 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=httpx2.Request("GET", "http://hub"), response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub")
+            response = httpx2.Response(self.status_code, request=request)
+            raise httpx2.HTTPStatusError("error", request=request, response=response)
 
 
 class _RunDeltaOverrides(TypedDict, total=False):

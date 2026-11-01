@@ -54,7 +54,7 @@ def _id_token(private_key: rsa.RSAPrivateKey, *, claims: Mapping[str, object]) -
     return jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": _KID})
 
 
-def _oidc_transport(id_token_claims: Mapping[str, object] | None, *, token_status: int = 200):  # type: ignore[no-untyped-def]
+def _oidc_transport(id_token_claims: Mapping[str, object] | None, *, token_status: int = 200) -> httpx2.Client:
     private_key, jwk = _rsa_keypair()
     token = _id_token(private_key, claims=id_token_claims) if id_token_claims is not None else None
 
@@ -230,7 +230,9 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
     (alg-confusion attack)."""
     _, jwk = _rsa_keypair()
     del jwk["alg"]
-    public_pem = RSAAlgorithm.from_jwk(jwk).public_bytes(  # type: ignore[union-attr]
+    public_key = RSAAlgorithm.from_jwk(jwk)
+    assert isinstance(public_key, rsa.RSAPublicKey)
+    public_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )

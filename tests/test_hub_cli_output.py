@@ -26,14 +26,17 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 pytestmark = pytest.mark.unit
 
 
 def test_json_on_a_read_verb_prints_the_raw_response_body() -> None:
-    payload = [
+    payload: list[dict[str, object]] = [
         {
             "chunk_id": "ch_1",
             "status": "ready",

@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,7 +33,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
     with TestClient(build_hosted_hub_app(config)) as c:
 
-        def forward(method: str, url: str, *, timeout: float, **kwargs):
+        def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
             return c.request(method.upper(), urlsplit(url).path, **kwargs)
 
         _bound["hub"] = bind_stubs(request=forward)

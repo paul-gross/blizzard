@@ -668,9 +668,13 @@ def test_the_hub_guard_installs_once_on_every_engine(monkeypatch: pytest.MonkeyP
 
     checks: list[object] = []
     check = TenantStatementGuard.check
-    monkeypatch.setattr(
-        TenantStatementGuard, "check", lambda self, statement, **kw: checks.append(check(self, statement, **kw))
-    )
+
+    def counting_check(
+        self: TenantStatementGuard, statement: object, *, parameter_keys: frozenset[str] = frozenset()
+    ) -> None:
+        checks.append(check(self, statement, parameter_keys=parameter_keys))
+
+    monkeypatch.setattr(TenantStatementGuard, "check", counting_check)
     engine = sa.create_engine("sqlite://")
     _run(engine, sa.select(sa.literal(1)))
     engine.dispose()
