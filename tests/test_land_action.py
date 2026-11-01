@@ -23,7 +23,7 @@ from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Marker, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.capabilities import Capability
@@ -1114,6 +1114,9 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     hub = _hub(tmp_path, GitHubDouble())
     chunk_id = _chunk(hub, _WIDGET)
     artifacts = hub.services.chunks.artifacts
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    close_decision = decide_close_enqueue(chunk.work_refs, lambda _: True)
 
     def record() -> bool:
         return artifacts.record_landing(  # type: ignore[attr-defined]
@@ -1126,10 +1129,9 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
             revision="m1",
             repository_id="re_widget",
             at=hub.clock.now(),
+            close_decision=close_decision,
         )
 
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
     hub.services.stop.stop(chunk, by="operator")
 
     assert record() is True
