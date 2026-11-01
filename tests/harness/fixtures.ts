@@ -31,8 +31,7 @@ import { uiWorld } from './ui';
 import type { OtlpSink } from './otlp-sink';
 import { mergeHostProfile, mergeProfile } from './profiles';
 import { startCollector, type Collector } from './collector';
-import { startForge } from './daemons/forge';
-import { stopDaemon } from './daemons/process';
+import { withSecondForge } from './second-forge';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -233,13 +232,10 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
 
   secondForge: async ({ testHub, ledger }, use, testInfo) => {
     const dir = testInfo.outputPath('second-forge');
-    const daemon = await startForge(dir);
-    try {
+    await withSecondForge(dir, async (daemon) => {
       const api = forgeApi({ context: testHub.context, testInfo, url: daemon.url, ledger });
       await use({ ...api, ...originReads(path.join(dir, 'origins'), daemonEnv(), TESTS_ROOT), pid: daemon.pid });
-    } finally {
-      await stopDaemon(daemon);
-    }
+    });
   },
 
   openedSubscriptions: async ({}, use) => {
