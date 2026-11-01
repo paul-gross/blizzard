@@ -109,9 +109,9 @@ class _FakeResponse:
 @pytest.mark.unit
 def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads the spawn-injected identity and posts it — no arguments."""
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse()
 

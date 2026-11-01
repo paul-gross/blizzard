@@ -658,7 +658,7 @@ def _trace_comments(double: TestClient, key: str = "acme/widget#1") -> list[str]
     return [c for c in forge_state(double)["issues"][key]["comments"] if "blizzard-delivery:ch_9" in c]  # type: ignore[index]
 
 
-def _closer_over(issues: dict[str, dict]) -> tuple[TestClient, GitHubWorkSource]:
+def _closer_over(issues: dict[str, dict[str, object]]) -> tuple[TestClient, GitHubWorkSource]:
     double = github_double(issues=issues)
     return double, GitHubWorkSource(double, source_id="widget", slug="widget", repo="acme/widget", web_base="https://x")
 

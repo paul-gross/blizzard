@@ -6,6 +6,7 @@ are linked, unlinked by retiring and relinked, each change carrying the project'
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,12 +23,12 @@ def hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path, link=False)
 
 
-def _ok(response, status: int = 200) -> dict:
+def _ok(response, status: int = 200) -> dict[str, Any]:
     assert response.status_code == status, response.text
     return response.json()
 
 
-def _create(client: TestClient, slug: str, name: str | None = None, **extra: object) -> dict:
+def _create(client: TestClient, slug: str, name: str | None = None, **extra: object) -> dict[str, Any]:
     return _ok(client.post("/api/projects", json={"slug": slug, "name": name or slug.title(), **extra}), 201)
 
 
@@ -48,7 +49,7 @@ def _seed_records(client: TestClient) -> str:
     return source_id
 
 
-def _changes(client: TestClient, **params: str) -> list[dict]:
+def _changes(client: TestClient, **params: str) -> list[dict[str, Any]]:
     return _ok(client.get("/api/config/changes", params=params))["changes"]
 
 
@@ -80,7 +81,9 @@ def test_a_created_project_is_listed_by_slug_and_read_by_its_id_or_slug(hub: Hub
         ({"slug": "widgets", "name": ""}, "name"),
     ],
 )
-def test_a_malformed_slug_or_name_answers_422_naming_the_field(hub: HubHarness, body: dict, field: str) -> None:
+def test_a_malformed_slug_or_name_answers_422_naming_the_field(
+    hub: HubHarness, body: dict[str, Any], field: str
+) -> None:
     response = hub.client.post("/api/projects", json=body)
 
     assert response.status_code == 422, response.text

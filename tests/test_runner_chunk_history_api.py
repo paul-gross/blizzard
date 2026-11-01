@@ -431,7 +431,7 @@ nodes:
 """
 
 
-def _step(node_id: str, *, epoch: int, choice: str) -> dict:
+def _step(node_id: str, *, epoch: int, choice: str) -> dict[str, object]:
     return {"choice": choice, "epoch": epoch, "runner_id": "r1", "from_node_id": node_id}
 
 

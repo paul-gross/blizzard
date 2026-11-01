@@ -2190,7 +2190,7 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
 # --- cross-window correlation ----------------------------------------
 
 
-def _shipped_turns(ctx) -> list[dict]:
+def _shipped_turns(ctx) -> list[dict[str, Any]]:
     """Every turn the pump actually enqueued, in wire order across all its records."""
     return [
         turn

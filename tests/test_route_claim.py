@@ -23,7 +23,7 @@ def _ingest(hub: HubHarness, ref: str = "7") -> str:
     return chunk_id
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a", "env-b"]}
 
 

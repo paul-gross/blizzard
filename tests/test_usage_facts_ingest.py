@@ -30,7 +30,7 @@ def _claim(hub: HubHarness) -> tuple[str, str]:
 
 def _usage_payload(
     node_id: str, *, epoch: int, cost_usd: float | None, estimated_cost_usd: float | None = None
-) -> dict:
+) -> dict[str, object]:
     payload = {
         "chunk_id": "",  # filled by the caller
         "node_id": node_id,
@@ -57,7 +57,7 @@ def _push_usage(
     seq: int,
     cost_usd: float | None = 0.1,
     estimated_cost_usd: float | None = None,
-) -> dict:
+) -> dict[str, object]:
     payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd, estimated_cost_usd=estimated_cost_usd)
     payload["chunk_id"] = chunk_id
     resp = hub.client.post(

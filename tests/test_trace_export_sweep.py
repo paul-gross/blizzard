@@ -6,6 +6,7 @@ from __future__ import annotations
 import itertools
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -58,7 +59,7 @@ def _kinds(hub: HubHarness) -> list[str]:
     return hub_event_kinds(hub.engine, "trace-")
 
 
-def _skipped_detail(hub: HubHarness) -> dict:
+def _skipped_detail(hub: HubHarness) -> dict[str, Any]:
     [row] = hub_event_rows(hub.engine, "trace-window-skipped")
     return hub_event_detail(row)
 

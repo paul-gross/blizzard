@@ -68,7 +68,7 @@ def _count(hub: HubHarness, table) -> int:
         return int(conn.execute(hub_store_connections(hub.engine).select(table, func.count())).scalar_one())
 
 
-def _force(hub: HubHarness, segment_id: str) -> dict:
+def _force(hub: HubHarness, segment_id: str) -> dict[str, object]:
     resp = hub.client.post("/api/analytics/re-derive", json={"segment_id": segment_id})
     assert resp.status_code == 200, resp.text
     return resp.json()

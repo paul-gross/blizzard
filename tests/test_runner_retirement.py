@@ -88,7 +88,7 @@ def _retire(hub: HubHarness, runner_id: str = "runner-a", **body):
     return hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "op", **body})
 
 
-def _listed(hub: HubHarness, *, include_retired: bool = False) -> list[dict]:
+def _listed(hub: HubHarness, *, include_retired: bool = False) -> list[dict[str, object]]:
     params = {"include_retired": "true"} if include_retired else {}
     return hub.client.get("/api/runners", params=params).json()["runners"]
 

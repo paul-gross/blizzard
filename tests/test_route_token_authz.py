@@ -74,8 +74,14 @@ def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1", headers: di
     return str(resp.json()["route_token"])
 
 
-def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token: str | None) -> dict:
-    body: dict = {"choice": "pass", "epoch": epoch, "runner_id": runner_id, "from_node_id": node_id, "artifacts": []}
+def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token: str | None) -> dict[str, object]:
+    body: dict[str, object] = {
+        "choice": "pass",
+        "epoch": epoch,
+        "runner_id": runner_id,
+        "from_node_id": node_id,
+        "artifacts": [],
+    }
     if route_token is not None:
         body["route_token"] = route_token
     return body

@@ -20,7 +20,7 @@ from tests.support import HubHarness, build_hub, chunk_stores, count_rows_read, 
 pytestmark = pytest.mark.component
 
 
-def _events(hub: HubHarness, **params) -> list[dict]:
+def _events(hub: HubHarness, **params) -> list[dict[str, object]]:
     resp = hub.client.get("/api/events", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["events"]

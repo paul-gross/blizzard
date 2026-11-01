@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -93,7 +94,7 @@ def _escalated(hub: HubHarness) -> str:
     return chunk_id
 
 
-def _fleet_detail(hub: HubHarness, chunk_id: str) -> dict:
+def _fleet_detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -126,7 +127,9 @@ def test_a_resolution_note_is_stored_and_read_back_on_the_chunk(tmp_path: Path) 
 
 
 @pytest.mark.parametrize("body", [{"choice": "approve"}, {"choice": "approve", "note": "  \n "}])
-def test_an_omitted_or_blank_resolution_note_stores_none_and_resolves_alike(tmp_path: Path, body: dict) -> None:
+def test_an_omitted_or_blank_resolution_note_stores_none_and_resolves_alike(
+    tmp_path: Path, body: dict[str, Any]
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id, decision_id = _gated(hub)
 
@@ -180,7 +183,7 @@ def test_a_requeue_note_and_requeuer_are_stored_and_read_back(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize("body", [None, {}, {"note": ""}, {"note": "   "}])
-def test_a_requeue_without_a_note_records_the_requeuer_and_no_note(tmp_path: Path, body: dict | None) -> None:
+def test_a_requeue_without_a_note_records_the_requeuer_and_no_note(tmp_path: Path, body: dict[str, Any] | None) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _escalated(hub)
 
@@ -212,7 +215,7 @@ def test_a_restart_note_is_stored_and_read_back(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("body", [{}, {"note": " "}])
-def test_a_restart_without_a_note_stores_none_and_moves_alike(tmp_path: Path, body: dict) -> None:
+def test_a_restart_without_a_note_stores_none_and_moves_alike(tmp_path: Path, body: dict[str, Any]) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _ = _running(hub)
 

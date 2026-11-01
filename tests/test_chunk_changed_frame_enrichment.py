@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -59,11 +60,11 @@ nodes:
 """
 
 
-def _chunk_changed_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
+def _chunk_changed_frames(hub: HubHarness, *, since: int = 0) -> list[dict[str, Any]]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED]
 
 
-def _frames_of(hub: HubHarness, event_type: str, *, since: int = 0) -> list[dict]:
+def _frames_of(hub: HubHarness, event_type: str, *, since: int = 0) -> list[dict[str, Any]]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == event_type]
 
 

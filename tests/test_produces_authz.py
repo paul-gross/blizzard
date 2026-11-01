@@ -76,7 +76,7 @@ def _submit(
     *,
     epoch: int = 1,
     runner_id: str = "r1",
-    artifacts: list[dict] | None = None,
+    artifacts: list[dict[str, object]] | None = None,
 ) -> httpx2.Response:
     body = {
         "choice": "pass",
@@ -155,7 +155,7 @@ def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(t
     assert retried.json()["outcome"] != "failure"
 
 
-def _decide(hub: HubHarness, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx2.Response:
+def _decide(hub: HubHarness, chunk_id: str, node_id: str, *, artifacts: list[dict[str, object]]) -> httpx2.Response:
     body = {"from_node_id": node_id, "epoch": 1, "runner_id": "r1", "artifacts": artifacts}
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
 

@@ -32,6 +32,8 @@ def test_a_breaking_note_naming_the_surface_and_where_names_the_entry() -> None:
         {"breaking": True, "surfaces": ["http-api"], "breaks": ["GET /other"]},
     ],
 )
-def test_a_non_breaking_note_a_wrong_surface_or_a_wrong_name_leaves_the_entry_unnamed(fields: dict) -> None:
+def test_a_non_breaking_note_a_wrong_surface_or_a_wrong_name_leaves_the_entry_unnamed(
+    fields: dict[str, object],
+) -> None:
     check = cross_check([_ROUTE], [_note("a", **fields)])
     assert check.named == () and check.unnamed == (_ROUTE,)

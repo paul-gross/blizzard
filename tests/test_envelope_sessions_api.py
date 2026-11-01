@@ -7,6 +7,7 @@ read."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -84,7 +85,7 @@ def _mint_and_pin(hub: HubHarness, chunk_id: str, yaml: str = _SESSIONS_YAML) ->
     return graph_id
 
 
-def _envelope(hub: HubHarness, chunk_id: str) -> dict:
+def _envelope(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope")
     assert resp.status_code == 200, resp.text
     return resp.json()

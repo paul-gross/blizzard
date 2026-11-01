@@ -3289,7 +3289,7 @@ def _ingest_hub_item_chunk(hub: httpx2.Client, definition_yaml: str) -> tuple[st
     return chunk_id, ref
 
 
-def _wait_item_delivered(hub: httpx2.Client, ref: str, *, timeout: float) -> dict | None:
+def _wait_item_delivered(hub: httpx2.Client, ref: str, *, timeout: float) -> dict[str, object] | None:
     """Poll the hub-owned item until its closure is durable — the drain sweep's own
     cadence, not a request/response round trip (unconditional, no config knob to
     shorten). Returns the last-read item, or ``None`` if it never answered."""

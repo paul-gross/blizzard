@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -67,7 +68,7 @@ _SPEND_BODY = {
 }
 
 
-def _body_for(suffix: str) -> dict:
+def _body_for(suffix: str) -> dict[str, Any]:
     return _COUNTS_BODY if suffix.startswith("counts/") else _SPEND_BODY
 
 

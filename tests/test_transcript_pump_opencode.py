@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -73,7 +74,7 @@ def _open_segment(ctx) -> str:
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
-def _shipped_turns(ctx) -> list[dict]:
+def _shipped_turns(ctx) -> list[dict[str, Any]]:
     return [
         turn
         for delta in ctx.stores.transcript_ledger.pending_transcript_outbound(limit=50)

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -395,10 +396,10 @@ def _delete_chunk(hub: HubHarness, chunk_id: str) -> None:
     assert resp.status_code == 202, resp.text
 
 
-def _all_pages(hub: HubHarness, *, limit: int) -> list[dict]:
+def _all_pages(hub: HubHarness, *, limit: int) -> list[dict[str, Any]]:
     """Walks ``GET /api/chunks`` at a fixed ``limit``, following ``next_cursor`` until
     it comes back null, and concatenates every page's own chunks in order."""
-    chunks: list[dict] = []
+    chunks: list[dict[str, Any]] = []
     cursor: str | None = None
     while True:
         params: dict[str, str | int] = {"limit": limit}
@@ -515,7 +516,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     assert full.status_code == 200, full.text
     full_by_id = {c["chunk_id"]: c for c in full.json()["chunks"]}
 
-    def hub_pointer_url(entry: dict) -> str | None:
+    def hub_pointer_url(entry: dict[str, Any]) -> str | None:
         (ref,) = [w for w in entry["work_refs"] if w["source"] == "hub"]
         return ref["web_url"]
 

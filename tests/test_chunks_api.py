@@ -76,7 +76,7 @@ def _claim(hub: HubHarness, chunk_id: str) -> str:
     return resp.json()["envelope"]["node"]["node_id"]
 
 
-def _build_completion(build_node_id: str, epoch: int) -> dict:
+def _build_completion(build_node_id: str, epoch: int) -> dict[str, object]:
     return {
         "choice": "pass",
         "epoch": epoch,

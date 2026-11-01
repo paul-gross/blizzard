@@ -38,20 +38,20 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
     assert resp.status_code == 202, resp.text
 
 
-def _list_entry(hub: HubHarness, chunk_id: str) -> dict:
+def _list_entry(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     (entry,) = [c for c in resp.json()["chunks"] if c["chunk_id"] == chunk_id]
     return entry
 
 
-def _detail(hub: HubHarness, chunk_id: str) -> dict:
+def _detail(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _backlog_entry(hub: HubHarness, chunk_id: str) -> dict:
+def _backlog_entry(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get("/api/backlog")
     assert resp.status_code == 200, resp.text
     (entry,) = [e for e in resp.json()["entries"] if e["chunk_id"] == chunk_id]
@@ -267,7 +267,7 @@ def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(t
     assert small_count == large_count
 
 
-def _queue_entry(hub: HubHarness, chunk_id: str) -> dict:
+def _queue_entry(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     (entry,) = [e for e in resp.json()["entries"] if e["chunk_id"] == chunk_id]

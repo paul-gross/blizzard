@@ -885,7 +885,9 @@ class _Clock:
         return self.now
 
 
-def _scripted_runner(clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict | None]]):
+def _scripted_runner(
+    clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict[str, object] | None]]
+):
     calls: list[tuple[str, float]] = []
 
     def runner(slug: str, since: str, timeout: float):
@@ -900,7 +902,7 @@ def _scripted_runner(clock: _Clock, mutants_dir: Path, script: dict[str, tuple[i
     return runner
 
 
-def _scope_report(*survivors: str) -> dict:
+def _scope_report(*survivors: str) -> dict[str, object]:
     return {"total": 3, "survivors": [{"mutant": name} for name in survivors]}
 
 
@@ -1003,7 +1005,7 @@ def test_delta_rejects_a_revision_that_names_no_commit_before_running(tmp_path: 
 def test_main_delta_exits_zero_whenever_the_report_is_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     written: list[str] = []
 
-    def fake_run_delta(since: str, *, budget_seconds: float) -> dict:
+    def fake_run_delta(since: str, *, budget_seconds: float) -> dict[str, object]:
         written.append(f"{since}:{budget_seconds:g}")
         return {"scopes": [{"status": "failed"}, {"status": "over-budget"}]}
 
@@ -1022,7 +1024,7 @@ def test_main_without_a_scope_or_since_exits_non_zero(capsys: pytest.CaptureFixt
 def test_main_delta_on_an_unresolvable_revision_exits_the_bad_revision_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def raising(since: str, *, budget_seconds: float) -> dict:
+    def raising(since: str, *, budget_seconds: float) -> dict[str, object]:
         raise m.UnknownRevisionError(since)
 
     monkeypatch.chdir(tmp_path)

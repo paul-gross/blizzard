@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -58,7 +59,7 @@ class _Runner:
         closed_lease(self.store, lease_id, opened=now - timedelta(minutes=1), closed=now, identified=identified)
         return lease_id
 
-    def events(self) -> list[dict]:
+    def events(self) -> list[dict[str, Any]]:
         return [json.loads(f.payload) for f in self.store.pending_outbound() if f.kind == EVENT_RECORDED]
 
     def kinds(self) -> list[str]:

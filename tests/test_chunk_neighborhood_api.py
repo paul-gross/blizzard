@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -45,7 +45,7 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
     assert resp.status_code == 202, resp.text
 
 
-def _detail(hub: HubHarness, chunk_id: str) -> dict:
+def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()

@@ -35,7 +35,7 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, **overrides: object) -> dict:
+def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
         "name": "gardening",
         "graph_name": "alpha",

@@ -25,7 +25,7 @@ _MATCHING_CAPABILITY = [{"harness_id": "claude", "default": True}]
 _MISMATCHED_CAPABILITY = [{"harness_id": "other-harness", "default": True}]
 
 
-def _register(hub: HubHarness, *, runner_id: str = "r1", capabilities: list[dict] | None = None) -> None:
+def _register(hub: HubHarness, *, runner_id: str = "r1", capabilities: list[dict[str, object]] | None = None) -> None:
     body: dict[str, object] = {"runner_id": runner_id, "workspace_id": "w1"}
     if capabilities is not None:
         body["capabilities"] = capabilities
@@ -45,7 +45,7 @@ def _ingest(hub: HubHarness, ref: str, *, default_harnesses: list[str] | None = 
     return chunk_id
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
@@ -175,7 +175,7 @@ class _ReasonlessIncompatibleDenial(BaseModel):
     detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
 
 
-def _reasonless_runner_reads(body: dict) -> str:
+def _reasonless_runner_reads(body: dict[str, object]) -> str:
     """Which 409 a runner predating ``reason`` takes ``body`` for: its claim reads the four shapes apart by key."""
     if "status" in body:
         return "terminal"

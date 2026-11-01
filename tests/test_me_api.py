@@ -6,6 +6,7 @@ naming a tenant the caller cannot enter resolves nothing here rather than answer
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -36,7 +37,7 @@ def _cookie(hub: HubHarness, user: User) -> dict[str, str]:
     return {"Cookie": f"bz_session={seed_session(hub, user)}"}
 
 
-def _me(hub: HubHarness, headers: dict[str, str], tenant: TenantId | str | None = None) -> dict:
+def _me(hub: HubHarness, headers: dict[str, str], tenant: TenantId | str | None = None) -> dict[str, Any]:
     named = headers if tenant is None else {**headers, TENANT_HEADER: tenant}
     resp = hub.client.get("/api/me", headers=named)
     assert resp.status_code == 200, resp.text

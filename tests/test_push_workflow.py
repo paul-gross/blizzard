@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -21,16 +22,16 @@ _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "push.yml"
 
 
-def _jobs() -> dict:
+def _jobs() -> dict[str, Any]:
     workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
     return workflow["jobs"]
 
 
-def _dev_image_job() -> dict:
+def _dev_image_job() -> dict[str, Any]:
     return _jobs()["dev-image"]
 
 
-def _step_index(steps: list[dict], predicate) -> int:
+def _step_index(steps: list[dict[str, Any]], predicate) -> int:
     for i, step in enumerate(steps):
         if predicate(step):
             return i
@@ -152,7 +153,7 @@ def test_derived_tags_include_edge_and_a_sha_tag_referencing_github_sha() -> Non
     assert "sha-${GITHUB_SHA}" in run or "sha-$GITHUB_SHA" in run
 
 
-def _build_push_step() -> dict:
+def _build_push_step() -> dict[str, Any]:
     steps = _dev_image_job()["steps"]
     return steps[_step_index(steps, lambda s: "docker buildx build" in str(s.get("run", "")))]
 

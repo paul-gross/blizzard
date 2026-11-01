@@ -211,7 +211,7 @@ def _mint_graph(hub: HubHarness) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, name: str, default_scope_slug: str = "blizzard") -> dict:
+def _create_routine(hub: HubHarness, name: str, default_scope_slug: str = "blizzard") -> dict[str, object]:
     resp = hub.client.post(
         "/api/routines",
         json={

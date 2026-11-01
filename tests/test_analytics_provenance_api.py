@@ -8,6 +8,7 @@ from __future__ import annotations
 import itertools
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -98,7 +99,7 @@ def _get(hub: HubHarness, token: str, path: str, **params: str):
     return resp.json()
 
 
-def _spend_by_key(body: dict) -> dict[str, int]:
+def _spend_by_key(body: dict[str, Any]) -> dict[str, int]:
     return {r["key"]: r["input_tokens"] for r in body["spend"]}
 
 
@@ -145,7 +146,7 @@ def test_spend_chunks_and_its_ndjson_stream_honor_the_provenance_filters(tmp_pat
     assert [line.split('"')[3] for line in resp.text.splitlines()] == [chunks["a"]]
 
 
-def _durations(body: dict) -> tuple[int, float]:
+def _durations(body: dict[str, Any]) -> tuple[int, float]:
     rows = body["durations"]
     return sum(r["completed_steps"] for r in rows), sum(r["total_seconds"] for r in rows)
 
@@ -170,7 +171,7 @@ def test_outcomes_count_only_attempts_with_a_matching_usage_fact(tmp_path: Path)
     hub, token, nodes, _chunks = _seed(tmp_path)
     build = nodes["build"]
 
-    def outcome(**params: str) -> dict:
+    def outcome(**params: str) -> dict[str, Any]:
         rows = _get(hub, token, "outcomes/nodes", **params)["outcomes"]
         return next((r for r in rows if r["node_id"] == build), {"choice_counts": {}, "attempt_failures": 0})
 

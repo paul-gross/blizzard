@@ -64,7 +64,7 @@ nodes:
 """
 
 
-def _usage_payload(node_id: str, chunk_id: str) -> dict:
+def _usage_payload(node_id: str, chunk_id: str) -> dict[str, object]:
     return {
         "chunk_id": chunk_id,
         "node_id": node_id,

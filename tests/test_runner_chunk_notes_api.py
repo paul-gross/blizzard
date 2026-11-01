@@ -63,7 +63,7 @@ _ARTIFACT = {
 }
 
 
-def _hub_detail(tmp_path: Path, notes: tuple[str | None, str | None, str | None]) -> tuple[str, dict]:
+def _hub_detail(tmp_path: Path, notes: tuple[str | None, str | None, str | None]) -> tuple[str, dict[str, object]]:
     """Drive one chunk on a real hub through a resolution, a requeue and a restart, in that order,
     each carrying its note (``None`` sends none), and return the fleet ``ChunkDetail`` it serves."""
     resolve_note, requeue_note, restart_note = notes
@@ -87,7 +87,7 @@ def _hub_detail(tmp_path: Path, notes: tuple[str | None, str | None, str | None]
     assert parked.json()["outcome"] == "parked_at_gate", parked.text
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
-    def with_note(body: dict, note: str | None) -> dict:
+    def with_note(body: dict[str, object], note: str | None) -> dict[str, object]:
         return body if note is None else {**body, "note": note}
 
     hub.clock.advance(timedelta(seconds=1))
@@ -112,7 +112,7 @@ def _hub_detail(tmp_path: Path, notes: tuple[str | None, str | None, str | None]
     return chunk_id, detail.json()
 
 
-def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict):
+def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict[str, object]):
     """A runner whose hub forward answers ``detail`` verbatim, with an open lease on ``chunk_id``."""
     tmp_path.mkdir(exist_ok=True)
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"

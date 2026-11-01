@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -32,7 +33,7 @@ def _commit(repo: Path, message: str) -> str:
 
 
 @pytest.fixture
-def line(tmp_path: Path) -> dict:
+def line(tmp_path: Path) -> dict[str, Any]:
     origin = tmp_path / "origin.git"
     seed = tmp_path / "seed"
     seed.mkdir()
@@ -50,7 +51,7 @@ def line(tmp_path: Path) -> dict:
     return {"repo": repo, "base": _git(repo, "rev-parse", "HEAD"), "on_master": on_master, "off_master": off_master}
 
 
-def _check(line: dict) -> subprocess.CompletedProcess[str]:
+def _check(line: dict[str, Any]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(_SCRIPT), line["base"], "HEAD"], cwd=line["repo"], capture_output=True, text=True, env=os.environ
     )

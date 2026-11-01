@@ -6,6 +6,7 @@ drain order (``bzh:epoch-fencing``). Warn-mode route tokens isolate this fence."
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import func
@@ -71,7 +72,7 @@ class _Runner:
         """The route went away under this runner: it has no valid token to present any more."""
         self.route_token = None
 
-    def _push(self, kind: str, payload: dict[str, object]) -> dict:
+    def _push(self, kind: str, payload: dict[str, object]) -> dict[str, Any]:
         self.seq += 1
         if self.route_token is not None:
             payload = {**payload, "route_token": self.route_token}
@@ -121,7 +122,7 @@ class _Runner:
         )
         return resp.status_code
 
-    def complete(self, node_id: str, *, epoch: int) -> dict:
+    def complete(self, node_id: str, *, epoch: int) -> dict[str, Any]:
         body: dict[str, object] = {
             "choice": "pass",
             "epoch": epoch,
@@ -134,7 +135,7 @@ class _Runner:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def decide(self, node_id: str, *, epoch: int) -> dict:
+    def decide(self, node_id: str, *, epoch: int) -> dict[str, Any]:
         body: dict[str, object] = {"from_node_id": node_id, "epoch": epoch, "runner_id": self.runner_id}
         if self.route_token is not None:
             body["route_token"] = self.route_token
@@ -154,7 +155,7 @@ class _Chunk:
     def runner(self, runner_id: str) -> _Runner:
         return _Runner(self.hub, self.chunk_id, runner_id)
 
-    def detail(self) -> dict:
+    def detail(self) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
     def restart(self) -> None:
@@ -173,7 +174,7 @@ class _Chunk:
             ).scalar_one()
 
 
-def _refused(result: dict, *, epoch: int) -> None:
+def _refused(result: dict[str, Any], *, epoch: int) -> None:
     assert result["outcome"] == "failure", result
     assert f"epoch {epoch}" in result["detail"]
 

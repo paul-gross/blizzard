@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -154,7 +155,7 @@ def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=
     )
 
 
-def _shipped_bodies(ctx) -> list[dict]:
+def _shipped_bodies(ctx) -> list[dict[str, Any]]:
     hub = ctx.hub
     assert isinstance(hub, FakeHub)
     return [json.loads(record.model_dump_json()) for record in hub.transcripts_pushed]

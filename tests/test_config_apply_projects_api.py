@@ -47,7 +47,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
-def _apply(hub: HubHarness, document: dict, *, dry_run: bool = False):
+def _apply(hub: HubHarness, document: dict[str, object], *, dry_run: bool = False):
     return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 1, **document})
 
 
@@ -56,7 +56,7 @@ def _rows(applied) -> list[tuple[str, str, str]]:
     return [(o["kind"], o["key"], o["op"]) for o in applied.json()["outcomes"]]
 
 
-def _changes(hub: HubHarness) -> list[dict]:
+def _changes(hub: HubHarness) -> list[dict[str, object]]:
     return hub.client.get("/api/config/changes", params={"limit": 200}).json()["changes"]
 
 

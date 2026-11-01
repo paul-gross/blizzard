@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -106,7 +107,7 @@ def _ctx(
     )
 
 
-def _warnings(store: SqlAlchemyRunnerStore) -> list[dict]:
+def _warnings(store: SqlAlchemyRunnerStore) -> list[dict[str, Any]]:
     return [json.loads(f.payload) for f in store.pending_outbound() if f.kind == EVENT_RECORDED]
 
 

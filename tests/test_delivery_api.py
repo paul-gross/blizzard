@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import event
@@ -56,7 +57,7 @@ def test_delivery_survives_reread_and_partial_multi_repo_land(tmp_path: Path) ->
         )
         _marker(conn, chunk_id, "merged/acme/one", "actual-merge-sha", 3)
 
-    def read() -> tuple[dict, dict]:
+    def read() -> tuple[dict[str, Any], dict[str, Any]]:
         page = hub.client.get("/api/chunks").json()["chunks"][0]
         detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
         return page, detail

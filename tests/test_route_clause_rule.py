@@ -25,7 +25,7 @@ _RUNNER = "src/blizzard/runner/cli/sample.py"
 _ELSEWHERE = "src/blizzard/cli/sample.py"
 
 
-def _hits(tmp_path: Path, fixture: str, at: str) -> list[dict]:
+def _hits(tmp_path: Path, fixture: str, at: str) -> list[dict[str, object]]:
     assert _VALE is not None, "vale is required here: install it (mise install) or unset BLIZZARD_REQUIRE_VALE"
     shutil.copy(_ROOT / ".vale.ini", tmp_path / ".vale.ini")
     shutil.copytree(_ROOT / "styles", tmp_path / "styles")
@@ -36,7 +36,7 @@ def _hits(tmp_path: Path, fixture: str, at: str) -> list[dict]:
     return json.loads(out.stdout).get(at, []) if out.stdout.strip() else []
 
 
-def _route(alerts: list[dict]) -> list[dict]:
+def _route(alerts: list[dict[str, object]]) -> list[dict[str, object]]:
     return [a for a in alerts if a["Check"] == "Blizzard.RouteClause"]
 
 

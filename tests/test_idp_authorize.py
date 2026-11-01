@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import jwt
 import pytest
@@ -225,7 +225,7 @@ def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_ma
     hub.client.cookies.set("bz_session", seed_session(hub, user))
     registered = _DEFAULT_REDIRECT_URIS[0]
 
-    def authorize(client: str, redirect_uri: str = registered) -> tuple[int, dict]:
+    def authorize(client: str, redirect_uri: str = registered) -> tuple[int, dict[str, Any]]:
         resp = hub.client.get(
             "/api/auth/authorize",
             params={"client": client, "redirect_uri": redirect_uri, "state": "s"},

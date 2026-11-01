@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,7 @@ def _on(tmp_path: Path, **extra: object) -> EgressConfig:
     return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)  # type: ignore[arg-type]
 
 
-def _status(hub: HubHarness) -> dict:
+def _status(hub: HubHarness) -> dict[str, Any]:
     resp = hub.client.get("/api/egress/status")
     assert resp.status_code == 200, resp.text
     return resp.json()

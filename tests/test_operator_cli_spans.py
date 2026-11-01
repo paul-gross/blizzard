@@ -9,6 +9,7 @@ import json
 import socket
 import time
 from pathlib import Path
+from typing import Any
 
 import click
 import httpx2
@@ -45,7 +46,7 @@ class _Collector:
         self.requests.append(request)
         return httpx2.Response(self.status)
 
-    def spans(self) -> list[dict]:
+    def spans(self) -> list[dict[str, object]]:
         return [json.loads(r.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0] for r in self.requests]
 
 
@@ -395,7 +396,7 @@ def _grouped() -> click.Group:
     return group
 
 
-def _exit_attribute(span: dict) -> dict:
+def _exit_attribute(span: dict[str, Any]) -> dict[str, Any]:
     return next(a for a in span["attributes"] if a["key"] == "process.exit.code")["value"]
 
 
@@ -403,7 +404,7 @@ def _exit_attribute(span: dict) -> dict:
     ("command", "code", "status"), [("ok", "0", None), ("boom", "1", {"code": 2}), ("quit", "3", {"code": 2})]
 )
 def test_the_operator_trace_records_the_exit_code_its_command_ends_in(
-    command: str, code: str, status: dict | None
+    command: str, code: str, status: dict[str, object] | None
 ) -> None:
     collector = _Collector()
     bound = _bind(collector)

@@ -13,6 +13,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -87,13 +88,13 @@ def _parse_ceiling_paused_runner(stdout: str) -> str:
     return match.group(1)
 
 
-def _chunks_by_id(hub: httpx2.Client) -> dict[str, dict]:
+def _chunks_by_id(hub: httpx2.Client) -> dict[str, dict[str, Any]]:
     resp = hub.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     return {row["chunk_id"]: row for row in resp.json()["chunks"]}
 
 
-def _chunk_detail(hub: httpx2.Client, chunk_id: str) -> dict:
+def _chunk_detail(hub: httpx2.Client, chunk_id: str) -> dict[str, Any]:
     resp = hub.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()

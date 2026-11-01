@@ -65,7 +65,7 @@ def _claim(hub: HubHarness, chunk_id: str) -> str:
     return resp.json()["envelope"]["node"]["node_id"]
 
 
-def _summary(hub: HubHarness, chunk_id: str) -> dict:
+def _summary(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     assert_all_timestamps_utc(resp.json())

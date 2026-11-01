@@ -18,7 +18,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "2"}
 
 
-def _claim_body(runner: str) -> dict:
+def _claim_body(runner: str) -> dict[str, object]:
     return {"chunk_id": "", "runner_id": runner, "workspace_id": "w1", "environment_ids": [f"env-{runner}"]}
 
 

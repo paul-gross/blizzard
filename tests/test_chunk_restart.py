@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -143,7 +143,7 @@ def _mint(hub: HubHarness, yaml: str = _YAML) -> str:
     return chunk_id
 
 
-def _detail(hub: HubHarness, chunk_id: str) -> dict:
+def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()

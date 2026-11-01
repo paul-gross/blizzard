@@ -162,7 +162,7 @@ def test_adv_dwf_routes_verify_pass_straight_to_review() -> None:
     ],
     ids=_PACKAGED,
 )
-def test_each_tuned_graphs_node_continuity_is_what_the_tuning_intended(graph: str, expected: dict) -> None:
+def test_each_tuned_graphs_node_continuity_is_what_the_tuning_intended(graph: str, expected: dict[str, object]) -> None:
     doc = _doc(graph)
     actual = {name: (n.session, n.session_source) for name in expected if (n := doc.node(name)) is not None}
     assert actual == expected

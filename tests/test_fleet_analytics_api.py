@@ -99,7 +99,7 @@ def _push_usage(hub: HubHarness, *, chunk_id: str, node_id: str, epoch: int, seq
     assert resp.status_code == 200, resp.text
 
 
-def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str) -> dict:
+def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str) -> dict[str, object]:
     return {
         "index": index,
         "kind": "tool",

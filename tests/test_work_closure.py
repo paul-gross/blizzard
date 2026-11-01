@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -74,7 +74,7 @@ def _event_log(hub: HubHarness) -> EventLogService:
     )
 
 
-def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
+def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict[str, Any]]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.EVENT_LOGGED]
 
 
@@ -312,7 +312,7 @@ class _RecordedEvent:
     kind: str
     chunk_id: str | None
     message: str
-    detail: dict | None
+    detail: dict[str, Any] | None
     project_id: str | None = None
 
 
@@ -375,7 +375,7 @@ class _FakeCloseChunks:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict | None,
+        detail: dict[str, Any] | None,
         at: object,
     ) -> int:
         self.events.append(

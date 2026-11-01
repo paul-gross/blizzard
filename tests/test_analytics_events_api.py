@@ -35,7 +35,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str | None = None) -> dict:
+def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str | None = None) -> dict[str, object]:
     return {
         "index": index,
         "kind": "tool",
@@ -59,14 +59,14 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
 def _record(
     chunk_id: str,
     *,
-    turns: list[dict],
+    turns: list[dict[str, object]],
     node_id: str = "nd_build",
     segment_id: str = "sg_1",
     harness_id: str | None = None,
     harness_version: str | None = "claude-code-1.0",
     model: str | None = None,
     effort: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     return {
         "seq": 1,
         "segment_id": segment_id,

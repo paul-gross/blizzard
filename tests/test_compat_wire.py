@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Any
 
 import pytest
 from fastapi import FastAPI
@@ -23,16 +23,18 @@ pytestmark = pytest.mark.unit
 # --- fixture-spec helpers -----------------------------------------------------------
 
 
-def _spec(paths: dict, schemas: dict | None = None) -> dict:
+def _spec(paths: dict[str, Any], schemas: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"openapi": "3.1.0", "paths": paths, "components": {"schemas": schemas or {}}}
 
 
-def _ref(name: str) -> dict:
+def _ref(name: str) -> dict[str, Any]:
     return {"$ref": f"#/components/schemas/{name}"}
 
 
-def _op(*, response_schema: dict | None = None, request_schema: dict | None = None) -> dict:
-    op: dict = {"responses": {}}
+def _op(
+    *, response_schema: dict[str, Any] | None = None, request_schema: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    op: dict[str, Any] = {"responses": {}}
     if response_schema is not None:
         op["responses"]["200"] = {"content": {"application/json": {"schema": response_schema}}}
     else:
@@ -131,7 +133,9 @@ def test_the_operator_host_list_beside_the_add_call_stays_off_the_surface() -> N
 # --- response-reached schema classes --------------------------------------------------
 
 
-def _response_widget_specs(base_schema: dict, head_schema: dict) -> tuple[dict, dict]:
+def _response_widget_specs(
+    base_schema: dict[str, Any], head_schema: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     base = _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, {"Widget": base_schema})
     head = _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, {"Widget": head_schema})
     return base, head
@@ -161,10 +165,12 @@ def test_response_property_type_changed_is_breaking() -> None:
     assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
-def _enum_narrowing_specs(*, request: bool, nullable: bool, base_enum: list[str] | None = None) -> tuple[dict, dict]:
-    base_member: dict = {"type": "string"} if base_enum is None else {"type": "string", "enum": base_enum}
-    base_prop: dict = {"anyOf": [base_member, {"type": "null"}]} if nullable else base_member
-    head_prop: dict = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
+def _enum_narrowing_specs(
+    *, request: bool, nullable: bool, base_enum: list[str] | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    base_member: dict[str, Any] = {"type": "string"} if base_enum is None else {"type": "string", "enum": base_enum}
+    base_prop: dict[str, Any] = {"anyOf": [base_member, {"type": "null"}]} if nullable else base_member
+    head_prop: dict[str, Any] = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
     op = (lambda s: _op(request_schema=s)) if request else (lambda s: _op(response_schema=s))
     color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
     base = _spec(
@@ -304,7 +310,9 @@ def test_property_added_to_forbid_schema_reached_by_response_is_breaking() -> No
 # --- request-reached schema classes -----------------------------------------------------
 
 
-def _request_widget_specs(base_schema: dict, head_schema: dict) -> tuple[dict, dict]:
+def _request_widget_specs(
+    base_schema: dict[str, Any], head_schema: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     base = _spec({"/api/fleet/widgets": {"post": _op(request_schema=_ref("Widget"))}}, {"Widget": base_schema})
     head = _spec({"/api/fleet/widgets": {"post": _op(request_schema=_ref("Widget"))}}, {"Widget": head_schema})
     return base, head
@@ -431,12 +439,14 @@ def test_component_schema_deleted_while_still_referenced_is_breaking() -> None:
 # --- parameters, array items, map values ------------------------------------------------
 
 
-def _param(name: str, schema: dict, *, where: str = "query", required: bool = False) -> dict:
+def _param(name: str, schema: dict[str, Any], *, where: str = "query", required: bool = False) -> dict[str, Any]:
     return {"name": name, "in": where, "required": required, "schema": schema}
 
 
-def _params_specs(base_params: list[dict], head_params: list[dict], schemas: dict | None = None) -> tuple[dict, dict]:
-    def build(params: list[dict]) -> dict:
+def _params_specs(
+    base_params: list[dict[str, Any]], head_params: list[dict[str, Any]], schemas: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    def build(params: list[dict[str, Any]]) -> dict[str, Any]:
         return _spec({"/api/fleet/widgets": {"get": {**_op(), "parameters": params}}}, schemas)
 
     return build(base_params), build(head_params)
@@ -478,7 +488,7 @@ def test_removed_parameter_is_additive() -> None:
 
 
 def test_parameter_referencing_an_enum_component_holds_the_request_rules() -> None:
-    def schemas(values: list[str]) -> dict:
+    def schemas(values: list[str]) -> dict[str, Any]:
         return {"State": {"type": "string", "enum": values}}
 
     param = [_param("state", _ref("State"))]
@@ -489,8 +499,10 @@ def test_parameter_referencing_an_enum_component_holds_the_request_rules() -> No
     assert classify_spec_diff(base, gained) == []
 
 
-def _widget_property_specs(base_prop: dict, head_prop: dict, *, request: bool) -> tuple[dict, dict]:
-    def build(prop: dict) -> dict:
+def _widget_property_specs(
+    base_prop: dict[str, Any], head_prop: dict[str, Any], *, request: bool
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    def build(prop: dict[str, Any]) -> dict[str, Any]:
         schemas = {"Widget": {"type": "object", "properties": {"p": prop}}}
         op = _op(request_schema=_ref("Widget")) if request else _op(response_schema=_ref("Widget"))
         return _spec({"/api/fleet/widgets": {"post": op}}, schemas)
@@ -500,7 +512,7 @@ def _widget_property_specs(base_prop: dict, head_prop: dict, *, request: bool) -
 
 @pytest.mark.parametrize("wrap", [False, True])
 def test_array_item_type_change_is_breaking(wrap: bool) -> None:
-    def arr(item: str) -> dict:
+    def arr(item: str) -> dict[str, Any]:
         body = {"type": "array", "items": {"type": item}}
         return {"anyOf": [body, {"type": "null"}]} if wrap else body
 
@@ -513,7 +525,7 @@ def test_array_item_type_change_is_breaking(wrap: bool) -> None:
 
 @pytest.mark.parametrize("wrap", [False, True])
 def test_map_value_type_change_is_breaking(wrap: bool) -> None:
-    def mapping(value: str) -> dict:
+    def mapping(value: str) -> dict[str, Any]:
         body = {"type": "object", "additionalProperties": {"type": value}}
         return {"anyOf": [body, {"type": "null"}]} if wrap else body
 
@@ -540,7 +552,7 @@ def test_request_array_item_enum_losing_a_value_is_breaking() -> None:
 
 
 def test_component_reached_only_through_a_map_value_is_checked() -> None:
-    def build(props: dict) -> dict:
+    def build(props: dict[str, Any]) -> dict[str, Any]:
         schemas = {
             "Holder": {"type": "object", "additionalProperties": _ref("Leaf")},
             "Leaf": {"type": "object", "properties": props},
@@ -591,7 +603,7 @@ def test_an_enum_schema_the_baseline_deprecated_marks_its_finding() -> None:
 
 
 def test_a_deprecated_parameter_marks_its_finding() -> None:
-    def build(params: list[dict]) -> dict:
+    def build(params: list[dict[str, Any]]) -> dict[str, Any]:
         return _spec({"/api/fleet/widgets": {"get": {**_op(), "parameters": params}}})
 
     old = {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "deprecated": True}
@@ -621,16 +633,16 @@ def test_a_wire_finding_is_reported_once_under_the_wire() -> None:
 _OPEN = "x-blizzard-open"
 
 
-def _open_ref(name: str, *, marked: bool = True) -> dict:
+def _open_ref(name: str, *, marked: bool = True) -> dict[str, Any]:
     return {**_ref(name), **({_OPEN: True} if marked else {})}
 
 
-def _state_specs(*positions: dict, gained: bool = True) -> tuple[dict, dict]:
+def _state_specs(*positions: dict[str, Any], gained: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
     """A response ``Widget`` holding each of ``positions`` as a property, the ``State`` enum gaining a value at head.
 
     The baseline carries ``positions`` as given; the head marks every one, so only the baseline's marks decide."""
 
-    def spec(values: list[str], properties: dict) -> dict:
+    def spec(values: list[str], properties: dict[str, Any]) -> dict[str, Any]:
         schemas = {
             "Widget": {"type": "object", "properties": properties},
             "State": {"type": "string", "enum": values},
@@ -642,7 +654,7 @@ def _state_specs(*positions: dict, gained: bool = True) -> tuple[dict, dict]:
     return spec(["ready"], base_props), spec(["ready", "paused"] if gained else ["ready"], head_props)
 
 
-def _marked_everywhere(node: dict) -> dict:
+def _marked_everywhere(node: dict[str, Any]) -> dict[str, Any]:
     """``node`` with the open mark on every ``$ref`` it holds, however nested."""
     if "$ref" in node:
         return {**node, _OPEN: True}
@@ -655,7 +667,7 @@ def _marked_everywhere(node: dict) -> dict:
     return marked
 
 
-def _gains(base: dict, head: dict) -> list[str]:
+def _gains(base: dict[str, Any], head: dict[str, Any]) -> list[str]:
     return [t for t in _violation_texts(classify_spec_diff(base, head)) if "response enum gained value" in t]
 
 
@@ -689,7 +701,7 @@ def test_an_unmarked_request_position_does_not_stop_marked_response_positions_op
 
 
 def test_a_marked_inline_enum_gaining_a_value_is_additive_and_an_unmarked_one_is_not() -> None:
-    def specs(marked: bool) -> tuple[dict, dict]:
+    def specs(marked: bool) -> tuple[dict[str, Any], dict[str, Any]]:
         mark = {_OPEN: True} if marked else {}
         return _response_widget_specs(
             {"type": "object", "properties": {"status": {"type": "string", "enum": ["ready"], **mark}}},
@@ -701,7 +713,7 @@ def test_a_marked_inline_enum_gaining_a_value_is_additive_and_an_unmarked_one_is
 
 
 def test_an_unmarked_inline_enum_widened_to_a_plain_string_is_breaking_and_a_marked_one_is_not() -> None:
-    def specs(marked: bool) -> tuple[dict, dict]:
+    def specs(marked: bool) -> tuple[dict[str, Any], dict[str, Any]]:
         mark = {_OPEN: True} if marked else {}
         return _response_widget_specs(
             {"type": "object", "properties": {"kind": {"type": "string", "enum": ["bounce"], **mark}}},
@@ -750,7 +762,7 @@ class _ClosedToneView(BaseModel):
     tone: _Tone
 
 
-def _generated_gain(view: type[BaseModel]) -> tuple[dict, dict]:
+def _generated_gain(view: type[BaseModel]) -> tuple[dict[str, Any], dict[str, Any]]:
     app = FastAPI()
     app.get("/api/fleet/tone", response_model=view)(lambda: None)
     base = app.openapi()

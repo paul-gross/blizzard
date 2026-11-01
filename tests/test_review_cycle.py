@@ -72,11 +72,11 @@ nodes:
 """
 
 
-def _git_artifact(commit: str) -> dict:
+def _git_artifact(commit: str) -> dict[str, object]:
     return {"name": "widget", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": commit}
 
 
-def _completion(node_id: str, *, epoch: int, choice: str, artifacts: list[dict]) -> dict:
+def _completion(node_id: str, *, epoch: int, choice: str, artifacts: list[dict[str, object]]) -> dict[str, object]:
     return {
         "choice": choice,
         "epoch": epoch,

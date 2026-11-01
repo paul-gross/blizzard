@@ -16,7 +16,7 @@ from tests.support import TEST_CATALOGUE
 pytestmark = pytest.mark.unit
 
 
-def _doc(graph: dict):
+def _doc(graph: dict[str, object]):
     return GraphDoc.of(yaml.safe_load(yaml.safe_dump(graph)))
 
 

@@ -7,6 +7,7 @@ pins the rejection edges (``bzh:facts-not-status``).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -96,7 +97,7 @@ def _claimed(hub: HubHarness, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple
     return chunk_id, node_id
 
 
-def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict:
+def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict[str, Any]:
     return {
         "choice": choice,
         "epoch": epoch,
@@ -248,7 +249,9 @@ nodes:
 """
 
 
-def _completion_with_checks(node_id: str, *, choice: str, check_results: list[dict], epoch: int = 1) -> dict:
+def _completion_with_checks(
+    node_id: str, *, choice: str, check_results: list[dict[str, Any]], epoch: int = 1
+) -> dict[str, Any]:
     return {
         "choice": choice,
         "epoch": epoch,

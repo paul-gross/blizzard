@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Engine
 
@@ -1131,7 +1132,7 @@ _HUB_RETIRED_GRAPH_NAME = "hub-gate-graph-retiree"
 _HUB_RETIRED_GRAPH_YAML = _HUB_GRAPH_YAML.replace(_HUB_GRAPH_NAME, _HUB_RETIRED_GRAPH_NAME, 1)
 
 
-def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict:
+def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict[str, Any]:
     """One transcript tool-call turn shaped for the analytics extractors — mirrors
     ``tests/test_analytics_events_api.py``'s own ``_tool_turn``, the smallest shape the
     file_read/skill_invocation/agent_spawn extractors parse."""

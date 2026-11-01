@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Table
@@ -104,7 +105,7 @@ class _Chunk:
         self.seq += 1
         report_lease(self.hub, self.chunk_id, epoch=epoch, seq=self.seq)
 
-    def complete(self, node: str, *, epoch: int, choice: str, decision_id: str | None = None) -> dict:
+    def complete(self, node: str, *, epoch: int, choice: str, decision_id: str | None = None) -> dict[str, Any]:
         body: dict[str, object] = {
             "choice": choice,
             "epoch": epoch,
@@ -118,7 +119,7 @@ class _Chunk:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def decide(self, node: str, *, epoch: int) -> dict:
+    def decide(self, node: str, *, epoch: int) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/decisions",
             json={"from_node_id": self.nodes[node], "epoch": epoch, "runner_id": "r1", "artifacts": [_ARTIFACT]},
@@ -132,7 +133,7 @@ class _Chunk:
     def restart(self) -> None:
         assert self.hub.client.post(f"/api/chunks/{self.chunk_id}/restart", json={"by": "operator"}).status_code == 202
 
-    def detail(self) -> dict:
+    def detail(self) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
     def rows(self, table: Table) -> int:
@@ -343,12 +344,12 @@ def test_a_runner_config_decision_blocks_behind_a_stop_and_then_refuses(tmp_path
     assert chunk.rows(s.artifacts) == 0
 
 
-def _ask(chunk: _Chunk, *, epoch: int) -> dict:
+def _ask(chunk: _Chunk, *, epoch: int) -> dict[str, Any]:
     chunk.seq += 1
     return report_question(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
 
-def _escalate(chunk: _Chunk, *, epoch: int) -> dict:
+def _escalate(chunk: _Chunk, *, epoch: int) -> dict[str, Any]:
     chunk.seq += 1
     return report_escalation(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
@@ -407,7 +408,7 @@ def test_an_intake_blocks_behind_a_restart_and_then_rejects(tmp_path: Path) -> N
     chunk.seq += 1
     seq = chunk.seq
 
-    def submit() -> dict:
+    def submit() -> dict[str, Any]:
         resp = chunk.hub.client.post(
             "/api/fleet/events",
             json={

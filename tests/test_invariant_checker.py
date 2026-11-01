@@ -118,8 +118,8 @@ def _two_runner_engine(tmp_path: Path):
     return engine
 
 
-def _segment_row(**overrides: object) -> dict:
-    row: dict = {
+def _segment_row(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
         "segment_id": "seg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -144,7 +144,7 @@ def _segment_row(**overrides: object) -> dict:
     return row
 
 
-def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
+def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict[str, object]:
     return {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -265,8 +265,8 @@ def _segment_values(**overrides: object) -> dict[str, object]:
     return values
 
 
-def _dependency_edge_values(**overrides: object) -> dict:
-    values: dict = {
+def _dependency_edge_values(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
         "dependency_id": "dep_1",
         "dependent_chunk_id": "ch_dependent",
         "prerequisite_chunk_id": "ch_prereq",

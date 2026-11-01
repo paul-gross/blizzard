@@ -25,7 +25,7 @@ from tests.test_fleet_auth import _enroll, _register
 pytestmark = pytest.mark.component
 
 
-def _turn(index: int, text: str = "hi") -> dict:
+def _turn(index: int, text: str = "hi") -> dict[str, object]:
     return {
         "index": index,
         "kind": "asst",
@@ -48,7 +48,7 @@ def _record(
     segment_id: str = "sg_1",
     spawn_generation: int = 1,
     text: str = "hi",
-) -> dict:
+) -> dict[str, object]:
     return {
         "seq": seq,
         "segment_id": segment_id,
@@ -551,7 +551,7 @@ def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path
 # --- the cross-window link handles ------------------------------------
 
 
-def _late_link_record(chunk_id: str, *, seq: int, turn_range_start: int, segment_id: str = "sg_1") -> dict:
+def _late_link_record(chunk_id: str, *, seq: int, turn_range_start: int, segment_id: str = "sg_1") -> dict[str, object]:
     """A record whose turns are the two late-link shapes: an output for a call shipped in an
     earlier window, and that call's subagent conversation, both naming it by `tool_use_id`."""
     record = _record(chunk_id, seq=seq, turn_range_start=turn_range_start, turn_range_end=turn_range_start + 1)

@@ -186,7 +186,7 @@ class _World:
         report_lease(hub, chunk_id, epoch=1, seq=1)
         return chunk_id, claim.json()["envelope"]["node"]["node_id"]
 
-    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO) -> dict:
+    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{chunk_id}/completions",
             json={
@@ -210,7 +210,7 @@ class _World:
         assert self.detail(chunk_id)["status"] == "delivering"
         return chunk_id
 
-    def detail(self, chunk_id: str) -> dict:
+    def detail(self, chunk_id: str) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{chunk_id}").json()
 
     def submissions(self, chunk_id: str) -> list[Submission]:
@@ -639,7 +639,7 @@ def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_th
 # --- forge budget notices -----------------------------------------------------------------------------------------
 
 
-def _budget_events(world: _World) -> list[tuple[str, str, dict]]:
+def _budget_events(world: _World) -> list[tuple[str, str, dict[str, Any]]]:
     with world.hub.engine.connect() as conn:
         rows = conn.execute(
             hub_scoped(

@@ -23,7 +23,7 @@ class _FakeResponse:
     def raise_for_status(self) -> None:
         return None
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, object]:
         return {"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 1}
 
 
@@ -31,9 +31,11 @@ class _FakeResponse:
 def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, dict, dict]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse()
 
@@ -52,9 +54,11 @@ def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
 
 @pytest.mark.unit
 def test_attach_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse()
 

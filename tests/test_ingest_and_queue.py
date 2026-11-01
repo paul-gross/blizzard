@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -241,7 +242,9 @@ def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) 
     assert resp.status_code == 422, resp.text  # no configured source claims it
 
 
-def _pass(hub: HubHarness, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:
+def _pass(
+    hub: HubHarness, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict[str, Any]]
+) -> dict[str, Any]:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

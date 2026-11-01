@@ -5,7 +5,7 @@ built apps and their specs, so a model added later without the wire base fails h
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from fastapi import FastAPI
@@ -45,7 +45,7 @@ def _refs(node: object) -> Iterator[str]:
             yield from _refs(item)
 
 
-def _closure(roots: set[str], schemas: dict[str, dict]) -> set[str]:
+def _closure(roots: set[str], schemas: dict[str, dict[str, Any]]) -> set[str]:
     """``roots`` plus every schema they reach through ``$ref``s."""
     seen: set[str] = set()
     pending = list(roots)
@@ -58,7 +58,7 @@ def _closure(roots: set[str], schemas: dict[str, dict]) -> set[str]:
     return seen
 
 
-def _request_reached(spec: dict) -> set[str]:
+def _request_reached(spec: dict[str, Any]) -> set[str]:
     """Schemas a request body reaches, and the ``-Input``/``-Output`` pairs a schema already split into —
     the split is the spec saying some request parses it."""
     schemas = spec["components"]["schemas"]
@@ -96,7 +96,7 @@ def _named_classes(annotation: object) -> Iterator[type]:
         yield from _named_classes(arg)
 
 
-def _exclude_flagged(app: FastAPI, spec: dict) -> set[str]:
+def _exclude_flagged(app: FastAPI, spec: dict[str, Any]) -> set[str]:
     """Schemas served by a route that drops fields from its reply (``response_model_exclude_*``)."""
     flagged = {
         cls.__name__

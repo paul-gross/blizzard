@@ -149,7 +149,7 @@ def test_every_chunk_describing_view_names_the_chunks_project(tmp_path: Path) ->
     chunk_id = resp.json()["chunk_id"]
     labels = {"project_id": beta, "project_slug": "beta", "project_name": "beta"}
 
-    def labels_of(body: dict) -> dict:
+    def labels_of(body: dict[str, object]) -> dict[str, object]:
         return {key: body[key] for key in labels}
 
     assert labels_of(resp.json()) == labels

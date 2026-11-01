@@ -6,6 +6,7 @@ asserting the slim batch read and the full aggregate agree on every shared field
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -58,14 +59,14 @@ def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1", epoch: int 
     report_lease(hub, chunk_id, epoch=epoch, seq=epoch, runner_id=runner_id)
 
 
-def _status_for(hub: HubHarness, chunk_id: str) -> dict:
+def _status_for(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": [chunk_id]})
     assert resp.status_code == 200, resp.text
     [view] = resp.json()
     return view
 
 
-def _detail_for(hub: HubHarness, chunk_id: str) -> dict:
+def _detail_for(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()

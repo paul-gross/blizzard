@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
@@ -32,7 +33,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return harness
 
 
-def _create(hub: HubHarness, slug: str = "ghe", api_base: str = "https://ghe.example/api/v3") -> dict:
+def _create(hub: HubHarness, slug: str = "ghe", api_base: str = "https://ghe.example/api/v3") -> dict[str, Any]:
     response = hub.client.post("/api/forges", json={"slug": slug, "kind": "github", "api_base": api_base})
     assert response.status_code == 201, response.text
     return response.json()

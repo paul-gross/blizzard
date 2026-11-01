@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -22,7 +23,7 @@ _POINTER_A = {"source": "default", "ref": "7"}
 _POINTER_B = {"source": "default", "ref": "8"}
 
 
-def _claim(hub: HubHarness, pointer: dict) -> tuple[str, str]:
+def _claim(hub: HubHarness, pointer: dict[str, Any]) -> tuple[str, str]:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(

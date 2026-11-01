@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -268,7 +269,7 @@ def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, mo
 _BREAKING = "---\nkind: changed\nbreaking: true\nsurfaces: [http-api]\nbreaks: ['GET /old', 'GET /ghost']\n---\n\nDrops it.\n\n## Upgrade\n\nMove.\n"
 
 
-def _breaks_file(repo: Path, tag: str, *entries: dict) -> str:
+def _breaks_file(repo: Path, tag: str, *entries: dict[str, Any]) -> str:
     path = repo / "breaks.json"
     path.write_text(json.dumps({"tag": tag, "breaks": list(entries)}))
     return str(path)

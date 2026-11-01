@@ -8,7 +8,7 @@ rendering — the per-chunk cost column, the fleet total, and the ``~``-estimate
 from __future__ import annotations
 
 import json
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -43,7 +43,7 @@ def _install(responses: dict[str, object]) -> Bound:
     return bind_stubs(get=fake_get)
 
 
-def _cost(cost_usd: float, *, partial: bool) -> dict:
+def _cost(cost_usd: float, *, partial: bool) -> dict[str, Any]:
     return {
         "input_tokens": 100,
         "output_tokens": 50,
@@ -54,7 +54,9 @@ def _cost(cost_usd: float, *, partial: bool) -> dict:
     }
 
 
-def _responses(chunk_cost: dict, fleet_cost: dict, runners: list[dict] | None = None) -> dict[str, object]:
+def _responses(
+    chunk_cost: dict[str, Any], fleet_cost: dict[str, Any], runners: list[dict[str, Any]] | None = None
+) -> dict[str, object]:
     return {
         f"{DEFAULT_HUB_URL}/api/chunks": {
             "chunks": [
@@ -75,8 +77,8 @@ def _runner(
     locally_paused_by: str | None = None,
     locally_paused_reason: str | None = None,
     online: bool = True,
-    declining: list[dict] | None = None,
-) -> dict:
+    declining: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "runner_id": "r1",
         "workspace_id": "ws1",
@@ -259,7 +261,7 @@ def test_status_marks_a_blocked_chunk_naming_the_prerequisite() -> None:
     is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)
-    envelope = cast("dict", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
+    envelope = cast("dict[str, Any]", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
     envelope["chunks"][0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
     bound = _install(responses)
 
@@ -273,7 +275,7 @@ _FLOOR = {"lever": "floor", "detail": "exhausted", "subscription": "anthropic", 
 _PACE = {"lever": "pace", "detail": "7d 86% spent, 71% elapsed", "subscription": None, "until": None}
 
 
-def _status_output(runner: dict) -> str:
+def _status_output(runner: dict[str, Any]) -> str:
     cost = _cost(0.0, partial=False)
     result = _install(_responses(cost, cost, [runner])).runner.invoke(hub_group, ["status"])
     assert result.exit_code == 0, result.output

@@ -45,7 +45,9 @@ def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
     return {"tenant_id": named, "tenant_name": name}
 
 
-def _serving_default(hub: HubHarness, tenant: TenantId | None = None, *, entry: str | None = None) -> list[dict]:
+def _serving_default(
+    hub: HubHarness, tenant: TenantId | None = None, *, entry: str | None = None
+) -> list[dict[str, object]]:
     """The ``projects`` a registration answers for a runner serving ``tenant``'s only project (default: the store's
     only tenant's), declared as ``entry`` — the project's id, as adding a runner with no list stores it, when
     ``None`` — with the color the store gave it."""

@@ -35,7 +35,7 @@ def _create(hub: HubHarness, **overrides: object):
     return hub.client.post("/api/work-sources", json={**_DEMO, **overrides})
 
 
-def _changes(hub: HubHarness, **params: object) -> list[dict]:
+def _changes(hub: HubHarness, **params: object) -> list[dict[str, Any]]:
     resp = hub.client.get("/api/config/changes", params=params)  # type: ignore[arg-type]
     assert resp.status_code == 200, resp.text
     return resp.json()["changes"]
@@ -582,7 +582,9 @@ repositories:
 """
 
 
-def _apply_json(hub: HubHarness, document: dict, *, dry_run: bool = False, headers: dict | None = None):
+def _apply_json(
+    hub: HubHarness, document: dict[str, Any], *, dry_run: bool = False, headers: dict[str, Any] | None = None
+):
     return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json=document, headers=headers or {})
 
 
@@ -810,7 +812,7 @@ def _rows(applied) -> list[tuple[str, str, str]]:
     return [(o["kind"], o["key"], o["op"]) for o in applied.json()["outcomes"]]
 
 
-def _routine(hub: HubHarness, name: str = "nightly") -> dict:
+def _routine(hub: HubHarness, name: str = "nightly") -> dict[str, Any]:
     return next(r for r in hub.client.get("/api/routines").json() if r["name"] == name)
 
 
@@ -954,7 +956,7 @@ def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: P
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=ada_headers).status_code == 201
     alpha = hub.client.get("/api/projects/alpha", headers=guest).json()["project_id"]
 
-    def read(**params: object) -> dict:
+    def read(**params: object) -> dict[str, Any]:
         resp = hub.client.get("/api/config/changes", params=params, headers=guest)  # type: ignore[arg-type]
         assert resp.status_code == 200, resp.text
         return resp.json()

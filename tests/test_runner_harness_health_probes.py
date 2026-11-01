@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from packaging.version import Version
@@ -29,7 +30,7 @@ _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "ope
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
-def _manifest() -> dict:
+def _manifest() -> dict[str, Any]:
     return json.loads((_CORPUS_DIR / "manifest.json").read_text())
 
 

@@ -8,6 +8,7 @@ escalation lets through only a submission that would re-escalate, answered with 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Table
@@ -93,7 +94,7 @@ class _Chunk:
         self.seq = 1
         report_lease(hub, self.chunk_id, epoch=1, seq=self.seq)
 
-    def complete(self, node: str, *, choice: str) -> dict:
+    def complete(self, node: str, *, choice: str) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/completions",
             json={"choice": choice, "epoch": 1, "runner_id": "r1", "from_node_id": self.nodes[node], "artifacts": []},
@@ -101,7 +102,7 @@ class _Chunk:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def decide(self, node: str) -> dict:
+    def decide(self, node: str) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/decisions",
             json={"from_node_id": self.nodes[node], "epoch": 1, "runner_id": "r1", "artifacts": []},
@@ -123,14 +124,14 @@ class _Chunk:
         assert self.complete("build", choice="ship")["outcome"] != "failure"
         assert self.detail()["current_node_id"] == self.nodes["deliver"]
 
-    def detail(self) -> dict:
+    def detail(self) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
     def rows(self, table: Table) -> int:
         return chunk_rows(self.hub, table, self.chunk_id)
 
 
-def _refused(result: dict, detail: str) -> None:
+def _refused(result: dict[str, Any], detail: str) -> None:
     assert result["outcome"] == "failure", result
     assert detail in result["detail"], result
 

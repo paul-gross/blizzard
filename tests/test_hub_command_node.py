@@ -96,7 +96,7 @@ def _answering(choice: str) -> str:
 # Unit — validation
 
 
-def _errors(yaml_nodes: dict) -> list[str]:
+def _errors(yaml_nodes: dict[str, object]) -> list[str]:
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": yaml_nodes})
     return Validator.of(doc, TEST_CATALOGUE).result.errors
 
@@ -222,7 +222,7 @@ _BUILD_TO_MERGE = {
 }
 
 
-def _merge_with(**overrides: object) -> dict:
+def _merge_with(**overrides: object) -> dict[str, object]:
     node = {
         "executor": "hub",
         "action": "test.sequence",
@@ -393,7 +393,7 @@ def _reified_merge_node():
     return graph, merge_node
 
 
-def _yaml_nodes() -> dict:
+def _yaml_nodes() -> dict[str, object]:
     return yaml.safe_load(_HUB_CMD_GRAPH_YAML)["nodes"]
 
 

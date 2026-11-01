@@ -55,7 +55,7 @@ def _mint_build_deliver_graph(hub: HubHarness) -> None:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
 
 
-def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict:
+def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict[str, object]:
     return {
         "choice": choice,
         "epoch": epoch,

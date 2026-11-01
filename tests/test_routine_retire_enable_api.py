@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -40,7 +41,7 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, **overrides: object) -> dict:
+def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, Any]:
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",

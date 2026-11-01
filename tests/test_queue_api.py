@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import func
@@ -39,7 +40,7 @@ def _ingest_backlog(hub: HubHarness, n: int) -> str:
     return chunk_id
 
 
-def _ids(entries: list[dict]) -> list[str]:
+def _ids(entries: list[dict[str, Any]]) -> list[str]:
     return [e["chunk_id"] for e in entries]
 
 
@@ -69,10 +70,10 @@ def _ingest_backlog_tied(hub: HubHarness, n: int) -> list[str]:
     return ids
 
 
-def _drain(hub: HubHarness, path: str, *, limit: int) -> list[dict]:
+def _drain(hub: HubHarness, path: str, *, limit: int) -> list[dict[str, object]]:
     """Page through ``path`` with ``limit``, following ``next_cursor`` to exhaustion and
     concatenating every page's entries."""
-    entries: list[dict] = []
+    entries: list[dict[str, object]] = []
     cursor: str | None = None
     for _ in range(1000):  # generous bound on iterations for a small fixture
         params: dict[str, str] = {"limit": str(limit)}

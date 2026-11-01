@@ -91,7 +91,7 @@ def _claim(hub: HubHarness) -> tuple[str, str]:
     return chunk_id, node_id
 
 
-def _completion(node_id: str, *, epoch: int) -> dict:
+def _completion(node_id: str, *, epoch: int) -> dict[str, object]:
     return {
         "choice": "pass",
         "epoch": epoch,

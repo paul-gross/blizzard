@@ -48,14 +48,14 @@ def _mint_graph(hub: HubHarness, name: str = "alpha", headers: dict[str, str] | 
     assert resp.status_code == 201, resp.text
 
 
-def _create(hub: HubHarness, headers: dict[str, str] | None = None, **overrides: object) -> dict:
+def _create(hub: HubHarness, headers: dict[str, str] | None = None, **overrides: object) -> dict[str, object]:
     body = {"name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard", **overrides}
     resp = hub.client.post("/api/routines", json=body, headers=headers)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
 
-def _changes(hub: HubHarness, kind: str = "routine", headers: dict[str, str] | None = None) -> list[dict]:
+def _changes(hub: HubHarness, kind: str = "routine", headers: dict[str, str] | None = None) -> list[dict[str, object]]:
     resp = hub.client.get("/api/config/changes", params={"record_kind": kind}, headers=headers)
     assert resp.status_code == 200, resp.text
     return list(reversed(resp.json()["changes"]))

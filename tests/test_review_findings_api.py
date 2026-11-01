@@ -66,7 +66,7 @@ def _record_artifact(hub: HubHarness, chunk_id: str, *, content: str, epoch: int
     )
 
 
-def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> dict:
+def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> dict[str, object]:
     return {
         "ref": ref,
         "disposition": "deferred",
@@ -78,15 +78,15 @@ def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "shou
     }
 
 
-def _fixed(ref: str = "F1") -> dict:
+def _fixed(ref: str = "F1") -> dict[str, object]:
     return {"ref": ref, "disposition": "fixed"}
 
 
-def _refuted(ref: str = "F1") -> dict:
+def _refuted(ref: str = "F1") -> dict[str, object]:
     return {"ref": ref, "disposition": "refuted"}
 
 
-def _delta(entries: list[dict]) -> str:
+def _delta(entries: list[dict[str, object]]) -> str:
     return json.dumps({"entries": entries})
 
 

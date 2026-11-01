@@ -11,7 +11,7 @@ from tests.support import build_hub, ingest, report_lease
 pytestmark = pytest.mark.component
 
 
-def _claim_body(chunk_id: str, runner: str) -> dict:
+def _claim_body(chunk_id: str, runner: str) -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
