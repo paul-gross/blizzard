@@ -15,7 +15,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
-from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
@@ -55,7 +55,9 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
     _mint(store, "ch_terminal", work_refs=[terminal_ref])
     store.queue.record_promote("ch_terminal", at=_T0)
     with store.exclusive.locked(["ch_terminal"]) as handle:
-        store.lifecycle.record_completion_locked(handle, "ch_terminal", by="op", at=_T0)
+        store.lifecycle.record_completion_locked(
+            handle, "ch_terminal", by="op", at=_T0, close_decision=decide_close_enqueue([terminal_ref], lambda _: True)
+        )
 
     pointers = [live_ref, grouped_ref, terminal_ref, absent_ref]
     result = store.work_refs.live_holders(pointers)
@@ -72,7 +74,9 @@ def test_live_holders_prefers_a_live_holder_over_an_earlier_terminal_one(tmp_pat
     _mint(store, "ch_a_terminal", work_refs=[shared_ref])
     store.queue.record_promote("ch_a_terminal", at=_T0)
     with store.exclusive.locked(["ch_a_terminal"]) as handle:
-        store.lifecycle.record_completion_locked(handle, "ch_a_terminal", by="op", at=_T0)
+        store.lifecycle.record_completion_locked(
+            handle, "ch_a_terminal", by="op", at=_T0, close_decision=decide_close_enqueue([shared_ref], lambda _: True)
+        )
 
     _mint(store, "ch_b_live", work_refs=[shared_ref])
     store.queue.record_promote("ch_b_live", at=_T0)

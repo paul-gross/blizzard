@@ -12,6 +12,7 @@ import pytest
 import yaml
 from sqlalchemy import select, update
 
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import GraphDoc
@@ -107,6 +108,7 @@ def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id:
     assert merge is not None
     cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
         transition_id="tr_parked",
+        close_decision=decide_close_enqueue([WorkRef("default", "7")], lambda _: True),
         chunk_id=chunk_id,
         from_node_id=build_node_id,
         to_node_id=merge.node_id,

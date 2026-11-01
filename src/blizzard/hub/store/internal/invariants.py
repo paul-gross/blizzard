@@ -269,7 +269,7 @@ class NoDoubleDelivery(HubQueryCheck):
 
 
 class NoDoubleTerminalClosure(HubQueryCheck):
-    """At most one terminal (``closed``/``gone``) ``work_item_closures`` outcome per
+    """At most one terminal (``closed``/``gone``/``skipped``) ``work_item_closures`` outcome per
     ``(chunk, source, ref)`` — the drain's idempotency guard is a
     ``retired_at`` check, not a store-level constraint, so a bug there would otherwise
     go unseen: the schema itself permits ``closed`` and ``gone`` to coexist."""
@@ -281,7 +281,7 @@ class NoDoubleTerminalClosure(HubQueryCheck):
             for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
-                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone", "skipped"]))
             )
         )
         for (chunk_id, source, ref), n in key.items():
@@ -307,7 +307,7 @@ class NoPendingIntentAgainstATerminalRef(HubQueryCheck):
             for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
-                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone", "skipped"]))
             )
         }
         for row in self.rows(
@@ -328,7 +328,8 @@ class NoPendingIntentAgainstATerminalRef(HubQueryCheck):
 
 class NoUnenqueuedClosableRef(HubQueryCheck):
     """A non-ephemeral chunk that has landed or completed owes a ``close_intents``
-    row for every still-open ``chunk_work_refs`` ref. A terminal
+    row or terminal skip fact for every still-open ``chunk_work_refs`` ref — the
+    shared enqueue write's derived invariant. A terminal
     outcome or any ``close_intents`` row (retired or not) satisfies it; neither is a missed call."""
 
     def run(self) -> list[Violation]:
@@ -357,7 +358,7 @@ class NoUnenqueuedClosableRef(HubQueryCheck):
             for row in self.rows(
                 select(
                     hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
-                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone", "skipped"]))
             )
         }
         enqueued = {

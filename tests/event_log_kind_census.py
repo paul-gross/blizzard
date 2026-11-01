@@ -67,6 +67,11 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/hub/outbound.py:OutboundFacts.command_failed", "warning"),
     "work-item-close-failed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.drain", "warning"),
+    "work-item-close-skipped": Recorded(
+        "hub/domain/work_items/closure.py:CloseIntentDrainer.drain",
+        "warning",
+        also=("hub/store/internal/chunk_rows.py:enqueue_close_intents",),
+    ),
     "transcript-truncated": Recorded("runner/hub/outbound.py:OutboundFacts.transcript_truncated", "warning"),
     "transcript-sidechain-dropped": Recorded(
         "runner/transcripts/transcript_pump.py:TranscriptPump._warn_sidechains_dropped", "warning"

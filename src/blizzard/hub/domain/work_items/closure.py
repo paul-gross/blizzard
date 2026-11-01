@@ -43,6 +43,8 @@ _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
 
 _EVENT_CLOSED: EventLogKind = "work-item-closed"
 _EVENT_CLOSE_FAILED: EventLogKind = "work-item-close-failed"
+_EVENT_CLOSE_SKIPPED: EventLogKind = "work-item-close-skipped"
+NO_CLOSER_REASON = "no closer bound for source"
 
 #: The close-drain sweep's own backoff base — pinned equal to
 #: ``CLOSE_DRAIN_INTERVAL_SECONDS`` in ``blizzard.hub.app`` by a dedicated test.
@@ -72,8 +74,8 @@ def close_intent_is_due(
 
 
 class CloseIntentState(StrEnum):
-    """A close intent's lifecycle. Enqueued ``pending``; a skipped attempt (no closer bound
-    for the source) or a ``failed`` one leaves it ``backing-off``, re-attempted once due; a
+    """A close intent's lifecycle. Enqueued ``pending``; a ``failed`` attempt leaves it
+    ``backing-off``, re-attempted once due; a missing closer retires it as ``skipped``; a
     terminal outcome ``retired`` it, never re-attempted and never re-enqueued for that ref."""
 
     PENDING = "pending"
@@ -89,6 +91,7 @@ class CloseIntentState(StrEnum):
 _STATE_AFTER: Mapping[WorkItemCloseOutcome, CloseIntentState] = {
     WorkItemCloseOutcome.CLOSED: CloseIntentState.RETIRED,
     WorkItemCloseOutcome.GONE: CloseIntentState.RETIRED,
+    WorkItemCloseOutcome.SKIPPED: CloseIntentState.RETIRED,
     WorkItemCloseOutcome.FAILED: CloseIntentState.BACKING_OFF,
 }
 
@@ -109,10 +112,16 @@ class CloseEvent:
 
 
 def close_event(label: str, outcome: WorkItemCloseOutcome, reason: str | None) -> CloseEvent:
-    """A closed ref announces ``work-item-closed``; a gone or failed one announces
-    ``work-item-close-failed`` with its outcome and reason. ``label`` is the ref as its source displays it now."""
+    """Announce closure, failure, or terminal skip with the outcome's own event kind.
+    ``label`` is the ref as its source displays it now."""
     if outcome is WorkItemCloseOutcome.CLOSED:
         return CloseEvent(kind=_EVENT_CLOSED, message=f"closed {label}", detail=None)
+    if outcome is WorkItemCloseOutcome.SKIPPED:
+        return CloseEvent(
+            kind=_EVENT_CLOSE_SKIPPED,
+            message=f"skipped closing {label}: {reason}",
+            detail={"outcome": outcome.value, "reason": reason},
+        )
     return CloseEvent(
         kind=_EVENT_CLOSE_FAILED,
         message=f"failed to close {label}: {reason}",
@@ -195,9 +204,29 @@ class CloseIntentDrainer:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 tally.skipped += 1
-                # No closer bound for this source today — stays pending, ticking the
-                # backoff clock so it isn't reconsidered every sweep.
-                self._delivery.record_close_attempt_skipped(intent.intent_id, at=self._clock.now())
+                at = self._clock.now()
+                wrote = self._delivery.record_work_item_closure(
+                    intent.chunk_id,
+                    pointer=intent.ref,
+                    outcome=WorkItemCloseOutcome.SKIPPED,
+                    reason=NO_CLOSER_REASON,
+                    at=at,
+                )
+                if wrote:
+                    event = close_event(
+                        f"{intent.ref.source}#{intent.ref.ref}", WorkItemCloseOutcome.SKIPPED, NO_CLOSER_REASON
+                    )
+                    self._events.record(
+                        kind=event.kind,
+                        runner_id=None,
+                        chunk_id=intent.chunk_id,
+                        project_id=projects.get(intent.chunk_id),
+                        lease_id=None,
+                        node_name=None,
+                        message=event.message,
+                        detail={**(event.detail or {}), "source": intent.ref.source, "ref": intent.ref.ref},
+                        at=at,
+                    )
                 continue
             at = self._clock.now()
             try:
@@ -250,6 +279,8 @@ class CloseDrainTally:
             self.closed += 1
         elif outcome is WorkItemCloseOutcome.GONE:
             self.gone += 1
+        elif outcome is WorkItemCloseOutcome.SKIPPED:
+            self.skipped += 1
         else:
             self.failed += 1
 

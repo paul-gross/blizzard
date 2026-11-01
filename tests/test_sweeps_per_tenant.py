@@ -17,7 +17,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision, PendingCloseIntent, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_refs import TenantWorkRef, WorkRefsSignature
@@ -347,6 +347,7 @@ def _landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkSt
         content="sha",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("hub", "1")}), skipped=frozenset()),
     )
     return stores
 

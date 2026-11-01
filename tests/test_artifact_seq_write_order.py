@@ -12,7 +12,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
-from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import build_hub, ingest
@@ -39,6 +39,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
         content="not json",
         at=at,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
     )
     minted: Iterator[str] = iter(_INVERTED_IDS)
 
@@ -56,6 +57,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
             content=f'{{"repo":"acme/one","number":{number},"url":"http://forge/acme/one/pull/{number}"}}',
             at=at,
             admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
         )
 
     sources = cast(IReadChunkArtifactsRepository, hub.services.chunks.artifacts).delivery_sources_for([chunk_id])[

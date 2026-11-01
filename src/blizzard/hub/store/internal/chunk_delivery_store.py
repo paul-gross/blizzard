@@ -14,7 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import case, func
 
-from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
@@ -112,14 +112,6 @@ class ChunkDeliveryStore:
             for row in rows
         ]
 
-    def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
-        with self._store.write("record_close_attempt_skipped") as conn:
-            conn.execute(
-                self._store.insert(s.close_intent_attempts).values(
-                    intent_id=intent_id, attempted_at=at, outcome="skipped"
-                )
-            )
-
     def record_close_attempt_deferred(self, intent_id: int, *, at: datetime, resume_at: datetime) -> None:
         with self._store.write("record_close_attempt_deferred") as conn:
             conn.execute(
@@ -129,7 +121,14 @@ class ChunkDeliveryStore:
             )
 
     def record_delivery_repo_landed(
-        self, chunk_id: str, *, repo: str, commit_hash: str, repository_id: str | None, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        repo: str,
+        commit_hash: str,
+        repository_id: str | None,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:
             conn.execute(
@@ -137,12 +136,12 @@ class ChunkDeliveryStore:
                     chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, repository_id=repository_id, landed_at=at
                 )
             )
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
 
-    def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
+    def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None:
         with self._store.write("record_delivery_landed") as conn:
             conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
 
     def finalize_delivery(
         self,
@@ -155,6 +154,7 @@ class ChunkDeliveryStore:
         runner_id: str,
         transition_id: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s `IWriteChunkDeliveryRepository.finalize_delivery`.
 
@@ -190,7 +190,7 @@ class ChunkDeliveryStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
             return True
 
     def record_work_item_closure(

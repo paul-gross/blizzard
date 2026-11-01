@@ -17,6 +17,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Any, Protocol, cast
 
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
@@ -24,9 +25,11 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.model import (
     Chunk,
+    CloseEnqueueDecision,
     IntendedMigration,
     NodeQuestion,
     RouteCreatedFact,
@@ -38,12 +41,12 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
+from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.scoped import ScopedStatements, statements_of
+from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
 
 
 @adapter_model
@@ -602,11 +605,13 @@ def _is_terminal(conn: Connection, chunk_id: str) -> bool:
     return bool(conn.execute(select(chunk_is_terminal(statements_of(conn), literal(chunk_id)))).scalar())
 
 
-def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
-    """Enqueue open work refs on the landing/completion write's transaction.
+def enqueue_close_intents(
+    conn: Connection, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision
+) -> None:
+    """Account for open work refs on the landing/completion write's transaction.
 
-    Ephemeral chunks and terminally closed refs enqueue nothing; the unique
-    ``(chunk_id, source, ref)`` key prevents replay duplicates."""
+    Bound refs get an intent; refs without a bound closer get a durable terminal skip
+    and chunk event. Existing terminal outcomes and replays produce no duplicate event."""
     if is_ephemeral_id(conn, chunk_id):
         return
     stmts = statements_of(conn)
@@ -617,6 +622,9 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
     ).all()
     if not refs:
         return
+    listed = frozenset(WorkRef(row.source, row.ref) for row in refs)
+    if close_decision.closable & close_decision.skipped or listed != close_decision.closable | close_decision.skipped:
+        raise ValueError("close decision must partition every chunk work ref")
     terminal = {
         (r.source, r.ref)
         for r in conn.execute(
@@ -635,13 +643,72 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
         ).all()
     }
     for row in refs:
-        if (row.source, row.ref) in terminal or (row.source, row.ref) in already:
+        pointer = WorkRef(row.source, row.ref)
+        if (row.source, row.ref) in terminal:
             continue
-        conn.execute(
-            stmts.insert(s.close_intents).values(
-                chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
+        if pointer in close_decision.skipped:
+            conn.execute(
+                stmts.insert(s.work_item_closures).values(
+                    chunk_id=chunk_id,
+                    source=row.source,
+                    ref=row.ref,
+                    outcome="skipped",
+                    reason=NO_CLOSER_REASON,
+                    recorded_at=at,
+                )
             )
-        )
+            conn.execute(
+                stmts.update(s.close_intents)
+                .where(
+                    (s.close_intents.c.chunk_id == chunk_id)
+                    & (s.close_intents.c.source == row.source)
+                    & (s.close_intents.c.ref == row.ref)
+                    & s.close_intents.c.retired_at.is_(None)
+                )
+                .values(retired_at=at)
+            )
+            kind: EventLogKind = "work-item-close-skipped"
+            result = conn.execute(
+                stmts.insert(s.event_log).values(
+                    severity=EVENT_LOG_SEVERITY[kind],
+                    kind=kind,
+                    runner_id=None,
+                    chunk_id=chunk_id,
+                    lease_id=None,
+                    node_name=None,
+                    message=f"skipped closing {row.source}#{row.ref}: {NO_CLOSER_REASON}",
+                    detail=json.dumps(
+                        {"source": row.source, "ref": row.ref, "reason": NO_CLOSER_REASON, "outcome": "skipped"}
+                    ),
+                    recorded_at=at,
+                )
+            )
+            publisher = event_publisher(conn)
+            if publisher is not None:
+                project_id = conn.execute(
+                    stmts.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+                ).scalar_one()
+                primary_key = result.inserted_primary_key
+                assert primary_key is not None
+                key = f"event_log:{primary_key[0]}"
+                after_commit(
+                    conn,
+                    partial(
+                        publisher.publish_event_logged,
+                        severity=EVENT_LOG_SEVERITY[kind],
+                        kind=kind,
+                        chunk_id=chunk_id,
+                        runner_id=None,
+                        key=key,
+                        project_id=project_id,
+                    ),
+                )
+        elif (row.source, row.ref) not in already:
+            conn.execute(
+                stmts.insert(s.close_intents).values(
+                    chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
+                )
+            )
 
 
 def chunk_row(conn: Connection, row: Row[Any]) -> Chunk:
@@ -680,6 +747,7 @@ def write_landing_rows(
     repository_id: str,
     artifact_id: str,
     at: datetime,
+    close_decision: CloseEnqueueDecision,
 ) -> tuple[bool, bool]:
     """One merge's ``merged/<repo>`` marker, its ``delivery_repo_landed`` row and the chunk's close intents, admitted
     past the fence. Answers whether the fence would have refused, and whether this wrote — a replay finds the marker
@@ -719,5 +787,5 @@ def write_landing_rows(
             chunk_id=chunk_id, repo=repo, commit_hash=revision, repository_id=repository_id, landed_at=at
         )
     )
-    enqueue_close_intents(conn, chunk_id, at=at)
+    enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
     return refused, True

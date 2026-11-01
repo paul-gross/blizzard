@@ -10,7 +10,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.chunk.model import HubNodePollFact
+from blizzard.hub.domain.chunk.model import HubNodePollFact, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import PollPolicy
@@ -210,6 +210,7 @@ def test_the_flow_driver_re_drives_a_chunk_waiting_at_an_action_node_once_its_hi
     # Stand at `deliver`, waiting, as a pass that answered `pending` with a hint leaves it.
     cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
         transition_id="tr_test_deliver",
+        close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
         chunk_id=chunk_id,
         from_node_id=build_node_id,
         to_node_id=deliver.node_id,

@@ -56,6 +56,29 @@ for (const harness of harnesses) {
   });
 }
 
+test.describe('landing without a closer', () => {
+  test.use({ isolation: 'fresh-hub', hubConfig: { close_forge_writes_enabled: false } });
+  test('test_acceptance_loop_lands_but_terminally_skips_the_unclosable_work_ref', async ({ api, forge, issue, repository, runnerHosts }) => {
+    test.slow();
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, harnesses[0]!, repo.name) } })).status).toBe(201);
+    const filed = await issue('land without closing', { repository: repo });
+    const id = filed.chunk.chunk_id;
+    expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
+    expect(await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body.status, (status) => status === 'done')).toBe('done');
+    expect(await host.originTree(repo.name, 'main')).toContain('LANDED.md');
+    await api.sweep('close_drain');
+    await api.sweep('close_drain');
+    const events = (await api.get('/api/events', { params: { chunk_id: id } })).body.events;
+    expect(events.filter((event: { kind: string }) => event.kind === 'work-item-close-skipped')).toEqual([
+      expect.objectContaining({ chunk_id: id, detail: expect.objectContaining({ ref: String(filed.issue.number), outcome: 'skipped', reason: 'no closer bound for source' }) }),
+    ]);
+    expect((await forge.call('GET', `/repos/${repo.owner}/${repo.name}/issues/${filed.issue.number}`)).body.state).toBe('open');
+    expect((await api.get('/api/admin/invariants')).body.violations).toEqual([]);
+  });
+});
+
 test.describe('work item pass-through', () => {
   test.use({ isolation: 'fresh-tenant' });
   test('test_build_worker_reads_work_item_through_the_passthrough', async ({ api, forge, repository, runnerHosts }) => {

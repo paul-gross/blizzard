@@ -24,7 +24,14 @@ from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, WaitKind, is_landed_revision
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    LandedRepos,
+    WaitKind,
+    decide_close_enqueue,
+    is_landed_revision,
+)
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
@@ -32,6 +39,7 @@ from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome,
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
@@ -53,6 +61,7 @@ from blizzard.hub.domain.graph.model import (
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
 # Once-per-(node, epoch) dedupe key for an outcome with no authored edge.
@@ -186,6 +195,7 @@ class HubNodeRouter:
         forge_records: IReadForgeRepository,
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
+        work_sources: IWorkSourceRegistry,
     ) -> None:
         self._artifacts = artifacts
         self._hub_exec = hub_exec
@@ -197,6 +207,7 @@ class HubNodeRouter:
         self._forge_records = forge_records
         self._links = links
         self._projects = projects
+        self._work_sources = work_sources
 
     def route(
         self,
@@ -273,6 +284,9 @@ class HubNodeRouter:
                 at=self._clock.now(),
                 artifacts=artifacts,
                 release_route=to_node_id == RESERVED_TERMINAL,
+                close_decision=decide_close_enqueue(
+                    chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+                ),
             )
             ending.end(handle, outcome=choice, closure=choice if wrote else None)
 
@@ -299,6 +313,9 @@ class HubNodeRouter:
             name=f"{HUB_LOG_PREFIX}{step}",
             content=f"[{step.replace('-', ' ')}]\n{detail}\n",
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         if announced and resolution is not None:
             self._record_refusal_event(chunk, node, resolution, epoch=epoch)
@@ -421,6 +438,9 @@ class HubNodeRouter:
             name=f"{HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
             content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
         outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
@@ -524,6 +544,9 @@ class HubNodeRouter:
                 "The chunk is escalated to a person; nothing routes it on.\n"
             ),
             at=now,
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         if announced:
             self._events.record(
@@ -569,11 +592,19 @@ class HubMarkerWriter:
     turn."""
 
     def __init__(
-        self, *, artifacts: IWriteChunkArtifactsRepository, delivery: IWriteChunkDeliveryRepository, clock: IClock
+        self,
+        *,
+        artifacts: IWriteChunkArtifactsRepository,
+        delivery: IWriteChunkDeliveryRepository,
+        clock: IClock,
+        record: IReadChunkRecordRepository,
+        work_sources: IWorkSourceRegistry,
     ) -> None:
         self._artifacts = artifacts
         self._delivery = delivery
         self._clock = clock
+        self._record = record
+        self._work_sources = work_sources
 
     def record_marker(
         self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
@@ -581,6 +612,12 @@ class HubMarkerWriter:
         """Record a hub node visit's marker, idempotently per ``(chunk, node, name, epoch)``. A superseded epoch
         writes nothing (``bzh:epoch-fencing``). A landing it records names no repository record: only a pass's
         ``LandingRecord`` knows which record landed."""
+        chunk = self._record.get(chunk_id)
+        if chunk is None:
+            return False
+        close_decision = decide_close_enqueue(
+            chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+        )
         wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
@@ -590,6 +627,7 @@ class HubMarkerWriter:
             name=name,
             content=content,
             at=self._clock.now(),
+            close_decision=close_decision,
         )
         # Only a fresh marker counts as landed; replay must not double-count.
         if wrote and name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
@@ -599,6 +637,7 @@ class HubMarkerWriter:
                 commit_hash=content,
                 repository_id=None,
                 at=self._clock.now(),
+                close_decision=close_decision,
             )
         return wrote
 

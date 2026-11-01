@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause
+from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -121,6 +121,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
@@ -142,6 +143,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
@@ -165,6 +167,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "migrated")
     assert row.chunk_id == "ch_1"
@@ -185,6 +188,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
@@ -205,6 +209,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     store.decisions.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
     row = _row_for(store, "decision-resolved")
@@ -354,7 +359,9 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_completion_locked(handle, "ch_1", by="alice", at=_T0)
+        store.lifecycle.record_completion_locked(
+            handle, "ch_1", by="alice", at=_T0, close_decision=decide_close_enqueue([], lambda _: True)
+        )
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"

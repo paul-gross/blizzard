@@ -12,6 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.store import schema
 from tests.support import chunk_stores, default_tenant, migrate_to, seed_chunk, seed_graph
@@ -19,6 +20,7 @@ from tests.support import chunk_stores, default_tenant, migrate_to, seed_chunk, 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+_NO_REFS = CloseEnqueueDecision(closable=frozenset(), skipped=frozenset())
 
 
 def _seeded(tmp_path: Path) -> Engine:
@@ -38,9 +40,11 @@ def test_a_landing_records_the_repository_record_it_resolved_to_or_none(tmp_path
     engine = _seeded(tmp_path)
     delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
     delivery.record_delivery_repo_landed(
-        "ch_1", repo="acme/widget", commit_hash="a1", repository_id="repo_widget", at=_NOW
+        "ch_1", repo="acme/widget", commit_hash="a1", repository_id="repo_widget", at=_NOW, close_decision=_NO_REFS
     )
-    delivery.record_delivery_repo_landed("ch_1", repo="acme/gadget", commit_hash="b2", repository_id=None, at=_NOW)
+    delivery.record_delivery_repo_landed(
+        "ch_1", repo="acme/gadget", commit_hash="b2", repository_id=None, at=_NOW, close_decision=_NO_REFS
+    )
 
     landed = schema.delivery_repo_landed
     with engine.connect() as conn:
@@ -58,8 +62,12 @@ def test_count_landed_since_counts_only_rows_strictly_after(tmp_path: Path) -> N
     delivery = _delivery(tmp_path)
     before = _NOW - timedelta(hours=1)
     after = _NOW + timedelta(hours=1)
-    delivery.record_delivery_repo_landed("ch_1", repo="blizzard", commit_hash="a1", repository_id=None, at=before)
-    delivery.record_delivery_repo_landed("ch_2", repo="blizzard", commit_hash="b2", repository_id=None, at=after)
+    delivery.record_delivery_repo_landed(
+        "ch_1", repo="blizzard", commit_hash="a1", repository_id=None, at=before, close_decision=_NO_REFS
+    )
+    delivery.record_delivery_repo_landed(
+        "ch_2", repo="blizzard", commit_hash="b2", repository_id=None, at=after, close_decision=_NO_REFS
+    )
 
     assert delivery.count_landed_since("blizzard", _NOW) == 1
 
@@ -67,7 +75,12 @@ def test_count_landed_since_counts_only_rows_strictly_after(tmp_path: Path) -> N
 def test_count_landed_since_ignores_a_different_repo(tmp_path: Path) -> None:
     delivery = _delivery(tmp_path)
     delivery.record_delivery_repo_landed(
-        "ch_1", repo="other-repo", commit_hash="a1", repository_id=None, at=_NOW + timedelta(hours=1)
+        "ch_1",
+        repo="other-repo",
+        commit_hash="a1",
+        repository_id=None,
+        at=_NOW + timedelta(hours=1),
+        close_decision=_NO_REFS,
     )
 
     assert delivery.count_landed_since("blizzard", _NOW) == 0

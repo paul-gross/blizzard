@@ -55,6 +55,23 @@ class WorkRef:
     ref: str
 
 
+@domain_model
+@dataclass(frozen=True)
+class CloseEnqueueDecision:
+    """Partition work references by whether their source can close them."""
+
+    closable: frozenset[WorkRef]
+    skipped: frozenset[WorkRef]
+
+
+def decide_close_enqueue(refs: Sequence[WorkRef], closer_available: Callable[[str], bool]) -> CloseEnqueueDecision:
+    closable: set[WorkRef] = set()
+    skipped: set[WorkRef] = set()
+    for ref in set(refs):
+        (closable if closer_available(ref.source) else skipped).add(ref)
+    return CloseEnqueueDecision(closable=frozenset(closable), skipped=frozenset(skipped))
+
+
 class WorkItemAuthorKind(StrEnum):
     """Who filed a hub-owned work item — a hub user by id, or the fleet
     itself. Persisted as ``work_items.author_kind`` plus a JSON payload
@@ -122,11 +139,12 @@ class HubWorkItem:
 class WorkItemCloseOutcome(StrEnum):
     """The result of one close attempt against a work item's source.
 
-    ``CLOSED``/``GONE`` are terminal; ``FAILED`` is retried on every later sweep until
+    ``CLOSED``/``GONE``/``SKIPPED`` are terminal; ``FAILED`` is retried on every later sweep until
     it converges to a terminal outcome."""
 
     CLOSED = "closed"
     GONE = "gone"
+    SKIPPED = "skipped"
     FAILED = "failed"
 
 
@@ -139,7 +157,7 @@ class PendingCloseIntent:
     dict would silently drop one.
 
     ``intent_id`` is the backing ``close_intents.id`` — the key a
-    skipped attempt's own ``close_intent_attempts`` row is recorded against.
+    failed or deferred attempt's ``close_intent_attempts`` row is recorded against.
     ``attempt_count`` and ``last_attempt_at`` are that intent's backoff history (``0`` and
     ``None`` with no attempt), counting no ``deferred`` attempt. ``resume_at`` is the newest
     deferred attempt's resume time, ``None`` with none. All four are excluded

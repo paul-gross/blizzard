@@ -13,6 +13,7 @@ from sqlalchemy import insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
+from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
@@ -85,10 +86,20 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
     delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="blizzard", commit_hash="e4f5", repository_id=None, at=baseline_at + timedelta(hours=1)
+        "ch_2",
+        repo="blizzard",
+        commit_hash="e4f5",
+        repository_id=None,
+        at=baseline_at + timedelta(hours=1),
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     delivery.record_delivery_repo_landed(
-        "ch_2", repo="other-repo", commit_hash="9988", repository_id=None, at=baseline_at + timedelta(hours=1)
+        "ch_2",
+        repo="other-repo",
+        commit_hash="9988",
+        repository_id=None,
+        at=baseline_at + timedelta(hours=1),
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)

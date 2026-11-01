@@ -46,7 +46,7 @@ from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requir
 from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
@@ -215,7 +215,7 @@ class TurnRunner:
         run_context: IReadRunContextRepository,
         requirements: Mapping[str, Requirement] = ACTION_REQUIREMENTS,
         public_url: str | None = None,
-        work_sources: IWorkSourceRegistry | None = None,
+        work_sources: IWorkSourceRegistry,
         tracer: IPlatformTracer | None = None,
         build_bound_seconds: float = BUILD_BOUND_SECONDS,
     ) -> None:
@@ -457,6 +457,9 @@ class TurnRunner:
             name=f"{HUB_LOG_PREFIX}{at.node.action or 'build'}",
             content=log,
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                at.chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         self._router.route(
             at.chunk, at.graph, at.node, epoch=at.epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, ending=ending
@@ -488,6 +491,9 @@ class TurnRunner:
                     name=name,
                     content=content,
                     at=self._clock.now(),
+                    close_decision=decide_close_enqueue(
+                        chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+                    ),
                 )
                 if wrote or self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=name
@@ -549,6 +555,9 @@ class TurnRunner:
                 revision=revision,
                 repository_id=repository,
                 at=at,
+                close_decision=decide_close_enqueue(
+                    chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+                ),
             )
         landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
         written = self._flows.record_landing(
@@ -560,6 +569,9 @@ class TurnRunner:
             repo=repo,
             revision=revision,
             at=at,
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         publish_flow_facts(self._publisher, written.written)
         if written.event_id is not None:
@@ -674,14 +686,17 @@ class TurnRunner:
             name=name,
             content="\n".join(answer.log) + "\n",
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         return name
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title — the FIRST ``work_ref``'s work item title, best-effort. A read failure or
-        a missing registry, pointer, or title degrades to ``None`` rather than breaking delivery."""
+        a missing pointer or title degrades to ``None`` rather than breaking delivery."""
         pointer = chunk.originating_ref()
-        if pointer is None or self._work_sources is None:
+        if pointer is None:
             return None
         source = self._work_sources.get(pointer.source)
         if source is None:
@@ -696,11 +711,11 @@ class TurnRunner:
         """One ``{label, reference}`` per ``work_ref``, with no forge read; ``reference`` is ``None`` off-forge."""
         items: list[dict[str, str | None]] = []
         for pointer in chunk.work_refs:
-            source = self._work_sources.get(pointer.source) if self._work_sources is not None else None
-            label = self._work_sources.label(pointer) if self._work_sources is not None else None
+            source = self._work_sources.get(pointer.source)
+            label = self._work_sources.label(pointer)
             items.append(
                 {
-                    "label": label if label is not None else f"{pointer.source}:{pointer.ref}",
+                    "label": label,
                     "reference": source.forge_reference(pointer) if source is not None else None,
                 }
             )
