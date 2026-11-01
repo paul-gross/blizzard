@@ -34,11 +34,13 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
@@ -51,11 +53,15 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.delivery.flows import TURN_ESCALATED
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals
+from blizzard.hub.domain.execution.completion import Landing, UnresolvableTarget
+from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
     RESERVED_TERMINAL,
+    Edge,
     Graph,
+    IReadGraphRepository,
     Node,
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks
@@ -194,6 +200,9 @@ class HubNodeRouter:
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
         work_sources: IWorkSourceRegistry,
+        movement: IWriteChunkMovementRepository,
+        decisions: IWriteChunkDecisionsRepository,
+        graphs: IReadGraphRepository,
     ) -> None:
         self._artifacts = artifacts
         self._hub_exec = hub_exec
@@ -206,6 +215,9 @@ class HubNodeRouter:
         self._links = links
         self._projects = projects
         self._work_sources = work_sources
+        self._movement = movement
+        self._decisions = decisions
+        self._graphs = graphs
 
     def route(
         self,
@@ -223,6 +235,9 @@ class HubNodeRouter:
         the graph lacks, escalates. A delivery the markers say is incomplete bounces first, escalating past the
         node's bounce cap."""
         edge = graph.edge_for_choice(node.node_id, choice)
+        if edge is not None and edge.target_graph is not None:
+            self._migrate(chunk, node, edge, epoch=epoch, choice=choice, ending=ending)
+            return
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
         if edge is None or to_node_id is None:
             self._unroutable(
@@ -288,6 +303,55 @@ class HubNodeRouter:
             )
             ending.end(handle, outcome=choice, closure=choice if wrote else None)
 
+    def _migrate(self, chunk: Chunk, node: Node, edge: Edge, *, epoch: int, choice: str, ending: ITurnEnd) -> None:
+        """A cross-graph choice: one transaction records the migration onto the target graph, opens the landed
+        node's gate, and ends the turn. A target naming no enabled graph escalates, routing nothing. The migration
+        is written at the visit's own ``epoch`` — it mints none — and a standing intent stays parked."""
+        target = self._graphs.get_enabled_by_name(edge.target_graph or "")
+        if target is None:
+            unresolvable = UnresolvableTarget.of(edge)
+            self.escalate(chunk, ActionEscalation(unresolvable.cause, unresolvable.detail), epoch=epoch, ending=ending)
+            return
+        landing = Landing.authored(edge, target, node)
+        close_decision = decide_close_enqueue(
+            chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+        )
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            outcome = self._movement.record_migration_locked(
+                handle,
+                chunk.chunk_id,
+                from_node_id=node.node_id,
+                from_graph_id=node.graph_id,
+                to_graph_id=landing.graph.graph_id,
+                landed_node_id=landing.node_id,
+                choice_name=choice,
+                decision_id=None,
+                model=landing.model,
+                epoch=epoch,
+                admission=EpochAdmission.CURRENT,
+                claimant=None,
+                at=self._clock.now(),
+                artifacts=[],
+                source=landing.source,
+                release_route=landing.releases_route,
+                clear_intent=landing.clear_intent,
+                migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
+                close_decision=close_decision,
+            )
+            wrote = outcome is not None and not isinstance(outcome, FenceRefusal)
+            if wrote:
+                open_graph_gate_on_arrival(
+                    self._decisions,
+                    handle,
+                    self._clock,
+                    chunk_id=chunk.chunk_id,
+                    graph=landing.graph,
+                    node_id=landing.node_id,
+                    epoch=epoch,
+                    close_decision=close_decision,
+                )
+            ending.end(handle, outcome=choice, closure=choice if wrote else None)
+
     def refuse(
         self,
         chunk: Chunk,
@@ -349,6 +413,9 @@ class HubNodeRouter:
         the node's ``bounce_cap``, else the ``failure`` edge with the kick-back envelope riding along."""
         choice = HUB_DEFAULT_FAILURE_CHOICE
         edge = graph.edge_for_choice(node.node_id, choice)
+        if edge is not None and edge.target_graph is not None:
+            self._migrate(chunk, node, edge, epoch=epoch, choice=choice, ending=ending)
+            return
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
         if edge is None or to_node_id is None:
             self._unroutable(
