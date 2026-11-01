@@ -29,6 +29,7 @@ def validate_artifact_content(name: str, content: str) -> str | None:
     registered = _FORMATS.get(name)
     if registered is None:
         return None
+    # Unrelated worker commands and assets must not pay for Pydantic at startup.
     from pydantic import ValidationError
 
     load_model, system_artifact = registered
