@@ -1510,6 +1510,49 @@
         "title": "BounceView",
         "type": "object"
       },
+      "CapturedLandingTermsView": {
+        "description": "Repository terms captured by the submission's first turn.",
+        "properties": {
+          "landing_policy": {
+            "title": "Landing Policy",
+            "type": "string"
+          },
+          "landing_position": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Position"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "landing_policy",
+          "park_timeout_hours",
+          "landing_position"
+        ],
+        "title": "CapturedLandingTermsView",
+        "type": "object"
+      },
       "CheckResult": {
         "description": "One deterministic check's runner-executed outcome: the command and whether it passed.",
         "properties": {
@@ -6637,6 +6680,13 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flow Ids",
+            "type": "array"
+          },
           "generation": {
             "title": "Generation",
             "type": "integer"
@@ -6652,6 +6702,13 @@
           "submitted_at": {
             "title": "Submitted At",
             "type": "string"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/CapturedLandingTermsView"
+            },
+            "title": "Terms",
+            "type": "array"
           }
         },
         "required": [
@@ -6661,7 +6718,9 @@
           "generation",
           "arrival",
           "submitted_at",
-          "closure"
+          "closure",
+          "flow_ids",
+          "terms"
         ],
         "title": "FlowSubmissionView",
         "type": "object"
@@ -9923,6 +9982,63 @@
           "url"
         ],
         "title": "LandedRepoView",
+        "type": "object"
+      },
+      "LandingFactView": {
+        "properties": {
+          "commit_hash": {
+            "title": "Commit Hash",
+            "type": "string"
+          },
+          "landed_at": {
+            "format": "date-time",
+            "title": "Landed At",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "repo",
+          "commit_hash",
+          "landed_at"
+        ],
+        "title": "LandingFactView",
+        "type": "object"
+      },
+      "LandingFactsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LandingFactView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "LandingFactsPage",
         "type": "object"
       },
       "LandingOrderRequest": {
@@ -15948,6 +16064,78 @@
           "source_links"
         ],
         "title": "SourceLinksView",
+        "type": "object"
+      },
+      "SubmissionTurnView": {
+        "description": "A turn, open while its end and outcome are null.",
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "started_at",
+          "ended_at",
+          "outcome"
+        ],
+        "title": "SubmissionTurnView",
+        "type": "object"
+      },
+      "SubmissionTurnsPage": {
+        "description": "A submission's turns in descending turn ID order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionTurnView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "SubmissionTurnsPage",
         "type": "object"
       },
       "SubmittedArtifact": {
@@ -23369,6 +23557,86 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns": {
+      "get": {
+        "description": "Turns of one submission, newest ID first; includes turns holding no flows.",
+        "operationId": "list_submission_turns_api_chunks__chunk_id__flow_submissions__submission_id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "title": "Submission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionTurnsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Submission Turns",
+        "tags": [
+          "flows"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
         "deprecated": true,
@@ -23561,6 +23829,72 @@
           }
         },
         "summary": "Record Hub Marker",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/landing-facts": {
+      "get": {
+        "description": "Page durable repository landings in write order.",
+        "operationId": "landing_facts_api_chunks__chunk_id__landing_facts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandingFactsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Landing Facts",
         "tags": [
           "chunks"
         ]

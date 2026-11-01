@@ -35,11 +35,53 @@ async function read(api: HubApi, id: string): Promise<Wire.ChunkDetail> {
   return response.body;
 }
 
+type LandingFact = { sequence: number; repo: string; commit_hash: string; landed_at: string };
+async function landingFacts(api: HubApi, id: string): Promise<LandingFact[]> {
+  const facts: LandingFact[] = [];
+  let cursor: number | null = 0;
+  while (cursor !== null) {
+    const response: { status: number; body: { items: LandingFact[]; next_cursor: number | null } } =
+      await api.get(`/api/chunks/${id}/landing-facts?limit=1&cursor=${cursor}`);
+    expect(response.status).toBe(200);
+    facts.push(...response.body.items);
+    cursor = response.body.next_cursor;
+  }
+  return facts;
+}
+
+type Submission = { submission_id: string; terms: { landing_policy: string }[]; closure: { outcome: string } | null };
+type Turn = { turn_id: string; ended_at: string | null };
+async function submissions(api: HubApi, id: string): Promise<Submission[]> {
+  const response = await api.get<{ items: Submission[] }>(`/api/chunks/${id}/flow-submissions`);
+  expect(response.status).toBe(200);
+  return response.body.items;
+}
+
+async function turns(api: HubApi, id: string): Promise<Turn[]> {
+  const result: Turn[] = [];
+  for (const submission of await submissions(api, id)) {
+    let before: string | null = null;
+    do {
+      const query: string = before === null ? '' : `?before=${encodeURIComponent(before)}`;
+      const response: { status: number; body: { items: Turn[]; next_before: string | null } } =
+        await api.get(`/api/chunks/${id}/flow-submissions/${submission.submission_id}/turns${query}`);
+      expect(response.status).toBe(200);
+      result.push(...response.body.items);
+      before = response.body.next_before;
+    } while (before !== null);
+  }
+  return result;
+}
+
 async function landedSubmission(api: HubApi, id: string) {
   await expect.poll(async () => {
     const response = await api.get<Wire.ChunkFlowSubmissionsView>(`/api/chunks/${id}/flow-submissions`);
     expect(response.status).toBe(200);
     return response.body.items.some((item) => item.closure?.outcome === 'landed');
+  }).toBe(true);
+  await expect.poll(async () => {
+    const history = await turns(api, id);
+    return history.length > 0 && history.every((turn) => turn.ended_at !== null);
   }).toBe(true);
 }
 
@@ -69,6 +111,7 @@ for (const method of ['merge', 'squash', 'rebase'] as const) {
     const opened = await pulls(forge, repo);
     expect(opened).toHaveLength(1);
     expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'merge-on-checks' } })).status).toBe(200);
+    expect((await submissions(api, id)).flatMap((submission) => submission.terms).map((term) => term.landing_policy)).toEqual(['park']);
     const held = await waitFor(api, id, (detail) => detail.status !== 'delivering' || detail.pending?.next_poll_at !== initial.pending!.next_poll_at);
     expect(held.status).toBe('delivering');
     expect(held.pending?.kind).toBe('awaiting-merge');
@@ -101,8 +144,10 @@ for (const requeue of [false, true]) {
     expect(escalated.escalation?.cause).toBe('change-closed');
     expect(escalated.pending).toBeNull();
     if (requeue) {
+      const previousTurns = new Set((await turns(api, id)).map((turn) => turn.turn_id));
       expect((await api.post(`/api/chunks/${id}/requeues`)).status).toBe(202);
       await stepUntil(host, () => pulls(forge, repo), (rows) => rows.length === 1, 80);
+      await expect.poll(async () => (await turns(api, id)).some((turn) => !previousTurns.has(turn.turn_id) && turn.ended_at !== null)).toBe(true);
       const replacement = await pulls(forge, repo);
       expect(replacement).toHaveLength(1);
       expect(replacement[0]!.number).not.toBe(opened[0]!.number);
@@ -127,7 +172,9 @@ function marker(detail: Wire.ChunkDetail, repo: Repository) {
   const matches = detail.artifacts.filter((artifact) => artifact.name.startsWith(`delivery-pr/${fullName(repo)}/`));
   expect(matches).toHaveLength(1);
   expect(matches[0]!.produced_at).not.toBeNull();
-  return Date.parse(matches[0]!.produced_at!);
+  const producedAt = Date.parse(matches[0]!.produced_at!);
+  expect(Number.isFinite(producedAt)).toBe(true);
+  return producedAt;
 }
 
 for (const parkedFirst of [true, false]) {
@@ -145,6 +192,7 @@ for (const parkedFirst of [true, false]) {
     expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
     const held = await parked(host, api, id);
     expect(held.landed_repos.map((row) => row.repo)).toEqual(parkedFirst ? [] : [fullName(library)]);
+    expect((await landingFacts(api, id)).map((fact) => fact.repo)).toEqual(parkedFirst ? [] : [fullName(library)]);
     const opened = await pulls(forge, target);
     expect(opened).toHaveLength(1);
     expect((await pulls(forge, parkedFirst ? consumer : library)).length).toBeLessThanOrEqual(1);
@@ -153,6 +201,10 @@ for (const parkedFirst of [true, false]) {
     expect([done.status, done.landed]).toEqual(['done', true]);
     expect(done.landed_repos).toHaveLength(2);
     expect(done.landed_repos.find((row) => row.repo === fullName(target))?.commit_hash).toBe(sha);
+    const facts = await landingFacts(api, id);
+    expect(facts.map((fact) => fact.repo)).toEqual([fullName(library), fullName(consumer)]);
+    expect(facts.find((fact) => fact.repo === fullName(target))?.commit_hash).toBe(sha);
+    expect(facts[1]!.sequence).toBeGreaterThan(facts[0]!.sequence);
     await landedSubmission(api, id);
   });
 }
@@ -201,6 +253,9 @@ test('test_second_parked_repository_has_its_own_review_clock', async ({ reposito
   const done = await waitFor(api, id, (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status));
   expect([done.status, done.landed]).toEqual(['done', true]);
   expect(Object.fromEntries(done.landed_repos.map((row) => [row.repo, row.commit_hash]))).toEqual({ [fullName(library)]: firstSha, [fullName(consumer)]: secondSha });
+  expect((await landingFacts(api, id)).map(({ repo, commit_hash }) => [repo, commit_hash])).toEqual([
+    [fullName(library), firstSha], [fullName(consumer), secondSha],
+  ]);
   await landedSubmission(api, id);
 });
 

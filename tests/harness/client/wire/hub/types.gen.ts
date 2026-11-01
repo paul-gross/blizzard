@@ -911,6 +911,30 @@ export type BounceView = {
 };
 
 /**
+ * CapturedLandingTermsView
+ *
+ * Repository terms captured by the submission's first turn.
+ */
+export type CapturedLandingTermsView = {
+    /**
+     * Landing Policy
+     */
+    landing_policy: string;
+    /**
+     * Landing Position
+     */
+    landing_position: number | null;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours: number | null;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+};
+
+/**
  * CheckResult
  *
  * One deterministic check's runner-executed outcome: the command and whether it passed.
@@ -3702,6 +3726,10 @@ export type FlowSubmissionView = {
      */
     epoch: number;
     /**
+     * Flow Ids
+     */
+    flow_ids: Array<string>;
+    /**
      * Generation
      */
     generation: number;
@@ -3717,6 +3745,10 @@ export type FlowSubmissionView = {
      * Submitted At
      */
     submitted_at: string;
+    /**
+     * Terms
+     */
+    terms: Array<CapturedLandingTermsView>;
 };
 
 /**
@@ -5646,6 +5678,42 @@ export type LandedRepoView = {
      * Url
      */
     url: string | null;
+};
+
+/**
+ * LandingFactView
+ */
+export type LandingFactView = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Landed At
+     */
+    landed_at: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Sequence
+     */
+    sequence: number;
+};
+
+/**
+ * LandingFactsPage
+ */
+export type LandingFactsPage = {
+    /**
+     * Items
+     */
+    items: Array<LandingFactView>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: number | null;
 };
 
 /**
@@ -9143,6 +9211,46 @@ export type SourceLinksView = {
      * Source Links
      */
     source_links: Array<SourceLinkView>;
+};
+
+/**
+ * SubmissionTurnView
+ *
+ * A turn, open while its end and outcome are null.
+ */
+export type SubmissionTurnView = {
+    /**
+     * Ended At
+     */
+    ended_at: string | null;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * SubmissionTurnsPage
+ *
+ * A submission's turns in descending turn ID order.
+ */
+export type SubmissionTurnsPage = {
+    /**
+     * Items
+     */
+    items: Array<SubmissionTurnView>;
+    /**
+     * Next Before
+     */
+    next_before: string | null;
 };
 
 /**
@@ -12776,6 +12884,49 @@ export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses = {
 
 export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponse = ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses[keyof ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses];
 
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Submission Id
+         */
+        submission_id: string;
+    };
+    query?: {
+        /**
+         * Before
+         */
+        before?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns';
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetError = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors];
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SubmissionTurnsPage;
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponse = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses];
+
 export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData = {
     body: GardenDeliveryRequest;
     path: {
@@ -12883,6 +13034,45 @@ export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
 };
 
 export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/landing-facts';
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetError = LandingFactsApiChunksChunkIdLandingFactsGetErrors[keyof LandingFactsApiChunksChunkIdLandingFactsGetErrors];
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LandingFactsPage;
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetResponse = LandingFactsApiChunksChunkIdLandingFactsGetResponses[keyof LandingFactsApiChunksChunkIdLandingFactsGetResponses];
 
 export type PauseChunkApiChunksChunkIdPausePostData = {
     body: ChunkPauseRequest;

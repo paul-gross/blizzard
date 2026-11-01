@@ -110,7 +110,7 @@ class SubmissionClosure:
 @domain_model
 @dataclass(frozen=True)
 class SubmissionRecord:
-    """One submission of a chunk's visit as a reader sees it, without the flows it holds. ``closure`` is ``None``
+    """One submission of a chunk's visit as a reader sees it. ``closure`` is ``None``
     while the submission is open."""
 
     submission_id: str
@@ -120,6 +120,8 @@ class SubmissionRecord:
     arrival: int
     submitted_at: datetime
     closure: SubmissionClosure | None
+    flow_ids: tuple[str, ...] = ()
+    terms: tuple[LandingTerms, ...] = ()
 
 
 @domain_model

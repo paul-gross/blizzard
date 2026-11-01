@@ -225,6 +225,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ),
     ("GET", "/api/chunks"): _LIST,
     ("GET", "/api/chunks/{chunk_id}"): _f(),
+    ("GET", "/api/chunks/{chunk_id}/landing-facts"): _f(),
     ("GET", "/api/flows"): _LIST,
     ("GET", "/api/flows/{flow_id}"): _f(),
     ("GET", "/api/flows/{flow_id}/record"): _f(),
@@ -236,6 +237,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/chunks/{chunk_id}/demote"): _f(),
     ("POST", "/api/chunks/{chunk_id}/detach"): _f(),
     ("GET", "/api/chunks/{chunk_id}/flow-submissions"): _f(),
+    ("GET", "/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns"): _f(),
     ("POST", "/api/chunks/{chunk_id}/garden-delivery"): _f({}, params=_MARKER),
     ("POST", "/api/chunks/{chunk_id}/group"): _f({"merge_chunk_ids": ["{chunk_id}"]}),
     ("POST", "/api/chunks/{chunk_id}/hub-markers"): _f({"name": "m"}, params=_MARKER),
@@ -661,6 +663,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     )
     assert flow is not None
     t.keep("flow_id", flow.flows[0].flow_id)
+    t.keep("submission_id", flow.submission_id)
     source = {"slug": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(

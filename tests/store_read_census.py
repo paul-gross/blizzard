@@ -2425,6 +2425,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_decision_1, w.chunk_decision_2]
     ),
     (IReadChunkDeliveryRepository, "landed_repos"): lambda w: w.read.delivery.landed_repos(w.chunk_delivery_a),
+    (IReadChunkDeliveryRepository, "landing_facts"): lambda w: w.read.delivery.landing_facts(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
     (IReadChunkDeliveryRepository, "count_landed_since"): lambda w: w.read.delivery.count_landed_since(
         "acme/widget", _HUB_BASE
     ),
@@ -2483,6 +2486,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
     (IReadFlows, "submissions_of"): lambda w: w.hub.services.flows.submissions_of(w.flow_chunk),
+    (IReadFlows, "submission_belongs_to"): lambda w: w.hub.services.flows.submission_belongs_to(
+        w.flow_submission_id, w.flow_chunk
+    ),
+    (IReadFlows, "turns_page"): lambda w: w.hub.services.flows.turns_page(w.flow_submission_id, before=None, limit=2),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
     (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1

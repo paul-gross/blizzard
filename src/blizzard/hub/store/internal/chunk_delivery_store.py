@@ -14,6 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import case, func
 
+from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
@@ -37,6 +38,17 @@ class ChunkDeliveryStore:
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
+
+    def landing_facts(self, chunk_id: str, *, after: int, limit: int) -> list[LandingFact]:
+        table = s.delivery_repo_landed
+        with self._store.read("landing_facts") as conn:
+            rows = conn.execute(
+                self._store.select(table, table.c.id, table.c.repo, table.c.commit_hash, table.c.landed_at)
+                .where(table.c.chunk_id == chunk_id, table.c.id > after)
+                .order_by(table.c.id)
+                .limit(limit)
+            ).all()
+        return [LandingFact(row.id, row.repo, row.commit_hash, row.landed_at) for row in rows]
 
     def landed_repos(self, chunk_id: str) -> set[str]:
         with self._store.read("landed_repos") as conn:

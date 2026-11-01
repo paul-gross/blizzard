@@ -13,6 +13,15 @@ class FlowSubmissionClosureView(WireModel):
     closed_at: str
 
 
+class CapturedLandingTermsView(WireModel):
+    """Repository terms captured by the submission's first turn."""
+
+    repository_id: str
+    landing_policy: str
+    park_timeout_hours: int | None
+    landing_position: float | None
+
+
 class FlowSubmissionView(WireModel):
     """One submission of a visit; ``closure`` is ``null`` while it is open."""
 
@@ -23,6 +32,8 @@ class FlowSubmissionView(WireModel):
     arrival: int
     submitted_at: str
     closure: FlowSubmissionClosureView | None
+    flow_ids: list[str]
+    terms: list[CapturedLandingTermsView]
 
 
 class ChunkFlowSubmissionsView(WireModel):
@@ -30,3 +41,19 @@ class ChunkFlowSubmissionsView(WireModel):
 
     chunk_id: str
     items: list[FlowSubmissionView]
+
+
+class SubmissionTurnView(WireModel):
+    """A turn, open while its end and outcome are null."""
+
+    turn_id: str
+    started_at: str
+    ended_at: str | None
+    outcome: str | None
+
+
+class SubmissionTurnsPage(WireModel):
+    """A submission's turns in descending turn ID order."""
+
+    items: list[SubmissionTurnView]
+    next_before: str | None

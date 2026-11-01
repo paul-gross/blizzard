@@ -13,9 +13,10 @@ import pytest
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import hub_store_connections, seed_runner
+from tests.support import chunk_stores, hub_store_connections, seed_runner
 from tests.test_flow_driver import _World
 
 pytestmark = pytest.mark.component
@@ -60,6 +61,28 @@ class _Line:
 @pytest.fixture
 def line(tmp_path: Path) -> _Line:
     return _Line(tmp_path)
+
+
+def test_chunk_landing_fact_pages(line: _Line) -> None:
+    delivery = chunk_stores(line.world.hub.engine, line.world.hub.clock).delivery
+    for repo in ("z", "a"):
+        delivery.record_delivery_repo_landed(
+            line.first,
+            repo=repo,
+            commit_hash=repo,
+            repository_id=None,
+            at=line.world.hub.clock.now(),
+            close_decision=CloseEnqueueDecision(
+                closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset()
+            ),
+        )
+    url = f"/api/chunks/{line.first}/landing-facts"
+    first = line.client.get(url, params={"limit": 1}).json()
+    second = line.client.get(url, params={"limit": 1, "cursor": first["next_cursor"]}).json()
+    assert [first["items"][0]["repo"], second["items"][0]["repo"]] == ["z", "a"]
+    assert second["next_cursor"] is None
+    assert line.client.get("/api/chunks/ch_missing/landing-facts").status_code == 404
+    assert line.client.get(url, params={"limit": 0}).status_code == 422
 
 
 def test_each_place_on_the_flow_and_on_the_chunk_reads_is_the_lines(line: _Line) -> None:

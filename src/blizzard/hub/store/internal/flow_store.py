@@ -128,6 +128,14 @@ class FlowStore:
             # Sorted here, not in SQL: an ORDER BY arrival steers the planner onto the tenant-wide arrival index,
             # where the chunk's own visit index bounds the read to this chunk's rows.
             rows = sorted(rows, key=lambda r: r.arrival)
+            ids = [r.submission_id for r in rows]
+            held = flows_held(conn, ids)
+            terms: dict[str, list[LandingTerms]] = {}
+            for batch in id_batches(ids):
+                for term in conn.execute(
+                    self._store.select(_terms).where(_terms.c.submission_id.in_(batch)).order_by(_terms.c.repository_id)
+                ):
+                    terms.setdefault(term.submission_id, []).append(_terms_of(term))
             return [
                 SubmissionRecord(
                     submission_id=r.submission_id,
@@ -139,8 +147,31 @@ class FlowStore:
                     closure=None
                     if r.closed_at is None
                     else SubmissionClosure(outcome=r.outcome, closed_at=r.closed_at),
+                    flow_ids=tuple(flow.flow_id for flow in held.get(r.submission_id, ())),
+                    terms=tuple(terms.get(r.submission_id, ())),
                 )
                 for r in rows
+            ]
+
+    def submission_belongs_to(self, submission_id: str, chunk_id: str) -> bool:
+        with self._store.read("submission_belongs_to") as conn:
+            return (
+                conn.execute(
+                    self._store.select(_sub, _sub.c.submission_id).where(
+                        _sub.c.submission_id == submission_id, _sub.c.chunk_id == chunk_id
+                    )
+                ).first()
+                is not None
+            )
+
+    def turns_page(self, submission_id: str, *, before: str | None, limit: int) -> list[Turn]:
+        with self._store.read("submission_turns_page") as conn:
+            query = self._store.select(_turns).where(_turns.c.submission_id == submission_id)
+            if before is not None:
+                query = query.where(_turns.c.turn_id < before)
+            return [
+                Turn(r.turn_id, r.submission_id, r.started_at, r.ended_at, r.outcome)
+                for r in conn.execute(query.order_by(_turns.c.turn_id.desc()).limit(limit))
             ]
 
     def facts_of(self, submission_id: str) -> list[FlowFact]:

@@ -31,6 +31,12 @@ landing** is its newest `landed` entry.
 
 ## Reading flows
 
+`GET /api/chunks/{chunk_id}/landing-facts` reads the chunk's durable repository landing facts. It requires fleet-view
+permission and only reads the selected tenant. `items` are ordered by ascending `sequence` (write order, not repository
+name or timestamp), each carrying `repo`, `commit_hash`, and `landed_at`. Pass `limit` and the returned `next_cursor` as
+`cursor` to continue; a null cursor ends the history. This history does not synthesize facts for legacy marker-only
+landings. The existing chunk detail's `landed_repos` remains alphabetically ordered by repository.
+
 `blizzard hub flow list` prints each active flow: its branch, the turn open on it, its line with each chunk's state and
 position, and its last verdict and landing. A flow is active while a chunk is in its line or it changed in the last 48
 hours; `--all` prints every flow. `blizzard hub flow get <flow>` prints one flow the same way. With `--record` it prints
@@ -56,3 +62,14 @@ artifact's nullable `produced_at` is its stored production timestamp; for a park
 the repository's review-expiry clock. `recorded_at` is instead decoded from the artifact ID and is not the clock park
 expiry evaluates. Read these fields from `GET /api/chunks/{id}` using a credential authorized to read that tenant's
 chunk.
+
+`GET /api/chunks/{chunk_id}/flow-submissions` lists a chunk's submissions in arrival order, including the IDs of the
+flows held and the repository terms captured on the first turn. Terms are empty before capture and retain their policy,
+park timeout, and landing position even if configuration changes. Flow IDs are in resource order; terms are in
+repository ID order. A submission may hold no flows.
+
+`GET /api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns` reads that submission's turns, including turns with
+no flows. Results are ordered by descending turn ID (a stable order, not a guarantee of start-time order). Each has a
+start time and nullable end time and outcome. The default page size is 50, with a maximum of 200; pass `next_before` as
+`before` to continue. A null `next_before` ends the history. Both reads require fleet-view permission, reject runner
+principals, and are restricted to the selected tenant; unknown or foreign chunks and submissions return 404.

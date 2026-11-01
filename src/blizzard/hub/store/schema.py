@@ -1618,6 +1618,12 @@ hub_turns = Table(
     PrimaryKeyConstraint("turn_id", name="pk_hub_turns"),
 )
 Index("ix_hub_turns_tenant_submission_id", hub_turns.c.tenant_id, hub_turns.c.submission_id)
+Index(
+    "ix_hub_turns_tenant_submission_turn",
+    hub_turns.c.tenant_id,
+    hub_turns.c.submission_id,
+    hub_turns.c.turn_id,
+)
 Index("ix_hub_turns_tenant_ended_at", hub_turns.c.tenant_id, hub_turns.c.ended_at)
 
 # Append-only; each flow's record. A submission's facts are written to every flow it holds.

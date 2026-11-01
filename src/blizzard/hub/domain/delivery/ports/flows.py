@@ -53,6 +53,14 @@ class IReadFlows(Protocol):
         by the chunk's visits."""
         ...
 
+    def turns_page(self, submission_id: str, *, before: str | None, limit: int) -> list[Turn]:
+        """At most ``limit`` turns of the submission, in descending turn ID order, below ``before`` if given."""
+        ...
+
+    def submission_belongs_to(self, submission_id: str, chunk_id: str) -> bool:
+        """Whether the tenant's chunk owns the submission."""
+        ...
+
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         """Every fact the submission wrote, on every flow it holds, in write order."""
         ...

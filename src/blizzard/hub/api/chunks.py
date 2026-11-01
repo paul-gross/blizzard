@@ -416,6 +416,43 @@ class FleetPulse:
         )
 
 
+class LandingFactView(BaseModel):
+    sequence: int
+    repo: str
+    commit_hash: str
+    landed_at: datetime
+
+
+class LandingFactsPage(BaseModel):
+    items: list[LandingFactView]
+    next_cursor: int | None
+
+
+@router.get(
+    "/chunks/{chunk_id}/landing-facts",
+    response_model=LandingFactsPage,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
+)
+def landing_facts(
+    chunk_id: str,
+    services: Services,
+    cursor: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> LandingFactsPage:
+    """Page durable repository landings in write order."""
+    if services.chunks.record.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    facts = services.chunks.delivery.landing_facts(chunk_id, after=cursor, limit=limit + 1)
+    page = facts[:limit]
+    return LandingFactsPage(
+        items=[
+            LandingFactView(sequence=f.sequence, repo=f.repo, commit_hash=f.commit_hash, landed_at=f.landed_at)
+            for f in page
+        ],
+        next_cursor=page[-1].sequence if len(facts) > limit else None,
+    )
+
+
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""

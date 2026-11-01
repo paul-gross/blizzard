@@ -6,11 +6,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 
 
 class IReadChunkDeliveryRepository(Protocol):
     """Read-only chunk-delivery access."""
+
+    def landing_facts(self, chunk_id: str, *, after: int, limit: int) -> list[LandingFact]:
+        """At most limit landing facts in durable sequence order, strictly after the cursor."""
+        ...
 
     def landed_repos(self, chunk_id: str) -> set[str]:
         """The repos already landed for a chunk — the delivery reconciliation skip-set."""
