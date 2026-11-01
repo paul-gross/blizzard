@@ -69,6 +69,9 @@ def _chunk_page_stmt(
     project: ProjectId | None,
 ) -> Select[Any]:
     stmt = stmts.select(s.chunks)
+    # Grouped-away and deleted chunks are gone from every read: excluded here so a page never reads past them.
+    for table in (s.chunk_grouped, s.chunk_deleted):
+        stmt = stmt.where(~stmts.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
     if project is not None:
         stmt = stmt.where(s.chunks.c.project_id == project)
     if done_since is not None:
@@ -232,27 +235,16 @@ class ChunkRecordStore:
         done_kept: Collection[str] = (),
         project: ProjectId | None = None,
     ) -> ChunkPage:
-        """`list_all`'s bounded sibling: a SQL keyset window with
-        ephemeral chunks excluded in Python after the read, so a window landing wholly
-        on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
-        the window rather than stopping there, so a `next_cursor` walk still sees every
+        """`list_all`'s bounded sibling: one SQL keyset window of `limit + 1` rows, grouped-away and deleted
+        chunks excluded in the statement itself (:func:`_chunk_page_stmt`), so a `next_cursor` walk sees every
         visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`) except
         for the ``done_kept`` ids, and ``project`` to that project's chunks."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None
-        fetch = limit + 1
         with self._store.read("list_page") as conn:
-            while True:
-                rows = conn.execute(_chunk_page_stmt(self._store, after, fetch, done_since, done_kept, project)).all()
-                ephemeral: set[str] = set()
-                for batch in id_batches([r.chunk_id for r in rows]):
-                    ephemeral |= ephemeral_ids_in(conn, batch)
-                surviving = [r for r in rows if r.chunk_id not in ephemeral]
-                if len(surviving) > limit or len(rows) < fetch:
-                    break
-                fetch *= 2
-            page_rows = surviving[:limit]
+            rows = conn.execute(_chunk_page_stmt(self._store, after, limit + 1, done_since, done_kept, project)).all()
+            page_rows = rows[:limit]
             pointers: dict[str, list[WorkRef]] = defaultdict(list)
             for batch in id_batches([r.chunk_id for r in page_rows]):
                 for p in conn.execute(
@@ -275,7 +267,7 @@ class ChunkRecordStore:
             )
             for r in page_rows
         ]
-        next_cursor = _encode_chunk_cursor(chunks[-1]) if len(surviving) > limit and chunks else None
+        next_cursor = _encode_chunk_cursor(chunks[-1]) if len(rows) > limit and chunks else None
         return ChunkPage(chunks=chunks, next_cursor=next_cursor)
 
     def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:

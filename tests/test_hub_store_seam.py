@@ -174,8 +174,8 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkDeliveryStore",
         lambda store: ChunkDeliveryStore(store),
-        lambda a: a.landed_repos("ch_x"),
-        "landed_repos",
+        lambda a: a.pending_close_intents(),
+        "pending_close_intents",
     ),
     _AdapterCase(
         "ChunkDependenciesStore",

@@ -1,4 +1,4 @@
-"""The chunk-delivery repository seam — landed repos, the pending
+"""The chunk-delivery repository seam — the landed-row count, the pending
 close-intent tail a delivered chunk leaves behind."""
 
 from __future__ import annotations
@@ -11,10 +11,6 @@ from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIn
 
 class IReadChunkDeliveryRepository(Protocol):
     """Read-only chunk-delivery access."""
-
-    def landed_repos(self, chunk_id: str) -> set[str]:
-        """The repos already landed for a chunk — the delivery reconciliation skip-set."""
-        ...
 
     def count_landed_since(self, repo: str, since: datetime) -> int:
         """How many `delivery_repo_landed` rows `repo` has recorded strictly after

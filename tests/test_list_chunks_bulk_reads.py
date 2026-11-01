@@ -608,3 +608,27 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path:
     (row,) = resp.json()["chunks"]
     assert row["chunk_id"] == dependent_id
     assert row["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
+
+
+def test_list_page_reads_are_flat_as_deleted_chunks_pile_ahead_of_the_page(tmp_path: Path) -> None:
+    measured = []
+    for n in (2, 12):
+        (tmp_path / str(n)).mkdir()
+        hub = build_hub(tmp_path / str(n))
+        with hub.engine.begin() as conn:
+            seed_graph(conn, "gr_page", at=_T0)
+            for i in range(n):
+                seed_chunk(conn, f"ch_gone_{i}", graph_id="gr_page", at=_T0 + timedelta(seconds=100 + i))
+            for i in range(3):
+                seed_chunk(conn, f"ch_live_{i}", graph_id="gr_page", at=_T0 + timedelta(seconds=i))
+        for i in range(n):
+            _delete_chunk(hub, f"ch_gone_{i}")
+        record = hub.services.chunks.record
+
+        def page(record: Any = record) -> Any:
+            return record.list_page(limit=2)
+
+        assert [c.chunk_id for c in page().chunks] == ["ch_live_2", "ch_live_1"]
+        assert page().next_cursor is not None
+        measured.append((count_queries(hub.engine, page), count_rows_read(hub.engine, page)))
+    assert measured[0] == measured[1]

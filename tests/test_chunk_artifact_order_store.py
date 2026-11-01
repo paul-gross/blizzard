@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import Engine, insert
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
@@ -80,3 +81,17 @@ def test_delivery_sources_for_returns_each_chunks_markers_in_seq_order_breaking_
 
     assert [a.artifact_id for a in sources["ch_a"].markers] == ["ar_3", "ar_1", "ar_2", "ar_9"]
     assert [a.artifact_id for a in sources["ch_b"].markers] == ["ar_0"]
+
+
+def test_load_artifacts_for_equals_load_artifacts_per_id_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching, "BATCH_SIZE", 1)
+    engine = _engine(tmp_path)
+    _seed_out_of_order(engine, prefix="")
+    store = _artifacts(engine)
+
+    loaded = store.load_artifacts_for(["ch_a", "ch_b", "ch_unknown"])
+
+    assert loaded == {"ch_a": store.load_artifacts("ch_a"), "ch_b": store.load_artifacts("ch_b")}
+    assert [a.artifact_id for a in loaded["ch_a"]] == ["ar_3", "ar_1", "ar_2", "ar_9"]

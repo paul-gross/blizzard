@@ -38,17 +38,6 @@ class ChunkDeliveryStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def landed_repos(self, chunk_id: str) -> set[str]:
-        with self._store.read("landed_repos") as conn:
-            return {
-                r.repo
-                for r in conn.execute(
-                    self._store.select(s.delivery_repo_landed, s.delivery_repo_landed.c.repo).where(
-                        s.delivery_repo_landed.c.chunk_id == chunk_id
-                    )
-                ).all()
-            }
-
     def count_landed_since(self, repo: str, since: datetime) -> int:
         with self._store.read("count_landed_since") as conn:
             return conn.execute(

@@ -209,14 +209,15 @@ class GardenRunStore:
         grouped: dict[str, list[str]] = {finding_set_id: [] for finding_set_id in finding_set_ids}
         if not finding_set_ids:
             return grouped
-        rows = conn.execute(
-            statements_of(conn)
-            .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.finding_id)
-            .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind == "add")
-            .order_by(finding_facts.c.finding_set_id, finding_facts.c.id.asc())
-        ).all()
-        for row in rows:
-            grouped[row.finding_set_id].append(row.finding_id)
+        for batch in id_batches(finding_set_ids):
+            rows = conn.execute(
+                statements_of(conn)
+                .select(finding_facts, finding_facts.c.finding_set_id, finding_facts.c.finding_id)
+                .where(finding_facts.c.finding_set_id.in_(batch), finding_facts.c.kind == "add")
+                .order_by(finding_facts.c.finding_set_id, finding_facts.c.id.asc())
+            ).all()
+            for row in rows:
+                grouped[row.finding_set_id].append(row.finding_id)
         return grouped
 
 

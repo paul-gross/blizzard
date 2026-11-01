@@ -321,10 +321,11 @@ class ChunkFactsStore:
             )
             executors = {
                 (r.graph_id, r.node_id): Executor(r.executor)
+                for graph_batch in id_batches(sorted(graph_ids))
                 for r in conn.execute(
                     stmts.select(
                         s.graph_nodes, s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor
-                    ).where(s.graph_nodes.c.graph_id.in_(graph_ids))
+                    ).where(s.graph_nodes.c.graph_id.in_(graph_batch))
                 ).all()
             }
 
