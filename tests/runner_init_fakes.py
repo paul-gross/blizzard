@@ -32,6 +32,7 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
+from tests.session_store_fakes import InMemorySessionStore
 
 # Nothing listens on the discard port, so a connection to it is refused at once.
 _REFUSED_HUB = "http://127.0.0.1:9"
@@ -216,18 +217,20 @@ class InitRunner(CliRunner):
     """A ``CliRunner`` whose every invocation hands the root group the :class:`FakeInitHub` as ``obj``,
     so an in-process ``runner init`` joins it."""
 
-    def __init__(self, hub: FakeInitHub) -> None:
+    def __init__(self, hub: FakeInitHub, sessions: InMemorySessionStore | None = None) -> None:
         super().__init__()
         self.hub = hub
+        self.sessions = sessions or InMemorySessionStore()
 
     def invoke(self, *args: Any, **kwargs: Any) -> Any:
-        kwargs.setdefault("obj", InitCollaborators(self.hub.clients, self.hub.host_clients))
+        kwargs.setdefault("obj", InitCollaborators(self.hub.clients, self.hub.host_clients, self.sessions))
         return super().invoke(*args, **kwargs)
 
 
-def init_runner(hub: FakeInitHub | None = None) -> InitRunner:
-    """A runner of in-process commands whose ``runner init`` joins ``hub`` — a fresh one when none is given."""
-    return InitRunner(hub or FakeInitHub())
+def init_runner(hub: FakeInitHub | None = None, *, sessions: InMemorySessionStore | None = None) -> InitRunner:
+    """A runner of in-process commands whose ``runner init`` joins ``hub`` — a fresh one when none is given — and
+    reads the operator's login from ``sessions``, holding none when none is given."""
+    return InitRunner(hub or FakeInitHub(), sessions)
 
 
 @pytest.fixture(autouse=True)

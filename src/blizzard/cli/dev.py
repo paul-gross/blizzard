@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
-from typing import cast
 
 import click
 from click.core import ParameterSource
@@ -21,6 +20,7 @@ from blizzard.cli.param_rank import ParamSource
 from blizzard.foundation.invariants import Violation
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.hub.cli.collaborators import HubCliCollaborators
 from blizzard.hub.cli.context import ENV_HUB_URL, CliContext
 from blizzard.hub.cli.session_service import SessionService
 from blizzard.hub.config import ConfigError, HubConfig
@@ -44,7 +44,7 @@ _RUNNING = "another invariant check is running — try again when it finishes"
 def dev(ctx: click.Context) -> None:
     """Developer tools for checking a hub's or runner's stores."""
     # The session service the `hub` group wires, read-only here: the client mode only loads a stored session.
-    ctx.obj = SessionService(SessionFile.of())
+    HubCliCollaborators.resolve(ctx, lambda: SessionService(SessionFile.of()))
 
 
 @dev.command("check-invariants")
@@ -178,7 +178,7 @@ def _check_running(ctx: click.Context, hub_url: str | None, directory: str | Non
 
 def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) -> list[Violation]:
     where = f"hub at {hub_url}"
-    session = cast(IReadSessionStore, ctx.obj)
+    session: IReadSessionStore = HubCliCollaborators.of(ctx).sessions
     cli = CliContext.of(hub_url, session, OperatorTrace.source(ctx), client_factory)
     try:
         resp = cli.send("get", _HUB_PATH, timeout=CHECK_TIMEOUT)

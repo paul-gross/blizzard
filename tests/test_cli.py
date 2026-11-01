@@ -658,7 +658,9 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) 
     result = runner.invoke(
         blizzard,
         ["runner", "host", "--dir", str(root)],
-        obj=replace(InitCollaborators(runner.hub.clients, runner.hub.host_clients), build_host_process=stop),
+        obj=replace(
+            InitCollaborators(runner.hub.clients, runner.hub.host_clients, runner.sessions), build_host_process=stop
+        ),
     )
 
     assert isinstance(result.exception, RuntimeError)

@@ -10,6 +10,7 @@ from typing import Any, TypedDict, cast
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
@@ -633,6 +634,41 @@ def chunk_work_items(cli: CliContext, chunk_id: str) -> None:
 
     An item its source fails to fetch shows that error in its own entry; the rest still list."""
     WorkItems(cli, chunk_id).show()
+
+
+@chunk_group.group("transcript", cls=GetGroup)
+def chunk_transcript_group() -> None:
+    """Read a chunk's recorded session transcript, as the board shows it."""
+
+
+@chunk_transcript_group.command("list", cls=FleetCommand)
+@click.argument("chunk_id")
+def chunk_transcript_list(cli: CliContext, chunk_id: str) -> None:
+    """List CHUNK_ID's transcript segments — id, node, epoch, turn range, whether it is closed or cut short, and size.
+
+    A chunk no worker has run lists none. Pass a segment id to `transcript get` to read it."""
+    body = cli.get(
+        f"/api/chunks/{chunk_id}/transcripts",
+        "GET /chunks/{id}/transcripts",
+        on_status={404: f"unknown chunk {chunk_id}"},
+    ).json()
+    cli.show(body, SegmentIndexLines(body))
+
+
+@chunk_transcript_group.command("get", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.argument("segment_id")
+def chunk_transcript_get(cli: CliContext, chunk_id: str, segment_id: str) -> None:
+    """Show SEGMENT_ID of CHUNK_ID, turn by turn: each turn's time and kind, a tool turn's name, input and output,
+    a subagent's turns indented under the call that spawned it.
+
+    Under --json, the segment as the hub stores it."""
+    body = cli.get(
+        f"/api/chunks/{chunk_id}/transcripts/{segment_id}",
+        "GET /chunks/{id}/transcripts/{segment_id}",
+        on_status={404: f"unknown chunk {chunk_id}, or no segment {segment_id} in it"},
+    ).json()
+    cli.show(body, SegmentContentLines(body))
 
 
 @chunk_group.command("pm", hidden=True, cls=FleetCommand)

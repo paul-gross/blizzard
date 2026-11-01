@@ -2057,6 +2057,137 @@
           "path": "hub chunk stop",
           "short_help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb."
         },
+        "transcript": {
+          "aliases": [
+            "show",
+            "read"
+          ],
+          "commands": {
+            "get": {
+              "help": "Show SEGMENT_ID of CHUNK_ID, turn by turn: each turn's time and kind, a tool turn's name, input and output,\na subagent's turns indented under the call that spawned it.\n\nUnder --json, the segment as the hub stores it.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "chunk_id",
+                  "opts": [
+                    "chunk_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "segment_id",
+                  "opts": [
+                    "segment_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub chunk transcript get",
+              "short_help": "Show SEGMENT_ID of CHUNK_ID, turn by turn: each turn's time and kind, a tool turn's name, input and output, a subagent's turns indented under the call that spawned it."
+            },
+            "list": {
+              "help": "List CHUNK_ID's transcript segments \u2014 id, node, epoch, turn range, whether it is closed or cut short, and size.\n\nA chunk no worker has run lists none. Pass a segment id to `transcript get` to read it.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "chunk_id",
+                  "opts": [
+                    "chunk_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub chunk transcript list",
+              "short_help": "List CHUNK_ID's transcript segments \u2014 id, node, epoch, turn range, whether it is closed or cut short, and size."
+            }
+          },
+          "help": "Read a chunk's recorded session transcript, as the board shows it.",
+          "params": [],
+          "path": "hub chunk transcript",
+          "short_help": "Read a chunk's recorded session transcript, as the board shows it."
+        },
         "work-items": {
           "help": "Show CHUNK's work items as their sources report them, one entry per pointer.\n\nAn item its source fails to fetch shows that error in its own entry; the rest still list.",
           "params": [

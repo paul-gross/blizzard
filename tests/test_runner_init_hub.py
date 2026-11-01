@@ -16,7 +16,6 @@ import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
-from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.unrecognized import Unrecognized
@@ -44,6 +43,7 @@ from blizzard.runner.runtime import sqlite_store_file
 from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
 from tests.runner_join import DEFAULT_TOKEN_ENV
+from tests.session_store_fakes import InMemorySessionStore
 
 _HUB = "http://hub.test:8421"
 _FROM_FILE = HeldToken("t", from_process_env=False)
@@ -490,8 +490,11 @@ def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fak
 
 @pytest.mark.component
 def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
-    SessionFile.of().save(f"{_HUB}/", "operator-session")
-    assert _init(fake_init_hub, tmp_path / "runner").exit_code == 0
+    sessions = InMemorySessionStore({_HUB: "operator-session"})
+    result = init_runner(fake_init_hub, sessions=sessions).invoke(
+        blizzard, ["runner", "init", str(tmp_path / "runner"), "--hub", _HUB]
+    )
+    assert result.exit_code == 0, result.output
     assert fake_init_hub.calls[-1].operator_token == "operator-session"
 
 

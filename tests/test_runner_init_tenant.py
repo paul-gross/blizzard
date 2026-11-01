@@ -44,6 +44,7 @@ from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.wire.user import CallerTenantsView, CallerTenantView
 from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
 from tests.runner_join import DEFAULT_TOKEN_ENV
+from tests.session_store_fakes import InMemorySessionStore
 from tests.support import build_hub, default_tenant
 
 _HUB = "http://hub.test:8421"
@@ -288,7 +289,7 @@ def _real_hub_clients(app: FastAPI) -> InitCollaborators:
     def host_clients(_hub_url: str) -> Generator[HostClients]:
         yield lambda token: HttpHostHubClient(TestClient(app), token=token)
 
-    return InitCollaborators(clients, host_clients)
+    return InitCollaborators(clients, host_clients, InMemorySessionStore())
 
 
 def _runner_ids(client: TestClient, tenant: str) -> list[str]:

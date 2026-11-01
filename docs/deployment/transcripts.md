@@ -35,6 +35,14 @@ the recorded harness owner is unknown or bound but unavailable on this runner �
 escalates a chunk in place elsewhere; the index read is unaffected, since it serves metadata off the local ledger alone,
 never the owner's own content.
 
+Both reads have a terminal verb. `blizzard hub chunk transcript list CHUNK_ID` and `get CHUNK_ID SEGMENT_ID` read the
+hub's pair, and `blizzard runner transcript list CHUNK_ID` and `get CHUNK_ID SEGMENT_ID` read the runner's, through the
+running host. Each `list` prints one line per segment with its id first; each `get` prints the segment's turns the way
+the board's Transcripts tab shows them — a time and kind per turn, a tool call's name, input and output, a subagent's
+turns indented under the call that spawned it, a redacted thinking turn marked redacted — with a late result folded onto
+its call. `--json` prints the route's body unchanged. Both are reads only: the hub verbs need `transcript:read`, and the
+runner verbs need the host up.
+
 Tool results and subagent conversations routinely arrive in later records than the call that produced them (the runner
 reads a session in windows), shipping with that call's `tool_use_id`; the board folds them back on render, direct API
 reads see them unmerged but never dropped, and a conversation whose spawning call was never observed is genuinely
@@ -91,6 +99,10 @@ Backfill is rerunnable: a session already holding a segment is skipped, an unfin
 resume, and a rerun costs at worst a duplicate turn range the hub's natural key discards.
 
 ## Reship
+
+Take the segment id from `blizzard runner transcript list CHUNK_ID` (the host up) or
+`blizzard hub chunk transcript
+list CHUNK_ID`: the hub and the runner name a segment by the same id.
 
 `transcript reship SEGMENT_ID` re-sends a shipped segment the hub holds in an outgrown form — most often one an older,
 smaller record cap shrank — under backfill's same three run conditions, enforced by the same refusal.
