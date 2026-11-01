@@ -140,7 +140,19 @@ class GitHubWorkSource:
         """:meth:`fetch` over every pointer in one GraphQL request, admitted through the gate once. A turn-away or a
         rate refusal of any form (a ``403``/``429``, or a ``200`` whose ``errors`` carry ``RATE_LIMITED``) errors
         every pointer with the instant the budget lifts; any other transport or HTTP failure errors every pointer
-        alike; a pointer the answer holds no item for errors alone."""
+        alike; a pointer the answer holds no item for, or whose ref is no issue number, errors alone."""
+        numbered = [p for p in pointers if p.ref.isdigit()]
+        result: dict[WorkRef, WorkItem | WorkSourceError] = {
+            p: WorkSourceError(f"failed to read {self._name}#{p.ref}: not an issue number")
+            for p in pointers
+            if not p.ref.isdigit()
+        }
+        result.update(self._fetch_numbered(numbered, include_comments))
+        return result
+
+    def _fetch_numbered(
+        self, pointers: Sequence[WorkRef], include_comments: bool
+    ) -> Mapping[WorkRef, WorkItem | WorkSourceError]:
         if not pointers:
             return {}
         if (resume_at := self._turned_away()) is not None:

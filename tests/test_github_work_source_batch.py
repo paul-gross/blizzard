@@ -148,3 +148,12 @@ def test_any_other_failure_errors_every_ref_without_retry_after() -> None:
     for outcome in result.values():
         assert isinstance(outcome, WorkSourceError)
         assert outcome.retry_after is None
+
+
+def test_a_non_numeric_ref_errors_only_itself() -> None:
+    world = _World()
+    bad = WorkRef(source="widget", ref="abc")
+    result = world.source().fetch_many([_ref(1), bad], include_comments=False)
+    assert len(world.requests) == 1
+    assert isinstance(result[bad], WorkSourceError)
+    assert isinstance(result[_ref(1)], WorkItem)
