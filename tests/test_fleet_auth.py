@@ -12,17 +12,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from tests.support import build_hub, seed_runner
+from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
 
-def _register(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:  # type: ignore[no-untyped-def]
+def _register(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:
     resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
     assert resp.status_code == 201, resp.text
 
 
-def _enroll(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> str:
     resp = hub.client.post(f"/api/runners/{runner_id}/enrollments")
     assert resp.status_code == 201, resp.text
     return str(resp.json()["token"])

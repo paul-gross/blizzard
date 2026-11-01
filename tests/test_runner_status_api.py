@@ -68,7 +68,7 @@ def _app_with_status(
     identity_verdict: ICurrentIdentityVerdict | None = None,
     bindings: tuple[BindingDeclaration, ...] | None = None,
     hub_version: ICurrentHubVersion | None = None,
-):  # type: ignore[no-untyped-def]
+):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     pool = config.home_workspace.envs if env_pool is None else env_pool
@@ -105,7 +105,7 @@ def _app_with_status(
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

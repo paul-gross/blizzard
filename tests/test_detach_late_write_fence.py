@@ -60,7 +60,7 @@ _ARTIFACT = {
 }
 
 
-def _completion(node_id: str, *, epoch: int, runner_id: str) -> dict:
+def _completion(node_id: str, *, epoch: int, runner_id: str) -> dict[str, object]:
     return {
         "choice": "pass",
         "epoch": epoch,

@@ -15,7 +15,7 @@ from sqlalchemy import insert as sa_insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema
-from tests.support import assert_all_timestamps_utc, build_hub, ingest, report_lease, stamp
+from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, ingest, report_lease, stamp
 
 pytestmark = pytest.mark.component
 
@@ -55,7 +55,7 @@ nodes:
 """
 
 
-def _claim(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
+def _claim(hub: HubHarness, chunk_id: str) -> str:
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
@@ -65,7 +65,7 @@ def _claim(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
     return resp.json()["envelope"]["node"]["node_id"]
 
 
-def _summary(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _summary(hub: HubHarness, chunk_id: str) -> dict[str, object]:
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     assert_all_timestamps_utc(resp.json())

@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -20,33 +22,33 @@ _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
-def _job(name: str) -> dict:
+def _job(name: str) -> dict[str, Any]:
     # YAML parses the bare `on:` key as the boolean `True` under PyYAML's default
     # (YAML 1.1) resolver — irrelevant here since only `jobs` is read.
     return yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"][name]
 
 
-def _build_job() -> dict:
+def _build_job() -> dict[str, Any]:
     return _job("build")
 
 
-def _publish_job() -> dict:
+def _publish_job() -> dict[str, Any]:
     return _job("publish")
 
 
-def _verify_job() -> dict:
+def _verify_job() -> dict[str, Any]:
     return _job("verify")
 
 
-def _wheel_job() -> dict:
+def _wheel_job() -> dict[str, Any]:
     return _job("wheel")
 
 
-def _uses(step: dict, action: str) -> bool:
+def _uses(step: dict[str, Any], action: str) -> bool:
     return step.get("uses", "").startswith(f"{action}@")
 
 
-def _step_index(steps: list[dict], predicate) -> int:
+def _step_index(steps: list[dict[str, Any]], predicate) -> int:
     for i, step in enumerate(steps):
         if predicate(step):
             return i
@@ -100,7 +102,7 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
 
 
 @pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0"])
-def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
+def test_release_wheel_stamps_the_full_tag_version(tmp_path: Path, tag: str) -> None:
     steps = _wheel_job()["steps"]
     derive = steps[_step_index(steps, lambda s: s.get("id") == "ver")]
     wheel = steps[_step_index(steps, lambda s: str(s.get("run", "")).strip() == "./scripts/build-wheel.sh")]
@@ -254,7 +256,7 @@ def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     assert "image_meta" in tags_input, "the build-push step must consume the derived tag list, not a literal"
 
 
-def _workflow() -> dict:
+def _workflow() -> dict[str, Any]:
     return yaml.safe_load(_WORKFLOW_PATH.read_text())
 
 
@@ -433,7 +435,7 @@ _TIER_JOBS = {
 }
 
 
-def _tier_job(workflow: str, name: str) -> dict:
+def _tier_job(workflow: str, name: str) -> dict[str, Any]:
     return yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text())["jobs"][name]
 
 

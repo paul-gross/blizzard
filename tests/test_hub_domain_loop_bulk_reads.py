@@ -152,7 +152,7 @@ def test_epoch_owners_is_statement_free_when_empty_and_flat_otherwise(owners_eng
     )
 
 
-def _epoch_owner_statements(hub: HubHarness, records: list[dict]) -> int:
+def _epoch_owner_statements(hub: HubHarness, records: list[dict[str, object]]) -> int:
     with capture_statements(hub.engine) as statements:
         push = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": records})
     assert push.status_code == 200, push.text

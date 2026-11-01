@@ -19,6 +19,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
 )
@@ -30,7 +31,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _ctx(sessions: list[str], *, batches=None):  # type: ignore[no-untyped-def]
+def _ctx(sessions: list[str], *, batches=None):
     store = make_store("sqlite://")
     source = FakeTranscriptSource(
         batches_by_session=batches or {s: _batch([_turn(0, "hi")], next_token="p") for s in sessions}
@@ -51,7 +52,7 @@ def _ctx(sessions: list[str], *, batches=None):  # type: ignore[no-untyped-def]
     return ctx, source, store
 
 
-def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = True) -> str:  # type: ignore[no-untyped-def]
+def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = True) -> str:
     n = chunk_id.removeprefix("ch_")
     if bind:
         ctx.stores.environments.record_binding(
@@ -84,13 +85,13 @@ def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = 
     )
 
 
-def _binding_statements(store, fn) -> int:  # type: ignore[no-untyped-def]
+def _binding_statements(store: SqlAlchemyRunnerStore, fn) -> int:
     with capture_statements(store._engine) as statements:
         fn()
     return sum(1 for statement, _ in statements if "env_bindings" in statement)
 
 
-def _world(n: int, *, held: bool):  # type: ignore[no-untyped-def]
+def _world(n: int, *, held: bool):
     sessions = [f"sess-{i}" for i in range(n)]
     ctx, source, store = _ctx(sessions)
     segment_ids = [_open_segment(ctx, f"ch_{i}", sessions[i], held=held) for i in range(n)]
@@ -122,14 +123,14 @@ def test_drain_segment_resolves_bindings_once_across_read_windows() -> None:
         segment_id = _open_segment(ctx, "ch_0", "sess-0", held=False)
         calls = {"n": 0}
 
-        def windowed(session_id, *, spawn_cwd, since, calls=calls, windows=windows):  # type: ignore[no-untyped-def]
+        def windowed(session_id, *, spawn_cwd, since, calls=calls, windows=windows):
             calls["n"] += 1
             token = f"p{calls['n']}"
             if calls["n"] < windows:
                 return _incomplete_batch([_turn(calls["n"], "more")], next_token=token)
             return _batch([_turn(calls["n"], "end")], next_token=token)
 
-        source.turns_since = windowed  # type: ignore[method-assign]
+        source.turns_since = windowed
         measured.append(
             _binding_statements(
                 store,

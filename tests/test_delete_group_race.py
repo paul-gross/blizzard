@@ -54,12 +54,12 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     dependencies = _writable_dependencies(hub)
     real_record_fold_locked = dependencies.record_fold_locked
 
-    def _blocking_record_fold_locked(handle, targets, *, grouped_into, by, at):  # type: ignore[no-untyped-def]
+    def _blocking_record_fold_locked(handle, targets, *, grouped_into, by, at):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
         return real_record_fold_locked(handle, targets, grouped_into=grouped_into, by=by, at=at)
 
-    dependencies.record_fold_locked = _blocking_record_fold_locked  # type: ignore[method-assign]
+    dependencies.record_fold_locked = _blocking_record_fold_locked
 
     group_result: dict[str, object] = {}
 

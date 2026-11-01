@@ -50,14 +50,14 @@ _bound: dict[str, Bound] = {}
 def _route_cli_through(client: TestClient) -> None:
     """Send the CLI's requests to the in-process app."""
 
-    def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+    def forward(method: str, url: str, *, timeout: float, **kwargs):
         kwargs.pop("headers", None)
         return client.request(method.upper(), urlsplit(url).path, **kwargs)
 
     _bound["hub"] = bind_stubs(request=forward)
 
 
-def _cli(args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
+def _cli(args: list[str], *, stdin: str | None = None):
     return _bound["hub"].runner.invoke(hub_group, ["secret", *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 

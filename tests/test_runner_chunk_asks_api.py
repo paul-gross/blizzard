@@ -21,7 +21,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk_asks import ChunkAsksSource
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -199,7 +199,7 @@ class _HubRouter:
         return self.handler(request)
 
 
-def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
+def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
     router = _HubRouter()
@@ -214,7 +214,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     return app, store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": _CHUNK,

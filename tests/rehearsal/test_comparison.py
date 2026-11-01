@@ -25,7 +25,7 @@ _OPENAPI = {
 }  # fmt: skip
 
 
-def _projected(view: dict) -> dict:
+def _projected(view: dict[str, object]) -> dict[str, object]:
     return project(view, response_schema(_OPENAPI, "/api/chunks/{chunk_id}"), _OPENAPI)
 
 

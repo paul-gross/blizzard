@@ -8,10 +8,11 @@ from __future__ import annotations
 import itertools
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.support import report_lease
+from tests.support import HubHarness, report_lease
 from tests.test_analytics_durations_api import _complete, _cookie, _mint_chunk, _seeded_hub
 
 pytestmark = pytest.mark.component
@@ -19,12 +20,12 @@ pytestmark = pytest.mark.component
 _SEQ = itertools.count(1)  # one monotone seq per runner, shared by lease and usage facts
 
 
-def _lease(hub, chunk_id: str, *, epoch: int) -> None:  # type: ignore[no-untyped-def]
+def _lease(hub: HubHarness, chunk_id: str, *, epoch: int) -> None:
     report_lease(hub, chunk_id, epoch=epoch, seq=next(_SEQ))
 
 
-def _usage(  # type: ignore[no-untyped-def]
-    hub,
+def _usage(
+    hub: HubHarness,
     *,
     chunk_id: str,
     node_id: str,
@@ -56,7 +57,7 @@ def _usage(  # type: ignore[no-untyped-def]
     assert resp.status_code == 200, resp.text
 
 
-def _seed(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seed(tmp_path: Path):
     """Chunk A: one 30s build step on ``m-a`` under harness ``claude_code``. Chunk B: a 10s
     epoch that ran on both models (a judged fail), then a 20s epoch on ``m-b``. Chunk C: a 5s
     step with no usage fact at all. Chunk D: an epoch on ``m-a`` that never completed."""
@@ -92,13 +93,13 @@ def _seed(tmp_path: Path):  # type: ignore[no-untyped-def]
     return hub, token, nodes, {"a": a, "b": b, "c": c, "d": d}
 
 
-def _get(hub, token: str, path: str, **params: str):  # type: ignore[no-untyped-def]
+def _get(hub: HubHarness, token: str, path: str, **params: str):
     resp = hub.client.get(f"/api/analytics/{path}", params=params, headers=_cookie(token))
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _spend_by_key(body: dict) -> dict[str, int]:  # type: ignore[type-arg]
+def _spend_by_key(body: dict[str, Any]) -> dict[str, int]:
     return {r["key"]: r["input_tokens"] for r in body["spend"]}
 
 
@@ -145,7 +146,7 @@ def test_spend_chunks_and_its_ndjson_stream_honor_the_provenance_filters(tmp_pat
     assert [line.split('"')[3] for line in resp.text.splitlines()] == [chunks["a"]]
 
 
-def _durations(body: dict) -> tuple[int, float]:  # type: ignore[type-arg]
+def _durations(body: dict[str, Any]) -> tuple[int, float]:
     rows = body["durations"]
     return sum(r["completed_steps"] for r in rows), sum(r["total_seconds"] for r in rows)
 
@@ -170,7 +171,7 @@ def test_outcomes_count_only_attempts_with_a_matching_usage_fact(tmp_path: Path)
     hub, token, nodes, _chunks = _seed(tmp_path)
     build = nodes["build"]
 
-    def outcome(**params: str) -> dict:  # type: ignore[type-arg]
+    def outcome(**params: str) -> dict[str, Any]:
         rows = _get(hub, token, "outcomes/nodes", **params)["outcomes"]
         return next((r for r in rows if r["node_id"] == build), {"choice_counts": {}, "attempt_failures": 0})
 

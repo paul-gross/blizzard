@@ -17,19 +17,19 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 23, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
 
 
-def _app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _app_with_store(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     return create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

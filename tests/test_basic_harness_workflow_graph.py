@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 _GRAPH = PACKAGED.named("basic-harness-workflow")
 
 
-def _doc():  # type: ignore[no-untyped-def]
+def _doc():
     return _GRAPH.doc
 
 

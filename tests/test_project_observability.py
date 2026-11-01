@@ -90,7 +90,7 @@ def _push_transcript(hub: HubHarness, chunk_id: str, file_path: str) -> None:
     assert push.status_code == 200, push.text
 
 
-def _ndjson(hub: HubHarness, path: str, **params: str) -> list[dict]:
+def _ndjson(hub: HubHarness, path: str, **params: str) -> list[dict[str, object]]:
     resp = hub.client.get(path, params=params)
     assert resp.status_code == 200, resp.text
     return [json.loads(line) for line in resp.text.splitlines() if line]

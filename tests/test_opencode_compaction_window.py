@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -9,7 +10,7 @@ from blizzard.runner.harness.opencode.model_limits import FileOpenCodeModelLimit
 pytestmark = pytest.mark.unit
 
 
-def test_catalog_reads_limits_without_pricing(tmp_path):
+def test_catalog_reads_limits_without_pricing(tmp_path: Path):
     path = tmp_path / "models.json"
     path.write_text(json.dumps({"p": {"models": {"m": {"limit": {"context": 100000, "output": 4000}}}}}))
     assert FileOpenCodeModelLimitsCatalog(path).limits_for("p", "m") == OpenCodeModelLimits(100000, 4000)

@@ -11,7 +11,7 @@ from tests.support import build_hub, ingest, report_lease
 pytestmark = pytest.mark.component
 
 
-def _claim_body(chunk_id: str, runner: str) -> dict:
+def _claim_body(chunk_id: str, runner: str) -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
@@ -28,7 +28,7 @@ def test_a_claim_blocks_while_a_detach_holds_the_row_lock_mid_write(
     release_write = threading.Event()
     real_refuse_detach = detach_module.refuse_detach
 
-    def _blocking_refuse_detach(chunk_id, route, status):  # type: ignore[no-untyped-def]
+    def _blocking_refuse_detach(chunk_id, route, status):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the detach's write"
         real_refuse_detach(chunk_id, route, status)

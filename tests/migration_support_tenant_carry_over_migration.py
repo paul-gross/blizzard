@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import event
@@ -57,7 +58,7 @@ def _row_counts(engine: sa.Engine) -> dict[str, int]:
         }
 
 
-def _tenant_rows(engine: sa.Engine) -> list[sa.Row]:
+def _tenant_rows(engine: sa.Engine) -> list[sa.Row[Any]]:
     with engine.connect() as conn:
         return list(conn.execute(sa.text("SELECT tenant_id, name, created_at, created_by FROM tenants")).all())
 
@@ -115,7 +116,7 @@ def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
     return seeded
 
 
-def _value_for(column: sa.Column) -> object:
+def _value_for(column: sa.Column[Any]) -> object:
     if column.foreign_keys:
         return _value_for(next(iter(column.foreign_keys)).column)
     try:
@@ -193,7 +194,7 @@ def _rows_each_update_changed() -> Iterator[list[tuple[str, int]]]:
     included — as the table it names and the rows it changed, in issue order."""
     updates: list[tuple[str, int]] = []
 
-    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+    def record(conn, cursor, statement, parameters, context, executemany):
         words = statement.split()
         if words[0].upper() == "UPDATE":
             updates.append((words[1], cursor.rowcount))

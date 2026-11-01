@@ -192,11 +192,13 @@ def test_a_new_major_beside_the_old_and_a_new_column_are_additive() -> None:
 # --- store -------------------------------------------------------------------------------
 
 
-def _col(type: str = "String", *, nullable: bool = False, server_default: bool = False, deprecated: Any = None) -> dict:
+def _col(
+    type: str = "String", *, nullable: bool = False, server_default: bool = False, deprecated: Any = None
+) -> dict[str, object]:
     return {"type": type, "nullable": nullable, "server_default": server_default, "deprecated": deprecated}
 
 
-def _table(columns: dict[str, dict], **extra: Any) -> dict[str, Any]:
+def _table(columns: dict[str, dict[str, object]], **extra: Any) -> dict[str, Any]:
     table: dict[str, Any] = {
         "columns": columns,
         "primary_key": ["id"],

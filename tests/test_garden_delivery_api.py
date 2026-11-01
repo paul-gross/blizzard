@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import insert, select
@@ -137,22 +138,24 @@ def _record_artifact(hub: HubHarness, chunk_id: str, *, name: str, content: str,
     )
 
 
-def _delta(*, scope: str = _SCOPE, revisions: dict[str, str] | None = None, findings: list[dict] | None = None) -> str:
+def _delta(
+    *, scope: str = _SCOPE, revisions: dict[str, str] | None = None, findings: list[dict[str, object]] | None = None
+) -> str:
     return json.dumps({"scope": scope, "revisions": revisions or {}, "measurement": None, "findings": findings or []})
 
 
-def _add_op(*, class_: str = "c", locus: str = "a.py:1", summary: str = "s", ref: str | None = None) -> dict:
+def _add_op(*, class_: str = "c", locus: str = "a.py:1", summary: str = "s", ref: str | None = None) -> dict[str, Any]:
     op = {"op": "add", "class": class_, "locus": locus, "summary": summary}
     if ref is not None:
         op["ref"] = ref
     return op
 
 
-def _observed_op(finding_id: str) -> dict:
+def _observed_op(finding_id: str) -> dict[str, object]:
     return {"op": "observed", "id": finding_id}
 
 
-def _gone_op(finding_id: str, *, note: str = "n") -> dict:
+def _gone_op(finding_id: str, *, note: str = "n") -> dict[str, object]:
     return {"op": "gone", "id": finding_id, "note": note}
 
 

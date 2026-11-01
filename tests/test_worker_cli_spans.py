@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping
+from typing import Any
 
 import httpx2
 import pytest
@@ -184,7 +185,7 @@ def test_the_unprefixed_traceparent_is_never_read(monkeypatch: pytest.MonkeyPatc
 
 
 def test_a_failing_command_records_its_exit_code_and_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    posted: list[dict] = []
+    posted: list[dict[str, Any]] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/v1/traces":
@@ -295,7 +296,7 @@ class _Post:
 
     def __init__(self, status: object = 200) -> None:
         self.status = status
-        self.calls: list[dict] = []
+        self.calls: list[dict[str, Any]] = []
         self.daemon: bool | None = None
 
     def post(self, url: str, *, content: bytes, headers: Mapping[str, str], timeout: float) -> object:

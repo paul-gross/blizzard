@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
 from tests.support import (
+    HubHarness,
     assert_all_timestamps_utc,
     build_hub,
     hub_scoped,
@@ -112,7 +114,7 @@ _BUILD_ARTIFACT = {
 }
 
 
-def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped-def]
+def _ingest(hub: HubHarness, yaml_body: str) -> tuple[str, dict[str, Any]]:
     """Mint the graph, ingest a chunk, and return (chunk_id, node-name -> node_id)."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": yaml_body})
     assert graph.status_code == 201, graph.text
@@ -122,7 +124,7 @@ def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped
     return chunk_id, nodes
 
 
-def _claim_and_lease(hub, chunk_id: str, *, epoch: int = 1, seq: int = 1) -> None:  # type: ignore[no-untyped-def]
+def _claim_and_lease(hub: HubHarness, chunk_id: str, *, epoch: int = 1, seq: int = 1) -> None:
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -130,8 +132,10 @@ def _claim_and_lease(hub, chunk_id: str, *, epoch: int = 1, seq: int = 1) -> Non
     report_lease(hub, chunk_id, epoch=epoch, seq=seq)
 
 
-def _completion(node_id: str, *, choice: str, epoch: int = 1, decision_id: str | None = None, artifacts=None) -> dict:
-    body: dict = {
+def _completion(
+    node_id: str, *, choice: str, epoch: int = 1, decision_id: str | None = None, artifacts=None
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
         "choice": choice,
         "epoch": epoch,
         "runner_id": "r1",
@@ -316,7 +320,7 @@ _CHECKED_YAML = _PLAIN_YAML.replace(
 )
 
 
-def _gate_with_checks(hub, passed: bool) -> tuple[str, dict, dict]:  # type: ignore[no-untyped-def]
+def _gate_with_checks(hub: HubHarness, passed: bool) -> tuple[str, dict[str, Any], dict[str, Any]]:
     chunk_id, nodes = _ingest(hub, _CHECKED_YAML)
     _claim_and_lease(hub, chunk_id)
     resp = hub.client.post(

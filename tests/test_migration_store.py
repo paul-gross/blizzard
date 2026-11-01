@@ -35,7 +35,7 @@ from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, chunk_stores, hub_scoped, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, chunk_stores, hub_scoped, make_ready, pointer_token, report_lease
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -202,7 +202,7 @@ def _artifact(chunk_id: str, node_id: str) -> StoredArtifact:
     )
 
 
-def _claimed(hub) -> tuple[str, str, str]:  # type: ignore[no-untyped-def]
+def _claimed(hub: HubHarness) -> tuple[str, str, str]:
     """Mint the source graph + a target graph, claim a route. Returns (chunk_id,
     from_node_id, target_graph_id)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201

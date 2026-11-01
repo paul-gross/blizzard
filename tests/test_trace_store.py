@@ -145,7 +145,7 @@ def test_a_step_names_its_runner_by_id_and_latest_registered_name_and_a_rename_b
     assert retold == (_RN, "r-claude-2")
 
 
-def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[CursorKey]:  # type: ignore[no-untyped-def]
+def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[CursorKey]:
     """Every key the window tells, pass after pass, until its position stops moving."""
     told: list[CursorKey] = []
     for _ in range(50):
@@ -251,11 +251,11 @@ class _CountingReads:
         self._store = store
         self.candidate_reads: list[int] = []
 
-    def closing_candidates(self, since, until, limit):  # type: ignore[no-untyped-def]
+    def closing_candidates(self, since, until, limit):
         self.candidate_reads.append(limit)
         return self._store.closing_candidates(since, until, limit)
 
-    def step_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+    def step_facts_for(self, chunk_ids):
         return self._store.step_facts_for(chunk_ids)
 
 
@@ -283,7 +283,7 @@ class _NonClosingBacklog:
         self.limits: list[int] = []
         self.hydrated = 0
 
-    def closing_candidates(self, since, until, limit):  # type: ignore[no-untyped-def]
+    def closing_candidates(self, since, until, limit):
         self.limits.append(limit)
         served = (len(self.limits) - 1) * limit
         page = tuple(self._ids[served : served + limit])
@@ -294,7 +294,7 @@ class _NonClosingBacklog:
             return ClosingCandidates(page, frontier=at)
         return ClosingCandidates(page, newest=at)
 
-    def step_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+    def step_facts_for(self, chunk_ids):
         self.hydrated += 1
         return {}
 

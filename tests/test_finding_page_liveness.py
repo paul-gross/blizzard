@@ -128,7 +128,7 @@ def test_sql_live_set_equals_derive_liveness(tmp_path: Path) -> None:
     assert "tie_later_inserted_exit" not in expected
 
 
-def _as_facts(facts: list[tuple[str, int]]):  # type: ignore[no-untyped-def]
+def _as_facts(facts: list[tuple[str, int]]):
     return [FindingFact(kind=kind, recorded_at=_at(seconds)) for kind, seconds in facts]
 
 
@@ -149,7 +149,7 @@ def test_page_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
         project = default_project(engine)
         _seed_interleaved(engine, exited_each_gap=gaps)
 
-        def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
+        def read(store: FindingStore = store, project: str = project):
             return store.list_page(project_id=project, routine_name="nightly", scope_slug="blizzard", limit=2)
 
         first = read()
@@ -203,7 +203,7 @@ def test_bucket_read_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> Non
         _finding(engine, "fin_live", [("add", 0)])
         _finding(engine, "fin_gone", [("add", 0), ("gone", 1)])
 
-        def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
+        def read(store: FindingStore = store, project: str = project):
             return store.list_for_routine(project, "nightly", include_gone=True, exclude_exited=True)
 
         measured.append((count_queries(engine, read), count_rows_read(engine, read), [f.finding_id for f in read()]))
@@ -257,7 +257,7 @@ def test_page_read_cost_is_flat_in_observation_depth(tmp_path: Path) -> None:
         for index in range(3):
             _finding(engine, f"fin_{index}", [("add", 0), *[("observed", n) for n in range(1, depth + 1)]])
 
-        def read(store: FindingStore = store):  # type: ignore[no-untyped-def]
+        def read(store: FindingStore = store):
             return store.list_page(
                 project_id=None, routine_name=None, scope_slug=None, include_gone=True, limit=10
             ).findings

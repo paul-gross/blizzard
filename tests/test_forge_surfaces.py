@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
@@ -32,7 +33,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return harness
 
 
-def _create(hub: HubHarness, slug: str = "ghe", api_base: str = "https://ghe.example/api/v3") -> dict:
+def _create(hub: HubHarness, slug: str = "ghe", api_base: str = "https://ghe.example/api/v3") -> dict[str, Any]:
     response = hub.client.post("/api/forges", json={"slug": slug, "kind": "github", "api_base": api_base})
     assert response.status_code == 201, response.text
     return response.json()
@@ -197,7 +198,7 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
         {"secret_name": "gh-token", "bucket": "core", "limit": 5000, "remaining": 1200, "reset": reset.isoformat()},
     ]
 
-    def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+    def forward(method: str, url: str, *, timeout: float, **kwargs):
         return hub.client.request(method.upper(), urlsplit(url).path, **kwargs)
 
     result = bind_stubs(request=forward).runner.invoke(

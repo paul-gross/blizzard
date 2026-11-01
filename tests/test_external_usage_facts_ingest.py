@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -35,8 +36,8 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 
 
-def _payload(*, slug: str, sampled_at: datetime, utilization_pct: float, name: str | None = None) -> dict:
-    payload: dict = {
+def _payload(*, slug: str, sampled_at: datetime, utilization_pct: float, name: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "slug": slug,
         "sampled_at": sampled_at.isoformat(),
         "windows": [
@@ -83,7 +84,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     )
 
 
-def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):  # type: ignore[no-untyped-def]
+def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):
     with engine.connect() as conn:
         return conn.execute(
             hub_store_connections(engine)
@@ -569,14 +570,14 @@ def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_
 # --------------------------------------------------------------------------- #
 
 
-def _miss_payload(*, slug: str, missed_at: datetime, reason: str, name: str | None = None) -> dict:
-    payload: dict = {"slug": slug, "missed_at": missed_at.isoformat(), "reason": reason}
+def _miss_payload(*, slug: str, missed_at: datetime, reason: str, name: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"slug": slug, "missed_at": missed_at.isoformat(), "reason": reason}
     if name is not None:
         payload["name"] = name
     return payload
 
 
-def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):  # type: ignore[no-untyped-def]
+def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):
     with engine.connect() as conn:
         return conn.execute(
             hub_store_connections(engine)
@@ -754,7 +755,7 @@ def test_a_miss_with_an_unknown_reason_lands_and_supersedes_a_lapsed_condition(t
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
     now = hub.clock.now()
 
-    def _post(seq: int, reason: str, at: datetime) -> dict:
+    def _post(seq: int, reason: str, at: datetime) -> dict[str, Any]:
         resp = hub.client.post(
             "/api/fleet/events",
             json={

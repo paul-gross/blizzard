@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -65,13 +65,13 @@ nodes:
 """
 
 
-def _mint_alt_graph(hub) -> str:  # type: ignore[no-untyped-def]
+def _mint_alt_graph(hub: HubHarness) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _ALT_YAML})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": [f"env-{runner}"]}
 
 
@@ -87,7 +87,7 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     release_write = threading.Event()
     real_set_graph_locked = _writable_record(hub).set_graph_locked
 
-    def _blocking_set_graph_locked(handle, cid: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
+    def _blocking_set_graph_locked(handle, cid: str, *, graph_id: str) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the edit's write"
         real_set_graph_locked(handle, cid, graph_id=graph_id)
@@ -129,7 +129,7 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     assert detail["status"] == "running"
     # The edit's write landed first — the claim's envelope resolution must agree with
     # the persisted graph_id, never the graph resolved before the repin.
-    body = cast(dict, claim_response["body"])
+    body = cast(dict[str, Any], claim_response["body"])
     assert body["envelope"]["graph_id"] == alt_graph_id, body
 
 
@@ -146,12 +146,12 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
     release_record = threading.Event()
     real_record_route_locked = _writable_route(hub).record_route_locked
 
-    def _blocking_record_route_locked(handle, route, *, token_hash, at):  # type: ignore[no-untyped-def]
+    def _blocking_record_route_locked(handle, route, *, token_hash, at):
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
         return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
 
-    _writable_route(hub).record_route_locked = _blocking_record_route_locked  # type: ignore[method-assign]
+    _writable_route(hub).record_route_locked = _blocking_record_route_locked
 
     claim_result: dict[str, int] = {}
 
@@ -220,7 +220,7 @@ def test_repeated_edit_claim_races_never_yield_a_torn_graph(tmp_path: Path) -> N
         assert results["edit"] in (202, 409), f"chunk {i}: {results}"
         detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
         assert detail["status"] == "running"
-        envelope_graph_id = cast(dict, results["claim_body"])["envelope"]["graph_id"]
+        envelope_graph_id = cast(dict[str, Any], results["claim_body"])["envelope"]["graph_id"]
         if results["edit"] == 202:
             # The edit's write landed before the claim locked in — the running route's
             # own envelope resolution and the persisted graph_id agree on the new graph.

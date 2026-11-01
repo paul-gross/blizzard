@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from typing import Any
 
 import pytest
 import yaml
@@ -16,11 +17,11 @@ pytestmark = pytest.mark.unit
 _WORKFLOW_PATH = repo_root() / ".github" / "workflows" / "rehearsal.yml"
 
 
-def _workflow() -> dict:
+def _workflow() -> dict[Any, Any]:
     return yaml.safe_load(_WORKFLOW_PATH.read_text())
 
 
-def _step(job: str, predicate) -> dict:
+def _step(job: str, predicate) -> dict[str, Any]:
     return next(s for s in _workflow()["jobs"][job]["steps"] if predicate(s))
 
 

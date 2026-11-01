@@ -42,6 +42,7 @@ from blizzard.hub.forge.landing import (
     IForgeRefs,
     MergeMethod,
     RepositoryForge,
+    Rerun,
     Update,
 )
 from blizzard.hub.live_config import ConfigObjectCache
@@ -324,7 +325,7 @@ class _ChecksHandle:
         _admit(self.offered, "change_checks", self.gate, self.cut_off)
         return await self.gate.spending(self.adapter.change_checks(number))
 
-    async def rerun_check(self, id: str) -> bool:
+    async def rerun_check(self, id: str) -> Rerun:
         _admit(self.offered, "rerun_check", self.gate, self.cut_off)
         return await self.gate.spending(self.adapter.rerun_check(id))
 

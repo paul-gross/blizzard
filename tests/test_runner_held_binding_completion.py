@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -44,11 +45,11 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, hub, *, pool: dict[str, str] | None = None, agents: int = 1):  # type: ignore[no-untyped-def]
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, pool: dict[str, str] | None = None, agents: int = 1):
     ctx = make_context(
         store,
         hub=hub,
@@ -65,12 +66,12 @@ def _held_rows(store: SqlAlchemyRunnerStore) -> dict[str, tuple[str | None, str 
     return {b.environment_id: (b.workspace_id, b.project_id) for b in store.held_bindings()}
 
 
-def _seed_pre_revision_binding(store, chunk_id: str, environment_id: str, workdir: str) -> None:  # type: ignore[no-untyped-def]
+def _seed_pre_revision_binding(store: SqlAlchemyRunnerStore, chunk_id: str, environment_id: str, workdir: str) -> None:
     """A held row as the previous release wrote it — no workspace, no project."""
     store.record_binding(chunk_id=chunk_id, environment_id=environment_id, workdir=workdir, bound_at=_NOW)
 
 
-def _seed_running_lease(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _seed_running_lease(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
     lease_id = f"lease_{chunk_id}"
     store.record_lease(
         NewLease(
@@ -93,7 +94,7 @@ def _seed_running_lease(store, chunk_id: str) -> None:  # type: ignore[no-untype
     )
 
 
-def test_a_pre_revision_held_row_takes_the_workspace_its_workdir_resolves_to(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_pre_revision_held_row_takes_the_workspace_its_workdir_resolves_to(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     _seed_pre_revision_binding(store, "ch_1", "e1", "/ws/./e1/")  # the listed /ws/e1, spelled differently
@@ -107,7 +108,7 @@ def test_a_pre_revision_held_row_takes_the_workspace_its_workdir_resolves_to(tmp
     assert rows["e2"][0] is None
 
 
-def test_a_held_row_takes_whichever_host_workspace_lists_its_workdir(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_held_row_takes_whichever_host_workspace_lists_its_workdir(tmp_path: Path) -> None:
     """Two workspaces on different roots both name ``e1``: each row takes the workspace whose root holds it."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -133,7 +134,7 @@ def test_a_held_row_takes_whichever_host_workspace_lists_its_workdir(tmp_path) -
     assert {b.chunk_id: b.workspace_id for b in store.held_bindings()} == {"ch_a": "ws_a", "ch_b": "ws_b"}
 
 
-def test_a_held_row_takes_its_project_from_one_batch_status_read(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_held_row_takes_its_project_from_one_batch_status_read(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, project_id="pr_1")
@@ -148,7 +149,7 @@ def test_a_held_row_takes_its_project_from_one_batch_status_read(tmp_path) -> No
     assert sorted(hub.chunk_statuses_calls[0]) == ["ch_1", "ch_2"]
 
 
-def test_an_unanswered_row_stays_empty_and_is_retried_next_tick(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_unanswered_row_stays_empty_and_is_retried_next_tick(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     hub.down = True
@@ -163,7 +164,7 @@ def test_an_unanswered_row_stays_empty_and_is_retried_next_tick(tmp_path) -> Non
     assert _held_rows(store) == {"e1": ("ws1", "pr_1")}
 
 
-def test_completion_does_nothing_once_every_held_row_is_whole(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_completion_does_nothing_once_every_held_row_is_whole(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     store.record_binding(
@@ -176,7 +177,7 @@ def test_completion_does_nothing_once_every_held_row_is_whole(tmp_path) -> None:
     assert _held_rows(store) == {"e1": ("ws1", "pr_1")}
 
 
-def test_a_held_rows_completion_never_overwrites_a_column_already_set(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_held_rows_completion_never_overwrites_a_column_already_set(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, project_id="pr_new")
@@ -189,7 +190,7 @@ def test_a_held_rows_completion_never_overwrites_a_column_already_set(tmp_path) 
     assert _held_rows(store) == {"e1": ("ws_old", "pr_new")}
 
 
-def test_with_an_unmatched_held_row_fill_never_exceeds_the_bindings_agents(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_with_an_unmatched_held_row_fill_never_exceeds_the_bindings_agents(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     _seed_pre_revision_binding(store, "ch_old", "e9", "/elsewhere/e9")
@@ -209,7 +210,7 @@ def test_with_an_unmatched_held_row_fill_never_exceeds_the_bindings_agents(tmp_p
     assert [lease.chunk_id for lease in store.list_active_leases()] == ["ch_old"]
 
 
-def test_a_new_binding_carries_the_workspace_and_the_entrys_project(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_new_binding_carries_the_workspace_and_the_entrys_project(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0, project_id=FIXTURE_PROJECT_ID)]
@@ -221,7 +222,7 @@ def test_a_new_binding_carries_the_workspace_and_the_entrys_project(tmp_path) ->
     assert _held_rows(store) == {"e1": ("ws1", FIXTURE_PROJECT_ID)}
 
 
-def test_an_entry_naming_no_project_is_never_claimed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_entry_naming_no_project_is_never_claimed(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     hub.narrows_peek = False  # the entry reaches the runner as the hub sent it

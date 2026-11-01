@@ -48,7 +48,7 @@ def _component_class_name(component: str) -> str:
     return component
 
 
-def _document_roles(documents: Iterable[dict]) -> tuple[set[str], set[str]]:
+def _document_roles(documents: Iterable[dict[str, object]]) -> tuple[set[str], set[str]]:
     """The class names a response role reaches, and those a request role reaches, across ``documents``."""
     responses: set[str] = set()
     requests: set[str] = set()
@@ -108,7 +108,7 @@ def _with_nested(models: Iterable[type[BaseModel]]) -> set[type[BaseModel]]:
 
 
 def response_only_models(
-    documents: Iterable[dict], client_roots: Iterable[Path], index: ModelIndex
+    documents: Iterable[dict[str, object]], client_roots: Iterable[Path], index: ModelIndex
 ) -> set[type[BaseModel]]:
     documents = list(documents)
     responses, requests = _document_roles(documents)
@@ -265,11 +265,11 @@ _PLANTED_INDEX = _index(
 )
 
 
-def _document(responses: Iterable[str] = (), requests: Iterable[str] = ()) -> dict:
-    def schema(name: str) -> dict:
+def _document(responses: Iterable[str] = (), requests: Iterable[str] = ()) -> dict[str, object]:
+    def schema(name: str) -> dict[str, object]:
         return {"$ref": f"#/components/schemas/{name}"}
 
-    paths: dict[str, dict] = {}
+    paths: dict[str, dict[str, object]] = {}
     for name in responses:
         paths[f"/{name}"] = {"get": {"responses": {"200": {"content": {"application/json": {"schema": schema(name)}}}}}}
     for name in requests:
@@ -288,7 +288,9 @@ def _model(name: str) -> type[BaseModel]:
     return _PLANTED_INDEX[name][0]
 
 
-def _violations_of(documents: list[dict], roots: Iterable[Path] = (), universe: Iterable[str] = ()) -> list[str]:
+def _violations_of(
+    documents: list[dict[str, object]], roots: Iterable[Path] = (), universe: Iterable[str] = ()
+) -> list[str]:
     """The planted violations, each as ``Model.field: why``; ``universe`` defaults to every response-only model."""
     response_only = response_only_models(documents, roots, _PLANTED_INDEX)
     models = [_model(name) for name in universe] or list(response_only)

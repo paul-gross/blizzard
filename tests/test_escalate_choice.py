@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Table
@@ -58,8 +59,8 @@ class _Chunk:
         assert claim.status_code == 201, claim.text
         report_lease(hub, self.chunk_id, epoch=1, seq=1)
 
-    def complete(self, choice: str, *, epoch: int = 1, decision_id: str | None = None) -> dict:
-        body: dict = {
+    def complete(self, choice: str, *, epoch: int = 1, decision_id: str | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "choice": choice,
             "epoch": epoch,
             "runner_id": "r1",
@@ -72,7 +73,7 @@ class _Chunk:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def detail(self) -> dict:
+    def detail(self) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
     def rows(self, table: Table) -> int:

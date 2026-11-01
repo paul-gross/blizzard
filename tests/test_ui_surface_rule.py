@@ -34,7 +34,7 @@ _UNGATED = [
 ]
 
 
-def _ui(tmp_path: Path, fixture: str, at: str) -> list[dict]:
+def _ui(tmp_path: Path, fixture: str, at: str) -> list[dict[str, object]]:
     assert _VALE is not None, "vale is required here: install it (mise install) or unset BLIZZARD_REQUIRE_VALE"
     shutil.copy(_ROOT / ".vale.ini", tmp_path / ".vale.ini")
     shutil.copytree(_ROOT / "styles", tmp_path / "styles")

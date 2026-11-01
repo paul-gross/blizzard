@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -49,6 +50,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -64,11 +66,11 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100"):  # type: ignore[no-untyped-def]
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100"):
     """A build lease spawned into env e1, plus its binding. The probe decides liveness."""
     store.record_lease(
         NewLease(
@@ -103,7 +105,7 @@ class _ExitingProbe(FakeProbe):
         self.groups_alive.discard(pgid)
 
 
-def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  # type: ignore[no-untyped-def]
+def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):
     """A chunk the operator paused, still routed to us. ``status`` is overridable: the
     runner must key on the pause fact, not the derived status, since a paused+asked chunk
     derives ``waiting_on_human`` while still carrying ``pause``.
@@ -117,7 +119,7 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
     )
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
+def _running_chunk(chunk="ch_1", *, runner_id="r1"):
     """The same chunk unpaused — no ``pause`` view."""
     return ChunkState(
         chunk_id=chunk,
@@ -127,15 +129,15 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
     )
 
 
-def _closure_reasons(store, lease_id="lease_1"):  # type: ignore[no-untyped-def]
+def _closure_reasons(store: SqlAlchemyRunnerStore, lease_id="lease_1"):
     return [c.reason for c in store.list_closed_leases(10) if c.lease.lease_id == lease_id]
 
 
-def _make_ctx(store, hub, harness, probe, **kw):  # type: ignore[no-untyped-def]
+def _make_ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, harness, probe, **kw):
     return make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, **kw)
 
 
-def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
+def _pause_locally(store: SqlAlchemyRunnerStore, ctx, *, paused: bool):
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
     The twin of `tests/test_runner_paused.py`'s helper, kept local rather than imported across
@@ -154,7 +156,7 @@ def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
 # Row 11 — THE KEYSTONE: a restart into a standing pause keeps the claim.
 
 
-def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path: Path):
     """A runner restarted while one of its chunks is paused must park it, not abandon it
     (plan §0.2 B) — a status-keyed RESUME branch would drop a still-routed chunk through
     to ``Attempt.abandon`` instead."""
@@ -201,7 +203,7 @@ def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignor
     assert harness.resumed == [] and harness.spawns == [] and harness.judged == []
 
 
-def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path: Path):
     """Detach wins over pause — the ``ours`` conjunct on both pause branches. A chunk
     detached and paused is not ours to hold: the route is gone, so it is abandoned, not
     parked."""
@@ -239,7 +241,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
 # Row 9 — PULL kills and parks, and gives up nothing else.
 
 
-def test_pull_interrupts_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_interrupts_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path: Path):
     """A pause discovered on a live tick interrupts the worker and parks on that same tick —
     the inverse of an abandon, and never a SIGKILL. Each omission (release,
     closure, epoch bump, requeue) is asserted separately (plan §3.1)."""
@@ -269,7 +271,7 @@ def test_pull_interrupts_the_worker_and_parks_the_lease_keeping_everything_else(
     assert harness.spawns == [] and harness.judged == []
 
 
-def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path: Path):
     """The park is idempotent: a standing pause does not append a park row every tick —
     the loop-level twin of the store-level ``runner:one-open-pause-park-per-lease`` fence."""
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"
@@ -304,7 +306,7 @@ def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # t
 # Row 10 — REAP never reaps a pause-park, however long it stands.
 
 
-def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path: Path):
     """A chunk may sit paused for hours and cost nothing: the reap clock is stopped, and
     ADVANCE's pause-park routing keeps the dead pid from being read as a done declaration
     (D-055)."""
@@ -342,7 +344,7 @@ def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path):
 # Row 12 — a pause landing between two ticks: marked, unreconciled.
 
 
-def test_a_pause_landing_between_two_ticks_is_reconciled_on_the_next_one(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_pause_landing_between_two_ticks_is_reconciled_on_the_next_one(tmp_path: Path):
     """The operator pauses while the runner is up and mid-flight: the first tick leaves an
     unpaused, live chunk alone; the pause lands between ticks; the second tick discovers
     it on PULL's sweep."""
@@ -374,7 +376,7 @@ def test_a_pause_landing_between_two_ticks_is_reconciled_on_the_next_one(tmp_pat
 # Row 13 — resume-in-place: same lease/epoch/session, new pid, no retry.
 
 
-def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_path: Path):
     """Unpausing resumes the same session — the point of keeping the claim (D-082): same
     lease, epoch, and session, only the pid rewritten."""
     store = _store(tmp_path)
@@ -409,7 +411,7 @@ def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_p
     assert _closure_reasons(store) == []
 
 
-def test_a_lifted_chunk_pause_waits_while_the_runners_floor_holds_then_resumes_once_it_opens(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_lifted_chunk_pause_waits_while_the_runners_floor_holds_then_resumes_once_it_opens(tmp_path: Path):
     """The unpause wake is a continuation: a standing floor keeps the park asleep, and the first tick it opens
     wakes the same session with nobody acting."""
     store = _store(tmp_path)
@@ -444,7 +446,7 @@ def test_a_lifted_chunk_pause_waits_while_the_runners_floor_holds_then_resumes_o
 # Row 15 — the overlap: an answer does not un-pause a chunk.
 
 
-def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path: Path):
     """Pause dominates the ask: answering a paused chunk's question does not restart it.
     While paused, the answer sits unclaimed; when the pause lifts, the answer — not the
     unpause — resumes the session, on the following tick."""
@@ -496,7 +498,7 @@ def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path):
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_path: Path):
     """The local brake gates ``_resume_if_unpaused`` above its fact writes, not merely
     above its spawn: the ask-park's early return writes a fact before reaching the spawn,
     so a lower gate would clear the pause-park while declining to work."""
@@ -563,7 +565,7 @@ def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_
 # Row 16 — seams 11/16 both rest on the lease staying ACTIVE. Tested separately.
 
 
-def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tmp_path: Path):
     """FILL's ``_reconcile_interrupted_claims`` skips a pause-parked chunk (seam 11): the
     active lease ``_kill_and_park_paused`` leaves behind is what keeps FILL from spawning
     a worker into it while paused."""
@@ -586,7 +588,7 @@ def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tm
     assert store.latest_epoch("ch_1") == 1  # no epoch bumped out from under the pause
 
 
-def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path: Path):
     """ADVANCE's ``_advance_held_chunk`` skips a pause-parked chunk (seam 16): its active
     lease keeps it unrouted, and its killed worker is never read as a done declaration
     (D-055)."""
@@ -614,7 +616,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
 # Row 17 — pausing a chunk this runner never held.
 
 
-def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path):  # type: ignore[no-untyped-def]
+def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path: Path):
     """A paused chunk nobody holds is a pure hub-side affair: given an empty queue, the
     runner produces no park, no claim, and no error path. The hub-side half is pinned in
     ``tests/test_queue_shaping.py``."""
@@ -638,7 +640,7 @@ def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path
 # The interrupt-then-kill park: envelope recorded, survivor killed only past the budget, no waits.
 
 
-def _usage_payloads(store):  # type: ignore[no-untyped-def]
+def _usage_payloads(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
@@ -658,7 +660,7 @@ class _EnvelopeWritingProbe(_ExitingProbe):
     """A worker that answers its SIGINT the way Claude Code does: it writes its result
     envelope to its generation's stdout file, then exits."""
 
-    def __init__(self, stdout_path, **kw):  # type: ignore[no-untyped-def]
+    def __init__(self, stdout_path, **kw):
         super().__init__(**kw)
         self._stdout_path = stdout_path
 
@@ -667,7 +669,7 @@ class _EnvelopeWritingProbe(_ExitingProbe):
         super().interrupt_group(pgid)
 
 
-def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_the_resume(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_the_resume(tmp_path: Path):
     """AC1/AC3: the park is durable on the tick that interrupts, the worker is never
     SIGKILLed, and once the operator resumes, the paused generation's tokens and billed cost
     are recorded off the envelope its SIGINT let it write."""
@@ -704,7 +706,7 @@ def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_
     assert spawn_payloads[0]["cost_usd"] == 0.42
 
 
-def test_a_worker_that_ignores_its_interrupt_is_killed_only_once_the_drain_budget_passes(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_worker_that_ignores_its_interrupt_is_killed_only_once_the_drain_budget_passes(tmp_path: Path):
     """AC4/AC6: before ``parked_at + SHUTDOWN_DRAIN_DEADLINE`` the survivor is neither
     killed nor woken, even with the pause lifted; the first tick at or past it SIGKILLs
     it; and the session wakes only once nothing of the lease's is alive. No tick sleeps."""
@@ -745,7 +747,7 @@ def test_a_worker_that_ignores_its_interrupt_is_killed_only_once_the_drain_budge
     assert lease is not None and (lease.epoch, lease.session_id, lease.pid) == (1, "sess-a", 4321)
 
 
-def test_an_in_flight_elicitation_is_interrupted_and_its_judge_usage_booked_before_the_resume(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_in_flight_elicitation_is_interrupted_and_its_judge_usage_booked_before_the_resume(tmp_path: Path):
     """The park names the elicitation it interrupted; once that process has exited, the
     teardown books its ``judge`` usage against the paused generation and clears the
     record — ahead of the pause-lifted gate — and resume then wakes the worker."""
@@ -783,7 +785,7 @@ def test_an_in_flight_elicitation_is_interrupted_and_its_judge_usage_booked_befo
     assert store.pause_parked_lease_ids() == set()
 
 
-def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_teardown(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_teardown(tmp_path: Path):
     """AC5: a park that named no elicitation owns none — the usage-limit judge park's
     deliberately standing record is neither signalled nor cleared while it stands."""
     store = _store(tmp_path)
@@ -813,8 +815,8 @@ def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_tear
 
 
 @pytest.mark.parametrize(("session", "resume_from"), [(None, None), (SessionMode.RESUME, "sess-a")])
-def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(  # type: ignore[no-untyped-def]
-    tmp_path, session, resume_from
+def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(
+    tmp_path: Path, session, resume_from
 ):
     """A paused chunk starts no worker on the apply arm: the binding is held, and FILL's adopt of
     the running chunk at the runner's own epoch enters the node once the pause lifts — through the
@@ -846,7 +848,7 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
 # The spawn gate reads the chunk's own pause: a paused chunk starts no worker by any path.
 
 
-def _seed_orphan_lease(store, *, retries_max=2):  # type: ignore[no-untyped-def]
+def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max=2):
     """A lease minted but never spawned (no pid/session) — REAP's orphan case."""
     store.record_lease(
         NewLease(
@@ -863,7 +865,7 @@ def _seed_orphan_lease(store, *, retries_max=2):  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _suppressed_chunk_paused(logs, *, via):  # type: ignore[no-untyped-def]
+def _suppressed_chunk_paused(logs, *, via):
     return [
         entry
         for entry in logs
@@ -871,7 +873,7 @@ def _suppressed_chunk_paused(logs, *, via):  # type: ignore[no-untyped-def]
     ]
 
 
-def test_a_reaped_orphan_on_a_paused_chunk_is_not_respawned_until_the_chunk_resumes(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_reaped_orphan_on_a_paused_chunk_is_not_respawned_until_the_chunk_resumes(tmp_path: Path):
     store = _store(tmp_path)
     _seed_orphan_lease(store)
     hub = FakeHub()
@@ -898,7 +900,7 @@ def test_a_reaped_orphan_on_a_paused_chunk_is_not_respawned_until_the_chunk_resu
     assert lease is not None and lease.pid == 202
 
 
-def test_a_rejected_completion_on_a_paused_chunk_requeues_without_a_respawn(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_rejected_completion_on_a_paused_chunk_requeues_without_a_respawn(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -922,7 +924,7 @@ def test_a_rejected_completion_on_a_paused_chunk_requeues_without_a_respawn(tmp_
     assert _suppressed_chunk_paused(logs, via="requeue")
 
 
-def test_an_unreadable_chunk_view_does_not_suppress_a_spawn(tmp_path):  # type: ignore[no-untyped-def]
+def test_an_unreadable_chunk_view_does_not_suppress_a_spawn(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()

@@ -76,7 +76,7 @@ def _engine(root: Path) -> sa.Engine:
     return create_engine_from_url(load_host_config(root).db_url)
 
 
-def _ingest(hub: FakeInitHub, hosts: TwoHosts, *extra: str, source: Path | None = None):  # type: ignore[no-untyped-def]
+def _ingest(hub: FakeInitHub, hosts: TwoHosts, *extra: str, source: Path | None = None):
     return run(hub, "ingest", str(source or hosts.there), "--runner", MOVING, "--dir", str(hosts.here), *extra)
 
 
@@ -663,7 +663,7 @@ def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
 
 
 class _Clock:
-    def now(self):  # type: ignore[no-untyped-def]
+    def now(self):
         return T0
 
 

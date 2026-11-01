@@ -8,11 +8,12 @@ cleared intent) or falls through unchanged (`auto` with no destination-name matc
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -213,13 +214,13 @@ nodes:
 """
 
 
-def _mint(hub, yaml: str) -> str:  # type: ignore[no-untyped-def]
+def _mint(hub: HubHarness, yaml: str) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": yaml})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]
 
 
-def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _setup(hub: HubHarness, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:
     """Mint the source graph, ingest + promote + claim a chunk on it. Returns
     ``(chunk_id, build_node_id)``."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": src_yaml}).status_code == 201
@@ -233,7 +234,7 @@ def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  # type: ignor
     return chunk_id, node_id
 
 
-def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx2.Response:  # type: ignore[no-untyped-def]
+def _set_intent(hub: HubHarness, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx2.Response:
     body = {"to_graph": to_graph}
     if node is not None:
         body["node"] = node
@@ -242,8 +243,14 @@ def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -
     return resp
 
 
-def _complete(  # type: ignore[no-untyped-def]
-    hub, chunk_id: str, node_id: str, *, choice: str = "pass", epoch: int = 1, artifacts: list | None = None
+def _complete(
+    hub: HubHarness,
+    chunk_id: str,
+    node_id: str,
+    *,
+    choice: str = "pass",
+    epoch: int = 1,
+    artifacts: list[dict[str, Any]] | None = None,
 ) -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",

@@ -52,7 +52,7 @@ def _record(**overrides: object) -> TranscriptSlice:
     return TranscriptSlice(**values)  # type: ignore[arg-type]
 
 
-def _migrated_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _migrated_engine(tmp_path: Path):
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     return create_engine_from_url(db_url)

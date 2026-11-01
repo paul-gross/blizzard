@@ -17,7 +17,7 @@ from tests.support import added_runner, build_hub, ingest, seed_runner
 pytestmark = pytest.mark.component
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
@@ -37,7 +37,7 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     release_write = threading.Event()
     real_record_deleted_row = work_item_store_module.record_deleted_row
 
-    def _blocking_record_deleted_row(conn, chunk_id, *, by, at):  # type: ignore[no-untyped-def]
+    def _blocking_record_deleted_row(conn, chunk_id, *, by, at):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the delete's write"
         return real_record_deleted_row(conn, chunk_id, by=by, at=at)

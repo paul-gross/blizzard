@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.component]
 _BEFORE = "20260721_1100_hub_auth_identity_spine"  # the head just before this revision
 
 
-def _upgrade_existing_store_to_head(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _upgrade_existing_store_to_head(tmp_path: Path):
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)

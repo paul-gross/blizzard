@@ -8,6 +8,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -73,7 +74,7 @@ def _setup(tmp_path: Path) -> tuple[UsageRecorder, EventBroker, Lease]:
     return recorder, events, lease
 
 
-def _rows(tmp_path: Path) -> list[sa.Row]:
+def _rows(tmp_path: Path) -> list[sa.Row[Any]]:
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         return list(

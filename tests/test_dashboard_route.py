@@ -30,6 +30,7 @@ from tests.runner_fakes import (
     FakeHarness,
     FakeHarnessHealth,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_host_stores,
     make_store,
     make_stores,
@@ -45,7 +46,7 @@ _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1
 
 def _app_with_status(
     tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_proxy_client: httpx2.Client | None = None
-) -> tuple[TestClient, object]:  # type: ignore[type-arg]
+) -> tuple[TestClient, SqlAlchemyRunnerStore]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
     harness = FakeHarness(
@@ -80,7 +81,7 @@ def _app_with_status(
     return runner_client(app), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -95,7 +96,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
 
 
-def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_all_sections(store: SqlAlchemyRunnerStore) -> None:
     """Puts real data behind each of the seven local sections."""
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     _seed_lease(store)

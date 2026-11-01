@@ -7,6 +7,7 @@ through the proxy, and surviving a restart is ``blizzard:compose-smoke``
 from __future__ import annotations
 
 import tomllib
+from typing import Any
 
 import pytest
 import yaml
@@ -19,11 +20,11 @@ _REPO_ROOT = repo_root()
 _DOCKER_DIR = _REPO_ROOT / "packaging" / "docker"
 
 
-def _compose() -> dict:
+def _compose() -> dict[str, Any]:
     return yaml.safe_load((_DOCKER_DIR / "compose.yaml").read_text())
 
 
-def _hub_config_toml() -> dict:
+def _hub_config_toml() -> dict[str, Any]:
     return tomllib.loads((_DOCKER_DIR / "blizzard-hub.toml").read_text())
 
 

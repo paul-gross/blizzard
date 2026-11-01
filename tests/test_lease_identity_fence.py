@@ -306,7 +306,7 @@ def _minted(tmp_path: Path, *, lease_id: str) -> tuple[HubHarness, str, dict[str
     return hub, chunk_id, nodes
 
 
-def _complete(hub: HubHarness, chunk_id: str, node_id: str, *, lease_id: str | None) -> dict:
+def _complete(hub: HubHarness, chunk_id: str, node_id: str, *, lease_id: str | None) -> dict[str, Any]:
     body: dict[str, object] = {"choice": "pass", "epoch": 1, "runner_id": "rA", "from_node_id": node_id}
     if lease_id is not None:
         body["lease_id"] = lease_id

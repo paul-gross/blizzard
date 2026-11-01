@@ -260,7 +260,7 @@ def test_cli_status_and_replay_are_pure_clients(tmp_path: Path, monkeypatch: pyt
     def reach(
         verb: str, directory: str, runner_url: str | None, trace: object, selector: str | None = None
     ) -> daemon_module.RunnerDaemon:
-        return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")  # type: ignore[arg-type]
+        return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")
 
     monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
     runner.clock.advance(timedelta(seconds=1))
@@ -284,7 +284,7 @@ def _reach_the_runner(runner: _Runner, tmp_path: Path, monkeypatch: pytest.Monke
     def reach(
         verb: str, directory: str, runner_url: str | None, trace: object, selector: str | None = None
     ) -> daemon_module.RunnerDaemon:
-        return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")  # type: ignore[arg-type]
+        return daemon_module.RunnerDaemon(verb, _client(runner, tmp_path), "test")
 
     monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
 
@@ -370,7 +370,7 @@ def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
     def reach(
         verb: str, directory: str, runner_url: str | None, trace: object, selector: str | None = None
     ) -> daemon_module.RunnerDaemon:
-        return daemon_module.RunnerDaemon(verb, client, "test")  # type: ignore[arg-type]
+        return daemon_module.RunnerDaemon(verb, client, "test")
 
     monkeypatch.setattr(daemon_module.RunnerDaemon, "reach", staticmethod(reach))
     monkeypatch.setattr(client, "post", post)

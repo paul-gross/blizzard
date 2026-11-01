@@ -10,6 +10,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -86,7 +87,7 @@ def _rows_of(hub: HubHarness, tenant: TenantId) -> dict[str, int]:
     return {name: n for name, n in counts.items() if n}
 
 
-def _deletions(hub: HubHarness) -> list[sa.Row]:
+def _deletions(hub: HubHarness) -> list[sa.Row[Any]]:
     with hub.engine.connect() as conn:
         return list(conn.execute(sa.select(schema.tenant_deletions)).all())
 

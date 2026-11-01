@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ _CSS_IMPORT = re.compile(r"""^import\s+['"]([^'"]+\.css)['"];?\s*$""", re.MULTIL
 _COMMENT_LINE = re.compile(r"^\s*/\*.*\*/\s*$", re.MULTILINE)
 
 
-def _fleet_targets() -> dict:
+def _fleet_targets() -> dict[str, Any]:
     project = json.loads((_WEB / "angular.json").read_text())["projects"]["fleet"]
     return project.get("architect") or project["targets"]
 

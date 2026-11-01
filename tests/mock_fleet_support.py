@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -129,7 +130,7 @@ BUILD_SCRIPT = scripted_build_prompt(
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 
-def transcript_segment_turn(index: int, kind: str, text: str) -> dict:
+def transcript_segment_turn(index: int, kind: str, text: str) -> dict[str, Any]:
     """One ``TurnSegmentView`` as the wire carries it, at its defaults."""
     return {
         "index": index,
@@ -149,8 +150,8 @@ def transcript_segment_record(
     seq: int,
     node_id: str = "nd_build",
     epoch: int = 1,
-    turns: list[dict] | None = None,
-) -> dict:
+    turns: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """One final ``TranscriptSegmentRecord`` on ``(chunk_id, node_id, epoch)``'s lane —
     a single ``asst`` turn unless ``turns`` says otherwise."""
     carried = turns if turns is not None else [transcript_segment_turn(0, "asst", "hi")]
@@ -170,7 +171,7 @@ def transcript_segment_record(
     }
 
 
-def mock_hub_chunk_spec(work_ref: str) -> dict:
+def mock_hub_chunk_spec(work_ref: str) -> dict[str, Any]:
     """A scripted build -> deliver chunk the mock hub serves to a real runner."""
     return {
         "graph_id": "gr_service",

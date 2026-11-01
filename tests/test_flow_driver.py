@@ -147,7 +147,7 @@ _REPO = "acme/widget"
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         self.action = _HeldLanding()
-        actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])  # type: ignore[list-item]
+        actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])
         self.hub = build_hub(tmp_path, actions=actions)
         self.tenant = default_tenant(self.hub.engine)
         self.driver = self.hub.flow_driver
@@ -186,7 +186,7 @@ class _World:
         report_lease(hub, chunk_id, epoch=1, seq=1)
         return chunk_id, claim.json()["envelope"]["node"]["node_id"]
 
-    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO) -> dict:
+    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{chunk_id}/completions",
             json={
@@ -210,7 +210,7 @@ class _World:
         assert self.detail(chunk_id)["status"] == "delivering"
         return chunk_id
 
-    def detail(self, chunk_id: str) -> dict:
+    def detail(self, chunk_id: str) -> dict[str, Any]:
         return self.hub.client.get(f"/api/chunks/{chunk_id}").json()
 
     def submissions(self, chunk_id: str) -> list[Submission]:
@@ -242,7 +242,7 @@ class _World:
                 ).scalars()
             )
 
-    def count(self, table) -> int:  # type: ignore[no-untyped-def]
+    def count(self, table) -> int:
         with self.hub.engine.connect() as conn:
             return int(conn.execute(hub_scoped(select(func.count()).select_from(table))).scalar() or 0)
 
@@ -639,7 +639,7 @@ def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_th
 # --- forge budget notices -----------------------------------------------------------------------------------------
 
 
-def _budget_events(world: _World) -> list[tuple[str, str, dict]]:
+def _budget_events(world: _World) -> list[tuple[str, str, dict[str, Any]]]:
     with world.hub.engine.connect() as conn:
         rows = conn.execute(
             hub_scoped(
@@ -755,7 +755,7 @@ def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry
     migrations.upgrade("head")
 
     action = _HeldLanding()
-    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])  # type: ignore[list-item]
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])
     reopened = build_hub(tmp_path, actions=actions)
     driver = reopened.flow_driver
     driver.recover_turns(default_tenant(reopened.engine))
@@ -840,7 +840,7 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
     world.complete(sound, build_sound)
     submit = FlowLineReconciler._submit
 
-    def flaky(self: FlowLineReconciler, standing):  # type: ignore[no-untyped-def]
+    def flaky(self: FlowLineReconciler, standing):
         if standing.chunk.chunk_id == broken:
             raise RuntimeError("unreadable visit")
         return submit(self, standing)

@@ -19,7 +19,7 @@ from tests.support import build_hub, ingest
 pytestmark = pytest.mark.component
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
@@ -35,12 +35,12 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
     work_refs = cast(IWriteChunkWorkRefsRepository, hub.services.chunks.work_refs)
     real_add_work_refs_locked = work_refs.add_work_refs_locked
 
-    def _blocking_add_work_refs_locked(handle, chunk_id, pointers, *, at):  # type: ignore[no-untyped-def]
+    def _blocking_add_work_refs_locked(handle, chunk_id, pointers, *, at):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
         return real_add_work_refs_locked(handle, chunk_id, pointers, at=at)
 
-    work_refs.add_work_refs_locked = _blocking_add_work_refs_locked  # type: ignore[method-assign]
+    work_refs.add_work_refs_locked = _blocking_add_work_refs_locked
 
     group_result: dict[str, object] = {}
 

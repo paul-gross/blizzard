@@ -35,7 +35,7 @@ class _FakeResponse:
 
 
 class _RejectingResponse:
-    def __init__(self, detail: dict | None = None) -> None:
+    def __init__(self, detail: dict[str, object] | None = None) -> None:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
@@ -62,12 +62,16 @@ _ARTIFACTS_PAYLOAD = [
 ]
 
 
-def _fake_get_by_suffix(routes: dict[str, _FakeResponse], calls: list[tuple[str, dict, dict | None]] | None = None):
+def _fake_get_by_suffix(
+    routes: dict[str, _FakeResponse], calls: list[tuple[str, dict[str, object], dict[str, object] | None]] | None = None
+):
     """A stub ``httpx2.get`` that answers by the request URL's trailing path segment — ``list``
     now makes two calls (``artifacts`` then ``attachments``), so a single canned response no
     longer distinguishes them."""
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object] | None = None, **_: object
+    ):
         if calls is not None:
             calls.append((url, headers, params))
         return routes[url.rsplit("/", 1)[-1]]
@@ -77,7 +81,7 @@ def _fake_get_by_suffix(routes: dict[str, _FakeResponse], calls: list[tuple[str,
 
 @pytest.mark.unit
 def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token() -> None:
-    calls: list[tuple[str, dict, dict | None]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object] | None]] = []
     routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
 
     bound = bind_stubs(get=_fake_get_by_suffix(routes, calls))
@@ -174,7 +178,9 @@ def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypat
     down a `list` call whose primary `artifacts` read already succeeded: the staged half is
     omitted with a stderr notice and the rest is listed."""
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object] | None = None, **_: object
+    ):
         if url.endswith("/attachments"):
             return _RejectingResponse()
         return _FakeResponse(payload=_ARTIFACTS_PAYLOAD)
@@ -191,9 +197,9 @@ def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypat
 
 @pytest.mark.unit
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict[str, object], timeout: float, **_: object) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse(payload=[])
 
@@ -207,9 +213,11 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.unit
 def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(payload=[])
 
@@ -223,9 +231,11 @@ def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.unit
 def test_list_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(payload=[])
 
@@ -238,10 +248,12 @@ def test_list_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: 
 
 @pytest.mark.unit
 def test_list_scope_node_still_fetches_staged(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict | None]] = []
+    calls: list[tuple[str, dict[str, object] | None]] = []
     routes = {"artifacts": _FakeResponse(payload=[]), "attachments": _FakeResponse(payload=[])}
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, params))
         return routes[url.rsplit("/", 1)[-1]]
 
@@ -256,10 +268,12 @@ def test_list_scope_node_still_fetches_staged(monkeypatch: pytest.MonkeyPatch) -
 def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare ``list`` sends no ``scope`` at all — never an empty string a route would have
     to special-case — so the route applies no scope filter."""
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
     routes = {"artifacts": _FakeResponse(payload=[]), "attachments": _FakeResponse(payload=[])}
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return routes[url.rsplit("/", 1)[-1]]
 
@@ -294,9 +308,11 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict | None]] = []
+    calls: list[tuple[str, dict[str, object] | None]] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, params))
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
@@ -313,7 +329,9 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
     """A ``merged/<repo>`` name is requested with its slash intact in the URL path."""
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(text='{"name": "merged/blizzard", "kind": "asset", "content": "hi"}')
 
@@ -328,7 +346,9 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
 def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(text='{"name": "a b%c?d", "kind": "asset", "content": "hi"}')
 
@@ -341,9 +361,11 @@ def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.Monke
 
 @pytest.mark.unit
 def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text='{"name": "retrospective", "kind": "asset", "content": "hi"}')
 
@@ -356,9 +378,11 @@ def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 def test_get_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text='{"scope": "graph", "name": "docket", "kind": "asset", "content": "hi"}')
 
@@ -371,9 +395,11 @@ def test_get_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_get_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(
             text='{"scope": "system", "name": "garden/finding-format", "kind": "asset", "content": "hi"}'
@@ -392,9 +418,11 @@ def test_get_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: p
 def test_get_node_and_scope_flags_both_land_in_params(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both disambiguators wired independently — a fix that carries only one of the two
     flags through would still pass a test that omits the other."""
-    calls: list[dict | None] = []
+    calls: list[dict[str, object] | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text='{"scope": "node", "name": "zulu", "kind": "asset", "content": "hi"}')
 
@@ -409,7 +437,9 @@ def test_get_node_and_scope_flags_both_land_in_params(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
 
     bound = bind_stubs(get=fake_get)
@@ -421,7 +451,9 @@ def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: py
 
 @pytest.mark.unit
 def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         return _FakeResponse(
             payload={"name": "build-branch", "kind": "git_commit", "commit_hash": "abc123", "content": None}
         )
@@ -435,7 +467,9 @@ def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.unit
 def test_get_content_prints_an_unknown_kind_that_carries_content() -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": "the plan text"})
 
     bound = bind_stubs(get=fake_get)
@@ -447,7 +481,9 @@ def test_get_content_prints_an_unknown_kind_that_carries_content() -> None:
 
 @pytest.mark.unit
 def test_get_content_refuses_an_unknown_kind_without_content_naming_it() -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": None})
 
     bound = bind_stubs(get=fake_get)
@@ -485,7 +521,9 @@ def test_get_names_artifact_staged_when_the_404d_name_is_staged(monkeypatch: pyt
     404 on its own work — the not-found path must name `artifact staged`, not leave the
     worker to guess it exists from `--help`."""
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object] | None = None, **_: object
+    ):
         if url.endswith("/attachments"):
             return _FakeResponse(payload=[{"name": "plan", "content": "the plan text"}])
         return _NotFoundResponse()
@@ -501,7 +539,9 @@ def test_get_names_artifact_staged_when_the_404d_name_is_staged(monkeypatch: pyt
 
 @pytest.mark.unit
 def test_get_404_with_no_staged_match_keeps_the_plain_not_found_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object] | None = None, **_: object
+    ):
         if url.endswith("/attachments"):
             return _FakeResponse(payload=[])
         return _NotFoundResponse()
@@ -520,7 +560,9 @@ def test_get_ambiguous_409_is_not_treated_as_a_staged_lookup(monkeypatch: pytest
     staged set even when a same-named submission happens to be staged elsewhere."""
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object] | None = None, **_: object
+    ):
         calls.append(url)
         return _RejectingResponse({"detail": "artifact 'retrospective' is ambiguous"})
 
@@ -537,7 +579,9 @@ def test_get_ambiguous_409_is_not_treated_as_a_staged_lookup(monkeypatch: pytest
 def test_get_name_option_is_an_alias_for_the_positional_name(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
@@ -598,9 +642,11 @@ def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes() -> None:
 
 @pytest.mark.unit
 def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict, dict]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 
@@ -719,9 +765,9 @@ def test_create_accepts_explicit_node_scope() -> None:
 
 @pytest.mark.unit
 def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict[str, object], timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, headers))
         return _FakeResponse(payload=[{"name": "review-findings", "content": "looks good"}])
 
@@ -798,9 +844,11 @@ def test_staged_refuses_system_scope_without_fetching(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict, dict]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 
@@ -832,7 +880,9 @@ def test_attach_alias_is_hidden_but_the_artifact_group_is_listed() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("alias", ["show", "read"])
 def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str) -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
+    ) -> _FakeResponse:
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)

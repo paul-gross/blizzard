@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import httpx2
 import pytest
@@ -152,7 +152,7 @@ def _window(hub: HubHarness, **extra: object) -> dict[str, object]:
     return {"since": _T0.isoformat(), "until": until.isoformat(), **extra}
 
 
-def _cursor_rows(hub: HubHarness) -> list[tuple]:  # type: ignore[type-arg]
+def _cursor_rows(hub: HubHarness) -> list[tuple[Any, ...]]:
     with hub.engine.connect() as conn:
         return [
             tuple(r)
@@ -264,12 +264,12 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
     accepted = len(exporter.batches)
     original = exporter.export
 
-    def second_fails(spans):  # type: ignore[no-untyped-def]
+    def second_fails(spans):
         if exporter.attempts > accepted:
             exporter.fail, exporter.raises = mode == "refuses", mode == "raises"
         return original(spans)
 
-    exporter.export = second_fails  # type: ignore[method-assign]
+    exporter.export = second_fails
     resp = hub.client.post("/api/traces/replay", json=_window(hub))
 
     assert resp.status_code == 502

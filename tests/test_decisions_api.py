@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -68,7 +68,7 @@ _BUILD_ARTIFACT = {
 }
 
 
-def _open_decision(hub) -> str:  # type: ignore[no-untyped-def]
+def _open_decision(hub: HubHarness) -> str:
     """Mint the gated graph, ingest+promote+claim+lease a chunk, and drive it to an
     open decision; return the decision id."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})

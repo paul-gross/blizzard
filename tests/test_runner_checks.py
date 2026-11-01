@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -43,7 +44,7 @@ def _prompt(results: list[ExecutedCheck]) -> JudgementPrompt:
 
 
 def _seed_exited_lease(
-    store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int, workdir: str = "/ws/e1"
+    store: SqlAlchemyRunnerStore, *, lease_id: str, chunk_id: str, node_id: str, epoch: int, workdir: str = "/ws/e1"
 ) -> None:
     store.record_lease(
         NewLease(
@@ -194,7 +195,7 @@ def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp
 # --- Unit: the check step in isolation, faked seam -----------------------------
 
 
-def _ctx_for_unit(store, *, check_runner: FakeCheckRunner, clock: FixedClock):
+def _ctx_for_unit(store: SqlAlchemyRunnerStore, *, check_runner: FakeCheckRunner, clock: FixedClock):
     return make_context(
         store,
         hub=FakeHub(),
@@ -206,7 +207,7 @@ def _ctx_for_unit(store, *, check_runner: FakeCheckRunner, clock: FixedClock):
     )
 
 
-def _lease_and_bindings(store, *, checks_cwd=None, checks_timeout=None):
+def _lease_and_bindings(store: SqlAlchemyRunnerStore, *, checks_cwd=None, checks_timeout=None):
     _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1, workdir="/ws/e1")
     lease = store.lease("lease_b")
     assert lease is not None

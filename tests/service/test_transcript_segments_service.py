@@ -22,7 +22,7 @@ from tests.support import free_port
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _record(chunk_id: str, *, seq: int) -> dict:
+def _record(chunk_id: str, *, seq: int) -> dict[str, object]:
     return transcript_segment_record(chunk_id, seq=seq)
 
 

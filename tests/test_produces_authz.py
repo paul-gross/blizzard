@@ -13,7 +13,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -53,7 +53,7 @@ nodes:
 """
 
 
-def _ingest(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _ingest(hub: HubHarness) -> tuple[str, str]:
     """Mint the graph, ingest+promote+claim a chunk; return (chunk_id, build node_id)."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML})
     assert graph.status_code == 201, graph.text
@@ -70,13 +70,13 @@ def _ingest(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
 
 
 def _submit(
-    hub,  # type: ignore[no-untyped-def]
+    hub: HubHarness,
     chunk_id: str,
     node_id: str,
     *,
     epoch: int = 1,
     runner_id: str = "r1",
-    artifacts: list[dict] | None = None,
+    artifacts: list[dict[str, object]] | None = None,
 ) -> httpx2.Response:
     body = {
         "choice": "pass",
@@ -155,7 +155,7 @@ def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(t
     assert retried.json()["outcome"] != "failure"
 
 
-def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx2.Response:  # type: ignore[no-untyped-def]
+def _decide(hub: HubHarness, chunk_id: str, node_id: str, *, artifacts: list[dict[str, object]]) -> httpx2.Response:
     body = {"from_node_id": node_id, "epoch": 1, "runner_id": "r1", "artifacts": artifacts}
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
 

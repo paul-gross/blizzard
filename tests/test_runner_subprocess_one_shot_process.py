@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -53,7 +54,7 @@ def test_a_hung_child_is_killed_and_reported_as_a_timeout() -> None:
     assert result.timed_out is True
 
 
-def test_a_timeout_terminates_the_whole_process_group_gracefully(tmp_path) -> None:
+def test_a_timeout_terminates_the_whole_process_group_gracefully(tmp_path: Path) -> None:
     marker = tmp_path / "grandchild-pid"
     script = (
         "import os, signal, subprocess, sys, time\n"

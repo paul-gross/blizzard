@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner, Result
@@ -31,10 +32,10 @@ _EMPTY = {
 _WINDOW = "src/blizzard/wire/window.toml"
 
 
-def _spec(*, route: bool, deprecated: bool = False) -> dict:
+def _spec(*, route: bool, deprecated: bool = False) -> dict[str, Any]:
     document = json.loads(json.dumps(_EMPTY["openapi/hub.openapi.json"]))
     if route:
-        operation: dict = {"responses": {"204": {"description": "ok"}}}
+        operation: dict[str, Any] = {"responses": {"204": {"description": "ok"}}}
         if deprecated:
             operation["deprecated"] = True
         document["paths"][_ROUTE] = {"get": operation}
@@ -60,10 +61,10 @@ class _Repo:
         *,
         floor: str = "0.2",
         opening: str | None = None,
-        hub: dict | None = None,
+        hub: dict[str, Any] | None = None,
         drop: tuple[str, ...] = (),
         notes: dict[str, str] | None = None,
-        store: dict | None = None,
+        store: dict[str, Any] | None = None,
         **extra,
     ) -> str:
         documents = {**_EMPTY, "openapi/hub.openapi.json": hub or _EMPTY["openapi/hub.openapi.json"], **extra}
@@ -414,7 +415,7 @@ def test_a_note_already_at_the_base_declares_nothing(tmp_path: Path, monkeypatch
 # --- tag mode -----------------------------------------------------------------------------------
 
 
-def _breaks_file(repo: _Repo) -> dict:
+def _breaks_file(repo: _Repo) -> dict[str, Any]:
     return json.loads((repo.root / "compat-breaks.json").read_text())
 
 
@@ -605,10 +606,10 @@ _STATE_GAIN = ("wire", "State", "response enum gained value(s) ['paused']")
 _ALLOWANCES = "contracts/compat/allowances.toml"
 
 
-def _enum_spec(values: list[str], *, marked: bool = False) -> dict:
+def _enum_spec(values: list[str], *, marked: bool = False) -> dict[str, Any]:
     """A wire route answering a ``Widget`` whose ``state`` is the ``State`` enum, open-marked or not."""
     document = json.loads(json.dumps(_EMPTY["openapi/hub.openapi.json"]))
-    position: dict = {"$ref": "#/components/schemas/State", **({"x-blizzard-open": True} if marked else {})}
+    position: dict[str, Any] = {"$ref": "#/components/schemas/State", **({"x-blizzard-open": True} if marked else {})}
     document["paths"][_ROUTE] = {
         "get": {
             "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Widget"}}}}}

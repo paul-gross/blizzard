@@ -93,7 +93,9 @@ def test_guide_command_refuses_unretired_and_prints_a_completed_line(
     assert result.output.index("Old API.") < result.output.index("Gone.")
 
 
-def test_pending_removal_completes_line_without_changing_released_schedule(tmp_path: Path, monkeypatch) -> None:
+def test_pending_removal_completes_line_without_changing_released_schedule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (tmp_path / "changes" / "1.9.0").mkdir(parents=True)
     (tmp_path / "changes" / "unreleased").mkdir()
     (tmp_path / "changes" / "1.9.0" / "old.md").write_text(_file("deprecated", "Old API.", **{"removes-in": "2"}))
@@ -115,7 +117,9 @@ def test_pending_removal_completes_line_without_changing_released_schedule(tmp_p
     assert "Old API." in CliRunner().invoke(main, ["guide", "2"]).output
 
 
-def test_guide_refuses_only_when_due_has_neither_released_nor_pending_removal(tmp_path: Path, monkeypatch) -> None:
+def test_guide_refuses_only_when_due_has_neither_released_nor_pending_removal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (tmp_path / "changes" / "1.9.0").mkdir(parents=True)
     (tmp_path / "changes" / "2.1.0").mkdir()
     (tmp_path / "changes" / "unreleased").mkdir()

@@ -9,19 +9,20 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
-from tests.support import build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
+from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
 from tests.test_fleet_auth import _bearer, _seed_enrolled
 
 pytestmark = pytest.mark.component
 
 
-def _activity(hub, **params) -> list[dict]:  # type: ignore[no-untyped-def]
+def _activity(hub: HubHarness, **params) -> list[dict[str, Any]]:
     resp = hub.client.get("/api/activity", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["activity"]

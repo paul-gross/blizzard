@@ -629,16 +629,16 @@ def test_planted_content_never_reaches_a_span() -> None:
                 ParkFact,
                 {"id": 1, "question_id": "q1", "parked_at": fx.at(20), "question": question, "options": "[]"},
             ),
-        ),  # type: ignore[arg-type]
+        ),
         check_results=(
             _load(
                 CheckResultFact,
                 {"id": 1, "epoch": fx.EPOCH, "passed": False, "command": command, "output_tail": output},
             ),
-        ),  # type: ignore[arg-type]
+        ),
         takeovers=(
             _load(TakeoverFact, {"takeover_id": "tko_1", "opened_at": fx.at(80), "workdir": workdir, "pid": 4242}),
-        ),  # type: ignore[arg-type]
+        ),
     )
     spans = assemble_lease(facts)
     rendered = repr([(s.name, s.attributes, [(e.name, e.attributes) for e in s.events]) for s in spans])

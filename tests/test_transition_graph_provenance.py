@@ -64,7 +64,7 @@ class _GraphLookup:
     def __init__(self, by_id: dict[str, Graph]) -> None:
         self._by_id = by_id
 
-    def load_graph_summaries(self, graph_ids):  # type: ignore[no-untyped-def]
+    def load_graph_summaries(self, graph_ids):
         return {
             graph_id: GraphSummary(
                 graph_id=graph.graph_id, name=graph.name, entry_node_id=graph.entry_node_id, created_at=graph.created_at
@@ -73,7 +73,7 @@ class _GraphLookup:
             if (graph := self._by_id.get(graph_id)) is not None
         }
 
-    def load_node_names(self, graph_ids):  # type: ignore[no-untyped-def]
+    def load_node_names(self, graph_ids):
         return {
             graph_id: {node.node_id: node.name for node in graph.nodes}
             for graph_id in graph_ids

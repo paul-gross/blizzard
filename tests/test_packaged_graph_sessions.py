@@ -22,7 +22,7 @@ _GRAPHS_ROOT = repo_root() / "src" / "blizzard" / "hub" / "graphs"
 _PACKAGED = ("advanced-development-workflow", "default", "basic-development-workflow")
 
 
-def _doc(name: str):  # type: ignore[no-untyped-def]
+def _doc(name: str):
     # Through the loader, as `graph sync` reads it: a raw parse would leave every file
     # reference unresolved, which is not a shape the hub ever mints from.
     return GraphFile(_GRAPHS_ROOT / name / "graph.yaml").doc
@@ -107,7 +107,7 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
-def _choice(doc, node: str, choice: str):  # type: ignore[no-untyped-def]
+def _choice(doc, node: str, choice: str):
     found = doc.node(node)
     assert found is not None and found.judgement is not None
     return next(c for c in found.judgement.choices if c.name == choice)
@@ -162,7 +162,7 @@ def test_adv_dwf_routes_verify_pass_straight_to_review() -> None:
     ],
     ids=_PACKAGED,
 )
-def test_each_tuned_graphs_node_continuity_is_what_the_tuning_intended(graph: str, expected: dict) -> None:
+def test_each_tuned_graphs_node_continuity_is_what_the_tuning_intended(graph: str, expected: dict[str, object]) -> None:
     doc = _doc(graph)
     actual = {name: (n.session, n.session_source) for name in expected if (n := doc.node(name)) is not None}
     assert actual == expected

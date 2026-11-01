@@ -182,7 +182,7 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
 
 def _push_event_fact(
     hub: HubHarness, *, kind: str, severity: str, message: str = "message", chunk_ids: tuple[str, ...] = ()
-) -> dict:
+) -> dict[str, object]:
     payload = {"severity": severity, "kind": kind, "message": message}
     resp = hub.client.post(
         "/api/fleet/events",

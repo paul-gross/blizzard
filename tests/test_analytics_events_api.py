@@ -11,7 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from tests.support import build_hub, seed_session, seed_user
+from tests.support import HubHarness, build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -35,7 +35,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str | None = None) -> dict:
+def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str | None = None) -> dict[str, object]:
     return {
         "index": index,
         "kind": "tool",
@@ -59,14 +59,14 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
 def _record(
     chunk_id: str,
     *,
-    turns: list[dict],
+    turns: list[dict[str, object]],
     node_id: str = "nd_build",
     segment_id: str = "sg_1",
     harness_id: str | None = None,
     harness_version: str | None = "claude-code-1.0",
     model: str | None = None,
     effort: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     return {
         "seq": 1,
         "segment_id": segment_id,
@@ -86,13 +86,13 @@ def _record(
     }
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  # type: ignore[no-untyped-def]
+def _ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])
 
 
-def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seeded_hub(tmp_path: Path):
     """A contributor session, one chunk carrying a file_read/skill_invocation/agent_spawn
     triad derived and stored, ready for the routes' own auth/filter/paging assertions."""
     hub = build_hub(tmp_path, auth_mode="oauth")

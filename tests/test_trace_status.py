@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,7 +38,7 @@ def _hub(
     return hub, exporter
 
 
-def _status(hub: HubHarness) -> dict:  # type: ignore[type-arg]
+def _status(hub: HubHarness) -> dict[str, Any]:
     resp = hub.client.get("/api/traces/status")
     assert resp.status_code == 200, resp.text
     return resp.json()

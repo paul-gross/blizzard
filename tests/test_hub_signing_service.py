@@ -33,7 +33,7 @@ def test_sign_and_verify_round_trip(tmp_path: Path) -> None:
     jwks = service.public_jwks()
     matching = [k for k in _jwks_keys(jwks) if k["kid"] == kid]
     assert len(matching) == 1
-    public_key = RSAAlgorithm.from_jwk(matching[0])  # type: ignore[arg-type]
+    public_key = RSAAlgorithm.from_jwk(matching[0])
     claims = jwt.decode(
         token,
         key=public_key,  # type: ignore[arg-type]
@@ -90,7 +90,7 @@ def test_token_signed_before_rotation_still_verifies_against_published_jwks(tmp_
     header = jwt.get_unverified_header(token)
     matching = [k for k in _jwks_keys(service.public_jwks()) if k["kid"] == header["kid"]]
     assert len(matching) == 1  # still published as "previous"
-    public_key = RSAAlgorithm.from_jwk(matching[0])  # type: ignore[arg-type]
+    public_key = RSAAlgorithm.from_jwk(matching[0])
     jwt.decode(
         token,
         key=public_key,  # type: ignore[arg-type]

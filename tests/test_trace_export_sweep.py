@@ -6,6 +6,7 @@ from __future__ import annotations
 import itertools
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -58,7 +59,7 @@ def _kinds(hub: HubHarness) -> list[str]:
     return hub_event_kinds(hub.engine, "trace-")
 
 
-def _skipped_detail(hub: HubHarness) -> dict:  # type: ignore[type-arg]
+def _skipped_detail(hub: HubHarness) -> dict[str, Any]:
     [row] = hub_event_rows(hub.engine, "trace-window-skipped")
     return hub_event_detail(row)
 
@@ -466,7 +467,7 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
     assert app.state.services.trace_export is not None
 
 
-def _open_steps(hub: HubHarness, count: int, seqs: itertools.count) -> None:  # type: ignore[type-arg]
+def _open_steps(hub: HubHarness, count: int, seqs: itertools.count[int]) -> None:
     """``count`` chunks claimed and left running — each an open step with nothing closing."""
     for _ in range(count):
         chunk_id = ingest(hub, [{"source": "default", "ref": str(next(seqs))}])

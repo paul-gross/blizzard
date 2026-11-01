@@ -25,6 +25,7 @@ from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     StaticTranscriptRepositoryResolver,
     make_host_stores,
     make_store,
@@ -60,7 +61,7 @@ def _app_with_transcripts(
     archived: FakeArchivedTranscriptRepository | None = None,
     workspace_root: str = "",
     harnesses: HarnessRegistry | None = None,
-):  # type: ignore[no-untyped-def]
+):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     repo = repo or FakeTranscriptRepository()
@@ -85,7 +86,7 @@ def _app_with_transcripts(
     )
 
 
-def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

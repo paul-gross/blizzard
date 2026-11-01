@@ -201,7 +201,7 @@ def _records(logs: Sequence[MutableMapping[str, Any]], event: str) -> list[Mutab
         ),
     ],
 )
-def test_claim_one_disposes_each_claim_outcome(  # type: ignore[no-untyped-def]
+def test_claim_one_disposes_each_claim_outcome(
     make_outcome: Callable[[], RouteClaimOutcome],
     strict: bool,
     returns: bool,
@@ -236,7 +236,7 @@ def test_claim_one_disposes_each_claim_outcome(  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_claim_one_enters_a_won_claim_via_fill():  # type: ignore[no-untyped-def]
+def test_claim_one_enters_a_won_claim_via_fill():
     _store, hub, _views, ctx = _setup([_won()])
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
 
@@ -255,7 +255,7 @@ def _bound(store: Any, hub: FakeHub, view: ChunkState) -> None:
 
 
 @pytest.mark.unit
-def test_reconcile_reclaims_an_unbraked_ready_binding_via_reclaim():  # type: ignore[no-untyped-def]
+def test_reconcile_reclaims_an_unbraked_ready_binding_via_reclaim():
     store, hub, views, ctx = _setup([_won()])
     _bound(store, hub, ChunkState(chunk_id="ch_1", status=ChunkStatus.READY))
 
@@ -286,7 +286,7 @@ def test_reconcile_reclaims_an_unbraked_ready_binding_via_reclaim():  # type: ig
         ),
     ],
 )
-def test_reconcile_holds_a_binding_without_claiming(view: ChunkState, requeued: bool, braked: bool):  # type: ignore[no-untyped-def]
+def test_reconcile_holds_a_binding_without_claiming(view: ChunkState, requeued: bool, braked: bool):
     store, hub, views, ctx = _setup([])
     _bound(store, hub, view)
     if requeued:
@@ -324,7 +324,7 @@ def test_reconcile_holds_a_binding_without_claiming(view: ChunkState, requeued: 
         ),
     ],
 )
-def test_reconcile_releases_a_reclaim_that_is_not_won(  # type: ignore[no-untyped-def]
+def test_reconcile_releases_a_reclaim_that_is_not_won(
     make_outcome: Callable[[], RouteClaimOutcome], message: str, denial_fields: dict[str, str]
 ):
     store, hub, views, ctx = _setup([make_outcome()])

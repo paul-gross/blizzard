@@ -19,6 +19,7 @@ from blizzard.hub.delivery.actions.landing.checks import (
     UPDATE,
     WAIT,
     Route,
+    Verdict,
     failed_checks,
     read_verdict,
 )
@@ -42,7 +43,6 @@ from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
     ChangeState,
-    Check,
     ForgeNotFound,
     ForgeRejected,
     ForgeUnavailable,
@@ -343,9 +343,7 @@ async def _routed(pull: PullRequest) -> RepoState:
         if verdict is not None:
             # A degraded CI read falls through to the plain wait below.
             if verdict.decision == FAILED:
-                return await _failed(
-                    pull, verdict.failing, verdict.failure_rows(await read_verdict(repo, repo.base_branch))
-                )
+                return await _failed(pull, verdict, verdict.failure_rows(await read_verdict(repo, repo.base_branch)))
             if verdict.substantive:
                 findings = pull.record(WAIT, checks=verdict.running_rows())
         run.say(f"{pull} is {state} — not cleanly mergeable yet; re-polling")
@@ -354,11 +352,11 @@ async def _routed(pull: PullRequest) -> RepoState:
     return Ready(_merge_at(pull, head_sha))
 
 
-async def _failed(pull: PullRequest, failing: list[Check], checks: list[dict[str, Any]]) -> RepoState:
+async def _failed(pull: PullRequest, verdict: Verdict, checks: list[dict[str, Any]]) -> RepoState:
     """A change whose checks failed: its own failure, or — every failing check inherited from the base — one re-run
     each before it is charged as inherited."""
     return await failed_checks(
-        pull.target, pull.head_sha, failing, checks, {"repo": pull.target.repo, "number": pull.number, "url": pull.url}
+        pull.target, pull.head_sha, verdict, checks, {"repo": pull.target.repo, "number": pull.number, "url": pull.url}
     )
 
 

@@ -13,7 +13,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.support import build_hub, pointer_token, report_lease, runner_token
+from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 pytestmark = pytest.mark.component
 
@@ -53,7 +53,7 @@ nodes:
 """
 
 
-def _ingest(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _ingest(hub: HubHarness) -> tuple[str, str]:
     """Mint the graph, ingest+promote a chunk; return (chunk_id, build node_id)."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML})
     assert graph.status_code == 201, graph.text
@@ -63,7 +63,7 @@ def _ingest(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, build_node_id
 
 
-def _claim(hub, chunk_id: str, *, runner_id: str = "r1", headers: dict[str, str] | None = None) -> str:  # type: ignore[no-untyped-def]
+def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1", headers: dict[str, str] | None = None) -> str:
     """Claim ``chunk_id`` for ``runner_id``; return the plaintext route token."""
     resp = hub.client.post(
         "/api/fleet/routes",
@@ -74,14 +74,20 @@ def _claim(hub, chunk_id: str, *, runner_id: str = "r1", headers: dict[str, str]
     return str(resp.json()["route_token"])
 
 
-def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token: str | None) -> dict:
-    body: dict = {"choice": "pass", "epoch": epoch, "runner_id": runner_id, "from_node_id": node_id, "artifacts": []}
+def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token: str | None) -> dict[str, object]:
+    body: dict[str, object] = {
+        "choice": "pass",
+        "epoch": epoch,
+        "runner_id": runner_id,
+        "from_node_id": node_id,
+        "artifacts": [],
+    }
     if route_token is not None:
         body["route_token"] = route_token
     return body
 
 
-def _submit(hub, chunk_id: str, **kwargs) -> httpx2.Response:  # type: ignore[no-untyped-def]
+def _submit(hub: HubHarness, chunk_id: str, **kwargs) -> httpx2.Response:
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(**kwargs))
 
 

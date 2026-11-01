@@ -80,7 +80,7 @@ nodes:
 """
 
 
-def _claim(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _claim(hub: HubHarness) -> tuple[str, str]:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
@@ -91,7 +91,7 @@ def _claim(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, node_id
 
 
-def _completion(node_id: str, *, epoch: int) -> dict:
+def _completion(node_id: str, *, epoch: int) -> dict[str, object]:
     return {
         "choice": "pass",
         "epoch": epoch,

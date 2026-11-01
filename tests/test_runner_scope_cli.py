@@ -34,7 +34,7 @@ class _FakeResponse:
 
 
 class _RejectingResponse:
-    def __init__(self, detail: dict | None = None) -> None:
+    def __init__(self, detail: dict[str, object] | None = None) -> None:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
@@ -48,9 +48,9 @@ class _RejectingResponse:
 def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict[str, object], timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, headers))
         return _FakeResponse(text=_SCOPES_TEXT)
 

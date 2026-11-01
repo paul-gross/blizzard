@@ -15,7 +15,7 @@ from tests.support import HubHarness, build_hub, default_project, seed_project, 
 pytestmark = pytest.mark.component
 
 
-def _changes(hub: HubHarness, headers: dict[str, str] | None = None) -> list[dict]:  # type: ignore[type-arg]
+def _changes(hub: HubHarness, headers: dict[str, str] | None = None) -> list[dict[str, object]]:
     resp = hub.client.get("/api/config/changes", params={"record_kind": "scope"}, headers=headers)
     assert resp.status_code == 200, resp.text
     return list(reversed(resp.json()["changes"]))

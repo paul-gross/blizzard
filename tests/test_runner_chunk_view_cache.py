@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +30,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -41,11 +43,11 @@ _NOW = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str):  # type: ignore[no-untyped-def]
+def _seed_active_lease(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str, pid: int, start: str):
     """A running lease with a live worker — no bearing on the cache other than being one
     of the ids every ``Reap``/``Pull``/``Advance`` sweep reads this tick."""
     store.record_lease(
@@ -69,7 +71,7 @@ def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str): 
     )
 
 
-def _seed_escalated(store, *, chunk: str, lease: str):  # type: ignore[no-untyped-def]
+def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, spawned, then closed ``escalated`` — the open-escalation shape."""
     store.record_lease(
         NewLease(
@@ -93,7 +95,7 @@ def _seed_escalated(store, *, chunk: str, lease: str):  # type: ignore[no-untype
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=_NOW)
 
 
-def _seed_taken_over(store, *, chunk: str, lease: str):  # type: ignore[no-untyped-def]
+def _seed_taken_over(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, closed ``escalated``, then taken over — the open-takeover shape."""
     _seed_escalated(store, chunk=chunk, lease=lease)
     store.record_takeover(
@@ -107,7 +109,7 @@ def _seed_taken_over(store, *, chunk: str, lease: str):  # type: ignore[no-untyp
     )
 
 
-def test_tick_primes_every_touched_chunk_in_one_batch_call(tmp_path):  # type: ignore[no-untyped-def]
+def test_tick_primes_every_touched_chunk_in_one_batch_call(tmp_path: Path):
     """One tick, five distinct touched chunks — an active lease, an open escalation, an
     open takeover, a held lease-less chunk, and a held chunk the hub no longer knows —
     costs exactly one ``chunk_statuses`` call naming all five, never a repeat read for any
@@ -153,7 +155,7 @@ class _WriteReactingHub(FakeHub):
     scripted status — standing in for the hub's own reaction to the write landing, the
     signal a reader after invalidation must see and a stale cache would have missed."""
 
-    def push_facts(self, facts):  # type: ignore[no-untyped-def]
+    def push_facts(self, facts):
         ack = super().push_facts(facts)
         self.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
         return ack
@@ -177,7 +179,7 @@ class _WriteReactingHub(FakeHub):
         return response
 
 
-def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type: ignore[no-untyped-def]
+def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path: Path):
     """Two of this tick's own writes, each invalidating the chunk it touched so a
     later reader in the SAME tick sees the reaction rather than the primed, stale view:
     (a) PULL's fact-batch flush reaching FILL's interrupted-claim reconciler, and (b) PULL's

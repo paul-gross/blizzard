@@ -38,7 +38,7 @@ class _FakeEvents:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict | None,
+        detail: dict[str, object] | None,
         at: datetime,
     ) -> int:
         self.rows.append(_RecordedRow(severity=severity, kind=kind))

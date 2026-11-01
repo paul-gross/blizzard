@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, ingest, report_lease
+from tests.support import HubHarness, build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
 
-def _claim_and_lease(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _claim_and_lease(hub: HubHarness, chunk_id: str) -> None:
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},

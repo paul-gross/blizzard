@@ -25,7 +25,7 @@ _probe = Table(
 )
 
 
-def _engine():  # type: ignore[no-untyped-def]
+def _engine():
     engine = create_engine_from_url("sqlite://")
     _metadata.create_all(engine)
     return engine

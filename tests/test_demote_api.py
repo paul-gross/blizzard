@@ -210,7 +210,7 @@ def test_a_claim_blocks_while_a_demote_holds_the_row_lock_mid_write(tmp_path: Pa
     release_write = threading.Event()
     real_insert = chunk_queue_store_module.insert_demote_rows
 
-    def _blocking_insert(conn, chunk_id, **kwargs):  # type: ignore[no-untyped-def]
+    def _blocking_insert(conn, chunk_id, **kwargs):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the demote's write"
         return real_insert(conn, chunk_id, **kwargs)

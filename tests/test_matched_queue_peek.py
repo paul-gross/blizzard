@@ -12,18 +12,18 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.support import build_hub, count_queries
+from tests.support import HubHarness, build_hub, count_queries
 from tests.test_fleet_auth import _bearer, _enroll, _register
 
 pytestmark = pytest.mark.component
 
 
-def _token(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  # type: ignore[no-untyped-def]
+def _token(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     _register(hub, runner_id=runner_id, workspace_id=workspace_id)
     return _enroll(hub, runner_id)
 
 
-def _ingest(hub, ref: str, *, default_harnesses: list[str] | None = None, promote: bool = True) -> str:  # type: ignore[no-untyped-def]
+def _ingest(hub: HubHarness, ref: str, *, default_harnesses: list[str] | None = None, promote: bool = True) -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [f"default:{ref}"]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
@@ -199,7 +199,7 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, extra: di
 
     results: dict[str, int] = {}
 
-    def call(hub, key: str, token: str) -> None:  # type: ignore[no-untyped-def]
+    def call(hub: HubHarness, key: str, token: str) -> None:
         resp = hub.client.post(
             "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, **extra}, headers=_bearer(token)
         )

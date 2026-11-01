@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx2
 import pytest
@@ -102,7 +102,7 @@ class _Tenant:
     markers: set[str] = field(default_factory=set)
 
     @property
-    def client(self):  # type: ignore[no-untyped-def]
+    def client(self):
         return self.harness.client
 
     def runner(self) -> str:
@@ -539,7 +539,7 @@ def test_the_table_names_every_live_tenant_route_and_nothing_else(tmp_path: Path
 # --- seeding ------------------------------------------------------------------------------------------------------
 
 
-def _ok(response, status: int) -> dict:  # type: ignore[no-untyped-def]
+def _ok(response, status: int) -> dict[str, Any]:
     assert response.status_code == status, f"{response.request.method} {response.request.url}: {response.text}"
     return response.json() if response.content else {}
 

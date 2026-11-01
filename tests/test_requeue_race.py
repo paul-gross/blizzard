@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, ingest, report_escalation, report_lease
+from tests.support import HubHarness, build_hub, ingest, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
 
-def _escalated_chunk(hub, tmp_path: Path) -> str:  # type: ignore[no-untyped-def]
+def _escalated_chunk(hub: HubHarness, tmp_path: Path) -> str:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     resp = hub.client.post(
         "/api/fleet/routes",

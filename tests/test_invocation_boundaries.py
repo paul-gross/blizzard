@@ -32,6 +32,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeTranscriptSource,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -45,11 +46,13 @@ _NOW = datetime(2026, 9, 18, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_exited_lease(store, *, lease="lease_r", chunk="ch_1", node="nd_review", epoch=1, session="sess-a"):  # type: ignore[no-untyped-def]
+def _seed_exited_lease(
+    store: SqlAlchemyRunnerStore, *, lease="lease_r", chunk="ch_1", node="nd_review", epoch=1, session="sess-a"
+):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -72,7 +75,7 @@ def _seed_exited_lease(store, *, lease="lease_r", chunk="ch_1", node="nd_review"
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def test_fresh_spawn_opens_a_spawn_boundary_at_generation_one(tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_fresh_spawn_opens_a_spawn_boundary_at_generation_one(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -102,7 +105,7 @@ def test_fresh_spawn_opens_a_spawn_boundary_at_generation_one(tmp_path: Path) ->
     assert boundary.closed_at is None
 
 
-def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_exited_lease(store, node="nd_build")
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -131,7 +134,7 @@ def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path:
     assert ctx.stores.invocation_boundaries.boundary("lease_r", 2, "nudge") is None
 
 
-def test_nudge_opens_a_nudge_boundary_not_a_resume_boundary(tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_nudge_opens_a_nudge_boundary_not_a_resume_boundary(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -167,7 +170,7 @@ def test_nudge_opens_a_nudge_boundary_not_a_resume_boundary(tmp_path: Path) -> N
     assert ctx.stores.invocation_boundaries.boundary("lease_r", 2, "resume") is None
 
 
-def test_judgement_launch_opens_a_judge_boundary_at_the_current_generation(tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_judgement_launch_opens_a_judge_boundary_at_the_current_generation(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_exited_lease(store, node="nd_build")
 
@@ -200,7 +203,7 @@ def test_judgement_launch_opens_a_judge_boundary_at_the_current_generation(tmp_p
     assert boundary.start_position == tail.token
 
 
-def test_closing_a_lease_closes_every_boundary_it_opened(tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_closing_a_lease_closes_every_boundary_it_opened(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_exited_lease(store, node="nd_build")
     ctx = make_context(
@@ -235,7 +238,7 @@ def test_closing_a_lease_closes_every_boundary_it_opened(tmp_path: Path) -> None
     assert boundary.closed_reason == "released"
 
 
-def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_tail(  # type: ignore[no-untyped-def]
+def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_tail(
     tmp_path: Path,
 ) -> None:
     """`Spawner.spawn`'s own ``resume_from`` branch (`enter_node`'s resume, not a fresh mint)
@@ -276,7 +279,7 @@ def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_t
     assert ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "spawn") is None
 
 
-def test_a_resumed_existing_session_spawn_with_an_unreadable_tail_marks_it_unreadable(  # type: ignore[no-untyped-def]
+def test_a_resumed_existing_session_spawn_with_an_unreadable_tail_marks_it_unreadable(
     tmp_path: Path,
 ) -> None:
     """The companion case: the resumed session's tail read fails (unscripted here) — the
@@ -312,7 +315,7 @@ def test_a_resumed_existing_session_spawn_with_an_unreadable_tail_marks_it_unrea
     assert boundary.start_unreadable is True
 
 
-def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_boundary(  # type: ignore[no-untyped-def]
+def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_boundary(
     tmp_path: Path,
 ) -> None:
     """A nudge boundary can open and then strand (its own `_wake` never ran) — a LATER,
