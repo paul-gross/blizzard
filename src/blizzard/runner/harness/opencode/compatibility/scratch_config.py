@@ -17,6 +17,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.json_value import JsonObject
+from blizzard.runner.harness.opencode.compaction_window import compose_window
 from blizzard.runner.harness.opencode.compatibility.proof_script import (
     CONFIG_PERMISSION_COMMAND,
     PERMISSION_AGENT,
@@ -28,11 +29,15 @@ from blizzard.runner.harness.opencode.compatibility.proof_script import (
     SECURITY_DENIAL_COMMAND,
     TOOL_AGENT,
 )
-from blizzard.runner.harness.opencode.shapes import parse_worker_config
+from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
+from blizzard.runner.harness.opencode.shapes import parse_model_reference, parse_worker_config
 from blizzard.runner.process.child_env import AllowlistedEnv
 
 RUNNER_CONFIG_USERNAME = "blizzard-runner-config"
 COMPACTION_TAIL_TURNS = 1
+COMPACTION_WINDOW = "1000000"
+COMPACTION_LIMITS = OpenCodeModelLimits(context=2000000, output=32000)
+COMPACTION_INPUT = 1020000
 PROJECT_CONFIG_SENTINEL = "project-config-sentinel"
 USER_CONFIG_SENTINEL = "user-config-sentinel"
 ISOLATION_EVIDENCE: JsonObject = {
@@ -220,6 +225,12 @@ def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, var
         },
         "plugin": [],
     }
+    reference = parse_model_reference(model)
+    composed = compose_window(
+        payload, payload, reference.provider, reference.model, COMPACTION_WINDOW, COMPACTION_LIMITS
+    )
+    assert composed is not None
+    payload = composed
     # Parse the exact config shape before handing it to OpenCode; a malformed runner-owned
     # config must be a proof failure, not an unexplained provider result.
     parse_worker_config(payload)

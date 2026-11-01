@@ -402,6 +402,13 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     )
     h1.resolved_model = "sonnet"
     Fill(_ctx(store, hub, provider, h1)).run()
+    original = store.active_lease_for_chunk("ch_1")
+    assert original is not None
+    assert (original.resolved_model, original.resolved_effort, original.resolved_compaction_window) == (
+        "sonnet",
+        "medium",
+        "150000",
+    )
 
     hub.envelopes["ch_1"] = build_env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=retro_env)]
@@ -424,6 +431,54 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     # The inherited session model reaches the harness on the resume.
     assert h2.spawn_model_effort == [("sonnet", "medium")]
     assert h2.spawn_compaction_windows == ["150000"]
+
+
+@pytest.mark.component
+def test_resumed_session_keeps_its_stamp_for_judgement_and_lost_judgement_relaunch(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    first = _pooled("build", "nd_build", mode=SessionMode.FRESH, effort="medium", compaction_window="150000")
+    resumed = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.RESUME)
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", first)
+    mint = FakeHarness(
+        handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    mint.resolved_model = "sonnet"
+    Fill(_ctx(store, hub, provider, mint)).run()
+    original = store.active_lease_for_chunk("ch_1")
+    assert original is not None
+    stamp = (original.resolved_model, original.resolved_effort, original.resolved_compaction_window)
+    assert stamp == ("sonnet", "medium", "150000")
+
+    hub.envelopes["ch_1"] = first
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=resumed)]
+    next_harness = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2", pgid=200), verdict="pass"
+    )
+    next_harness.resolved_model = "opus"
+    ctx = _ctx(store, hub, provider, next_harness, minutes=1)
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Pull(ctx).run()
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id == original.session_id
+    assert (lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window) == stamp
+    assert next_harness.spawn_model_effort == [stamp[:2]]
+    assert next_harness.spawn_compaction_windows == [stamp[2]]
+
+    # The resumed worker exits; a lost judge is launched again under the same lease.
+    hub.envelopes["ch_1"] = resumed
+    next_harness.judge_output = ""
+    next_harness.resolved_model = "another-default"
+    Advance(ctx).run()
+    Advance(ctx).run()
+    standing = store.in_flight_elicitation(lease.lease_id, lease.epoch)
+    assert standing is not None and standing.relaunch_count == 1
+    # One judgement for the first node, followed by launch and relaunch for the resume.
+    assert next_harness.judge_model_effort[-2:] == [stamp[:2], stamp[:2]]
+    assert next_harness.judge_compaction_windows[-2:] == [stamp[2], stamp[2]]
 
 
 @pytest.mark.component

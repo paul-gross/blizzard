@@ -20,6 +20,7 @@ from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.model_limits import FileOpenCodeModelLimitsCatalog
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.opencode.plugin import (
@@ -103,6 +104,7 @@ class OpenCodeDeclaration:
             autonomy=shared.autonomy,
             transcript_source=transcript_source,
             price_catalog=price_catalog,
+            limits_catalog=FileOpenCodeModelLimitsCatalog(cache_path) if cache_path is not None else None,
             descendant_usage=OpenCodeDescendantUsage(exporter),
             permission_resolver=SubprocessOpenCodePermissionResolver(binary=section.binary, children=children),
             process=process,

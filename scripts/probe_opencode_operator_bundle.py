@@ -25,13 +25,17 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
+from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
+from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.graph import SessionMode
 
@@ -75,7 +79,9 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
         json.dumps({"permission": {"bash": "deny"}, "agent": {"explore": {"prompt": "{file:./prompts/explore.txt}"}}})
     )
     OPENCODE_DECLARATION.scaffold_runtime(
-        OpenCodeSection(worker_config_path=str(runtime / "opencode-worker-config.json")), runtime
+        OpenCodeSection(worker_config_path=str(runtime / "opencode-worker-config.json")),
+        runtime,
+        worker_shell="/bin/bash",
     )
     snapshot = publish_harness_bundle(source.parent, runtime)
     previous = published_snapshot(runtime)
@@ -165,8 +171,53 @@ def _wait(pid: int, timeout: float = 100) -> None:
     raise TimeoutError(f"OpenCode pid {pid} did not exit in {timeout}s")
 
 
+class _ProbeCatalog:
+    def limits_for(self, provider: str, model: str) -> OpenCodeModelLimits:
+        return OpenCodeModelLimits(context=100000, output=4000)
+
+
+class _InspectingLauncher(ProcessLauncher):
+    def __init__(self, *args, binary: str, model: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.binary = binary
+        self.model = model
+        self.expected_reserve = 0
+        self.expected_output = 0
+        self.invocation = ""
+        self.checks = []
+
+    def launch(self, argv, *, cwd, env, stdout, stderr, defer_disarm=False):
+        result = subprocess.run(
+            [self.binary, "debug", "config", "--pure"],
+            cwd=cwd,
+            env=env.variables,
+            text=True,
+            capture_output=True,
+            timeout=90,
+            check=True,
+        )
+        document = json.loads(result.stdout)
+        provider, model = self.model.split("/", 1)
+        limit = document["provider"][provider]["models"][model]["limit"]
+        assert limit["input"] == 8000 + self.expected_reserve, limit
+        assert limit["output"] == self.expected_output, limit
+        assert document["permission"]["bash"] == document["permission"]["question"] == "deny"
+        assert document["username"] == "bundle-probe" and document["model"] == self.model
+        assert document["agent"]["explore"]["prompt"] == "Explore only, probe companion loaded."
+        assert any("blizzard-heartbeat" in plugin for plugin in document["plugin"])
+        self.checks.append(
+            {
+                "invocation": self.invocation,
+                "input": limit["input"],
+                "output": limit["output"],
+                "reserve": self.expected_reserve,
+            }
+        )
+        return super().launch(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr, defer_disarm=defer_disarm)
+
+
 def _run(
-    adapter: OpenCodeAdapter, project: Path, root: Path, name: str, prompt: str, session: str | None
+    adapter: OpenCodeAdapter, project: Path, root: Path, name: str, prompt: str, session: str | None, model: str
 ) -> tuple[str, list[str]]:
     out = root / f"{name}.jsonl"
     preamble = WorkerPreamble(
@@ -193,14 +244,30 @@ def _run(
             prompt=prompt,
             judgement_prompt="assess",
         )
-        handle = adapter.spawn(envelope, preamble, None, resume_from=session)
+        handle = adapter.spawn(envelope, preamble, None, resume_from=session, model=model, compaction_window="8k")
     elif name == "judge":
         assert session
-        handle = adapter.judge(str(project), session, prompt, str(out), preamble=preamble, chunk_id="ch_probe")
+        handle = adapter.judge(
+            str(project),
+            session,
+            prompt,
+            str(out),
+            preamble=preamble,
+            chunk_id="ch_probe",
+            model=model,
+            compaction_window="8k",
+        )
     else:
         assert session
         handle = adapter.resume_with_message(
-            str(project), session, prompt, str(out), preamble=preamble, chunk_id="ch_probe"
+            str(project),
+            session,
+            prompt,
+            str(out),
+            preamble=preamble,
+            chunk_id="ch_probe",
+            model=model,
+            compaction_window="8k",
         )
     handle.confirm_durable()
     minted = handle.await_identity(10).session_id if name == "fresh" else session
@@ -213,14 +280,13 @@ def _run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--login", type=Path, default=Path.home() / ".local/share/opencode/auth.json")
+    parser.add_argument("--login", type=Path, required=True, help="explicit credential file for this authorized probe")
     parser.add_argument("--model", default="openai/gpt-5.6-luna")
     parser.add_argument("--binary", default="opencode")
     args = parser.parse_args()
     temp = os.environ.get("BLIZZARD_TMPDIR")
     if not temp:
         raise RuntimeError("BLIZZARD_TMPDIR must name this lease's scratch directory")
-    version = subprocess.run([args.binary, "--version"], text=True, capture_output=True, check=True).stdout.strip()
     with tempfile.TemporaryDirectory(dir=temp) as work:
         root = Path(work)
         home, project, _runtime, effective = _setup(root, args.login, args.model)
@@ -237,15 +303,25 @@ def main() -> None:
             PATH=f"{stub.parent}:{os.environ['PATH']}",
         )
         worker_env = AllowlistedEnv.of(("XDG_CONFIG_HOME", "XDG_DATA_HOME", "PROBE_EVENT_FILE"))
+        version = subprocess.run(
+            [args.binary, "--version"], env=worker_env.tool().variables, text=True, capture_output=True, check=True
+        ).stdout.strip()
         process = LinuxProcessProbe()
+        children = SubprocessChildProcesses()
         with ThreadPoolExecutor(max_workers=2) as executor:
+            launcher = _InspectingLauncher(
+                process, executor=executor, children=children, binary=args.binary, model=args.model
+            )
             adapter = OpenCodeAdapter(
                 binary=args.binary,
                 worker_env=worker_env,
                 worker_config_path=str(effective / "opencode.json"),
                 effective_config_dir=str(effective),
                 process=process,
-                launcher=ProcessLauncher(process, executor=executor),
+                launcher=launcher,
+                limits_catalog=_ProbeCatalog(),
+                permission_resolver=SubprocessOpenCodePermissionResolver(args.binary, children=children),
+                versions=VersionProbe(children, worker_env.tool()),
             )
             preamble = WorkerPreamble([AcquiredEnvironment("probe", str(project))], "lease_probe", "http://127.0.0.1:9")
             resolved = subprocess.run(
@@ -264,6 +340,17 @@ def main() -> None:
             origins = [Path(item["spec"]).name for item in document["plugin_origins"]]
             assert len(origins) == len(set(origins)) == 4, origins
             assert set(origins) == {"global.js", "local.js", "marker.js", "blizzard-heartbeat.ts"}, origins
+            provider, model = args.model.split("/", 1)
+            output = 6000
+            config = {
+                "model": args.model,
+                "provider": {provider: {"models": {model: {"limit": {"context": 100000, "output": output}}}}},
+            }
+            config["compaction"] = {"reserved": 1234}
+            (project / "opencode.json").write_text(json.dumps(config))
+            launcher.expected_reserve = 1234
+            launcher.expected_output = output
+            launcher.invocation = "fresh"
             counts: dict[str, list[str]] = {}
             session, counts["fresh"] = _run(
                 adapter,
@@ -272,6 +359,7 @@ def main() -> None:
                 "fresh",
                 "Read note.txt with the read tool exactly once. Then report the contents.",
                 None,
+                args.model,
             )
             prompts = {
                 "resume": "Read note.txt once more and say resumed.",
@@ -282,7 +370,15 @@ def main() -> None:
                 "child": "Use the task tool to ask a subagent to read note.txt exactly once.",
             }
             for name, prompt in prompts.items():
-                _, counts[name] = _run(adapter, project, root, name, prompt, session)
+                launcher.invocation = name
+                if name in {"resume", "judge"}:
+                    config.pop("compaction", None)
+                    launcher.expected_reserve = output
+                else:
+                    config["compaction"] = {"reserved": 1234}
+                    launcher.expected_reserve = 1234
+                (project / "opencode.json").write_text(json.dumps(config))
+                _, counts[name] = _run(adapter, project, root, name, prompt, session, args.model)
         for name in ("fresh", "resume", "nudge", "judge"):
             assert counts[name] == ["read"], (name, counts[name])
         assert counts["deny_bash"] == counts["deny_question"] == []
@@ -311,6 +407,7 @@ def main() -> None:
             "runner_heartbeat_calls": lines.count("runner heartbeat"),
             "native_collisions_rejected": True,
             "ambient_duplicate_rejected": True,
+            "numeric_window_config_checks": launcher.checks,
         }
         print(json.dumps(report, indent=2))
 

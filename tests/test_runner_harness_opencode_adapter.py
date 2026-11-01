@@ -17,14 +17,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
@@ -33,7 +36,14 @@ from blizzard.runner.harness.opencode.adapter import (
 )
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
-from blizzard.runner.harness.opencode.permissions.permission_resolver import OpenCodeEffectivePermissions
+from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
+from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
+from blizzard.runner.harness.opencode.permissions.permission_resolver import (
+    OpenCodeEffectivePermissions,
+    OpenCodePermissionResolveError,
+    SubprocessOpenCodePermissionResolver,
+)
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.opencode.usage.price_cache import (
     FileOpenCodePriceCatalog,
@@ -200,6 +210,155 @@ def test_effective_bundle_is_delivered_to_every_launch_kind(
         assert env["OPENCODE_CONFIG"] == str(config)
         assert env["OPENCODE_CONFIG_CONTENT"] == config.read_text()
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
+
+
+@pytest.mark.unit
+def test_numeric_window_reaches_all_launches_using_session_stamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    config = tmp_path / "config.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
+    captured: list[tuple[list[str], dict[str, str]]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    class Catalog:
+        def limits_for(self, provider: str, model: str) -> OpenCodeModelLimits | None:
+            return OpenCodeModelLimits(100000, 5000) if (provider, model) == ("old", "model") else None
+
+    class Resolver:
+        def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+            return OpenCodeEffectivePermissions(merged_config={"compaction": {"reserved": 1200}}, agent_rulesets={})
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append((cmd, kwargs["env"]))
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    adapter = _adapter(
+        spawn_executor,
+        model="new/default",
+        worker_config_path=str(config),
+        limits_catalog=Catalog(),
+        permission_resolver=Resolver(),
+    )
+    preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    adapter.spawn(envelope, preamble, None, model="old/model", compaction_window="8k")
+    adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model="old/model", compaction_window="8k")
+    adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model="old/model", compaction_window="8k")
+    adapter.judge(
+        str(tmp_path), "ses_prior", "assess", str(tmp_path / "judge.out"), model="old/model", compaction_window="8k"
+    )
+    adapter.spawn(envelope, preamble, None, resume_from="ses_prior", compaction_window="8k")
+
+    for _, env in captured[:4]:
+        content = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+        assert content["provider"]["old"]["models"]["model"]["limit"]["input"] == 9200
+        assert content["permission"]["question"] == "deny"
+    assert "--model" in captured[0][0]
+    assert all("--model" not in command for command, _ in captured[1:])
+    assert captured[4][1]["OPENCODE_CONFIG_CONTENT"] == config.read_text()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("failure", ["missing-model", "missing-limits", "resolver-error", "invalid-effective"])
+def test_numeric_window_fallback_preserves_launch_and_warns_once_per_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor, failure: str
+) -> None:
+    config = tmp_path / "config.json"
+    content = '{"permission":{"question":"deny"},"plugin":[],"custom":"retained"}'
+    config.write_text(content)
+    captured: list[dict[str, str]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    class Catalog:
+        def limits_for(self, provider: str, model: str) -> OpenCodeModelLimits | None:
+            return None if failure == "missing-limits" else OpenCodeModelLimits(100000, 5000)
+
+    class Resolver:
+        def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+            if failure == "resolver-error":
+                raise OpenCodePermissionResolveError("config unavailable")
+            effective: JsonObject = {"compaction": {"reserved": "invalid"}} if failure == "invalid-effective" else {}
+            return OpenCodeEffectivePermissions(merged_config=effective, agent_rulesets={})
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append(kwargs["env"])
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    adapter = _adapter(
+        spawn_executor, worker_config_path=str(config), limits_catalog=Catalog(), permission_resolver=Resolver()
+    )
+    model = None if failure == "missing-model" else "provider/model"
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
+    with capture_logs() as logs:
+        adapter.spawn(envelope, preamble, None, model=model, compaction_window="8k")
+        adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model=model, compaction_window="8k")
+        adapter.judge(
+            str(tmp_path), "ses_prior", "assess", str(tmp_path / "judge.out"), model=model, compaction_window="8k"
+        )
+        adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model=model, compaction_window="9k")
+
+    assert len(captured) == 4
+    assert all(env["OPENCODE_CONFIG_CONTENT"] == content for env in captured)
+    warnings = [
+        log for log in logs if log.get("event") == "cannot apply OpenCode compaction window; launching unchanged"
+    ]
+    expected = [("", "8k"), (None, "8k"), (None, "9k")] if model is None else [(model, "8k"), (model, "9k")]
+    assert [(log["model"], log["window"]) for log in warnings] == expected
+    assert all(log["log_level"] == "warning" for log in warnings)
+
+
+@pytest.mark.unit
+def test_production_binding_reads_limits_from_worker_cache_for_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    home = tmp_path / "worker-home"
+    cache = home / ".cache"
+    catalog = cache / "opencode" / "models.json"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text(json.dumps({"provider": {"models": {"model": {"limit": {"context": 100000, "output": 5000}}}}}))
+    monkeypatch.setenv("HOME", str(home))
+    worker_env = AllowlistedEnv.of(())
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "daemon-cache"))
+    config = tmp_path / "config.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
+    captured: list[dict[str, str]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append(kwargs["env"])
+        return FakeProcess()
+
+    def resolve(self: Any, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+        return OpenCodeEffectivePermissions(merged_config={"compaction": {"reserved": 1200}}, agent_rulesets={})
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    monkeypatch.setattr(SubprocessOpenCodePermissionResolver, "resolve", resolve)
+    process = FakeProbe()
+    binding = OPENCODE_DECLARATION.binding(
+        OpenCodeSection(worker_config_path=str(config)),
+        SharedHarnessInputs(
+            root=tmp_path, autonomy=Autonomy.Auto, config_dir=None, worker_env=worker_env, transcripts_root=""
+        ),
+        process=process,
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
+        children=CHILDREN,
+    )
+    assert binding.adapter is not None
+    binding.adapter.resume_with_message(
+        str(tmp_path), "ses_prior", "continue", model="provider/model", compaction_window="8k"
+    )
+    limits = json.loads(captured[0]["OPENCODE_CONFIG_CONTENT"])["provider"]["provider"]["models"]["model"]["limit"]
+    assert limits == {"input": 9200, "context": 100000, "output": 5000}
 
 
 @pytest.mark.component
@@ -374,11 +533,13 @@ def test_resolve_effort_of_none_is_none(spawn_executor: Executor) -> None:
 
 
 @pytest.mark.unit
-def test_resolve_compaction_window_is_always_unsupported(spawn_executor: Executor) -> None:
+def test_resolve_compaction_window(spawn_executor: Executor) -> None:
     # No numeric translation is ever invented, regardless of the value's shape.
     adapter = _adapter(spawn_executor)
-    assert adapter.resolve_compaction_window("auto") is None
-    assert adapter.resolve_compaction_window("200000") is None
+    assert adapter.resolve_compaction_window("auto") == "auto"
+    assert adapter.resolve_compaction_window("200000") == "200000"
+    assert adapter.resolve_compaction_window("8K") == "8K"
+    assert adapter.resolve_compaction_window("invalid") is None
     assert adapter.resolve_compaction_window(None) is None
 
 
