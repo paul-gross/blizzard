@@ -4,8 +4,8 @@
 # and overrides only `reportUnnecessaryTypeIgnoreComment = "error"`; every other setting is the repo's
 # `[tool.pyright]`.
 #
-# Checks `tests` and both store-migration test trees, or the paths passed as arguments (flags such as `--outputjson` pass through). Exits non-zero while any
-# comment is inert. Shipping code is excluded: the structural gate already holds it. Not part of the gate.
+# Checks `tests` and both store-migration test trees, or the paths passed as arguments (flags such as `--outputjson`
+# pass through). Exits non-zero while any comment is inert. Shipping code is excluded: the structural gate already holds it. Not part of the gate.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
