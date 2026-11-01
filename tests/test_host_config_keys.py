@@ -358,7 +358,7 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
         read.add(view.join(key))
         checked(view, key)
 
-    monkeypatch.setattr(ConfigView, "_check", recording)
+    monkeypatch.setattr(ConfigView, "check", recording)
     loaded = parse(
         document_carrying_every_key(HOST_REGISTRY),
         layout=HostLayout(tmp_path),
