@@ -330,11 +330,13 @@ def test_migration_and_migration_landing_on_a_hub_node() -> None:
     assert root.attributes[attr.STEP_OUTCOME] == "migrated"
     assert root.attributes[attr.STEP_TO_NODE_NAME] == "graph:flow"
     assert root.attributes[attr.STEP_CHOICE] == "upgrade"
-    landed = StepFacts(
-        chunk_id="ch_1",
-        graphs={"g1": fx.G1, "g2": fx.hub_graph("g2")},
-        pin_graph_id="g1",
-        migrations=(TracedMigration(1, fx.at(30), "g1", "g2", landed_node_id="g2-poll"),),
+    landed = replace(
+        StepFacts(
+            chunk_id="ch_1",
+            graphs={"g1": fx.G1, "g2": fx.hub_graph("g2")},
+            pin_graph_id="g1",
+            migrations=(TracedMigration(1, fx.at(30), "g1", "g2", landed_node_id="g2-poll"),),
+        ),
         **fx.runner_epoch(1, 10),
     )
     assert _step(landed)[0].attributes[attr.STEP_OUTCOME] == "migrated"
@@ -506,17 +508,19 @@ def test_planted_content_never_leaves_and_every_key_is_declared() -> None:
     base = fx.graph("g1", "build", "review", "gate")
     nodes = [replace(n, prompt=SENTINEL, checks=[SENTINEL], judgement_prompt=SENTINEL) for n in base.nodes]
     planted = replace(base, nodes=nodes)
-    facts = StepFacts(
-        chunk_id="ch_1",
-        graphs={"g1": planted, "g2": fx.G2},
-        pin_graph_id="g1",
-        work_refs=("blizzard#1",),
-        usage=(fx.usage(),),
-        questions=(TracedQuestion("q1", 1, fx.at(15), fx.at(16)),),
-        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
-        decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
-        transitions=(fx.to("g1", "review", 90, 2, decision_id="d1", choice_name="approve"),),
-        bounces=(TracedBounce(1, "conflict", fx.at(18)),),
+    facts = replace(
+        StepFacts(
+            chunk_id="ch_1",
+            graphs={"g1": planted, "g2": fx.G2},
+            pin_graph_id="g1",
+            work_refs=("blizzard#1",),
+            usage=(fx.usage(),),
+            questions=(TracedQuestion("q1", 1, fx.at(15), fx.at(16)),),
+            decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
+            decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
+            transitions=(fx.to("g1", "review", 90, 2, decision_id="d1", choice_name="approve"),),
+            bounces=(TracedBounce(1, "conflict", fx.at(18)),),
+        ),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 70)),
     )
     told = _told(facts)

@@ -11,6 +11,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = [pytest.mark.component]
@@ -20,7 +21,7 @@ _BEFORE = "20260928_1100_runner_retirement"  # the head just before this revisio
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _seed(tmp_path: Path):
+def _seed(tmp_path: Path) -> MigrationRunner:
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         seed_graph(conn, "g_1", at=_T0)

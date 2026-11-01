@@ -64,8 +64,8 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_route_classification import _FLEET, _FLEET_CLAIM, _HUB_LEVEL, _HUMAN, _live_routes
-from tests.test_sweeps_per_tenant import _close_events, _landed_hub_ref
+from tests.test_route_classification import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
+from tests.test_sweeps_per_tenant import close_events, landed_hub_ref
 
 pytestmark = pytest.mark.component
 
@@ -528,9 +528,9 @@ _PROBES: dict[tuple[str, str], _Probe] = {
 def test_the_table_names_every_live_tenant_route_and_nothing_else(tmp_path: Path) -> None:
     app = build_hub(tmp_path).client.app
     assert isinstance(app, FastAPI)
-    tenant_routes = (set(_HUMAN) - _HUB_LEVEL) | _FLEET | {_FLEET_CLAIM}
+    tenant_routes = (set(HUMAN) - HUB_LEVEL) | FLEET | {FLEET_CLAIM}
 
-    assert tenant_routes <= _live_routes(app)
+    assert tenant_routes <= live_routes(app)
     assert set(_PROBES) == tenant_routes, (
         f"unprobed: {sorted(tenant_routes - set(_PROBES))}; not a tenant route: {sorted(set(_PROBES) - tenant_routes)}"
     )
@@ -726,7 +726,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
 
 
 @dataclass(frozen=True)
-class _Two:
+class Two:
     hub: HubHarness
     first: _Tenant
     second: _Tenant
@@ -735,7 +735,7 @@ class _Two:
         return (self.first, self.second)
 
 
-def _seeded(hub: HubHarness, *labels: str) -> list[_Tenant]:
+def seeded(hub: HubHarness, *labels: str) -> list[_Tenant]:
     """Tenants named ``labels`` on ``hub``, seeded alike, each driven by one person who administers every one of
     them as a member and holds no hub-level role."""
     person = seed_user(hub, username="operator", role=Role.PENDING)
@@ -750,14 +750,14 @@ def _seeded(hub: HubHarness, *labels: str) -> list[_Tenant]:
 
 
 @pytest.fixture
-def two(tmp_path: Path) -> _Two:
+def two(tmp_path: Path) -> Two:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    first, second = _seeded(hub, "alpha", "beta")
+    first, second = seeded(hub, "alpha", "beta")
     # Hub item refs count per tenant: the first tenant's probed item sits at a ref the second never allocated.
     item = _ok(first.client.post("/api/work-sources/hub/items", json={"title": "alpha-last", "body": "b"}), 201)
     first.ids["ref"] = str(item["ref"])
     first.markers.add("alpha-last")
-    return _Two(hub, first, second)
+    return Two(hub, first, second)
 
 
 # --- probing ------------------------------------------------------------------------------------------------------
@@ -846,7 +846,7 @@ def _unghosted(text: str, ghost: _Tenant, owner: _Tenant) -> str:
     return text
 
 
-def test_a_listing_in_either_tenant_names_none_of_the_others_records(two: _Two) -> None:
+def test_a_listing_in_either_tenant_names_none_of_the_others_records(two: Two) -> None:
     for reader, other in ((two.first, two.second), (two.second, two.first)):
         for (method, path), probe in _PROBES.items():
             if probe.kind != "listing":
@@ -857,7 +857,7 @@ def test_a_listing_in_either_tenant_names_none_of_the_others_records(two: _Two) 
             assert not leaked, f"{reader.label} reads {other.label}'s {sorted(leaked)} at {path}"
 
 
-def test_a_tenant_sees_its_own_records_in_its_listings(two: _Two) -> None:
+def test_a_tenant_sees_its_own_records_in_its_listings(two: Two) -> None:
     for t in two.both():
         for path, marker in (
             ("/api/chunks", t.ids["chunk_id"]),
@@ -886,7 +886,7 @@ def test_a_tenant_sees_its_own_records_in_its_listings(two: _Two) -> None:
             assert marker in t.client.get(path).text, f"{t.label} misses its own {marker} at {path}"
 
 
-def test_naming_the_other_tenants_record_answers_as_a_never_minted_one_and_changes_nothing_there(two: _Two) -> None:
+def test_naming_the_other_tenants_record_answers_as_a_never_minted_one_and_changes_nothing_there(two: Two) -> None:
     owner, sender, ghost = two.first, two.second, _ghost_of(two.first)
     before = _reads(owner)
     wrong: dict[str, str] = {}
@@ -915,7 +915,7 @@ def _blind(owner: _Tenant, method: str, path: str, probe: _Probe) -> str:
 
 def _fresh_tenant(tmp_path: Path) -> _Tenant:
     tmp_path.mkdir()
-    (owner,) = _seeded(build_hub(tmp_path, auth_mode="oauth"), "alpha")
+    (owner,) = seeded(build_hub(tmp_path, auth_mode="oauth"), "alpha")
     return owner
 
 
@@ -937,7 +937,7 @@ def test_each_foreign_probe_answers_its_records_own_tenant_otherwise_than_a_neve
     assert not blind, "\n".join(f"{route}: {answer}" for route, answer in blind.items())
 
 
-def test_a_write_in_one_tenant_changes_nothing_the_other_reads(two: _Two) -> None:
+def test_a_write_in_one_tenant_changes_nothing_the_other_reads(two: Two) -> None:
     before = _reads(two.first)
     wrong: dict[str, str] = {}
     for (method, path), probe in _PROBES.items():
@@ -965,7 +965,7 @@ def _project_answers(stores: TenantStores, project_id: ProjectId, owner: _Tenant
     )
 
 
-def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two) -> None:
+def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: Two) -> None:
     """At the store: the other tenant's project, slugs and links answer as a project never minted does, while their own
     tenant reads them."""
     core = build_hub_core(two.hub.engine, clock=two.hub.clock)
@@ -1004,7 +1004,7 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two)
         assert project.project_id not in foreign.project_links.projects_linking_source(owner.ids["source"])
 
 
-def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_minted_one(two: _Two) -> None:
+def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_minted_one(two: Two) -> None:
     for owner, sender in ((two.first, two.second), (two.second, two.first)):
         ghost = _ghost_of(owner)
         for key in ("project", "project_slug"):
@@ -1018,7 +1018,7 @@ def test_a_project_named_by_the_other_tenants_id_or_slug_answers_404_as_a_never_
                 assert foreign.text == _unghosted(unknown.text, ghost, owner)
 
 
-def test_each_tenants_stream_replays_its_own_events_only(two: _Two) -> None:
+def test_each_tenants_stream_replays_its_own_events_only(two: Two) -> None:
     for reader, other in ((two.first, two.second), (two.second, two.first)):
         frames = asyncio.run(drain_stream(reader.harness.services.events))
         text = repr(frames)
@@ -1026,7 +1026,7 @@ def test_each_tenants_stream_replays_its_own_events_only(two: _Two) -> None:
         assert not {marker for marker in other.markers if marker in text}
 
 
-def test_a_runner_minted_id_posted_in_both_tenants_is_two_rows_each_answered_alone(two: _Two) -> None:
+def test_a_runner_minted_id_posted_in_both_tenants_is_two_rows_each_answered_alone(two: Two) -> None:
     answers = {}
     for t in (two.first, two.second):
         answered = t.client.post(f"/api/questions/{_SHARED_QUESTION}/answers", json={"answer": f"{t.label}-answer"})
@@ -1041,7 +1041,7 @@ def test_a_runner_minted_id_posted_in_both_tenants_is_two_rows_each_answered_alo
     assert "beta-answer" in answers["beta"] and "alpha-answer" not in answers["beta"]
 
 
-def test_a_route_token_acts_in_its_chunks_tenant_and_nowhere_else(two: _Two) -> None:
+def test_a_route_token_acts_in_its_chunks_tenant_and_nowhere_else(two: Two) -> None:
     first, second = two.first, two.second
     lease = {"chunk_id": first.ids["chunk_id"], "epoch": 2, "route_token": first.ids["route_token"]}
     fact = [{"seq": 50, "kind": "lease.minted", "payload": lease}]
@@ -1063,7 +1063,7 @@ def test_a_route_token_acts_in_its_chunks_tenant_and_nowhere_else(two: _Two) -> 
     assert own.status_code == 200 and not own.json()["rejected"], own.text
 
 
-def test_the_packaged_system_artifacts_read_the_same_from_either_tenant(two: _Two) -> None:
+def test_the_packaged_system_artifacts_read_the_same_from_either_tenant(two: Two) -> None:
     listings = [t.client.get("/api/fleet/system-artifacts", params={"runner_id": t.runner()}) for t in two.both()]
     assert listings[0].status_code == 200
     assert listings[0].text == listings[1].text
@@ -1113,8 +1113,8 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
         egress=EgressConfig(directory=tmp_path / "egress", settle_seconds=0),
         egress_path_key=b"k" * 32,
     )
-    first, second, closed = _seeded(hub, "alpha", "beta", "gamma")
-    intents = {t.label: _landed_hub_ref(hub, t.harness.tenant, f"ch_close_{t.label}") for t in (first, second, closed)}
+    first, second, closed = seeded(hub, "alpha", "beta", "gamma")
+    intents = {t.label: landed_hub_ref(hub, t.harness.tenant, f"ch_close_{t.label}") for t in (first, second, closed)}
     close_tenant(hub.engine, closed.harness.tenant)
     hub.hub_services.tenants.open_tenants.refresh()
     assert hub.app is not None
@@ -1130,7 +1130,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     for t in (first, second):
         assert _rows(hub, schema.transcript_event_derivations, t.harness.tenant) == 1, t.label
         assert intents[t.label].delivery.pending_close_intents() == []
-        assert _close_events(hub, t.harness.tenant) == [f"ch_close_{t.label}"]
+        assert close_events(hub, t.harness.tenant) == [f"ch_close_{t.label}"]
     assert [i.chunk_id for i in intents["gamma"].delivery.pending_close_intents()] == ["ch_close_gamma"]
     assert _rows(hub, schema.transcript_event_derivations, closed.harness.tenant) == 0
     assert closed.harness.tenant not in repr(spans.batches)

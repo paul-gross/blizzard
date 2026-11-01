@@ -1,7 +1,5 @@
 """Tests proving the ``20261004_1000_binding_release_epoch_floor`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -15,9 +13,9 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
 from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
-    _RUNNER,
-    _leases,
-    _seed_identity_before_the_scope,
+    RUNNER,
+    leases_table,
+    seed_identity_before_the_scope,
 )
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
@@ -48,7 +46,7 @@ def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_
         with engine.begin() as conn:
             for lease_id, epoch in (("old", 1), ("new", 3)):
                 conn.execute(
-                    _leases.insert().values(
+                    leases_table.insert().values(
                         lease_id=lease_id, chunk_id="ch_1", epoch=epoch, runner_id="r1", created_at=instant
                     )
                 )
@@ -60,13 +58,13 @@ def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_
             conn.execute(
                 _binding_releases_at_floor.insert().values(chunk_id="ch_1", environment_id="e1", released_at=instant)
             )
-        _seed_identity_before_the_scope(migration, engine)
+        seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
         with engine.connect() as conn:
             floor = conn.execute(
-                sa.select(sa.column("lease_epoch_floor")).select_from(sa.table("binding_releases"))
+                sa.select(sa.column("lease_epoch_floor", sa.Integer)).select_from(sa.table("binding_releases"))
             ).scalar_one()
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
         assert floor == 1
         assert store.has_lease_in_binding_tenure("ch_1", instant)
     finally:

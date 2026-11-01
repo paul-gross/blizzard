@@ -32,8 +32,8 @@ from tests.support import (
     pointer_token,
     report_lease,
 )
-from tests.test_hub_command_node import _post_build_pass
-from tests.test_write_fence import _Chunk, _held_by_a_writer, _restart_under_lock, _stop_under_lock
+from tests.test_hub_command_node import post_build_pass
+from tests.test_write_fence import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
 
 pytestmark = pytest.mark.component
 
@@ -94,14 +94,14 @@ def _bounce_capped_chunk(tmp_path: Path):
     )
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _post_build_pass(hub, chunk_id, build_node_id, 1)
+    post_build_pass(hub, chunk_id, build_node_id, 1)
     assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
     assert hub.turn_outcome(chunk_id) == "failure"
     hub.clock.advance(timedelta(seconds=1))
     report_lease(hub, chunk_id, epoch=3, seq=2)
     second_build = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
-    _post_build_pass(hub, chunk_id, second_build, 3)
+    post_build_pass(hub, chunk_id, second_build, 3)
     assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
     return hub, chunk_id
@@ -120,9 +120,9 @@ def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Pat
     assert chunk_facts_of(hub, chunk_id).routes.newest is not None
 
 
-@pytest.mark.parametrize("writer", [_restart_under_lock, _stop_under_lock], ids=["restart", "stop"])
+@pytest.mark.parametrize("writer", [restart_under_lock, stop_under_lock], ids=["restart", "stop"])
 def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: Callable[[_Chunk], Callable[[object], None]]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: Callable[[Chunk], Callable[[object], None]]
 ) -> None:
     """The writer lands after the hub turn decided to kick the chunk back and before the routing's own locked
     write — the window the fence closes: the escalation the crossing would record is refused, so the turn
@@ -184,7 +184,7 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
 
 
 def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_twice(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
     def _land_the_first(handle) -> None:
         chunk.stores.movement.record_transition_locked(
@@ -202,14 +202,14 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         )
 
-    result = _held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)
+    result = held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)
 
     assert isinstance(result, dict) and result["outcome"] == "parked_at_gate", result
     assert _count(chunk.hub, s.transitions, chunk.chunk_id, from_node_id=chunk.nodes["build"], epoch=1) == 1
 
 
 def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
     def _open_the_first(handle) -> None:
         chunk.stores.decisions.record_decision_locked(
@@ -227,7 +227,7 @@ def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: 
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         )
 
-    result = _held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), _open_the_first)
+    result = held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), _open_the_first)
 
     assert isinstance(result, dict) and result["outcome"] == "parked_at_gate", result
     assert _count(chunk.hub, s.decisions, chunk.chunk_id) == 1

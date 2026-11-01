@@ -57,13 +57,13 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
 
 
-def _migrated_engine(tmp_path: Path) -> Engine:
+def migrated_engine(tmp_path: Path) -> Engine:
     config = init_host(tmp_path)
     return create_engine_from_url(config.db_url)
 
 
 def _store(tmp_path: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
-    engine = _migrated_engine(tmp_path)
+    engine = migrated_engine(tmp_path)
     return SqlAlchemyRunnerStore(engine, runner_store_errors()), engine
 
 

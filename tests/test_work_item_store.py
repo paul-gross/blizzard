@@ -48,10 +48,10 @@ def test_get_of_an_unknown_ref_is_none(tmp_path: Path) -> None:
 
 
 def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
 
     created = seed_work_item(
-        store,
+        hub_store_connections(engine),
         graph_id="gr_1",
         title="widget is broken",
         body="steps to repro",
@@ -74,10 +74,10 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
 def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> None:
     """A fleet author's runner/chunk/node lineage round-trips through the JSON
     ``author_payload``, same as a user author's ``user_id`` does."""
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_source", node_name="triage")
 
-    created = seed_work_item(store, graph_id="gr_1", author=author, at=_NOW)
+    created = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=author, at=_NOW)
 
     reader: IReadWorkItemRepository = store
     fetched = reader.get("hub", created.ref)
@@ -89,9 +89,9 @@ def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Pat
     """Two items created at the identical instant still sort deterministically — not an
     artifact of sqlite's rowid-order fallback, which a real (postgres) engine wouldn't
     give a bare ``created_at`` ordering."""
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     first = seed_work_item(
-        store,
+        hub_store_connections(engine),
         graph_id="gr_1",
         title="a",
         body="a",
@@ -100,7 +100,7 @@ def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Pat
         at=_NOW,
     )
     second = seed_work_item(
-        store,
+        hub_store_connections(engine),
         graph_id="gr_1",
         title="b",
         body="b",
@@ -115,10 +115,10 @@ def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Pat
 
 
 def test_list_respects_the_limit(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     for i in range(3):
         seed_work_item(
-            store,
+            hub_store_connections(engine),
             graph_id="gr_1",
             title=str(i),
             body="b",
@@ -131,9 +131,9 @@ def test_list_respects_the_limit(tmp_path: Path) -> None:
 
 
 def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     created = seed_work_item(
-        store,
+        hub_store_connections(engine),
         graph_id="gr_1",
         title="a",
         body="a",
@@ -157,9 +157,9 @@ def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
 def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> None:
     """The ``closed_at IS NULL`` guard mirrors ``close``'s own (:107) — a title/body
     write racing a closure matches zero rows rather than landing on a closed item."""
-    store = _store(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     created = seed_work_item(
-        store,
+        hub_store_connections(engine),
         graph_id="gr_1",
         title="a",
         body="a",

@@ -12,17 +12,17 @@ from sqlalchemy import func
 from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, hub_store_connections
-from tests.test_analytics_events_api import _ingest_chunk, _record, _tool_turn
+from tests.test_analytics_events_api import ingest_chunk, record_transcript, tool_turn
 
 pytestmark = pytest.mark.component
 
 
 def _hub_with_one_segment(tmp_path: Path):
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
-    turns = [_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
+    chunk_id = ingest_chunk(hub)
+    turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
     push = hub.client.post(
-        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=turns)]}
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns)]}
     )
     assert push.status_code == 200, push.text
     return hub, chunk_id
@@ -52,11 +52,9 @@ def test_a_stored_segment_is_counted(tmp_path: Path) -> None:
     assert by_chunk.derived == 0  # the forced derive left its marker current: no candidate remains
 
 
-def _push(
-    hub: HubHarness, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True
-) -> None:
-    turns = [_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
-    record = _record(chunk_id, turns=turns, segment_id=segment_id)
+def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True) -> None:
+    turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
+    record = record_transcript(chunk_id, turns=turns, segment_id=segment_id)
     record["supersedes"] = supersedes
     record["final"] = final
     push = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [record]})
@@ -128,7 +126,7 @@ def test_a_sweep_after_a_refused_force_appends_no_drop_fact(tmp_path: Path) -> N
 
 def test_a_scope_re_derive_excludes_an_unresolvable_pin_candidate_from_derived(tmp_path: Path) -> None:
     hub, _chunk_id = _hub_with_one_segment(tmp_path)
-    orphan_chunk = _ingest_chunk(hub, pointer_token="default:2")
+    orphan_chunk = ingest_chunk(hub, pointer_token="default:2")
     _push(hub, orphan_chunk, segment_id="sg_orphan")
     deleted = hub.client.request("DELETE", f"/api/chunks/{orphan_chunk}", json={"by": "test"})
     assert deleted.status_code == 202, deleted.text

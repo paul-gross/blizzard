@@ -13,18 +13,18 @@ from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.internal.github_reads import ANSWERS_MAX, COMPARISONS_MAX, KeptAnswers, KeptComparisons
 from blizzard.hub.forge.landing import ForgeRejected, MergeMethod
-from tests.test_github_landing import _REPO, _Harness, _pull, _reply, _run
+from tests.test_github_landing import REPO, Harness, pull, reply, workflow_run
 
 pytestmark = pytest.mark.unit
 
 _TIP = {"object": {"sha": "a" * 40}}
-_REF = f"{_REPO}/git/ref/heads/main"
-_REFS = f"{_REPO}/git/refs/heads/main"
+_REF = f"{REPO}/git/ref/heads/main"
+_REFS = f"{REPO}/git/refs/heads/main"
 
 
 def test_branch_tip_distinguishes_the_mock_missing_ref_from_other_422s() -> None:
     missing = "ref does not resolve in acme/widget: main"
-    harness = _Harness({("GET", _REF): [_reply(422, {"message": missing}), _reply(422, {"message": "other"})]})
+    harness = Harness({("GET", _REF): [reply(422, {"message": missing}), reply(422, {"message": "other"})]})
     assert harness.run(lambda forge: forge.branch_tip("main")) is None
     with pytest.raises(ForgeRejected):
         harness.run(lambda forge: forge.branch_tip("main"))
@@ -32,7 +32,7 @@ def test_branch_tip_distinguishes_the_mock_missing_ref_from_other_422s() -> None
 
 @pytest.mark.parametrize("message", ["ref does not resolve in acme/widget: other", "ref does not resolve in x/y: main"])
 def test_branch_tip_does_not_hide_a_different_missing_ref(message: str) -> None:
-    harness = _Harness({("GET", _REF): [_reply(422, {"message": message})]})
+    harness = Harness({("GET", _REF): [reply(422, {"message": message})]})
     with pytest.raises(ForgeRejected):
         harness.run(lambda forge: forge.branch_tip("main"))
 
@@ -46,7 +46,7 @@ def test_github_offers_the_four_new_capabilities() -> None:
 
 
 def test_advance_ref_patches_without_force_when_the_tip_is_the_expected_one() -> None:
-    harness = _Harness({("GET", _REF): [_reply(200, _TIP)], ("PATCH", _REFS): [_reply(200, {})]})
+    harness = Harness({("GET", _REF): [reply(200, _TIP)], ("PATCH", _REFS): [reply(200, {})]})
 
     harness.run(lambda forge: forge.advance_ref("main", "a" * 40, "b" * 40))
 
@@ -56,7 +56,7 @@ def test_advance_ref_patches_without_force_when_the_tip_is_the_expected_one() ->
 
 
 def test_advance_ref_with_a_moved_tip_is_stale_and_sends_no_patch() -> None:
-    harness = _Harness({("GET", _REF): [_reply(200, _TIP)]})
+    harness = Harness({("GET", _REF): [reply(200, _TIP)]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.advance_ref("main", "c" * 40, "b" * 40))
@@ -77,7 +77,7 @@ def test_advance_ref_with_a_moved_tip_is_stale_and_sends_no_patch() -> None:
     ],
 )
 def test_advance_ref_refusals_are_named_by_message_prefix(message: str, reason: str) -> None:
-    harness = _Harness({("GET", _REF): [_reply(200, _TIP)], ("PATCH", _REFS): [_reply(422, {"message": message})]})
+    harness = Harness({("GET", _REF): [reply(200, _TIP)], ("PATCH", _REFS): [reply(422, {"message": message})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.advance_ref("main", "a" * 40, "b" * 40))
@@ -89,14 +89,14 @@ def test_advance_ref_refusals_are_named_by_message_prefix(message: str, reason: 
 
 
 def test_merge_into_answers_the_merge_commit_or_none_or_the_named_refusal() -> None:
-    path = f"{_REPO}/merges"
-    harness = _Harness(
+    path = f"{REPO}/merges"
+    harness = Harness(
         {
             ("POST", path): [
-                _reply(201, {"sha": "m" * 40}),
-                _reply(204),
-                _reply(409, {"message": "Merge conflict"}),
-                _reply(422, {"message": "Repository rule violations found for refs/heads/x-landing"}),
+                reply(201, {"sha": "m" * 40}),
+                reply(204),
+                reply(409, {"message": "Merge conflict"}),
+                reply(422, {"message": "Repository rule violations found for refs/heads/x-landing"}),
             ]
         }
     )
@@ -114,18 +114,18 @@ def test_merge_into_answers_the_merge_commit_or_none_or_the_named_refusal() -> N
 # create_ref / delete_ref
 
 
-_CREATE = f"{_REPO}/git/refs"
+_CREATE = f"{REPO}/git/refs"
 _EXISTS = {"message": "Reference already exists"}
 
 
 def test_create_ref_at_the_same_revision_is_not_an_error() -> None:
-    harness = _Harness({("POST", _CREATE): [_reply(422, _EXISTS)], ("GET", _REF): [_reply(200, _TIP)]})
+    harness = Harness({("POST", _CREATE): [reply(422, _EXISTS)], ("GET", _REF): [reply(200, _TIP)]})
 
     harness.run(lambda forge: forge.create_ref("main", "a" * 40))
 
 
 def test_create_ref_at_another_revision_is_stale() -> None:
-    harness = _Harness({("POST", _CREATE): [_reply(422, _EXISTS)], ("GET", _REF): [_reply(200, _TIP)]})
+    harness = Harness({("POST", _CREATE): [reply(422, _EXISTS)], ("GET", _REF): [reply(200, _TIP)]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.create_ref("main", "b" * 40))
@@ -134,7 +134,7 @@ def test_create_ref_at_another_revision_is_stale() -> None:
 
 
 def test_create_ref_under_a_repository_rule_is_protected() -> None:
-    harness = _Harness({("POST", _CREATE): [_reply(422, {"message": "Repository rule violations found"})]})
+    harness = Harness({("POST", _CREATE): [reply(422, {"message": "Repository rule violations found"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.create_ref("main", "a" * 40))
@@ -144,7 +144,7 @@ def test_create_ref_under_a_repository_rule_is_protected() -> None:
 
 @pytest.mark.parametrize("status", [404, 422])
 def test_delete_ref_of_a_branch_already_gone_is_not_an_error(status: int) -> None:
-    harness = _Harness({("DELETE", _REFS): [_reply(status, {"message": "Reference does not exist"})]})
+    harness = Harness({("DELETE", _REFS): [reply(status, {"message": "Reference does not exist"})]})
 
     harness.run(lambda forge: forge.delete_ref("main"))
 
@@ -154,7 +154,7 @@ def test_delete_ref_of_a_branch_already_gone_is_not_an_error(status: int) -> Non
 
 def test_a_merge_method_refusal_is_method_and_keeps_the_forges_words() -> None:
     message = "Merge commits are not allowed on this repository"
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/merge"): [_reply(405, {"message": message})]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(405, {"message": message})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg"))
@@ -164,7 +164,7 @@ def test_a_merge_method_refusal_is_method_and_keeps_the_forges_words() -> None:
 
 
 def test_any_other_405_still_raises_the_forges_message() -> None:
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/merge"): [_reply(405, {"message": "Base branch was modified"})]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(405, {"message": "Base branch was modified"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg"))
@@ -176,7 +176,7 @@ def test_any_other_405_still_raises_the_forges_message() -> None:
 
 
 def test_recently_closed_is_one_page_ordered_by_update() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls"): [_reply(200, [_pull(number=3, state="closed")])]})
+    harness = Harness({("GET", f"{REPO}/pulls"): [reply(200, [pull(number=3, state="closed")])]})
 
     found = harness.run(lambda forge: forge.recently_closed("main", 20))
 
@@ -193,25 +193,25 @@ def test_recently_closed_is_one_page_ordered_by_update() -> None:
 
 
 def test_change_checks_reads_the_checks_of_the_changes_head() -> None:
-    harness = _Harness(
+    harness = Harness(
         {
-            ("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull())],
-            ("GET", f"{_REPO}/commits/h1/check-runs"): [_reply(200, {"check_runs": [_run()]})],
+            ("GET", f"{REPO}/pulls/7"): [reply(200, pull())],
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [workflow_run()]})],
         }
     )
 
     found = harness.run(lambda forge: forge.change_checks(7))
 
     assert [c.name for c in found] == ["build"]
-    assert harness.recorded.paths() == [f"{_REPO}/pulls/7", f"{_REPO}/commits/h1/check-runs"]
+    assert harness.recorded.paths() == [f"{REPO}/pulls/7", f"{REPO}/commits/h1/check-runs"]
 
 
 # kept reads
 
 
 def test_a_304_is_answered_from_the_kept_body_and_sent_conditionally() -> None:
-    path = f"{_REPO}/pulls/7"
-    harness = _Harness({("GET", path): [_reply(200, _pull(), {"ETag": '"v1"'}), _reply(304)]})
+    path = f"{REPO}/pulls/7"
+    harness = Harness({("GET", path): [reply(200, pull(), {"ETag": '"v1"'}), reply(304)]})
 
     first = harness.run(lambda forge: forge.change(7))
     both = harness.run(lambda forge: _twice(forge))
@@ -225,8 +225,8 @@ async def _twice(forge: GitHubLanding) -> tuple[Any, Any]:
 
 
 def test_checks_always_reach_the_transport_even_after_an_all_completed_answer() -> None:
-    path = f"{_REPO}/commits/h1/check-runs"
-    harness = _Harness({("GET", path): [_reply(200, {"check_runs": [_run()]}, {"ETag": '"c1"'})]})
+    path = f"{REPO}/commits/h1/check-runs"
+    harness = Harness({("GET", path): [reply(200, {"check_runs": [workflow_run()]}, {"ETag": '"c1"'})]})
 
     async def thrice(forge: GitHubLanding) -> None:
         for _ in range(3):
@@ -238,8 +238,8 @@ def test_checks_always_reach_the_transport_even_after_an_all_completed_answer() 
 
 
 def test_a_304_with_nothing_kept_is_asked_again_unconditionally() -> None:
-    path = f"{_REPO}/pulls/7"
-    harness = _Harness({("GET", path): [_reply(200, _pull())]})
+    path = f"{REPO}/pulls/7"
+    harness = Harness({("GET", path): [reply(200, pull())]})
     assert harness.run(lambda forge: forge.change(7)).number == 7
     assert "if-none-match" not in harness.recorded.requests[0].headers
 
@@ -256,7 +256,7 @@ _COMPARE = {
 
 def test_a_compare_of_two_fixed_revisions_is_read_once() -> None:
     base, head = "a" * 40, "b" * 40
-    harness = _Harness({("GET", f"{_REPO}/compare/{base}...{head}"): [_reply(200, _COMPARE)]})
+    harness = Harness({("GET", f"{REPO}/compare/{base}...{head}"): [reply(200, _COMPARE)]})
 
     async def twice(forge: GitHubLanding) -> None:
         await forge.compare(base, head)
@@ -269,9 +269,7 @@ def test_a_compare_of_two_fixed_revisions_is_read_once() -> None:
 
 def test_a_compare_naming_a_branch_is_sent_every_time_and_conditionally() -> None:
     head = "b" * 40
-    harness = _Harness(
-        {("GET", f"{_REPO}/compare/main...{head}"): [_reply(200, _COMPARE, {"ETag": '"k"'}), _reply(304)]}
-    )
+    harness = Harness({("GET", f"{REPO}/compare/main...{head}"): [reply(200, _COMPARE, {"ETag": '"k"'}), reply(304)]})
 
     async def twice(forge: GitHubLanding) -> None:
         await forge.compare("main", head)

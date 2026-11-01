@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Pyright in strict mode over everything — the report a strict-typing slice of the tests reads its before and after
 # from. The gate already holds shipping code to strict (`[tool.pyright]` `strict`); this report extends strict to the
-# tests. A file's own `# pyright: standard` header outranks the generated config, so a waived store migration test is
-# measured by deleting its header and running the gate.
+# tests.
 #
 # Runs the repo's `[tool.pyright]` settings with `typeCheckingMode = "strict"` and `enableTypeIgnoreComments = false`,
 # so a `# type: ignore` hides nothing. Checks the configured include paths, or the paths passed as arguments. Not part

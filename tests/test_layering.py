@@ -3389,7 +3389,7 @@ def _loaded_after_importing(module: str) -> set[str]:
     return set(json.loads(result.stdout))
 
 
-def _loaded_after_running(argv: list[str], env: dict[str, str] | None = None) -> set[str]:
+def loaded_after_running(argv: list[str], env: dict[str, str] | None = None) -> set[str]:
     """The modules a ``blizzard`` invocation leaves loaded, in a fresh interpreter."""
     code = (
         "import sys, json; from click.testing import CliRunner; from blizzard.cli.main import blizzard; "
@@ -3403,7 +3403,7 @@ def _loaded_after_running(argv: list[str], env: dict[str, str] | None = None) ->
 
 def test_a_worker_verb_loads_no_opentelemetry() -> None:
     """A worker verb is a short-lived process that must not pay for the OpenTelemetry SDK."""
-    loaded = _loaded_after_running(
+    loaded = loaded_after_running(
         ["runner", "chunk", "--help"],
         {
             "BLIZZARD_TRACEPARENT": "00-" + "1" * 32 + "-" + "2" * 16 + "-01",
@@ -3434,7 +3434,7 @@ def _adapter_modules_beyond_sections(loaded: set[str]) -> list[str]:
     "load",
     [
         lambda: _loaded_after_importing("blizzard.runner.cli.worker"),
-        lambda: _loaded_after_running(["runner", "heartbeat", "--help"]),
+        lambda: loaded_after_running(["runner", "heartbeat", "--help"]),
     ],
     ids=["hook-entry-point", "heartbeat-verb"],
 )
@@ -3467,7 +3467,7 @@ def test_the_adapter_module_filter_keeps_only_what_lies_beyond_a_section() -> No
 
 def test_a_hub_client_verb_loads_no_opentelemetry() -> None:
     """A hub client verb is a short-lived process that must not pay for the hub's app or its SDK."""
-    loaded = _loaded_after_running(["hub", "chunk", "list", "--hub-url", "http://127.0.0.1:1"])
+    loaded = loaded_after_running(["hub", "chunk", "list", "--hub-url", "http://127.0.0.1:1"])
     heavy = sorted(m for m in loaded if m.split(".")[0] == "opentelemetry")
     assert not heavy, (
         f"a hub client verb loaded {len(heavy)} opentelemetry modules, first {heavy[:3]}. Command modules "
@@ -3481,8 +3481,8 @@ def test_an_operator_trace_loads_no_opentelemetry_and_an_untraced_command_no_emi
     """The operator span is hand-built OTLP/JSON: sending it never loads the SDK, and a command
     with no endpoint configured never loads the emitter."""
     argv = ["hub", "chunk", "list", "--hub-url", "http://127.0.0.1:1"]
-    traced = _loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"})
-    untraced = _loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": ""})
+    traced = loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"})
+    untraced = loaded_after_running(argv, {"OTEL_EXPORTER_OTLP_ENDPOINT": ""})
     heavy = sorted(m for m in traced if m.split(".")[0] == "opentelemetry")
     assert not heavy, f"an operator trace loaded {len(heavy)} opentelemetry modules, first {heavy[:3]}"
     assert "blizzard.foundation.cli_spans" in traced

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -12,7 +11,6 @@ from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import (
     FakeWorkSource,
-    HubHarness,
     build_hub,
     chunk_stores,
     default_project,
@@ -31,7 +29,7 @@ _P2 = {"source": "default", "ref": "2"}
 
 # A build -> review -> deliver graph mirroring the packaged default's shape, but with a
 # trivial deliver node — hermetic, since this drives re-ingest, not delivery mechanics.
-_BUILD_REVIEW_DELIVER_YAML = """
+BUILD_REVIEW_DELIVER_YAML = """
 name: default-delivery
 entry: build
 nodes:
@@ -242,9 +240,7 @@ def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) 
     assert resp.status_code == 422, resp.text  # no configured source claims it
 
 
-def _pass(
-    hub: HubHarness, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict[str, Any]]
-) -> dict[str, Any]:
+def pass_node(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -261,7 +257,7 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     # Pre-minted under the packaged default's own name, so `ensure_default` reuses it
     # (D-081) instead of the packaged prose graph — hermetic, no real forge script.
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
+    assert hub.client.post("/api/graphs", json={"definition_yaml": BUILD_REVIEW_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.
     make_ready(hub, chunk_id)
@@ -278,11 +274,11 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
             "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
     ]
-    to_review = _pass(hub, chunk_id, build_id, 1, artifacts=commit)
+    to_review = pass_node(hub, chunk_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
     # Report the review node-step's fresh lease so the hub's fence tracks it.
     assert report_lease(hub, chunk_id, epoch=2, seq=1)["applied"] == [1]
-    _pass(hub, chunk_id, review_id, 2, artifacts=[])
+    pass_node(hub, chunk_id, review_id, 2, artifacts=[])
     hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 

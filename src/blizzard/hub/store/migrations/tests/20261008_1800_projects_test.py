@@ -3,12 +3,10 @@ record links to, keys and uniqueness move under the project, an interrupted run 
 downgrade refuses a second project, else restores the store exactly. ``hub_invariants`` runs once,
 over the carried-over store in ``test_a_carried_over_store_keeps_every_project_invariant``."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -33,8 +31,8 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store import schema as hub
 from blizzard.tools.invariants import hub_invariants
-from tests.migration_support_invariant_checker import _NOW as _INVARIANT_NOW
-from tests.migration_support_invariant_checker import _PROJECT_INVARIANTS, insert
+from tests.migration_support_invariant_checker import NOW as _INVARIANT_NOW
+from tests.migration_support_invariant_checker import PROJECT_INVARIANTS, insert
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
     schema_snapshot,
@@ -51,7 +49,7 @@ _PROJECTS = "20261008_1800_projects"
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
-_NOW = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
+NOW = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
 
 _EMPTY = "ten_empty"
 
@@ -84,9 +82,9 @@ def _revision_module() -> ModuleType:
 
 
 @contextmanager
-def _at_the_closed_at(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine]]:
+def _at_the_closed_at(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine]]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner
+    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(NOW)).runner
     runner.upgrade(_CLOSED_AT)
     engine = create_engine_from_url(db_url)
     try:
@@ -195,7 +193,7 @@ def _projects(engine: sa.Engine) -> dict[str, tuple[Any, ...]]:
 def _stopped_after(engine: sa.Engine, steps: int) -> None:
     module = _revision_module()
     config = Config()
-    config.attributes[MIGRATION_CLOCK_ATTRIBUTE] = FixedClock(_NOW)
+    config.attributes[MIGRATION_CLOCK_ATTRIBUTE] = FixedClock(NOW)
     environment = EnvironmentContext(config, ScriptDirectory(str(MIGRATIONS_DIR)))
     with engine.begin() as conn, Operations.context(MigrationContext.configure(conn, environment_context=environment)):
         for step in module.UPGRADE_STEPS[:steps]:
@@ -324,7 +322,7 @@ def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> N
     try:
         violations = hub_invariants(engine).run()
         stranded = [v for v in violations if v.invariant == "hub:work-source-references-in-tenant"]
-        assert {v.invariant for v in violations} & _PROJECT_INVARIANTS == {"hub:work-source-references-in-tenant"}
+        assert {v.invariant for v in violations} & PROJECT_INVARIANTS == {"hub:work-source-references-in-tenant"}
         # Only the ref naming a source never stored as a record is left as stored, and reported.
         assert [v.detail.split(" names ")[1] for v in stranded] == [
             "work source default, not a work source of its tenant"

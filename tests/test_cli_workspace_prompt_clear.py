@@ -12,7 +12,7 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from tests.host_files import load_runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.test_runner_status_cli import _init_runner, _serve_local_api
+from tests.test_runner_status_cli import init_runner_home, serve_local_api
 from tests.worker_http import bind_local_only
 
 pytestmark = pytest.mark.component
@@ -23,7 +23,7 @@ def _run(*args: str) -> Result:
 
 
 def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
-    root = _init_runner(tmp_path)
+    root = init_runner_home(tmp_path)
     config = load_runner_config(root)
     store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
     store.set_workspace_prompt(config.home_workspace.id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
@@ -31,7 +31,7 @@ def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
     assert "store override" in standing.output
     assert "runner prompt clear" in standing.output
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         cleared = _run("clear", "--dir", str(root))
 
     assert cleared.exit_code == 0, cleared.output
@@ -39,7 +39,7 @@ def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
 
 
 def test_clear_without_a_daemon_names_the_missing_runner(tmp_path: Path) -> None:
-    result = _run("clear", "--dir", str(_init_runner(tmp_path)))
+    result = _run("clear", "--dir", str(init_runner_home(tmp_path)))
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output

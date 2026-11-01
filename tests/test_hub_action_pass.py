@@ -29,7 +29,6 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     TEST_HUB_ACTIONS,
     HubHarness,
@@ -138,7 +137,7 @@ def _at_deliver(hub: HubHarness, yaml: str, *, run_context: bool = False) -> str
     assert minted.status_code == 201, minted.text
     connections = hub_store_connections(hub.engine)
     item = seed_work_item(
-        WorkItemStore(connections),
+        connections,
         graph_id=minted.json()["graph_id"],
         author=WorkItemAuthor.user("u_1"),
         at=hub.clock.now(),

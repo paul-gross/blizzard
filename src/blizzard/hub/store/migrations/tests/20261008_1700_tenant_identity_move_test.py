@@ -3,11 +3,9 @@ member and the hub administrator, a pending user nothing — ``users.role`` goes
 session stay; a re-run over a stopped move writes no fact twice; the copy pages in bounded batches; the downgrade, with
 one tenant only, restores the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,6 +15,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -102,11 +101,18 @@ def _user_columns(engine: sa.Engine) -> set[str]:
 
 
 @contextmanager
-def _inserts_into(table: str) -> Iterator[list[int]]:
+def _inserts_into(table: str) -> Generator[list[int]]:
     """The rows each ``INSERT`` into ``table`` any engine runs while the context is open wrote."""
     inserts: list[int] = []
 
-    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+    def record(
+        conn: sa.Connection,
+        cursor: DBAPICursor,
+        statement: str,
+        parameters: Sequence[object] | Mapping[str, object],
+        context: ExecutionContext | None,
+        executemany: bool,
+    ) -> None:
         words = statement.split()
         if words[0].upper() == "INSERT" and words[2] == table:
             inserts.append(len(parameters) if executemany else 1)

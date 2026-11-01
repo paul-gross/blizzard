@@ -43,7 +43,7 @@ from tests.runner_fakes import (
     migrated_store_at,
     single_workspace,
 )
-from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
+from tests.test_runner_winter_provider import FakeGit, FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -344,8 +344,8 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     config = RunnerConfig(root=tmp_path, db_url=db_url, workspaces=one_workspace(root=str(tmp_path), envs=("e1",)))
     (tmp_path / "e1").mkdir()
-    winter = _FakeWinter()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    winter = FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
     monkeypatch.setattr(composition, "build_workspace_provider", lambda *_args, **_kwargs: provider)
 
     def membership(repo: str) -> None:

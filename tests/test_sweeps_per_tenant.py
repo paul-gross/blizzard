@@ -328,7 +328,7 @@ def _stores_of(hub: HubHarness, tenant: TenantId) -> ChunkStores:
     return build_chunk_stores(connections, hub.clock, registry=RunnerRegistryStore(connections))
 
 
-def _landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkStores:
+def landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkStores:
     """A chunk of ``tenant`` holding the hub source's ref ``1`` — the same ref in every tenant — landed,
     so its close intent is pending; the tenant's chunk stores."""
     connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
@@ -352,7 +352,7 @@ def _landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkSt
     return stores
 
 
-def _close_events(hub: HubHarness, tenant: TenantId) -> list[str]:
+def close_events(hub: HubHarness, tenant: TenantId) -> list[str]:
     connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
     log = s.event_log
     with connections.read("test close events") as conn:
@@ -366,16 +366,16 @@ def test_one_drain_pass_closes_each_tenants_intent_in_its_own_tenant(tmp_path: P
     carried = default_tenant(hub.engine)
     other = hub.add_tenant("other")
     stores = {
-        carried: _landed_hub_ref(hub, carried, "ch_carried"),
-        other.tenant: _landed_hub_ref(hub, other.tenant, "ch_other"),
+        carried: landed_hub_ref(hub, carried, "ch_carried"),
+        other.tenant: landed_hub_ref(hub, other.tenant, "ch_other"),
     }
 
     hub.hub_services.close_drain.sweep()
 
     assert stores[carried].delivery.pending_close_intents() == []
     assert stores[other.tenant].delivery.pending_close_intents() == []
-    assert _close_events(hub, carried) == ["ch_carried"]
-    assert _close_events(hub, other.tenant) == ["ch_other"]
+    assert close_events(hub, carried) == ["ch_carried"]
+    assert close_events(hub, other.tenant) == ["ch_other"]
 
 
 @pytest.mark.component
@@ -383,15 +383,15 @@ def test_a_drain_pass_leaves_a_closed_tenants_intent_untouched(tmp_path: Path) -
     hub = build_hub(tmp_path)
     carried = default_tenant(hub.engine)
     other = hub.add_tenant("other")
-    carried_stores = _landed_hub_ref(hub, carried, "ch_carried")
-    other_stores = _landed_hub_ref(hub, other.tenant, "ch_other")
+    carried_stores = landed_hub_ref(hub, carried, "ch_carried")
+    other_stores = landed_hub_ref(hub, other.tenant, "ch_other")
     close_tenant(hub.engine, other.tenant)
 
     hub.hub_services.close_drain.sweep()
 
     assert carried_stores.delivery.pending_close_intents() == []
     assert [intent.chunk_id for intent in other_stores.delivery.pending_close_intents()] == ["ch_other"]
-    assert _close_events(hub, other.tenant) == []
+    assert close_events(hub, other.tenant) == []
     attempts = s.close_intent_attempts
     with hub.engine.connect() as conn:
         tried = conn.execute(

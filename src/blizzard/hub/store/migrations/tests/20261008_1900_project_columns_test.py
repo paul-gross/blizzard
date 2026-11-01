@@ -3,12 +3,10 @@ id; a landed repository row gains a null record name; nothing else changes; the 
 a runner holds other than one project; a run stopped after any step finishes as a single run does; the fill pages in
 bounded batches; and the downgrade restores the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
@@ -24,7 +22,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_project_columns_migration import _NOW, _T0, _insert, _query, _run_step
+from tests.migration_support_project_columns_migration import NOW, T0, insert, query, run_step
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
     schema_snapshot,
@@ -46,27 +44,27 @@ def _revision_module() -> ModuleType:
 
 
 @contextmanager
-def _at_the_read_indexes(tmp_path: Path, *, runners: int = 2) -> Iterator[tuple[MigrationRunner, sa.Engine, str]]:
+def _at_the_read_indexes(tmp_path: Path, *, runners: int = 2) -> Generator[tuple[MigrationRunner, sa.Engine, str]]:
     """A store at the read-indexes revision holding two tenants, each with its one project: the store's own, with
     ``runners`` runners and a landed repository row, and an idle one with neither; the store's own tenant's id."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner
+    runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(NOW)).runner
     runner.upgrade(_CLOSED_AT)
     engine = create_engine_from_url(db_url)
     try:
-        _insert(engine, "tenants", [{"tenant_id": _IDLE, "name": "idle", "created_by": "migration"}])
-        (tenant,) = _query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :i", i=_IDLE)[0]
+        insert(engine, "tenants", [{"tenant_id": _IDLE, "name": "idle", "created_by": "migration"}])
+        (tenant,) = query(engine, "SELECT tenant_id FROM tenants WHERE tenant_id != :i", i=_IDLE)[0]
         t = {"tenant_id": tenant}
-        _insert(engine, "chunks", [{**t, "chunk_id": "ch_00000", "minted_at": _T0}])
-        _insert(
+        insert(engine, "chunks", [{**t, "chunk_id": "ch_00000", "minted_at": T0}])
+        insert(
             engine,
             "delivery_repo_landed",
-            [{**t, "chunk_id": "ch_00000", "repo": "acme/widget", "commit_hash": "abc123", "landed_at": _T0}],
+            [{**t, "chunk_id": "ch_00000", "repo": "acme/widget", "commit_hash": "abc123", "landed_at": T0}],
         )
-        _insert(
+        insert(
             engine,
             "runner_registrations",
-            [{**t, "runner_id": f"run_{n:05d}", "name": f"r{n}", "added_at": _T0} for n in range(runners)],
+            [{**t, "runner_id": f"run_{n:05d}", "name": f"r{n}", "added_at": T0} for n in range(runners)],
         )
         runner.upgrade(_READ_INDEXES)
         yield runner, engine, tenant
@@ -75,16 +73,16 @@ def _at_the_read_indexes(tmp_path: Path, *, runners: int = 2) -> Iterator[tuple[
 
 
 def _project_of(engine: sa.Engine, tenant: str) -> str:
-    return _query(engine, "SELECT project_id FROM projects WHERE tenant_id = :t", t=tenant)[0][0]
+    return query(engine, "SELECT project_id FROM projects WHERE tenant_id = :t", t=tenant)[0][0]
 
 
 def _served(engine: sa.Engine) -> dict[str, Any]:
-    rows = _query(engine, "SELECT runner_id, projects FROM runner_registrations ORDER BY runner_id")
+    rows = query(engine, "SELECT runner_id, projects FROM runner_registrations ORDER BY runner_id")
     return {runner_id: None if served is None else json.loads(served) for runner_id, served in rows}
 
 
 def _rows(engine: sa.Engine, table: str) -> list[tuple[Any, ...]]:
-    return sorted(_query(engine, f"SELECT * FROM {table}"), key=repr)
+    return sorted(query(engine, f"SELECT * FROM {table}"), key=repr)
 
 
 def _all_rows(engine: sa.Engine) -> dict[str, list[tuple[Any, ...]]]:
@@ -102,7 +100,7 @@ def _labelled(value: object, labels: dict[str, str]) -> object:
 def _shape(engine: sa.Engine) -> tuple[object, ...]:
     """The store with every minted tenant and project id read as a label, wherever it appears: its schema and every
     row."""
-    minted = _query(engine, "SELECT tenant_id, project_id FROM projects ORDER BY tenant_id = :i", i=_IDLE)
+    minted = query(engine, "SELECT tenant_id, project_id FROM projects ORDER BY tenant_id = :i", i=_IDLE)
     labels = {
         id_: f"{kind}-{n}" for n, row in enumerate(minted) for kind, id_ in zip(("tenant", "project"), row, strict=True)
     }
@@ -148,7 +146,7 @@ def test_a_runner_already_declaring_its_projects_keeps_its_declaration(tmp_path:
         module = _revision_module()
         with engine.begin() as conn:
             for step in module.UPGRADE_STEPS[:1]:
-                _run_step(conn, step)
+                run_step(conn, step)
             conn.execute(sa.text("UPDATE runner_registrations SET projects = '[]' WHERE runner_id = 'run_00001'"))
 
         runner.upgrade(_COLUMNS)
@@ -159,8 +157,8 @@ def test_a_runner_already_declaring_its_projects_keeps_its_declaration(tmp_path:
 @pytest.mark.component
 def test_the_upgrade_refuses_while_a_tenant_holding_a_runner_holds_two_projects(tmp_path: Path) -> None:
     with _at_the_read_indexes(tmp_path) as (runner, engine, tenant):
-        _insert(engine, "projects", [{"project_id": "proj_second", "tenant_id": tenant, "slug": "second"}])
-        _insert(engine, "projects", [{"project_id": "proj_idle_second", "tenant_id": _IDLE, "slug": "second"}])
+        insert(engine, "projects", [{"project_id": "proj_second", "tenant_id": tenant, "slug": "second"}])
+        insert(engine, "projects", [{"project_id": "proj_idle_second", "tenant_id": _IDLE, "slug": "second"}])
 
         with pytest.raises(RuntimeError, match=tenant) as refused:
             runner.upgrade(_COLUMNS)
@@ -177,7 +175,7 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
     with _at_the_read_indexes(tmp_path / "stopped") as (runner, engine, _tenant):
         with engine.begin() as conn:
             for step in _revision_module().UPGRADE_STEPS[:steps]:
-                _run_step(conn, step)
+                run_step(conn, step)
 
         runner.upgrade(_COLUMNS)
 

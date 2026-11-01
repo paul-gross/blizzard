@@ -38,7 +38,7 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
 )
-from tests.test_runner_tick_bulk_reads import _migrated_engine
+from tests.test_runner_tick_bulk_reads import migrated_engine
 
 pytestmark = pytest.mark.component
 
@@ -87,7 +87,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, i: int) -> None:
 
 
 def _run(tmp_path: Path, n: int, seed: Callable[[SqlAlchemyRunnerStore, FakeHub, int], None]) -> _Run:
-    engine = _migrated_engine(tmp_path)
+    engine = migrated_engine(tmp_path)
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     hub = FakeHub()
     for i in range(n):

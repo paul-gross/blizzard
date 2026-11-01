@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import inspect
 from pathlib import Path
 
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -16,7 +16,9 @@ def install_head_replay_guard() -> None:
 
     def upgrade(self: MigrationRunner, revision: str = "head") -> None:
         # The module's own ``__file__``, not the code object's: a ``.pyc`` copied into mutants/ keeps the path it was compiled at.
-        caller = Path(sys._getframe(1).f_globals.get("__file__") or "").resolve()
+        frame = inspect.currentframe()
+        caller_frame = frame.f_back if frame else None
+        caller = Path((caller_frame.f_globals.get("__file__") if caller_frame else None) or "").resolve()
         if (
             revision == "head"
             and caller.parent == tests

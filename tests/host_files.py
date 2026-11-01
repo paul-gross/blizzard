@@ -159,12 +159,12 @@ def with_runner(config: RunnerConfig, **changes: object) -> RunnerConfig:
     return changed
 
 
-def one_workspace(**fields: Any) -> tuple[HostWorkspace, ...]:
+def one_workspace(**fields: object) -> tuple[HostWorkspace, ...]:
     """A host's ``workspaces`` holding one workspace, the default id unless ``fields`` names another."""
-    return (HostWorkspace(**{"id": DEFAULT_WORKSPACE_ID, **fields}),)
+    return (dataclasses.replace(HostWorkspace(DEFAULT_WORKSPACE_ID), **fields),)
 
 
-def with_workspace(config: RunnerConfig, **changes: Any) -> RunnerConfig:
+def with_workspace(config: RunnerConfig, **changes: object) -> RunnerConfig:
     """``config`` with ``changes`` laid over its first workspace."""
     first, *rest = config.workspaces
     return dataclasses.replace(config, workspaces=(dataclasses.replace(first, **changes), *rest))

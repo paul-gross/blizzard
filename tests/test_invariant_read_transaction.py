@@ -24,7 +24,7 @@ from blizzard.hub.tenancy import StoreScope
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
 from tests.config_inputs import init_host, init_hub
-from tests.migration_support_invariant_checker import _NOW, insert
+from tests.migration_support_invariant_checker import NOW, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import default_tenant, hub_level_connections, hub_scoped, stamp
 
@@ -51,7 +51,7 @@ def test_the_runner_half_does_not_see_a_seq_committed_after_it_read_the_counters
     engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)
+            sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=NOW)
         )
     writer = create_engine_from_url(str(engine.url))
 
@@ -59,7 +59,7 @@ def test_the_runner_half_does_not_see_a_seq_committed_after_it_read_the_counters
         with writer.begin() as conn:
             conn.execute(
                 insert(runner.outbound_buffer).values(
-                    seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+                    seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW
                 )
             )
 
@@ -87,7 +87,7 @@ def test_the_hub_half_does_not_see_a_record_committed_after_it_loaded_a_tenants_
         with writer.begin() as conn:
             conn.execute(
                 sa.insert(hub.chunks).values(
-                    stamp(hub.chunks, chunk_id="ch_late", graph_id="gr_1", minted_at=_NOW, model="m")
+                    stamp(hub.chunks, chunk_id="ch_late", graph_id="gr_1", minted_at=NOW, model="m")
                 )
             )
 

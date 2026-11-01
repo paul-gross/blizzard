@@ -48,7 +48,7 @@ _PUBLIC: set[tuple[str, str]] = {
 
 #: The human routes that serve no tenant, gated by ``require_hub(<permission>)``: every other human
 #: route, and every fleet route, resolves its tenant at router level.
-_HUB_LEVEL: set[tuple[str, str]] = {
+HUB_LEVEL: set[tuple[str, str]] = {
     ("POST", "/api/auth/rotate-signing-key"),
     ("GET", "/api/traces/status"),
     ("POST", "/api/traces/replay"),
@@ -70,7 +70,7 @@ _HUB_LEVEL: set[tuple[str, str]] = {
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``, or
 #: ``require_hub(<permission>)`` for a route in :data:`_HUB_LEVEL`.
-_HUMAN: dict[tuple[str, str], Permission] = {
+HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events/stream"): Permission.FLEET_VIEW,
     ("GET", "/api/events"): Permission.FLEET_VIEW,
     ("GET", "/api/activity"): Permission.FLEET_VIEW,
@@ -325,7 +325,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` but the identity route and the claim route carries
 #: ``require_runner_principal``-at-router-level confinement; no per-route permission.
-_FLEET: set[tuple[str, str]] = {
+FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
     # The matched fleet peek — a second verb on the same
     # path; the ``GET`` above stays for a previous-minor caller.
@@ -388,7 +388,7 @@ _ADMITTING: dict[tuple[str, str], Permission] = {
 
 #: The claim route is gated by the principal without the retirement refusal: a retired runner's claim is
 #: refused in-domain with the paused-denial body older runners parse.
-_FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
+FLEET_CLAIM: tuple[str, str] = ("POST", "/api/fleet/routes")
 
 #: Host plane — the five ``/api/fleet/host*`` routes a host's bearer token reaches, and nothing else. Mounted on a
 #: router of their own, because the fleet router's runner-principal gate cannot be lifted per route.
@@ -401,7 +401,7 @@ _HOST: set[tuple[str, str]] = {
 }
 
 
-def _api_routes(app: FastAPI) -> list[APIRoute]:
+def api_routes(app: FastAPI) -> list[APIRoute]:
     """Every mounted :class:`APIRoute`, recursively unwrapped.
 
     This FastAPI version does not flatten an included router's routes onto
@@ -430,12 +430,12 @@ def _api_routes_of(included: _IncludedRouter) -> list[APIRoute]:
     return routes
 
 
-def _live_routes(app: FastAPI) -> set[tuple[str, str]]:
+def live_routes(app: FastAPI) -> set[tuple[str, str]]:
     """Every ``(method, path)`` pair the app actually mounts, ``HEAD`` excluded
     (FastAPI auto-adds it alongside every ``GET``, so it carries no separate
     classification)."""
     live: set[tuple[str, str]] = set()
-    for route in _api_routes(app):
+    for route in api_routes(app):
         for method in route.methods or set():
             if method == "HEAD":
                 continue
@@ -443,7 +443,7 @@ def _live_routes(app: FastAPI) -> set[tuple[str, str]]:
     return live
 
 
-def _dependency_names(route: APIRoute) -> set[str]:
+def dependency_names(route: APIRoute) -> set[str]:
     """The ``__name__`` of every dependency callable resolved for ``route`` (a callable instance's class
     name) — both
     route-level (``dependencies=[...]``) and router-level (attached at
@@ -509,7 +509,7 @@ def _required_permission(route: APIRoute) -> Permission | None:
 
 def _routes_by_key(app: FastAPI) -> dict[tuple[str, str], APIRoute]:
     by_key: dict[tuple[str, str], APIRoute] = {}
-    for route in _api_routes(app):
+    for route in api_routes(app):
         for method in route.methods or set():
             if method == "HEAD":
                 continue
@@ -522,8 +522,8 @@ def test_every_live_route_is_classified(tmp_path: Path) -> None:
     plane tables — a newly added, unnamed route fails this assertion."""
     app = build_hub(tmp_path).wired_app
     assert isinstance(app, FastAPI)
-    live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
+    live = live_routes(app)
+    classified = _PUBLIC | set(HUMAN) | FLEET | _HOST | {FLEET_CLAIM}
     unclassified = live - classified
     assert not unclassified, f"unclassified route(s): {sorted(unclassified)}"
 
@@ -533,8 +533,8 @@ def test_every_classified_route_is_still_live(tmp_path: Path) -> None:
     renamed/removed route leaving a stale, silently-untested table row)."""
     app = build_hub(tmp_path).wired_app
     assert isinstance(app, FastAPI)
-    live = _live_routes(app)
-    classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
+    live = live_routes(app)
+    classified = _PUBLIC | set(HUMAN) | FLEET | _HOST | {FLEET_CLAIM}
     stale = classified - live
     assert not stale, f"table entry(ies) naming a route no longer mounted: {sorted(stale)}"
 
@@ -544,7 +544,7 @@ def test_human_routes_require_their_declared_permission(tmp_path: Path) -> None:
     dependency for exactly the permission the table declares — introspected off the
     live route, not merely asserted by table membership."""
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    for key, expected_permission in _HUMAN.items():
+    for key, expected_permission in HUMAN.items():
         route = by_key[key]
         assert _required_permission(route) == expected_permission, key
 
@@ -562,13 +562,13 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
     and carries no human ``require(<permission>)`` dependency —
     the fleet plane is not human-permission-gated at all."""
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    for key in _FLEET:
+    for key in FLEET:
         route = by_key[key]
-        assert "require_runner_principal" in _dependency_names(route), key
+        assert "require_runner_principal" in dependency_names(route), key
         assert _required_permission(route) is None, key
-    claim = by_key[_FLEET_CLAIM]
-    assert "require_runner_principal_even_if_retired" in _dependency_names(claim)
-    assert "require_runner_principal" not in _dependency_names(claim)
+    claim = by_key[FLEET_CLAIM]
+    assert "require_runner_principal_even_if_retired" in dependency_names(claim)
+    assert "require_runner_principal" not in dependency_names(claim)
     assert _required_permission(claim) is None
 
 
@@ -578,7 +578,7 @@ def test_host_routes_carry_the_host_principal_gate_and_never_the_runner_one(tmp_
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _HOST:
         route = by_key[key]
-        names = _dependency_names(route)
+        names = dependency_names(route)
         assert "require_host_principal" in names, key
         assert "require_runner_principal" not in names, key
         assert "require_runner_principal_even_if_retired" not in names, key
@@ -587,8 +587,8 @@ def test_host_routes_carry_the_host_principal_gate_and_never_the_runner_one(tmp_
 
 def test_no_other_fleet_route_accepts_the_host_principal(tmp_path: Path) -> None:
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    for key in _FLEET | {_FLEET_CLAIM}:
-        assert "require_host_principal" not in _dependency_names(by_key[key]), key
+    for key in FLEET | {FLEET_CLAIM}:
+        assert "require_host_principal" not in dependency_names(by_key[key]), key
 
 
 def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> None:
@@ -596,10 +596,10 @@ def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> N
     ``TenantBoundAdmitting`` for a route in :data:`_ADMITTING`) and gates on a permission in it
     (``require``); a hub-level route resolves none and gates on a hub permission (``require_hub``)."""
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    for key in _HUMAN:
-        names = _dependency_names(by_key[key])
+    for key in HUMAN:
+        names = dependency_names(by_key[key])
         resolvers = names & {"tenant_bound", "TenantBoundAdmitting"}
-        if key in _HUB_LEVEL:
+        if key in HUB_LEVEL:
             assert not resolvers and "_hub_dependency" in names, key
         else:
             expected = "TenantBoundAdmitting" if key in _ADMITTING else "tenant_bound"
@@ -611,7 +611,7 @@ def test_only_the_named_routes_admit_a_hub_permission_without_a_membership(tmp_p
     :data:`_ADMITTING`, under exactly the permission named there, which its gate takes as the
     alternative to its tenant permission."""
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    assert set(_ADMITTING) <= set(_HUMAN) - _HUB_LEVEL
+    assert set(_ADMITTING) <= set(HUMAN) - HUB_LEVEL
     for key, route in by_key.items():
         assert _admitted_permission(route) == _ADMITTING.get(key), key
     for key, admitted in _ADMITTING.items():
@@ -629,7 +629,7 @@ def test_the_admission_introspection_reads_an_admitting_route() -> None:
 
     app = FastAPI()
     app.include_router(router)
-    (route,) = _api_routes(app)
+    (route,) = api_routes(app)
 
     assert _admitted_permission(route) is Permission.MEMBERSHIP_GRANT_ANY
     assert _gate_alternative(route) is Permission.MEMBERSHIP_GRANT_ANY
@@ -640,7 +640,7 @@ def test_fleet_routes_resolve_their_tenant_and_public_routes_none(tmp_path: Path
     """A fleet route's tenant is its credential's, resolved at router level; a public route
     serves no tenant."""
     by_key = _routes_by_key(build_hub(tmp_path).wired_app)
-    for key in _FLEET | _HOST | {_FLEET_CLAIM}:
-        assert "tenant_bound" in _dependency_names(by_key[key]), key
+    for key in FLEET | _HOST | {FLEET_CLAIM}:
+        assert "tenant_bound" in dependency_names(by_key[key]), key
     for key in _PUBLIC:
-        assert "tenant_bound" not in _dependency_names(by_key[key]), key
+        assert "tenant_bound" not in dependency_names(by_key[key]), key

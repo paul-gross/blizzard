@@ -48,8 +48,8 @@ def _store_and_items(tmp_path: Path) -> tuple[RunContextStore, WorkItemStore, En
 
 
 def test_record_then_for_chunk_round_trips(tmp_path: Path) -> None:
-    runs, items, engine = _store_and_items(tmp_path)
-    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    runs, _, engine = _store_and_items(tmp_path)
+    item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
     context = RunContext(
         project_id=default_project(engine), routine_name="nightly", scope_slug="blizzard", mode="dry_run"
     )
@@ -64,9 +64,9 @@ def test_record_then_for_chunk_round_trips(tmp_path: Path) -> None:
 
 def test_for_chunk_resolves_through_the_chunks_first_work_ref(tmp_path: Path) -> None:
     """A chunk naming more than one work ref still resolves off ``work_refs[0]``."""
-    runs, items, engine = _store_and_items(tmp_path)
-    first = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
-    second = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    runs, _, engine = _store_and_items(tmp_path)
+    first = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    second = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
     context = RunContext(
         project_id=default_project(engine), routine_name="nightly", scope_slug="blizzard", mode="dry_run"
     )
@@ -83,8 +83,8 @@ def test_for_chunk_resolves_through_the_chunks_first_work_ref(tmp_path: Path) ->
 
 
 def test_for_chunk_with_no_work_item_runs_row_is_none(tmp_path: Path) -> None:
-    runs, items, _ = _store_and_items(tmp_path)
-    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    runs, _, engine = _store_and_items(tmp_path)
+    item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_NOW)
 
     chunk = Chunk(
         chunk_id="ch_probe", graph_id="gr_1", work_refs=[WorkRef(source=item.source, ref=item.ref)], minted_at=_NOW

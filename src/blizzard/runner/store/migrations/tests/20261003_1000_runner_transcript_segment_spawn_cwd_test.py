@@ -1,7 +1,5 @@
 """Tests proving the ``20261003_1000_runner_transcript_segment_spawn_cwd`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -12,7 +10,7 @@ import pytest
 from blizzard.runner import runtime as runner_runtime
 from tests.config_inputs import init_host
 from tests.migration_support_store_migrations import (
-    _spawn_cwd_round_trip,
+    spawn_cwd_round_trip,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -35,8 +33,8 @@ def test_runner_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_
         "stamped_at": datetime(2026, 10, 3, tzinfo=UTC),
     }
 
-    values = _spawn_cwd_round_trip(
-        config,
+    values = spawn_cwd_round_trip(
+        config.db_url,
         runner_runtime.migration_runner(config),
         "20261002_1300_runner_lease_tokens_token_hash_index",
         row,

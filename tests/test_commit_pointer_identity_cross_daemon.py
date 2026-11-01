@@ -26,7 +26,7 @@ from blizzard.runner.node_steps.submissions import CompletionArtifact
 from tests.github_double import GitHubDouble
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
 from tests.support import DEFAULT_FIXTURE_REPOSITORIES, build_hub, report_lease
-from tests.test_pin_hub_delivery import _mint_and_claim, _writable
+from tests.test_pin_hub_delivery import mint_and_claim, writable
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -106,7 +106,7 @@ def _deliver(
             for owner, forge in itertools.product(owners, forges or ("https://api.github.com",))
         ],
     )
-    chunk_id, nodes = _mint_and_claim(hub)
+    chunk_id, nodes = mint_and_claim(hub)
     rows = [
         StoredArtifact(
             kind=ArtifactKind.GIT_COMMIT,
@@ -122,7 +122,7 @@ def _deliver(
         )
         for a in submitted
     ]
-    _writable(hub).record_transition(
+    writable(hub).record_transition(
         transition_id="tr_seed_deliver",
         chunk_id=chunk_id,
         from_node_id=None,

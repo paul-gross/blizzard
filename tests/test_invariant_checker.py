@@ -25,7 +25,7 @@ from blizzard.hub.tenancy import TenantId
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
 from tests.config_inputs import init_host, init_hub
-from tests.migration_support_invariant_checker import _NOW, _PROJECT_INVARIANTS, insert
+from tests.migration_support_invariant_checker import NOW, PROJECT_INVARIANTS, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import (
     add_tenant,
@@ -48,7 +48,7 @@ def _runner_engine(tmp_path: Path):
     engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)
+            sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=NOW)
         )
     return engine
 
@@ -74,7 +74,7 @@ def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
                     chunk_id=chunk_id,
                     environment_id=environment_id,
                     workdir=f"/{workspace_id}/{environment_id}",
-                    bound_at=_NOW,
+                    bound_at=NOW,
                     workspace_id=workspace_id,
                 )
             )
@@ -92,7 +92,7 @@ def _two_runner_engine(tmp_path: Path):
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(runner.runner_identity).values(runner_id=_OTHER_RUNNER, runner_name="o", registered_at=_NOW)
+            sa.insert(runner.runner_identity).values(runner_id=_OTHER_RUNNER, runner_name="o", registered_at=NOW)
         )
         for runner_id in (FIXTURE_RUNNER_ID, _OTHER_RUNNER):
             for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, 3), (runner.OUTBOX_LANE_TRANSCRIPT, 3)):
@@ -102,7 +102,7 @@ def _two_runner_engine(tmp_path: Path):
             for seq in (1, 2, 3):
                 conn.execute(
                     sa.insert(runner.outbound_buffer).values(
-                        runner_id=runner_id, seq=seq, kind="lease.minted", payload="{}", created_at=_NOW
+                        runner_id=runner_id, seq=seq, kind="lease.minted", payload="{}", created_at=NOW
                     )
                 )
                 conn.execute(
@@ -113,7 +113,7 @@ def _two_runner_engine(tmp_path: Path):
                         segment_id="seg_1",
                         chunk_id="ch_1",
                         payload="{}",
-                        created_at=_NOW,
+                        created_at=NOW,
                     )
                 )
     return engine
@@ -143,7 +143,7 @@ def _segment_row(**overrides: Unpack[_SegmentRowFields]) -> dict:
         "truncated_reason": None,
         "shipping_stopped_reason": None,
         "finalized_at": None,
-        "stamped_at": _NOW,
+        "stamped_at": NOW,
     }
     row.update(overrides)
     return row
@@ -163,17 +163,17 @@ def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict[str, object]
         "cache_read_tokens": 0,
         "cache_create_tokens": 0,
         "cost_usd": 0.1,
-        "recorded_at": _NOW,
+        "recorded_at": NOW,
     }
 
 
 def _seed_owned_chunk(conn) -> None:
     conn.execute(
-        insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+        insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m"))
     )
     conn.execute(
         insert(hub.epoch_owners).values(
-            stamp(hub.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW)
+            stamp(hub.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=NOW)
         )
     )
 
@@ -202,7 +202,7 @@ def _seed_migration(
                 hub.chunks,
                 chunk_id="ch_1",
                 graph_id=pin_graph,
-                minted_at=_NOW,
+                minted_at=NOW,
                 model="unread-since-144",
                 default_model=json.dumps(pin_default_model) if pin_default_model else None,
             )
@@ -236,14 +236,14 @@ def _seed_migration(
                 choice_name="migrate",
                 model_after=model_after,
                 epoch=1,
-                recorded_at=_NOW,
+                recorded_at=NOW,
                 source=source,
             )
         )
     )
     if release_route:
         conn.execute(
-            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=NOW, seq=1))
         )
 
 
@@ -268,7 +268,7 @@ def _segment_values(**overrides: Unpack[_SegmentValuesFields]) -> dict[str, obje
         "content": b"",
         "content_digest": "dg_test",  # this suite inserts the raw row directly, bypassing the adapter that derives it
         "normalizer_version": "claude-code-jsonl/2",
-        "received_at": _NOW,
+        "received_at": NOW,
     }
     values.update(overrides)
     return values
@@ -287,7 +287,7 @@ def _dependency_edge_values(**overrides: Unpack[_DependencyEdgeFields]) -> dict:
         "dependency_id": "dep_1",
         "dependent_chunk_id": "ch_dependent",
         "prerequisite_chunk_id": "ch_prereq",
-        "declared_at": _NOW,
+        "declared_at": NOW,
         "declared_by": "user:alice",
         "released_at": None,
         "released_by": None,
@@ -300,12 +300,12 @@ def _seed_landed_mid_flight(conn: sa.Connection, tenant: str) -> None:
     """A chunk in ``tenant`` whose ``delivery.landed`` fact sits beside a non-terminal newest transition."""
     conn.execute(
         insert(hub.chunks).values(
-            stamp(hub.chunks, tenant_id=tenant, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m")
+            stamp(hub.chunks, tenant_id=tenant, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m")
         )
     )
     conn.execute(
         insert(hub.lease_facts).values(
-            stamp(hub.lease_facts, tenant_id=tenant, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+            stamp(hub.lease_facts, tenant_id=tenant, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=NOW)
         )
     )
     conn.execute(
@@ -321,14 +321,12 @@ def _seed_landed_mid_flight(conn: sa.Connection, tenant: str) -> None:
                 choice_name="landed",
                 epoch=2,
                 runner_id="hub",
-                recorded_at=_NOW,
+                recorded_at=NOW,
             )
         )
     )
     conn.execute(
-        insert(hub.delivery_landed).values(
-            stamp(hub.delivery_landed, tenant_id=tenant, chunk_id="ch_1", landed_at=_NOW)
-        )
+        insert(hub.delivery_landed).values(stamp(hub.delivery_landed, tenant_id=tenant, chunk_id="ch_1", landed_at=NOW))
     )
 
 
@@ -361,14 +359,14 @@ def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
                 description="",
                 color="slate",
                 revision=1,
-                created_at=_NOW,
+                created_at=NOW,
             )
         )
     )
 
 
 def _scope_values(scope_id: str, project_id: str) -> dict[str, object]:
-    return stamp(hub.scopes, scope_id=scope_id, slug=scope_id, description="", created_at=_NOW, project_id=project_id)
+    return stamp(hub.scopes, scope_id=scope_id, slug=scope_id, description="", created_at=NOW, project_id=project_id)
 
 
 def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) -> dict[str, object]:
@@ -378,7 +376,7 @@ def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) 
         name=routine_id,
         graph_name="gr",
         default_scope_id=default_scope_id,
-        created_at=_NOW,
+        created_at=NOW,
         project_id=project_id,
     )
 
@@ -418,14 +416,14 @@ def _work_item_values(work_item_id: str, *, tenant: str, project_id: str) -> dic
         body="",
         author_kind="fleet",
         author_payload="{}",
-        created_at=_NOW,
-        edited_at=_NOW,
+        created_at=NOW,
+        edited_at=NOW,
         project_id=project_id,
     )
 
 
 def _hours(n: float) -> datetime:
-    return _NOW + timedelta(hours=n)
+    return NOW + timedelta(hours=n)
 
 
 def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime, project_id: str = "proj_app") -> None:
@@ -486,7 +484,7 @@ def test_a_runner_scoped_row_naming_an_unregistered_runner_is_a_violation(tmp_pa
     with engine.begin() as conn:
         conn.execute(
             sa.insert(runner.leases).values(
-                runner_id="rn_other", lease_id="lease_b", chunk_id="ch_2", epoch=1, created_at=_NOW
+                runner_id="rn_other", lease_id="lease_b", chunk_id="ch_2", epoch=1, created_at=NOW
             )
         )
     details = {v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:rows-name-registered-runner"}
@@ -505,7 +503,7 @@ def test_outbox_counters_left_by_a_reset_runner_are_not_a_violation(tmp_path: Pa
 def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
     assert runner_invariants(engine).run() == []
 
 
@@ -513,14 +511,14 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for lease_id in ("lease_a", "lease_b"):
-            conn.execute(insert(runner.leases).values(lease_id=lease_id, chunk_id="ch_1", epoch=1, created_at=_NOW))
+            conn.execute(insert(runner.leases).values(lease_id=lease_id, chunk_id="ch_1", epoch=1, created_at=NOW))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-live-lease-per-chunk" in slugs
     # Closing one lease clears the violation (facts-not-status: a closure is the fact).
     with engine.begin() as conn:
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_b", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+                lease_id="lease_b", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=NOW
             )
         )
     assert runner_invariants(engine).run() == []
@@ -532,15 +530,15 @@ def test_a_closed_lease_with_an_ambiguous_generation_is_a_violation(tmp_path: Pa
     so this shape means that guard was bypassed — a leaked, ownerless process."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         conn.execute(
             insert(runner.lease_spawns).values(
-                lease_id="lease_a", spawned_at=_NOW, pid=4242, process_start_time="start-4242", pgid=4242
+                lease_id="lease_a", spawned_at=NOW, pid=4242, process_start_time="start-4242", pgid=4242
             )
         )
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=NOW
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -552,20 +550,20 @@ def test_a_closed_lease_whose_generation_was_marked_identity_failed_is_not_a_vio
     ``record_identity_failed`` before ``Attempt.fail`` — not a leak."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         conn.execute(
             insert(runner.lease_spawns).values(
                 lease_id="lease_a",
-                spawned_at=_NOW,
+                spawned_at=NOW,
                 pid=4242,
                 process_start_time="start-4242",
                 pgid=4242,
-                identity_failed_at=_NOW,
+                identity_failed_at=NOW,
             )
         )
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=NOW
             )
         )
     assert runner_invariants(engine).run() == []
@@ -582,7 +580,7 @@ def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                created_at=_NOW,
+                created_at=NOW,
                 pid=99999,
                 process_start_time="start-99999",
             )
@@ -604,7 +602,7 @@ def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_pa
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                created_at=_NOW,
+                created_at=NOW,
                 pid=4242,
                 process_start_time="start-4242",
             )
@@ -625,7 +623,7 @@ def test_an_active_lease_whose_generation_already_failed_identity_is_not_a_viola
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                created_at=_NOW,
+                created_at=NOW,
                 pid=99999,
                 process_start_time="start-99999",
             )
@@ -633,11 +631,11 @@ def test_an_active_lease_whose_generation_already_failed_identity_is_not_a_viola
         conn.execute(
             insert(runner.lease_spawns).values(
                 lease_id="lease_a",
-                spawned_at=_NOW,
+                spawned_at=NOW,
                 pid=99999,
                 process_start_time="start-99999",
                 pgid=99999,
-                identity_failed_at=_NOW,
+                identity_failed_at=NOW,
             )
         )
     # The default probe is the real `/proc` one — pid 99999 reads dead, which would otherwise
@@ -657,14 +655,14 @@ def test_an_active_lease_with_a_genuinely_leaked_provisional_generation_is_still
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                created_at=_NOW,
+                created_at=NOW,
                 pid=99999,
                 process_start_time="start-99999",
             )
         )
         conn.execute(
             insert(runner.lease_spawns).values(
-                lease_id="lease_a", spawned_at=_NOW, pid=99999, process_start_time="start-99999", pgid=99999
+                lease_id="lease_a", spawned_at=NOW, pid=99999, process_start_time="start-99999", pgid=99999
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run(after_recovery=True)}
@@ -682,7 +680,7 @@ def test_an_active_lease_with_two_unidentified_generations_reports_exactly_once(
                 lease_id="lease_a",
                 chunk_id="ch_1",
                 epoch=1,
-                created_at=_NOW,
+                created_at=NOW,
                 pid=99999,
                 process_start_time="start-99999",
             )
@@ -690,7 +688,7 @@ def test_an_active_lease_with_two_unidentified_generations_reports_exactly_once(
         for pid in (11111, 99999):  # two open (unidentified) generations on the same lease
             conn.execute(
                 insert(runner.lease_spawns).values(
-                    lease_id="lease_a", spawned_at=_NOW, pid=pid, process_start_time=f"start-{pid}", pgid=pid
+                    lease_id="lease_a", spawned_at=NOW, pid=pid, process_start_time=f"start-{pid}", pgid=pid
                 )
             )
     violations = [
@@ -713,7 +711,7 @@ def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_pat
                     lease_id=lease_id,
                     chunk_id=chunk_id,
                     epoch=1,
-                    created_at=_NOW,
+                    created_at=NOW,
                     pid=555,
                     process_start_time="start-555",
                 )
@@ -729,7 +727,7 @@ def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
         for chunk_id in ("ch_1", "ch_2"):
             conn.execute(
                 insert(runner.env_bindings).values(
-                    chunk_id=chunk_id, environment_id="env_shared", workdir="/w", bound_at=_NOW
+                    chunk_id=chunk_id, environment_id="env_shared", workdir="/w", bound_at=NOW
                 )
             )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -786,12 +784,12 @@ def _release_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int
 @pytest.mark.unit
 def test_a_release_frees_only_its_own_runners_binding_appended_before_it(tmp_path: Path) -> None:
     """Held means what the runner's own reads mean: no release by the binding's runner appended after the bind."""
-    later = _NOW + timedelta(hours=1)
+    later = NOW + timedelta(hours=1)
     me = FIXTURE_RUNNER_ID
 
     # Another runner's release of the same (chunk, environment) does not free this runner's binding.
     cross = _two_runner_engine(tmp_path / "cross")
-    _bind_at(cross, "ch_1", runner_id=_OTHER_RUNNER, at=_NOW, seq=1)
+    _bind_at(cross, "ch_1", runner_id=_OTHER_RUNNER, at=NOW, seq=1)
     _release_at(cross, "ch_1", runner_id=me, at=later, seq=1)
     _bind_at(cross, "ch_2", runner_id=me, at=later, seq=2)
     assert len(_unique_env_violations(cross)) == 1
@@ -799,23 +797,23 @@ def test_a_release_frees_only_its_own_runners_binding_appended_before_it(tmp_pat
     # A release appended before the bind does not free it, whatever instants they carry.
     early = _runner_engine(tmp_path / "early")
     _release_at(early, "ch_1", runner_id=me, at=later, seq=1)
-    _bind_at(early, "ch_1", runner_id=me, at=_NOW, seq=2)
+    _bind_at(early, "ch_1", runner_id=me, at=NOW, seq=2)
     _bind_at(early, "ch_2", runner_id=me, at=later, seq=3)
     assert len(_unique_env_violations(early)) == 1
 
     # Bind, release, rebind by one runner at one instant: the rebind is held, the released bind is not.
     rebound = _runner_engine(tmp_path / "rebound")
-    _bind_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=1)
-    _release_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=2)
-    _bind_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=3)
+    _bind_at(rebound, "ch_1", runner_id=me, at=NOW, seq=1)
+    _release_at(rebound, "ch_1", runner_id=me, at=NOW, seq=2)
+    _bind_at(rebound, "ch_1", runner_id=me, at=NOW, seq=3)
     assert _unique_env_violations(rebound) == []
     _bind_at(rebound, "ch_2", runner_id=me, at=later, seq=4)
     assert len(_unique_env_violations(rebound)) == 1
 
     # A release by the binding's own runner, appended after it, frees it.
     freed = _runner_engine(tmp_path / "freed")
-    _bind_at(freed, "ch_1", runner_id=me, at=_NOW, seq=1)
-    _release_at(freed, "ch_1", runner_id=me, at=_NOW, seq=2)
+    _bind_at(freed, "ch_1", runner_id=me, at=NOW, seq=1)
+    _release_at(freed, "ch_1", runner_id=me, at=NOW, seq=2)
     _bind_at(freed, "ch_2", runner_id=me, at=later, seq=3)
     assert _unique_env_violations(freed) == []
 
@@ -826,7 +824,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
         for seq in (1, 2, 4):  # 3 is missing — a hole in the FIFO buffer
             conn.execute(
                 insert(runner.outbound_buffer).values(
-                    seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+                    seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW
                 )
             )
     _set_counters(engine, outbound=4)
@@ -841,13 +839,13 @@ def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(
     with engine.begin() as conn:
         conn.execute(
             insert(runner.outbound_buffer).values(
-                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW, acked_at=_NOW
+                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW, acked_at=NOW
             )
         )
         # seq 2 is deliberately absent — the acked-and-pruned row it once was.
         conn.execute(
             insert(runner.outbound_buffer).values(
-                seq=3, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+                seq=3, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW
             )
         )
     _set_counters(engine, outbound=3)
@@ -862,13 +860,13 @@ def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violati
     with engine.begin() as conn:
         conn.execute(
             insert(runner.outbound_buffer).values(
-                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW, acked_at=_NOW
+                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW, acked_at=NOW
             )
         )
         for seq in (2, 4):  # 3 is missing at/above the pending floor (2)
             conn.execute(
                 insert(runner.outbound_buffer).values(
-                    seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+                    seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=NOW
                 )
             )
     _set_counters(engine, outbound=4)
@@ -883,7 +881,7 @@ def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
         for seq in (1, 2, 4):  # 3 is missing — a hole in the FIFO buffer
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
-                    seq=seq, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                    seq=seq, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=NOW
                 )
             )
     _set_counters(engine, transcript=4)
@@ -906,14 +904,14 @@ def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_v
                 segment_id="seg_1",
                 chunk_id="ch_1",
                 payload="{}",
-                created_at=_NOW,
-                acked_at=_NOW,
+                created_at=NOW,
+                acked_at=NOW,
             )
         )
         # seq 2 is deliberately absent — the acked-and-pruned non-final row it once was.
         conn.execute(
             insert(runner.transcript_outbound_buffer).values(
-                seq=3, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
+                seq=3, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=NOW
             )
         )
     _set_counters(engine, transcript=3)
@@ -933,14 +931,14 @@ def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(t
                 segment_id="seg_1",
                 chunk_id="ch_1",
                 payload="{}",
-                created_at=_NOW,
-                acked_at=_NOW,
+                created_at=NOW,
+                acked_at=NOW,
             )
         )
         for seq in (2, 4):  # 3 is missing from the still-pending (unacked) window
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
-                    seq=seq, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
+                    seq=seq, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=NOW
                 )
             )
     _set_counters(engine, transcript=4)
@@ -960,8 +958,8 @@ def test_a_hole_among_acked_outbound_rows_with_none_pending_is_a_violation(tmp_p
                     chunk_id="ch_1",
                     lease_id="l",
                     payload="{}",
-                    created_at=_NOW,
-                    acked_at=_NOW,
+                    created_at=NOW,
+                    acked_at=NOW,
                 )
             )
     _set_counters(engine, outbound=3)
@@ -973,7 +971,7 @@ def test_a_hole_among_acked_transcript_rows_is_not_a_violation(tmp_path: Path) -
     """The transcript lane judges its pending window alone: an acked row's absence is retention."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        for seq, acked_at in ((1, _NOW), (3, _NOW), (4, None), (5, None)):
+        for seq, acked_at in ((1, NOW), (3, NOW), (4, None), (5, None)):
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
                     seq=seq,
@@ -981,7 +979,7 @@ def test_a_hole_among_acked_transcript_rows_is_not_a_violation(tmp_path: Path) -
                     segment_id="seg_1",
                     chunk_id="ch_1",
                     payload="{}",
-                    created_at=_NOW,
+                    created_at=NOW,
                     acked_at=acked_at,
                 )
             )
@@ -1055,7 +1053,7 @@ def test_a_counter_above_every_retained_seq_is_not_a_violation(tmp_path: Path) -
 def test_finalized_segment_with_no_final_marker_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=NOW)))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" in slugs
 
@@ -1063,7 +1061,7 @@ def test_finalized_segment_with_no_final_marker_is_a_violation(tmp_path: Path) -
 def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=NOW)))
         for seq in (1, 2):
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
@@ -1072,7 +1070,7 @@ def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_pat
                     segment_id="seg_1",
                     chunk_id="ch_1",
                     payload="{}",
-                    created_at=_NOW,
+                    created_at=NOW,
                 )
             )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1082,10 +1080,10 @@ def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_pat
 def test_finalized_segment_with_exactly_one_final_marker_is_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=NOW)))
         conn.execute(
             insert(runner.transcript_outbound_buffer).values(
-                seq=1, final=True, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                seq=1, final=True, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=NOW
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1098,11 +1096,11 @@ def test_pending_non_final_records_do_not_count_as_final_markers(tmp_path: Path)
     unseen by every tier, which runs `[transcripts] ship` at its default."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=NOW)))
         for seq, final in ((1, False), (2, False), (3, True)):
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
-                    seq=seq, final=final, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                    seq=seq, final=final, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=NOW
                 )
             )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1113,10 +1111,10 @@ def test_a_finalized_segment_with_only_non_final_records_is_a_violation(tmp_path
     """The same filter from the other side: content records are not a close-out."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=NOW)))
         conn.execute(
             insert(runner.transcript_outbound_buffer).values(
-                seq=1, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                seq=1, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=NOW
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1161,7 +1159,7 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
     ``Attempt.close``, the one funnel every closure path shares, was bypassed."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -1171,12 +1169,12 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
                 generation=1,
                 kind="spawn",
                 start_position=None,
-                opened_at=_NOW,
+                opened_at=NOW,
             )
         )
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=NOW
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1186,7 +1184,7 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
 def test_a_closed_leases_closed_invocation_boundary_is_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -1196,14 +1194,14 @@ def test_a_closed_leases_closed_invocation_boundary_is_not_a_violation(tmp_path:
                 generation=1,
                 kind="spawn",
                 start_position=None,
-                opened_at=_NOW,
-                closed_at=_NOW,
+                opened_at=NOW,
+                closed_at=NOW,
                 closed_reason="transitioned",
             )
         )
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=NOW
             )
         )
     assert runner_invariants(engine).run() == []
@@ -1214,7 +1212,7 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
     open boundary is the violation."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         conn.execute(
             insert(runner.invocation_boundaries).values(
                 lease_id="lease_a",
@@ -1224,7 +1222,7 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
                 generation=1,
                 kind="spawn",
                 start_position=None,
-                opened_at=_NOW,
+                opened_at=NOW,
             )
         )
     assert runner_invariants(engine).run() == []
@@ -1236,7 +1234,7 @@ def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp
     scoped per generation, not per lease."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         for generation, kind in ((1, "spawn"), (2, "resume")):
             conn.execute(
                 insert(runner.invocation_boundaries).values(
@@ -1247,7 +1245,7 @@ def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp
                     generation=generation,
                     kind=kind,
                     start_position=None,
-                    opened_at=_NOW,
+                    opened_at=NOW,
                 )
             )
     assert runner_invariants(engine).run() == []
@@ -1259,7 +1257,7 @@ def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_pat
     checker names it instead."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
+        conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=NOW))
         for kind in ("nudge", "resume"):
             conn.execute(
                 insert(runner.invocation_boundaries).values(
@@ -1270,7 +1268,7 @@ def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_pat
                     generation=2,
                     kind=kind,
                     start_position=None,
-                    opened_at=_NOW,
+                    opened_at=NOW,
                 )
             )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1284,7 +1282,7 @@ def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path)
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for _ in range(2):
-            conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
+            conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=NOW))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:nudge-at-most-once" in slugs
 
@@ -1294,9 +1292,9 @@ def test_distinct_lease_or_epoch_nudge_facts_are_not_a_violation(tmp_path: Path)
     attempt's own nudge — not a duplicate. The checker stays green over them."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
-        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=2, nudged_at=_NOW))
-        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_2", epoch=1, nudged_at=_NOW))
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=NOW))
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=2, nudged_at=NOW))
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_2", epoch=1, nudged_at=NOW))
     assert runner_invariants(engine).run() == []
 
 
@@ -1306,7 +1304,7 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
         for _ in range(2):
             conn.execute(
                 insert(hub.delivery_repo_landed).values(
-                    stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
+                    stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=NOW)
                 )
             )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1324,7 +1322,7 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
                     chunk_id="ch_1",
                     runner_id="r",
                     workspace_id="w",
-                    created_at=_NOW,
+                    created_at=NOW,
                     seq=1,
                 )
             )
@@ -1332,7 +1330,7 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
         # Same chunk, same seq as the create above — the exact race #41's tiebreak
         # closed: two route writes both computed seq=1 for chunk ch_1.
         conn.execute(
-            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=NOW, seq=1))
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:route-seq-unique" in slugs
@@ -1349,7 +1347,7 @@ def test_two_live_routes_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                     chunk_id="ch_1",
                     runner_id="r_a",
                     workspace_id="w",
-                    created_at=_NOW,
+                    created_at=NOW,
                     seq=1,
                 )
             )
@@ -1364,7 +1362,7 @@ def test_two_live_routes_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                     chunk_id="ch_1",
                     runner_id="r_b",
                     workspace_id="w",
-                    created_at=_NOW,
+                    created_at=NOW,
                     seq=2,
                 )
             )
@@ -1384,13 +1382,13 @@ def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path:
                     chunk_id="ch_1",
                     runner_id="r_a",
                     workspace_id="w",
-                    created_at=_NOW,
+                    created_at=NOW,
                     seq=1,
                 )
             )
         )
         conn.execute(
-            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=2))
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=NOW, seq=2))
         )
         conn.execute(
             insert(hub.route_created).values(
@@ -1400,7 +1398,7 @@ def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path:
                     chunk_id="ch_1",
                     runner_id="r_b",
                     workspace_id="w",
-                    created_at=_NOW,
+                    created_at=NOW,
                     seq=3,
                 )
             )
@@ -1414,7 +1412,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
     with engine.begin() as conn:
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r", minted_at=NOW)
             )
         )
         conn.execute(
@@ -1429,7 +1427,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
                     choice_name="pass",
                     epoch=2,  # a transition fenced beyond any known lease — a zombie land
                     runner_id="r",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
@@ -1445,22 +1443,22 @@ def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
         _seed_owned_chunk(conn)
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_a", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_a", minted_at=NOW)
             )
         )
         conn.execute(
             insert(hub.epoch_owners).values(
-                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=NOW)
             )
         )
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=NOW)
             )
         )
         conn.execute(
             insert(hub.epoch_owners).values(
-                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=3, runner_id=None, recorded_at=_NOW)
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=3, runner_id=None, recorded_at=NOW)
             )
         )
         conn.execute(
@@ -1472,13 +1470,13 @@ def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
                     to_node_id="nd_a",
                     epoch=3,
                     restarted_by="op",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
         conn.execute(
             insert(hub.epoch_owners).values(
-                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=_NOW)
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=NOW)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1491,7 +1489,7 @@ def test_a_lease_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
         _seed_owned_chunk(conn)
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=NOW)
             )
         )
     assert [v.detail for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
@@ -1512,7 +1510,7 @@ def test_a_restart_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
                     to_node_id="nd_a",
                     epoch=2,
                     restarted_by="op",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
@@ -1528,17 +1526,17 @@ def test_a_runner_lease_level_with_another_owners_epoch_is_a_violation(tmp_path:
         _seed_owned_chunk(conn)
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_b", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=1, runner_id="r_b", minted_at=NOW)
             )
         )
         conn.execute(
             insert(hub.epoch_owners).values(
-                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=NOW)
             )
         )
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=NOW)
             )
         )
     assert [v.detail for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
@@ -1554,11 +1552,11 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
-            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m"))
         )
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=NOW)
             )
         )
         # Newest transition targets a post-merge worker node, NOT the reserved terminal.
@@ -1574,11 +1572,11 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
                     choice_name="landed",
                     epoch=2,
                     runner_id="hub",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
-        conn.execute(insert(hub.delivery_landed).values(stamp(hub.delivery_landed, chunk_id="ch_1", landed_at=_NOW)))
+        conn.execute(insert(hub.delivery_landed).values(stamp(hub.delivery_landed, chunk_id="ch_1", landed_at=NOW)))
     slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:merge-queue-single-state" in slugs
 
@@ -1590,16 +1588,16 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
-            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+            insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m"))
         )
         conn.execute(
             insert(hub.lease_facts).values(
-                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+                stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=NOW)
             )
         )
         conn.execute(
             insert(hub.epoch_owners).values(
-                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW)
+                stamp(hub.epoch_owners, chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=NOW)
             )
         )
         conn.execute(
@@ -1614,13 +1612,13 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
                     choice_name="landed",
                     epoch=2,
                     runner_id="hub",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=NOW)
             )
         )
     assert hub_invariants(engine).run() == []
@@ -1632,13 +1630,13 @@ def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> Non
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
-            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
     # Resuming the lease closes both parks (the resume is at/after each) — no violation.
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=_NOW))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=NOW))
     assert runner_invariants(engine).run() == []
 
 
@@ -1650,7 +1648,7 @@ def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
     t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
     t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
     assert runner_invariants(engine).run() == []
@@ -1662,10 +1660,10 @@ def test_a_closed_leases_double_park_is_not_an_open_pause_park(tmp_path: Path) -
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for _ in range(2):
-            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
         conn.execute(
             insert(runner.lease_closures).values(
-                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="terminal", closed_at=_NOW
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="terminal", closed_at=NOW
             )
         )
     slugs = {v.invariant for v in runner_invariants(engine).run()}
@@ -1676,8 +1674,8 @@ def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path
     """The invariant is per-lease: two chunks paused at once is the normal world."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_b", chunk_id="ch_2", parked_at=_NOW))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_b", chunk_id="ch_2", parked_at=NOW))
     assert runner_invariants(engine).run() == []
 
 
@@ -1688,7 +1686,7 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
     t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
     t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
         # Re-paused, then parked again by a tick that lost its guard — two parks open
         # above the resume, on a lease that *does* carry a resume fact.
@@ -1806,7 +1804,7 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         for mid in ("mg_1", "mg_2"):
@@ -1823,7 +1821,7 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
                         choice_name="migrate",
                         model_after=None,
                         epoch=1,
-                        recorded_at=_NOW,
+                        recorded_at=NOW,
                     )
                 )
             )
@@ -1844,7 +1842,7 @@ def test_a_ref_closed_and_gone_both_is_a_violation(tmp_path: Path) -> None:
                         ref="1",
                         outcome=outcome,
                         reason=None,
-                        recorded_at=_NOW,
+                        recorded_at=NOW,
                     )
                 )
             )
@@ -1864,7 +1862,7 @@ def test_a_ref_closed_just_once_is_not_a_violation(tmp_path: Path) -> None:
                     ref="1",
                     outcome="closed",
                     reason=None,
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
@@ -1884,13 +1882,13 @@ def test_a_pending_intent_against_an_already_terminal_ref_is_a_violation(tmp_pat
                     ref="1",
                     outcome="closed",
                     reason=None,
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1909,13 +1907,13 @@ def test_a_retired_intent_against_a_terminal_ref_is_not_a_violation(tmp_path: Pa
                     ref="1",
                     outcome="closed",
                     reason=None,
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=NOW, retired_at=NOW)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1927,7 +1925,7 @@ def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path
     with engine.begin() as conn:
         conn.execute(
             insert(hub.close_intents).values(
-                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1941,7 +1939,7 @@ def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -1949,12 +1947,12 @@ def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=NOW)
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=NOW, retired_at=None)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1968,7 +1966,7 @@ def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -1976,12 +1974,12 @@ def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=NOW)
             )
         )
         conn.execute(
             insert(hub.close_intents).values(
-                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
+                stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=NOW, retired_at=NOW)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -1993,7 +1991,7 @@ def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_pat
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2001,7 +1999,7 @@ def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_pat
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=NOW)
             )
         )
         conn.execute(
@@ -2013,7 +2011,7 @@ def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_pat
                     ref="1",
                     outcome="closed",
                     reason=None,
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
@@ -2027,7 +2025,7 @@ def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> 
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2045,7 +2043,7 @@ def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violatio
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2053,7 +2051,7 @@ def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violatio
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=NOW)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -2066,7 +2064,7 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2074,7 +2072,7 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
         )
         conn.execute(
             insert(hub.chunk_completed).values(
-                stamp(hub.chunk_completed, chunk_id="ch_1", completed_at=_NOW, completed_by="test")
+                stamp(hub.chunk_completed, chunk_id="ch_1", completed_at=NOW, completed_by="test")
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -2086,7 +2084,7 @@ def test_a_terminal_transition_without_intent_is_a_violation(tmp_path: Path) -> 
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2104,7 +2102,7 @@ def test_a_terminal_transition_without_intent_is_a_violation(tmp_path: Path) -> 
                     choice_name="success",
                     epoch=1,
                     runner_id="r1",
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                 )
             )
         )
@@ -2118,12 +2116,12 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_2", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_2", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(
@@ -2131,12 +2129,12 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
         )
         conn.execute(
             insert(hub.delivery_repo_landed).values(
-                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+                stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=NOW)
             )
         )
         conn.execute(
             insert(hub.chunk_grouped).values(
-                stamp(hub.chunk_grouped, chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW)
+                stamp(hub.chunk_grouped, chunk_id="ch_1", grouped_into="ch_2", grouped_at=NOW)
             )
         )
     slugs = {v.invariant for v in hub_invariants(engine).run()}
@@ -2164,7 +2162,7 @@ def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> N
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=NOW, model="m")
             )
         )
         conn.execute(insert(hub.transcript_segments).values(stamp(hub.transcript_segments, **_segment_values())))
@@ -2257,7 +2255,7 @@ def test_a_released_edge_reopening_a_cycle_is_not_a_violation(tmp_path: Path) ->
                         dependency_id="dep_2",
                         dependent_chunk_id="ch_b",
                         prerequisite_chunk_id="ch_a",
-                        released_at=_NOW,
+                        released_at=NOW,
                         released_by="user:alice",
                     ),
                 )
@@ -2300,7 +2298,7 @@ def test_a_declared_edge_after_a_release_of_the_same_pair_is_not_a_violation(tmp
             insert(hub.chunk_dependencies).values(
                 stamp(
                     hub.chunk_dependencies,
-                    **_dependency_edge_values(dependency_id="dep_1", released_at=_NOW, released_by="user:alice"),
+                    **_dependency_edge_values(dependency_id="dep_1", released_at=NOW, released_by="user:alice"),
                 )
             )
         )
@@ -2323,7 +2321,7 @@ def test_a_standing_edge_onto_a_grouped_away_prerequisite_is_a_violation(tmp_pat
         conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
         conn.execute(
             insert(hub.chunk_grouped).values(
-                stamp(hub.chunk_grouped, chunk_id="ch_prereq", grouped_into="ch_survivor", grouped_at=_NOW)
+                stamp(hub.chunk_grouped, chunk_id="ch_prereq", grouped_into="ch_survivor", grouped_at=NOW)
             )
         )
 
@@ -2338,7 +2336,7 @@ def test_a_standing_edge_onto_a_deleted_prerequisite_is_a_violation(tmp_path: Pa
         conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
         conn.execute(
             insert(hub.chunk_deleted).values(
-                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice")
+                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=NOW, deleted_by="user:alice")
             )
         )
 
@@ -2355,7 +2353,7 @@ def test_a_standing_edges_dependent_gone_ephemeral_is_also_a_violation(tmp_path:
         conn.execute(insert(hub.chunk_dependencies).values(stamp(hub.chunk_dependencies, **_dependency_edge_values())))
         conn.execute(
             insert(hub.chunk_deleted).values(
-                stamp(hub.chunk_deleted, chunk_id="ch_dependent", deleted_at=_NOW, deleted_by="user:alice")
+                stamp(hub.chunk_deleted, chunk_id="ch_dependent", deleted_at=NOW, deleted_by="user:alice")
             )
         )
 
@@ -2370,12 +2368,12 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
     with engine.begin() as conn:
         conn.execute(
             insert(hub.chunk_dependencies).values(
-                stamp(hub.chunk_dependencies, **_dependency_edge_values(released_at=_NOW, released_by="user:alice"))
+                stamp(hub.chunk_dependencies, **_dependency_edge_values(released_at=NOW, released_by="user:alice"))
             )
         )
         conn.execute(
             insert(hub.chunk_deleted).values(
-                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice")
+                stamp(hub.chunk_deleted, chunk_id="ch_prereq", deleted_at=NOW, deleted_by="user:alice")
             )
         )
 
@@ -2418,7 +2416,7 @@ def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.graphs).values(
-                tenant_id=second, graph_id="gr_2", name="g", entry_node_id="nd_2", definition_yaml="", created_at=_NOW
+                tenant_id=second, graph_id="gr_2", name="g", entry_node_id="nd_2", definition_yaml="", created_at=NOW
             )
         )
         conn.execute(
@@ -2432,7 +2430,7 @@ def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
                 judged_by="worker",
             )
         )
-        seed_drainable_history(conn, second, graph_id="gr_2", node_id="nd_2", at=_NOW, open_refs=3)
+        seed_drainable_history(conn, second, graph_id="gr_2", node_id="nd_2", at=NOW, open_refs=3)
     assert hub_invariants(engine).run() == []
     close_tenant(engine, second)
     teardown = TenantTeardownStore(hub_level_connections(engine))
@@ -2469,7 +2467,7 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
     """A deletion that removed its tenant's row but left some of the rows the tenant owns."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        seed_graph(conn, "gr_1", at=_NOW)
+        seed_graph(conn, "gr_1", at=NOW)
     second = add_tenant(engine, "second")
     with engine.begin() as conn:
         conn.execute(
@@ -2481,7 +2479,7 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
                     name="g",
                     entry_node_id="nd_1",
                     definition_yaml="",
-                    created_at=_NOW,
+                    created_at=NOW,
                 )
             )
         )
@@ -2510,7 +2508,7 @@ def test_a_chunk_filed_under_another_tenants_project_is_a_violation(tmp_path: Pa
                     tenant_id=first,
                     chunk_id="ch_1",
                     graph_id="gr_1",
-                    minted_at=_NOW,
+                    minted_at=NOW,
                     model="m",
                     project_id=foreign,
                 )
@@ -2533,14 +2531,14 @@ def test_a_chunk_of_its_tenants_project_is_not_a_violation(tmp_path: Path) -> No
                     tenant_id=second,
                     chunk_id="ch_1",
                     graph_id="gr_1",
-                    minted_at=_NOW,
+                    minted_at=NOW,
                     model="m",
                     project_id=default_project(engine, second),
                 )
             )
         )
 
-    assert {v.invariant for v in hub_invariants(engine).run()} & _PROJECT_INVARIANTS == set()
+    assert {v.invariant for v in hub_invariants(engine).run()} & PROJECT_INVARIANTS == set()
 
 
 def test_a_closed_tenants_misfiled_chunk_is_not_judged(tmp_path: Path) -> None:
@@ -2555,7 +2553,7 @@ def test_a_closed_tenants_misfiled_chunk_is_not_judged(tmp_path: Path) -> None:
                     tenant_id=second,
                     chunk_id="ch_1",
                     graph_id="gr_1",
-                    minted_at=_NOW,
+                    minted_at=NOW,
                     model="m",
                     project_id="proj_never_minted",
                 )
@@ -2642,7 +2640,7 @@ def test_a_review_finding_outside_its_chunks_project_is_a_violation(tmp_path: Pa
         conn.execute(insert(hub.scopes).values(_scope_values("scp_home", home)))
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m", project_id="proj_other")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m", project_id="proj_other")
             )
         )
         for finding_id, raised_by in (("fin_review", "ch_1"), ("fin_unminted", "ch_never_minted")):
@@ -2672,7 +2670,7 @@ def test_a_question_or_decision_of_another_project_than_its_chunk_is_a_violation
         _add_project(conn, "proj_other", slug="other")
         conn.execute(
             insert(hub.chunks).values(
-                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m", project_id="proj_other")
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m", project_id="proj_other")
             )
         )
         conn.execute(
@@ -2685,7 +2683,7 @@ def test_a_question_or_decision_of_another_project_than_its_chunk_is_a_violation
                     epoch=1,
                     question="q",
                     options="[]",
-                    asked_at=_NOW,
+                    asked_at=NOW,
                     project_id=home,
                 )
             )
@@ -2700,7 +2698,7 @@ def test_a_question_or_decision_of_another_project_than_its_chunk_is_a_violation
                     node_name="gate",
                     epoch=1,
                     choices="[]",
-                    submitted_at=_NOW,
+                    submitted_at=NOW,
                     project_id=home,
                 )
             )
@@ -2732,7 +2730,7 @@ def test_a_proposal_citing_another_projects_finding_is_a_violation(tmp_path: Pat
                     class_="dead-code",
                     title="t",
                     body="",
-                    created_at=_NOW,
+                    created_at=NOW,
                     project_id=home,
                 )
             )
@@ -2757,7 +2755,7 @@ def test_a_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
         for slug in ("other", "retired"):
             conn.execute(
                 insert(hub.project_former_slugs).values(
-                    stamp(hub.project_former_slugs, slug=slug, project_id=home, left_at=_NOW)
+                    stamp(hub.project_former_slugs, slug=slug, project_id=home, left_at=NOW)
                 )
             )
 
@@ -2773,10 +2771,10 @@ def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Pat
     tenant, home = default_tenant(engine), default_project(engine)
     with engine.begin() as conn:
         # Rows stamped by the store's only tenant go in before the second tenant exists.
-        _mint(conn, "ch_1", at=_NOW, refs=("hub:1", "wsrc_home:2", "wsrc_other:3", "wsrc_gone:4"), project_id=home)
+        _mint(conn, "ch_1", at=NOW, refs=("hub:1", "wsrc_home:2", "wsrc_other:3", "wsrc_gone:4"), project_id=home)
         conn.execute(
             hub_scoped(insert(hub.tenants)).values(
-                tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test"
+                tenant_id="tnt_other", name="other", created_at=NOW, created_by="test"
             )
         )
         for owner, source_id in ((tenant, "wsrc_home"), ("tnt_other", "wsrc_other")):
@@ -2790,7 +2788,7 @@ def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Pat
                     locator="acme/app",
                     annotate=False,
                     revision=1,
-                    created_at=_NOW,
+                    created_at=NOW,
                     created_by="test",
                 )
             )
@@ -2806,7 +2804,7 @@ def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Pat
                 stamp(
                     hub.config_changes,
                     tenant_id=tenant,
-                    recorded_at=_NOW,
+                    recorded_at=NOW,
                     actor="op",
                     door="cli",
                     record_kind="work_source",
@@ -2901,9 +2899,9 @@ def _secret(conn: sa.Connection, tenant: str) -> None:
             nonce="n",
             key_id="k",
             revision=1,
-            replaced_at=_NOW,
+            replaced_at=NOW,
             replaced_by="test",
-            created_at=_NOW,
+            created_at=NOW,
         )
     )
 
@@ -2919,7 +2917,7 @@ def _forge(conn: sa.Connection, forge_id: str, *, tenant: str, api_base: str, we
             api_base=api_base,
             web_base=web_base,
             revision=1,
-            created_at=_NOW,
+            created_at=NOW,
             created_by="test",
         )
     )
@@ -2940,7 +2938,7 @@ def _forge_repository(
             base_branch="main",
             secret_name="tok",
             revision=1,
-            created_at=_NOW,
+            created_at=NOW,
             created_by="test",
             forge_id=forge_id,
         )
@@ -2969,7 +2967,7 @@ def _forge_source(
             web_base=web_base,
             annotate=False,
             revision=1,
-            created_at=_NOW,
+            created_at=NOW,
             created_by="test",
             forge_id=forge_id,
         )
@@ -2979,7 +2977,7 @@ def _forge_source(
 def _retire(conn: sa.Connection, facts: sa.Table, key: str, value: str, *, tenant: str, retired: bool = True) -> None:
     conn.execute(
         hub_scoped(insert(facts)).values(
-            {key: value, "retired": retired, "set_at": _NOW, "set_by": "op", "tenant_id": tenant}
+            {key: value, "retired": retired, "set_at": NOW, "set_by": "op", "tenant_id": tenant}
         )
     )
 
@@ -3037,7 +3035,7 @@ def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> 
         _secret(conn, tenant)
         conn.execute(
             hub_scoped(insert(hub.tenants)).values(
-                tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test"
+                tenant_id="tnt_other", name="other", created_at=NOW, created_by="test"
             )
         )
         _forge(conn, "frg_home", tenant=tenant, api_base=github)
@@ -3049,7 +3047,7 @@ def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> 
         _forge_source(conn, "wsrc_gone", tenant=tenant, forge_id="frg_gone", api_base=github)
         conn.execute(
             hub_scoped(insert(hub.forge_former_slugs)).values(
-                tenant_id=tenant, slug="old", forge_id="frg_other", left_at=_NOW
+                tenant_id=tenant, slug="old", forge_id="frg_other", left_at=NOW
             )
         )
         _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_home", tenant=tenant)
@@ -3060,7 +3058,7 @@ def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> 
                     stamp(
                         hub.config_changes,
                         tenant_id=tenant,
-                        recorded_at=_NOW,
+                        recorded_at=NOW,
                         actor="op",
                         door="cli",
                         record_kind="forge",
@@ -3096,7 +3094,7 @@ def test_a_forge_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> 
         _forge(conn, "frg_b", tenant=tenant, api_base="https://b.example")
         conn.execute(
             hub_scoped(insert(hub.forge_former_slugs)).values(
-                tenant_id=tenant, slug="frg_a", forge_id="frg_b", left_at=_NOW
+                tenant_id=tenant, slug="frg_a", forge_id="frg_b", left_at=NOW
             )
         )
 
@@ -3105,7 +3103,7 @@ def test_a_forge_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> 
     ]
 
 
-def _flow_line_breaches(engine: sa.Engine, *, now: datetime = _NOW + timedelta(hours=1)) -> list[str]:
+def _flow_line_breaches(engine: sa.Engine, *, now: datetime = NOW + timedelta(hours=1)) -> list[str]:
     """The three flow invariants' breaches alone, judged at ``now``."""
     flow_invariants = {"hub:one-turn-per-flow", "hub:one-turn-per-visit", "hub:flow-line-standing"}
     return [v.invariant for v in hub_invariants(engine, clock=FixedClock(now)).run() if v.invariant in flow_invariants]
@@ -3114,12 +3112,10 @@ def _flow_line_breaches(engine: sa.Engine, *, now: datetime = _NOW + timedelta(h
 def _seed_at_deliver(conn: sa.Connection, chunk_id: str = "ch_1") -> None:
     """A chunk whose newest movement entered ``nd_deliver`` at epoch 1."""
     conn.execute(
-        insert(hub.chunks).values(stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m"))
+        insert(hub.chunks).values(stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=NOW, model="m"))
     )
     conn.execute(
-        insert(hub.lease_facts).values(
-            stamp(hub.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r", minted_at=_NOW)
-        )
+        insert(hub.lease_facts).values(stamp(hub.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r", minted_at=NOW))
     )
     conn.execute(
         insert(hub.transitions).values(
@@ -3133,7 +3129,7 @@ def _seed_at_deliver(conn: sa.Connection, chunk_id: str = "ch_1") -> None:
                 choice_name="pass",
                 epoch=1,
                 runner_id="r",
-                recorded_at=_NOW,
+                recorded_at=NOW,
             )
         )
     )
@@ -3152,7 +3148,7 @@ def _submit(
                 epoch=1,
                 generation=0,
                 arrival=arrival,
-                submitted_at=_NOW,
+                submitted_at=NOW,
             )
         )
     )
@@ -3172,7 +3168,7 @@ def _flow(conn: sa.Connection, flow_id: str = "flw_main") -> None:
                 resource="repo:repo_a/main",
                 repository_id="repo_a",
                 branch="main",
-                created_at=_NOW,
+                created_at=NOW,
             )
         )
     )
@@ -3180,9 +3176,7 @@ def _flow(conn: sa.Connection, flow_id: str = "flw_main") -> None:
 
 def _open_turn(conn: sa.Connection, turn_id: str, submission_id: str) -> None:
     conn.execute(
-        insert(hub.hub_turns).values(
-            stamp(hub.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=_NOW)
-        )
+        insert(hub.hub_turns).values(stamp(hub.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=NOW))
     )
 
 
@@ -3201,8 +3195,8 @@ def test_a_line_whose_visits_stand_at_their_node_holds_every_flow_invariant(tmp_
                     hub.hub_turns,
                     turn_id="htn_0",
                     submission_id="fsub_2",
-                    started_at=_NOW,
-                    ended_at=_NOW,
+                    started_at=NOW,
+                    ended_at=NOW,
                     outcome="pending",
                 )
             )
@@ -3236,12 +3230,12 @@ def test_flow_invariants_hold_before_submission_and_after_landing(tmp_path: Path
     with engine.begin() as conn:
         conn.execute(
             hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_1")).values(
-                ended_at=_NOW, outcome="landed"
+                ended_at=NOW, outcome="landed"
             )
         )
         conn.execute(
             insert(hub.flow_submission_closures).values(
-                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome="landed", closed_at=_NOW)
+                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome="landed", closed_at=NOW)
             )
         )
     assert open_turns() == 0
@@ -3282,7 +3276,7 @@ def test_an_open_submission_whose_chunk_left_its_node_is_a_violation(tmp_path: P
         _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_review", arrival=1, flow_id="flw_main")
 
     assert _flow_line_breaches(engine) == ["hub:flow-line-standing"]
-    assert _flow_line_breaches(engine, now=_NOW + timedelta(seconds=30)) == []
+    assert _flow_line_breaches(engine, now=NOW + timedelta(seconds=30)) == []
 
 
 def test_an_open_submission_whose_chunk_left_is_exempt_while_its_turn_is_open(tmp_path: Path) -> None:
@@ -3299,7 +3293,7 @@ def test_an_open_submission_whose_chunk_left_is_exempt_while_its_turn_is_open(tm
 def _other_tenant(conn: sa.Connection) -> None:
     """A second tenant, inserted after every row ``stamp`` files under the store's only one."""
     conn.execute(
-        hub_scoped(insert(hub.tenants)).values(tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test")
+        hub_scoped(insert(hub.tenants)).values(tenant_id="tnt_other", name="other", created_at=NOW, created_by="test")
     )
 
 
@@ -3319,7 +3313,7 @@ def _position(conn: sa.Connection, project_id: str, repository_id: str, position
                 project_id=project_id,
                 repository_id=repository_id,
                 position=position,
-                set_at=_NOW,
+                set_at=NOW,
                 set_by="op",
             )
         )
@@ -3371,7 +3365,7 @@ def test_a_landing_position_off_its_tenants_links_is_a_violation(tmp_path: Path)
     tenant, home = default_tenant(engine), default_project(engine)
     with engine.begin() as conn:
         _link(conn, home, "repo_a", tenant=tenant)
-        _repository_fact(conn, "repo_a", linked=False, at=_NOW, project_id=home)
+        _repository_fact(conn, "repo_a", linked=False, at=NOW, project_id=home)
         _position(conn, home, "repo_a")
         _position(conn, home, "repo_a", position=None)
         foreign = _position(conn, "proj_other", "repo_b")
@@ -3408,8 +3402,8 @@ def test_submission_terms_must_stand_on_what_the_submission_holds(tmp_path: Path
                     hub.hub_turns,
                     turn_id="htn_3",
                     submission_id="fsub_3",
-                    started_at=_NOW,
-                    ended_at=_NOW,
+                    started_at=NOW,
+                    ended_at=NOW,
                     outcome="interrupted",
                 )
             )

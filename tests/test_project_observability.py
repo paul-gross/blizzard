@@ -28,7 +28,7 @@ from tests.support import (
     seed_project,
     seed_runner,
 )
-from tests.test_analytics_events_api import _record, _tool_turn
+from tests.test_analytics_events_api import record_transcript, tool_turn
 
 pytestmark = pytest.mark.component
 
@@ -82,10 +82,10 @@ def _record_usage(hub: HubHarness, chunk_id: str, tokens: int) -> None:
 
 
 def _push_transcript(hub: HubHarness, chunk_id: str, file_path: str) -> None:
-    turns = [_tool_turn(0, "Read", {"file_path": file_path}, timestamp="2026-08-12T09:00:00Z")]
+    turns = [tool_turn(0, "Read", {"file_path": file_path}, timestamp="2026-08-12T09:00:00Z")]
     push = hub.client.post(
         "/api/fleet/transcripts",
-        json={"runner_id": "r1", "records": [_record(chunk_id, turns=turns, segment_id=f"sg_{chunk_id}")]},
+        json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns, segment_id=f"sg_{chunk_id}")]},
     )
     assert push.status_code == 200, push.text
 

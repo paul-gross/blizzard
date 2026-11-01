@@ -15,7 +15,7 @@ from tests.support import build_hub
 
 pytestmark = pytest.mark.component
 
-_GRAPH_YAML = """
+GRAPH_YAML = """
 name: tiny
 entry: build
 nodes:
@@ -39,27 +39,27 @@ nodes:
 
 def test_anonymous_mint_still_succeeds(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML})
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML})
     assert resp.status_code == 201, resp.text
 
 
 def test_runner_bearer_token_is_rejected_on_mint_graph(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_bearer(token))
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML}, headers=bearer(token))
     assert resp.status_code == 403
 
 
 def test_runner_bearer_token_is_rejected_on_list_and_get_graph(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
-    graph_id = warn_hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).json()["graph_id"]
+    graph_id = warn_hub.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML}).json()["graph_id"]
 
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/graphs", headers=_bearer(token)).status_code == 403
-    assert hub.client.get(f"/api/graphs/{graph_id}", headers=_bearer(token)).status_code == 403
+    assert hub.client.get("/api/graphs", headers=bearer(token)).status_code == 403
+    assert hub.client.get(f"/api/graphs/{graph_id}", headers=bearer(token)).status_code == 403

@@ -18,7 +18,7 @@ import pytest
 
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream, events_stream
+from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream, events_stream
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.tenancy import TenantId
@@ -96,7 +96,7 @@ async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None
             return False  # the client stays connected — only the shutdown signal ends this
 
     async def _drain() -> None:
-        stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, shutdown)  # type: ignore[arg-type]
+        stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, shutdown)  # type: ignore[arg-type]
         async for _ in stream.frames():
             pass
 
@@ -129,11 +129,11 @@ async def test_dropping_a_tenants_broker_ends_its_open_stream_after_what_it_hold
     brokers = TenantBrokers()
     dropped, kept = brokers.for_tenant(TenantId("ten_A")), brokers.for_tenant(TenantId("ten_B"))
     streams = [
-        Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, keepalive_seconds=30.0).frames()  # type: ignore[arg-type]
+        Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, keepalive_seconds=30.0).frames()  # type: ignore[arg-type]
         for broker in (dropped, kept)
     ]
     for frames in streams:
-        assert await asyncio.wait_for(frames.__anext__(), timeout=1.0) == _RESERVED_COMMENT.encode()
+        assert await asyncio.wait_for(frames.__anext__(), timeout=1.0) == RESERVED_COMMENT.encode()
     try:
         dropped.publish_queue_changed()
         brokers.drop(TenantId("ten_A"))
@@ -157,10 +157,10 @@ async def test_a_stream_opened_on_a_closed_broker_replays_its_tail_and_ends() ->
     broker.publish_queue_changed()
     broker.close()
 
-    stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT)  # type: ignore[arg-type]
     frames = await asyncio.wait_for(_rest(stream.frames()), timeout=1.0)
 
-    assert frames[0] == _RESERVED_COMMENT.encode()
+    assert frames[0] == RESERVED_COMMENT.encode()
     assert [frame["event"] for frame in parse_sse_frames(b"".join(frames[1:]).decode())] == ["queue-changed"]
     assert broker.subscriber_count() == 0
 

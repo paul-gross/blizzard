@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from pathlib import Path
 
 import httpx2
@@ -116,7 +116,7 @@ def await_http(
 
 
 @contextlib.contextmanager
-def run_forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx2.Client]:
+def run_forge(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Client]:
     log = origins.parent / "forge.log"
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
@@ -148,7 +148,7 @@ def run_hub(
     egress: EgressConfig | None = None,
     rehost: bool = False,
     test_actions: bool = True,
-) -> Iterator[httpx2.Client]:
+) -> Generator[httpx2.Client]:
     """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
     instead of initializing it; ``egress`` replaces the ``[egress]`` block. The test actions are admitted behind both
     of their fences unless ``test_actions`` is off, and with no crash point armed the crash fence never kills. Traced (exporting to ``collector``,
@@ -293,7 +293,7 @@ def drive_until_done(
 @contextlib.contextmanager
 def runner_api(
     config: RunnerConfig, *, events: EventBroker | None = None, process: RunnerProcess | None = None
-) -> Iterator[None]:
+) -> Generator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
     Touches no store, so it runs alongside the tick without contention. ``events``

@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import threading
 import weakref
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -85,6 +85,7 @@ from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, 
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
+from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
@@ -154,7 +155,7 @@ from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
-from blizzard.runner.usage.repository import derive_invocation_cost
+from blizzard.runner.usage.repository import IWriteUsageRepository, derive_invocation_cost
 from blizzard.tools.invariants import runner_invariants
 from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
@@ -245,6 +246,11 @@ class SqlAlchemyRunnerStore(
         self._engine = engine
         self._errors = errors
 
+    @property
+    def engine(self) -> Engine:
+        """The engine every concept store here writes through."""
+        return self._engine
+
 
 def runner_store_errors() -> RunnerStoreErrorFactory:
     """The runner-store seam every test's ``SqlAlchemyRunnerStore``
@@ -268,17 +274,36 @@ def registered_fixture_store(engine: Engine, runner_id: str = FIXTURE_RUNNER_ID)
     return store
 
 
-def record_usage(usage, **kwargs):
+def record_usage(
+    usage: IWriteUsageRepository,
+    *,
+    lease_id: str,
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    generation: int,
+    sample: UsageSample,
+    recorded_at: datetime,
+) -> int | None:
     """``record_usage`` as ``UsageRecorder`` drives it: the session's banked basis, then the
     domain cost policy, then the store's verbatim write."""
-    cost = derive_invocation_cost(kwargs["sample"], usage.session_cost_basis(kwargs["lease_id"]))
-    return usage.record_usage(cost=cost, **kwargs)
+    cost = derive_invocation_cost(sample, usage.session_cost_basis(lease_id))
+    return usage.record_usage(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        node_id=node_id,
+        epoch=epoch,
+        generation=generation,
+        sample=sample,
+        cost=cost,
+        recorded_at=recorded_at,
+    )
 
 
 def make_store(tmp_path_url: str, runner_id: str | None = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
     """A migrated (schema-created) runner store over a fresh sqlite file, bound to ``runner_id``."""
     engine = create_engine_from_url(tmp_path_url)
-    _create_all(runner_metadata, engine)
+    create_all(runner_metadata, engine)
     return SqlAlchemyRunnerStore(engine, runner_store_errors(), runner_id)
 
 
@@ -379,8 +404,8 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
     )
 
 
-def _create_all(md: MetaData, engine: object) -> None:
-    md.create_all(engine)  # type: ignore[arg-type]
+def create_all(md: MetaData, engine: Engine) -> None:
+    md.create_all(engine)
 
 
 def strip_transcript_segments(store: object) -> None:
@@ -391,7 +416,7 @@ def strip_transcript_segments(store: object) -> None:
     ``store`` is typed loosely: any one field of a :func:`make_stores` bundle is, at
     runtime, the same flat :class:`SqlAlchemyRunnerStore` this asserts for."""
     assert isinstance(store, SqlAlchemyRunnerStore)
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(store.connections.delete(transcript_outbound_buffer))
         conn.execute(store.connections.delete(transcript_segments))
 
@@ -422,18 +447,18 @@ class CountingAttachmentStore:
     test assert the produces-coverage check reads only names while `_judged`'s asset
     harvest still reads full content, on the very same lease."""
 
-    def __init__(self, inner: object) -> None:
+    def __init__(self, inner: IReadAttachmentRepository) -> None:
         self._inner = inner
         self.attachments_for_lease_calls: list[str] = []
         self.attachment_names_for_lease_calls: list[str] = []
 
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
         self.attachments_for_lease_calls.append(lease_id)
-        return self._inner.attachments_for_lease(lease_id)  # type: ignore[attr-defined,no-any-return]
+        return self._inner.attachments_for_lease(lease_id)
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
         self.attachment_names_for_lease_calls.append(lease_id)
-        return self._inner.attachment_names_for_lease(lease_id)  # type: ignore[attr-defined,no-any-return]
+        return self._inner.attachment_names_for_lease(lease_id)
 
     def __getattr__(self, name: str) -> object:
         return getattr(self._inner, name)
@@ -443,7 +468,7 @@ def runner_invariant_violations(store: object) -> list[Violation]:
     """The runner store's durable invariants, asserted over this store's own engine — the
     checker the crash sweep runs, reachable from a component test."""
     assert isinstance(store, SqlAlchemyRunnerStore)
-    return runner_invariants(store._engine).run()
+    return runner_invariants(store.engine).run()
 
 
 @dataclass(frozen=True)
@@ -697,7 +722,8 @@ class FakeHub:
         runner_id = self._caller()
         self.push_facts_calls.append([fact.seq for fact in facts])
         mark = self.high_water.get(runner_id, 0)
-        applied, already = [], []
+        applied: list[int] = []
+        already: list[int] = []
         for fact in sorted(facts, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
@@ -716,7 +742,10 @@ class FakeHub:
         shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
         self.push_transcripts_calls.append([record.seq for record in shipped])
         mark = self.transcript_high_water.get(runner_id, 0)
-        applied, already, capped, refused = [], [], [], []
+        applied: list[int] = []
+        already: list[int] = []
+        capped: list[int] = []
+        refused: list[int] = []
         for record in sorted(shipped, key=lambda r: r.seq):
             if record.seq <= mark:
                 # A lost-ack retry of an already-decided seq reports its cap outcome, not
@@ -1462,8 +1491,7 @@ class FakeSubscriptionSampler:
         return SampleMiss(self.miss_reason)
 
 
-def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscriptionSampler:
-    return x
+_fake_subscription_sampler_conforms: type[ISubscriptionSampler] = FakeSubscriptionSampler
 
 
 class FakeCredentialRenewer:
@@ -1495,8 +1523,7 @@ class FakeCredentialRenewer:
         return self.outcome
 
 
-def _conforms_fake_credential_renewer(x: FakeCredentialRenewer) -> ICredentialRenewer:
-    return x
+_fake_credential_renewer_conforms: type[ICredentialRenewer] = FakeCredentialRenewer
 
 
 class FakeProbe:
@@ -1505,9 +1532,9 @@ class FakeProbe:
     ``group_alive`` probe a dead-leader-with-live-descendants scenario scripts independently
     of any single pid's own liveness."""
 
-    def __init__(self, alive: set[tuple[int, str]] | None = None, groups_alive: set[int] | None = None) -> None:
-        self.alive = alive if alive is not None else set()
-        self.groups_alive = groups_alive if groups_alive is not None else set()
+    def __init__(self, alive: set[tuple[int, str | None]] | None = None, groups_alive: set[int] | None = None) -> None:
+        self.alive: set[tuple[int, str | None]] = alive if alive is not None else set()
+        self.groups_alive: set[int] = groups_alive if groups_alive is not None else set()
         self.killed: list[int] = []
         self.killed_groups: list[int] = []
         self.interrupted_groups: list[int] = []
@@ -1673,7 +1700,8 @@ def make_context(
     _harnesses = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
     )
-    _transcripts_wired = harness.transcript_source() is not None
+    # A FakeHarness always carries a transcript source.
+    _transcripts_wired = True
     _probe: IProcessProbe = probe
     _wt: IWorktreeGit = worktree_git if worktree_git is not None else FakeWorktreeGit()
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
@@ -1879,7 +1907,7 @@ def no_retry_clock() -> ManualMonotonicClock:
 @contextmanager
 def loop_graph(
     config: RunnerConfig, *, events: EventBroker | None = None, runner_id: str | None = None
-) -> Iterator[RunnerProcess]:
+) -> Generator[RunnerProcess, None, None]:
     """The composition root's process graph over ``config``, closed on exit — the one owner
     of a graph for every test that builds a :class:`LoopContext` or a ``PeriodicDriver``. Its runner is bound to
     ``runner_id``, else to the id ``config`` carries, else to the fixture runner."""
@@ -1896,7 +1924,7 @@ def loop_context(
     *,
     broker: EventBroker | None = None,
     runner_prompt: str = "",
-) -> Iterator[LoopContext]:
+) -> Generator[LoopContext, None, None]:
     """A :class:`LoopContext` built by ``LoopWiring.context`` over its own graph, closed on exit."""
     with loop_graph(config, events=broker) as graph:
         ctx = LoopWiring(config, runner_prompt, broker).context(FakeHub(), graph)

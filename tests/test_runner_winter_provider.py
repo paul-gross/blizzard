@@ -14,7 +14,7 @@ from blizzard.runner.environments.internal.winter_provider import WinterWorkspac
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError
 
 
-class _FakeWinter:
+class FakeWinter:
     def __init__(self, *, service_bound: bool = False, fail_on: list[str] | None = None) -> None:
         self.runs: list[list[str]] = []
         self.captures: list[list[str]] = []
@@ -42,7 +42,7 @@ class _FakeWinter:
         return json.dumps([{"slot": "service", "bound": bound, "binding_kind": "explicit"}])
 
 
-class _FakeGit:
+class FakeGit:
     def __init__(self, origins: dict[str, str] | None = None) -> None:
         self.cleans: list[str] = []
         self.origin_reads: list[str] = []
@@ -57,13 +57,13 @@ class _FakeGit:
 
 
 def _provider(root: str, pool, **kw):
-    return WinterWorkspaceProvider(root, env_pool=pool, winter=_FakeWinter(), git=_FakeGit(), **kw)
+    return WinterWorkspaceProvider(root, env_pool=pool, winter=FakeWinter(), git=FakeGit(), **kw)
 
 
 @pytest.mark.unit
 def test_acquire_of_a_fresh_env_inits_cleans_and_provisions(tmp_path: Path) -> None:
     """A pool env with no workdir yet is materialized by init — already clean, no reset steps."""
-    winter, git = _FakeWinter(), _FakeGit()
+    winter, git = FakeWinter(), FakeGit()
     provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
 
     acquired = provider.acquire("ch_1", 1, held_ids=[])
@@ -83,7 +83,7 @@ def test_acquire_of_a_fresh_env_inits_cleans_and_provisions(tmp_path: Path) -> N
 @pytest.mark.unit
 def test_acquire_of_a_lived_in_env_runs_the_full_reset_sequence(tmp_path: Path) -> None:
     """An existing workdir gets the full reset: fetch, forced base checkout, disconnect, init."""
-    winter, git = _FakeWinter(service_bound=True), _FakeGit()
+    winter, git = FakeWinter(service_bound=True), FakeGit()
     (tmp_path / "e1").mkdir()
     provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], base_branch="master", winter=winter, git=git)
 
@@ -103,9 +103,9 @@ def test_acquire_of_a_lived_in_env_runs_the_full_reset_sequence(tmp_path: Path) 
 
 @pytest.mark.unit
 def test_service_teardown_skipped_when_no_orchestrator_bound(tmp_path: Path) -> None:
-    winter = _FakeWinter(service_bound=False)
+    winter = FakeWinter(service_bound=False)
     (tmp_path / "e1").mkdir()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
 
     provider.acquire("ch_1", 1, held_ids=[])
 
@@ -116,8 +116,8 @@ def test_service_teardown_skipped_when_no_orchestrator_bound(tmp_path: Path) -> 
 @pytest.mark.unit
 def test_standalones_refresh_once_per_pass_and_probe_is_cached(tmp_path: Path) -> None:
     """Workspace-global steps are hoisted out of the per-env path (no redundant repetition)."""
-    winter = _FakeWinter()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1", "e2"], winter=winter, git=_FakeGit())
+    winter = FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1", "e2"], winter=winter, git=FakeGit())
 
     provider.acquire("ch_1", 2, held_ids=[])
 
@@ -128,9 +128,9 @@ def test_standalones_refresh_once_per_pass_and_probe_is_cached(tmp_path: Path) -
 
 @pytest.mark.unit
 def test_mid_reset_step_failure_is_attributed_to_step_and_env(tmp_path: Path) -> None:
-    winter = _FakeWinter(fail_on=["ws", "disconnect"])
+    winter = FakeWinter(fail_on=["ws", "disconnect"])
     (tmp_path / "e1").mkdir()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
 
     with pytest.raises(EnvironmentPreparationError) as excinfo:
         provider.acquire("ch_1", 1, held_ids=[])
@@ -150,8 +150,8 @@ def test_acquire_excludes_held_and_is_stateless(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_acquire_refuses_all_or_nothing_when_pool_short(tmp_path: Path) -> None:
-    winter = _FakeWinter()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    winter = FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
     with pytest.raises(WorkspaceAcquisitionError):
         provider.acquire("ch_1", 1, held_ids=["e1"])  # the only env is held
     with pytest.raises(WorkspaceAcquisitionError):
@@ -168,8 +168,8 @@ def test_release_is_a_noop(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_reacquire_refreshes_manifest_even_after_failed_reset(tmp_path: Path) -> None:
     (tmp_path / "e1").mkdir()
-    winter = _FakeWinter()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    winter = FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
 
     def membership(repo: str) -> None:
         winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]
@@ -192,7 +192,7 @@ def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
     entered = threading.Event()
     resume = threading.Event()
 
-    class BlockingWinter(_FakeWinter):
+    class BlockingWinter(FakeWinter):
         def run(self, workspace_root: Path, args) -> None:
             if list(args) == ["ws", "init", "e1"]:
                 entered.set()
@@ -200,7 +200,7 @@ def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
             super().run(workspace_root, args)
 
     winter = BlockingWinter()
-    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
     names: list[str] = []
     reset = threading.Thread(target=lambda: provider.acquire("ch_1", 1, held_ids=[]))
     reset.start()
@@ -234,12 +234,12 @@ def test_repos_reads_the_env_manifest_from_winter_rather_than_guessing_paths() -
     """The manifest is *read*, not derived. Blizzard never joins an env workdir to a repo
     name to guess where a worktree is — winter is the authority on where it put things,
     and a repo's local directory name is free to differ from its remote's."""
-    winter = _FakeWinter()
+    winter = FakeWinter()
     winter.worktrees = [
         _worktree_entry("e1", "blizzard", "/ws"),
         _worktree_entry("e1", "blizzard-mock", "/ws"),
     ]
-    git = _FakeGit({"/ws/e1/blizzard": "git@github.com:acme/blizzard.git"})
+    git = FakeGit({"/ws/e1/blizzard": "git@github.com:acme/blizzard.git"})
     provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=winter, git=git)
 
     bindings = provider.repos("e1")
@@ -256,7 +256,7 @@ def test_repos_reads_the_env_manifest_from_winter_rather_than_guessing_paths() -
 def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
     """A repo can be both a project repo and a standalone extension checkout with the
     same origin — only the env's own worktree belongs in the manifest."""
-    winter = _FakeWinter()
+    winter = FakeWinter()
     winter.worktrees = [
         _worktree_entry("e1", "blizzard-context", "/ws"),
         _worktree_entry("e2", "blizzard-context", "/ws"),
@@ -270,7 +270,7 @@ def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
         },
         {"kind": "workspace", "env": None, "repo": None, "name": "ws", "label": "<workspace>", "path": "/ws"},
     ]
-    provider = WinterWorkspaceProvider("/ws", env_pool=["e1", "e2"], winter=winter, git=_FakeGit())
+    provider = WinterWorkspaceProvider("/ws", env_pool=["e1", "e2"], winter=winter, git=FakeGit())
 
     assert [(b.environment_id, b.relpath) for b in provider.repos("e1")] == [("e1", "blizzard-context")]
     assert [(b.environment_id, b.relpath) for b in provider.repos("e2")] == [("e2", "blizzard-context")]
@@ -280,6 +280,6 @@ def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
 def test_repos_is_empty_for_an_env_with_no_worktrees() -> None:
     """An empty manifest authorizes nothing, which is the safe reading — not an error
     the declare path has to special-case."""
-    provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=_FakeWinter(), git=_FakeGit())
+    provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=FakeWinter(), git=FakeGit())
 
     assert provider.repos("e1") == []

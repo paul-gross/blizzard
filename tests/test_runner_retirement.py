@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
-from tests.test_route_classification import _api_routes, _dependency_names
+from tests.test_route_classification import api_routes, dependency_names
 
 pytestmark = pytest.mark.component
 
@@ -259,8 +259,8 @@ def test_every_fleet_route_is_gated_or_a_named_exception(tmp_path: Path) -> None
     routes, which a host credential gates instead."""
     ungated = {
         (method, route.path)
-        for route in _api_routes(build_hub(tmp_path).wired_app)
-        if route.path.startswith("/api/fleet/") and _GATE not in _dependency_names(route)
+        for route in api_routes(build_hub(tmp_path).wired_app)
+        if route.path.startswith("/api/fleet/") and _GATE not in dependency_names(route)
         for method in (route.methods or set()) - {"HEAD"}
     }
     assert ungated == {
@@ -289,7 +289,7 @@ def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_f
     hub.clock.advance(timedelta(seconds=5))
     before = _store_rows(hub)
 
-    gated = [route for route in _api_routes(hub.wired_app) if _GATE in _dependency_names(route)]
+    gated = [route for route in api_routes(hub.wired_app) if _GATE in dependency_names(route)]
     assert gated, "no route carries the fleet gate"
     refused = []
     for route in gated:

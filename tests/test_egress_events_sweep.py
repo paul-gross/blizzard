@@ -30,12 +30,12 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
 from tests.repo_files import repo_root
 from tests.support import HubHarness, hub_level_connections, hub_store_connections
-from tests.test_egress_sweep import _closed_step, _kinds, _node_id
+from tests.test_egress_sweep import closed_step, graph_node_id, kinds
 from tests.trace_hub import trace_hub
 
 pytestmark = pytest.mark.component
 
-_OLD_VERSION = "blizzard-analytics/0"
+OLD_VERSION = "blizzard-analytics/0"
 _PLANTED = "PLANTED-PROMPT-TEXT"
 _PROVENANCE = SegmentProvenance("claude_code", "1.0", "claude-sonnet-5", "high")
 
@@ -58,14 +58,14 @@ def _config(tmp_path: Path, **extra: Unpack[_EgressFields]) -> EgressConfig:
     )
 
 
-class _Events:
+class Events:
     """A hub with the export on, a closed runner step, and that step's transcript segments, derived by hand."""
 
     def __init__(self, tmp_path: Path, *, path_key: bytes | None = None, **extra: Unpack[_EgressFields]) -> None:
         self.directory = tmp_path / "out"
         self.hub, self.graph = trace_hub(tmp_path, egress=_config(tmp_path, **extra), egress_path_key=path_key)
         self.sweep()  # anchors every dataset
-        self.chunk_id = _closed_step(self.hub, self.graph, 1)
+        self.chunk_id = closed_step(self.hub, self.graph, 1)
 
     def sweep(self) -> None:
         sweep = self.hub.hub_services.egress_export
@@ -77,7 +77,7 @@ class _Events:
         record = TranscriptSlice(
             segment_id=segment_id,
             chunk_id=chunk_id or self.chunk_id,
-            node_id=_node_id(self.graph),
+            node_id=graph_node_id(self.graph),
             epoch=1,
             spawn_generation=1,
             runner_id="r1",
@@ -152,7 +152,7 @@ class _Events:
             subject=f"/work/src/f{turn}.py",
             tool="Read",
             chunk_id=chunk_id,
-            node_id=_node_id(self.graph),
+            node_id=graph_node_id(self.graph),
             epoch=1,
             spawn_generation=1,
             graph_id="gr_stamped_elsewhere",
@@ -180,7 +180,7 @@ def _derivations(rows: list[dict[str, object]]) -> list[tuple[object, ...]]:
 
 
 def test_re_derived_emptied_and_dropped_segments_each_write_their_record(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     world.segment("sg_a")
     world.derive("sg_a", 2)
     world.sweep()
@@ -206,7 +206,7 @@ def test_re_derived_emptied_and_dropped_segments_each_write_their_record(tmp_pat
 
 
 def test_a_batch_limit_inside_a_derivation_still_writes_it_whole(tmp_path: Path) -> None:
-    world = _Events(tmp_path, batch_limit=2)
+    world = Events(tmp_path, batch_limit=2)
     world.segment("sg_a")
     world.segment("sg_b")
     world.derive("sg_a", 5)
@@ -222,12 +222,12 @@ def test_a_batch_limit_inside_a_derivation_still_writes_it_whole(tmp_path: Path)
 def test_current_writes_only_the_hubs_extractor_version_and_all_writes_every_one(tmp_path: Path) -> None:
     settings: tuple[tuple[Literal["current", "all"], list[str]], ...] = (
         ("current", [EXTRACTOR_VERSION]),
-        ("all", [_OLD_VERSION, EXTRACTOR_VERSION]),
+        ("all", [OLD_VERSION, EXTRACTOR_VERSION]),
     )
     for setting, expected in settings:
-        world = _Events(tmp_path / setting, extractor_versions=setting)
+        world = Events(tmp_path / setting, extractor_versions=setting)
         world.segment("sg_a")
-        world.derive("sg_a", 1, version=_OLD_VERSION)
+        world.derive("sg_a", 1, version=OLD_VERSION)
         world.derive("sg_a", 1)
         world.sweep()
         versions = [r["extractor_version"] for r in world.rows() if r["record_type"] == "derivation"]
@@ -235,7 +235,7 @@ def test_current_writes_only_the_hubs_extractor_version_and_all_writes_every_one
 
 
 def test_re_derivations_and_drops_land_in_their_steps_start_partition(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     step_day = world.hub.clock.now().date()
     world.segment("sg_a")
     world.segment("sg_b")
@@ -251,7 +251,7 @@ def test_re_derivations_and_drops_land_in_their_steps_start_partition(tmp_path: 
 
 
 def test_an_events_manifest_names_the_extractor_version_and_a_steps_manifest_does_not(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
@@ -263,7 +263,7 @@ def test_an_events_manifest_names_the_extractor_version_and_a_steps_manifest_doe
 
 
 def test_an_event_names_its_step_rows_graph_and_no_row_carries_transcript_content(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     world.segment("sg_a")
     world.derive("sg_a", 2)
     world.sweep()
@@ -285,7 +285,7 @@ def test_an_event_names_its_step_rows_graph_and_no_row_carries_transcript_conten
 
 
 def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     hub: HubHarness = world.hub
     world.segment("sg_a")
     world.derive("sg_a", 1)
@@ -318,14 +318,14 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
 def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
     tmp_path: Path, file_paths: Literal["relative", "hashed"]
 ) -> None:
-    world = _Events(tmp_path, file_paths=file_paths)
+    world = Events(tmp_path, file_paths=file_paths)
     hub = world.hub
     hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
 
-    assert _kinds(hub) == ["egress-config-rejected"]
+    assert kinds(hub) == ["egress-config-rejected"]
     [row] = hub_event_rows(hub.engine)
     detail = hub_event_detail(row)
     assert detail == {"setting": "egress.path_key_env", "value": "BZ_EGRESS_PATH_KEY"}
@@ -354,13 +354,13 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 
 
 def test_a_hashing_policy_with_its_key_exports_events_and_records_no_rejection(tmp_path: Path) -> None:
-    world = _Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
+    world = Events(tmp_path, file_paths="hashed", path_key=b"k" * 32)
     hub_app._announce_rejected_egress(_config(tmp_path, file_paths="hashed"), world.hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()
 
-    assert _kinds(world.hub) == []
+    assert kinds(world.hub) == []
     assert _derivations(world.rows()) == [("sg_a", 1)]
     assert world.hub.client.get("/api/egress/status").json()["rejected_setting"] is None
 
@@ -370,7 +370,7 @@ def _subjects(rows: list[tuple[str, ...]], segment: str | None = None) -> list[s
 
 
 def test_events_current_shows_only_what_a_segment_counts_now(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     for segment in ("sg_a", "sg_b", "sg_c"):
         world.segment(segment)
         world.derive(segment, 2)
@@ -396,7 +396,7 @@ def test_events_current_shows_only_what_a_segment_counts_now(tmp_path: Path) -> 
 
 
 def test_events_current_counts_two_kinds_at_one_place_twice(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     world.segment("sg_a")
     world.derive_events("sg_a", [world.event("file_read", 0, "/work/a.py"), world.event("skill_invocation", 0, "lint")])
     world.sweep()
@@ -407,7 +407,7 @@ def test_events_current_counts_two_kinds_at_one_place_twice(tmp_path: Path) -> N
 
 
 def test_events_current_collapses_a_derivation_exported_twice(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     world.segment("sg_a")
     world.derive("sg_a", 2)
     world.sweep()
@@ -420,12 +420,12 @@ def test_events_current_collapses_a_derivation_exported_twice(tmp_path: Path) ->
 def test_the_events_views_ride_through_an_extractor_upgrade_without_a_dip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    world = _Events(tmp_path)
-    world.reads_version(_OLD_VERSION, monkeypatch)
+    world = Events(tmp_path)
+    world.reads_version(OLD_VERSION, monkeypatch)
     segments = [f"sg_{n}" for n in range(6)]
     for segment in segments:
         world.segment(segment)
-        world.derive(segment, 2, version=_OLD_VERSION)
+        world.derive(segment, 2, version=OLD_VERSION)
     world.sweep()
     assert len(world.view("events_current")) == 12
 
@@ -440,5 +440,5 @@ def test_the_events_views_ride_through_an_extractor_upgrade_without_a_dip(
 
     assert {version for _, version, _, _ in world.view("events_current")} == {EXTRACTOR_VERSION}
     by_version = world.view("events_by_version")
-    assert {version for seg, version, _, _ in by_version if seg == "sg_0"} == {_OLD_VERSION, EXTRACTOR_VERSION}
+    assert {version for seg, version, _, _ in by_version if seg == "sg_0"} == {OLD_VERSION, EXTRACTOR_VERSION}
     assert len(by_version) == 24

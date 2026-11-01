@@ -23,7 +23,7 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.store import schema
 from tests.hub_event_rows import hub_event_rows
 from tests.support import HubHarness, InMemoryTraceExporter, hub_scoped
-from tests.test_trace_export_sweep import _closed_pair, _sweep
+from tests.test_trace_export_sweep import closed_pair, trace_export_sweep
 from tests.trace_fixtures import make_facts, runner_epoch
 from tests.trace_hub import trace_hub
 from tests.worker_http import Bound, bind_stubs
@@ -169,10 +169,10 @@ def _event_count(hub: HubHarness) -> int:
 
 
 def _told_live(hub: HubHarness) -> None:
-    _sweep(hub).sweep()
-    _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    closed_pair(hub)
     for _ in range(4):
-        _sweep(hub).sweep()
+        trace_export_sweep(hub).sweep()
 
 
 @pytest.mark.component
@@ -229,7 +229,7 @@ def test_the_window_is_half_open(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_a_dry_run_counts_and_exports_nothing_even_with_tracing_off(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, on=False)
-    _closed_pair(hub)
+    closed_pair(hub)
 
     resp = hub.client.post("/api/traces/replay", json=_window(hub, dry_run=True))
 

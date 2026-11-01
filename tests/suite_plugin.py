@@ -143,6 +143,8 @@ def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     Without isolation, a real on-disk ``blizzard hub login`` token leaks into any test —
     the same ambient-host-state hazard :func:`_strip_daemon_env` closes for env vars.
     """
-    monkeypatch.setattr(
-        session_file.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")
-    )
+
+    def user_config_dir(appname: str | None = None) -> str:
+        return str(tmp_path / "config" / "blizzard")
+
+    monkeypatch.setattr(session_file.platformdirs, "user_config_dir", user_config_dir)

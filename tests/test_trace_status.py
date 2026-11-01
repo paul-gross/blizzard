@@ -14,7 +14,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
 from blizzard.wire.traces import TraceStatusResponse
 from tests.support import HubHarness, InMemoryTraceExporter
-from tests.test_trace_export_sweep import _closed_pair, _sweep
+from tests.test_trace_export_sweep import closed_pair, trace_export_sweep
 from tests.trace_hub import trace_hub
 from tests.worker_http import bind_stubs
 
@@ -65,7 +65,7 @@ def test_a_rejected_setting_is_named(tmp_path: Path) -> None:
 def test_status_shows_only_the_origin_in_the_api_and_the_cli(tmp_path: Path) -> None:
     settings = TracingSettings.of(_ENV)
     hub, _ = _hub(tmp_path, settings)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert _status(hub)["endpoint"] == "http://collector:4318"
     assert not any(secret in hub.client.get("/api/traces/status").text for secret in _CREDENTIALS)
 
@@ -79,20 +79,20 @@ def test_status_shows_only_the_origin_in_the_api_and_the_cli(tmp_path: Path) -> 
 
 def test_the_cursor_its_lag_and_the_last_export(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path, TracingSettings.of(_ENV), TracingConfig(settle_seconds=300))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     start = _status(hub)
     assert start["cursor_at"] is not None
     assert start["lag_seconds"] is None
     assert start["last_export_at"] is None
 
-    _closed_pair(hub)
+    closed_pair(hub)
     hub.clock.advance(timedelta(seconds=100))
     waiting = _status(hub)
     assert waiting["lag_seconds"] == 100
     assert waiting["last_export_at"] is None
 
     hub.clock.advance(timedelta(seconds=200))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     told = _status(hub)
     assert told["lag_seconds"] is None
     assert told["last_export_at"] is not None
@@ -102,18 +102,18 @@ def test_the_cursor_its_lag_and_the_last_export(tmp_path: Path) -> None:
 
 def test_an_idle_fleet_has_no_lag_however_old_the_cursor(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path, TracingSettings.of(_ENV))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     hub.clock.advance(timedelta(seconds=1800))
     assert _status(hub)["lag_seconds"] is None
 
 
 def test_the_last_error_is_ongoing_until_an_export_recovers_and_carries_no_exporter_text(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, TracingSettings.of(_ENV))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert _status(hub)["last_error_at"] is None
-    _closed_pair(hub)
+    closed_pair(hub)
     exporter.fail = True
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     failed = _status(hub)
     assert failed["last_error_ongoing"] is True
     assert failed["last_error_at"] is not None
@@ -121,7 +121,7 @@ def test_the_last_error_is_ongoing_until_an_export_recovers_and_carries_no_expor
 
     exporter.fail = False
     hub.clock.advance(timedelta(seconds=120))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     recovered = _status(hub)
     assert recovered["last_error_ongoing"] is False
     assert recovered["last_error_at"] == failed["last_error_at"]

@@ -17,7 +17,7 @@ from blizzard.tools.change_notes.render import render
 from blizzard.tools.change_notes.schedule import due_without_removal
 from tests.compat_stub import stub_compat
 from tests.repo_files import repo_root
-from tests.test_change_notes_render import _commit, _git
+from tests.test_change_notes_render import commit, git
 
 pytestmark = pytest.mark.unit
 
@@ -188,27 +188,27 @@ def test_tagged_render_sees_history_at_tag_not_working_tree_and_candidate_is_rep
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-b", "main")
-    _git(repo, "config", "user.name", "Test")
-    _git(repo, "config", "user.email", "test@example.com")
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "config", "user.email", "test@example.com")
     (repo / "scripts").mkdir()
     shutil.copy(repo_root() / "scripts" / "release-notes.sh", repo / "scripts" / "release-notes.sh")
-    _commit(repo, "feat: deprecate", {"changes/1.9.0/old.md": _file("deprecated", "Old API.", **{"removes-in": "2"})})
-    _git(repo, "tag", "v1.9.0")
-    _commit(
+    commit(repo, "feat: deprecate", {"changes/1.9.0/old.md": _file("deprecated", "Old API.", **{"removes-in": "2"})})
+    git(repo, "tag", "v1.9.0")
+    commit(
         repo,
         "feat: postpone",
         {"changes/1.10.0/delay.md": _file("changed", "Later.", postpones="old", **{"removes-in": "3"})},
     )
-    _git(repo, "tag", "v1.10.0")
-    _commit(repo, "feat: new major", {"changes/2.0.0/new.md": _file("fixed", "New.")})
-    _git(repo, "tag", "v2.0.0-rc.1")
-    _commit(
+    git(repo, "tag", "v1.10.0")
+    commit(repo, "feat: new major", {"changes/2.0.0/new.md": _file("fixed", "New.")})
+    git(repo, "tag", "v2.0.0-rc.1")
+    commit(
         repo,
         "feat: removal",
         {"changes/3.0.0/gone.md": _file("removed", "Gone.\n\n## Upgrade\n\nSwitch.", retires="old")},
     )
-    _git(repo, "tag", "v3.0.0-rc.1")
+    git(repo, "tag", "v3.0.0-rc.1")
     stub_compat(repo, monkeypatch)
     monkeypatch.chdir(repo)
     candidate = CliRunner().invoke(main, ["render", "v2.0.0-rc.1"])
@@ -232,14 +232,14 @@ def test_tagged_opening_does_not_borrow_pending_removal_from_tag_or_worktree(
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-b", "main")
-    _git(repo, "config", "user.name", "Test")
-    _git(repo, "config", "user.email", "test@example.com")
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "config", "user.email", "test@example.com")
     (repo / "scripts").mkdir()
     shutil.copy(repo_root() / "scripts" / "release-notes.sh", repo / "scripts" / "release-notes.sh")
-    _commit(repo, "feat: deprecate", {"changes/1.9.0/old.md": _file("deprecated", "Old.", **{"removes-in": "2"})})
-    _git(repo, "tag", "v1.9.0")
-    _commit(
+    commit(repo, "feat: deprecate", {"changes/1.9.0/old.md": _file("deprecated", "Old.", **{"removes-in": "2"})})
+    git(repo, "tag", "v1.9.0")
+    commit(
         repo,
         "feat: candidate",
         {
@@ -247,7 +247,7 @@ def test_tagged_opening_does_not_borrow_pending_removal_from_tag_or_worktree(
             "changes/unreleased/gone.md": _file("removed", "Gone.\n\n## Upgrade\n\nSwitch.", retires="old"),
         },
     )
-    _git(repo, "tag", "v2.0.0")
+    git(repo, "tag", "v2.0.0")
     stub_compat(repo, monkeypatch)
     monkeypatch.chdir(repo)
     result = CliRunner().invoke(main, ["render", "v2.0.0"])

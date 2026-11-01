@@ -12,7 +12,7 @@ from blizzard.runner.store.schema import lease_closures
 from blizzard.runner.store.scoped import RunnerStoreConnections
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
-    _create_all,
+    create_all,
     create_engine_from_url,
     runner_metadata,
     runner_store_errors,
@@ -37,7 +37,7 @@ class _RowCountingConnections(RunnerStoreConnections):
 
 def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
-    _create_all(runner_metadata, engine)
+    create_all(runner_metadata, engine)
     counting = _RowCountingConnections(engine, runner_store_errors(), FIXTURE_RUNNER_ID)
     asks = AskStore(counting)
     for i in range(_HISTORY):

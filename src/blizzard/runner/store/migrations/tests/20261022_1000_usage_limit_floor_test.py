@@ -65,7 +65,16 @@ def _tables(engine: sa.Engine) -> set[str]:
     return set(sa.inspect(engine).get_table_names()) - {"alembic_version"}
 
 
-def _schema(engine: sa.Engine) -> dict[str, object]:
+type _TableShape = tuple[
+    tuple[tuple[str, str, bool], ...],
+    tuple[str, ...],
+    frozenset[tuple[tuple[str | None, ...], bool, str | None]],
+    frozenset[tuple[tuple[str | None, ...], str | None]],
+]
+"""A table's columns (name, type, nullability), primary key, indexes, and unique constraints."""
+
+
+def _schema(engine: sa.Engine) -> dict[str, _TableShape]:
     inspector = sa.inspect(engine)
     return {
         table: (
@@ -94,14 +103,14 @@ def test_the_upgrade_creates_the_four_empty_floor_tables_and_changes_nothing_els
         assert set(after) - set(before) == _NEW
         assert {k: v for k, v in after.items() if k not in _NEW} == before
         for table, key in zip(_MARKS, ("slug", "runner_id"), strict=True):
-            columns, pk, indexes, uniques = after[table]  # type: ignore[misc]
+            columns, pk, indexes, uniques = after[table]
             assert columns == (("id", "INTEGER", False), (key, "VARCHAR", False), *_MARK_COLUMNS)
             assert pk == ("id",)
             assert ((key, "marked_at"), False, f"ix_{table}_{key}_marked_at") in indexes
             invocation = ("lease_id", "epoch", "generation", "invocation_kind")
             assert uniques == {(invocation if key == "slug" else (key, *invocation), f"uq_{table}_invocation")}
         for table, key in zip(_CLEARS, ("slug", "runner_id"), strict=True):
-            columns, pk, indexes, _ = after[table]  # type: ignore[misc]
+            columns, pk, indexes, _ = after[table]
             assert columns == (
                 ("id", "INTEGER", False),
                 (key, "VARCHAR", False),

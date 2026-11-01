@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from tests.support import HubHarness, build_hub, count_queries, emitted_events, seed_runner
-from tests.test_fleet_auth import _bearer
+from tests.test_fleet_auth import bearer
 
 pytestmark = pytest.mark.component
 
@@ -53,13 +53,13 @@ def _miss(seq: int, slug: str = "anthropic") -> dict[str, Any]:
 
 def _host(hub: HubHarness, name: str = "box") -> dict[str, Any]:
     added = hub.client.post("/api/hosts", json={"name": name}).json()
-    resp = hub.client.post("/api/fleet/host", json={**_REPORT, "name": name}, headers=_bearer(added["token"]))
+    resp = hub.client.post("/api/fleet/host", json={**_REPORT, "name": name}, headers=bearer(added["token"]))
     assert resp.status_code == 200, resp.text
     return added
 
 
 def _push(hub: HubHarness, host: dict[str, Any], *facts: dict[str, Any]) -> dict[str, Any]:
-    resp = hub.client.post(_LANE, json={"facts": list(facts)}, headers=_bearer(host["token"]))
+    resp = hub.client.post(_LANE, json={"facts": list(facts)}, headers=bearer(host["token"]))
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -88,7 +88,7 @@ def test_a_retired_hosts_push_is_refused_and_its_mark_stays_put(tmp_path: Path) 
     _push(hub, host, _sample(1))
     assert hub.client.post(f"/api/hosts/{host['host_id']}/retire", json={}).status_code == 200
 
-    resp = hub.client.post(_LANE, json={"facts": [_sample(2)]}, headers=_bearer(host["token"]))
+    resp = hub.client.post(_LANE, json={"facts": [_sample(2)]}, headers=bearer(host["token"]))
 
     # Retirement revokes the host's token, so the gate no longer resolves it.
     assert resp.status_code == 401
@@ -122,7 +122,7 @@ def test_a_host_mark_and_a_runner_mark_advance_independently(tmp_path: Path) -> 
 
     _push(hub, host, _sample(1), _sample(2), _sample(3))
     runner = hub.client.post(
-        "/api/fleet/events", json={"facts": [_sample(1), _sample(2)]}, headers=_bearer(runner_token)
+        "/api/fleet/events", json={"facts": [_sample(1), _sample(2)]}, headers=bearer(runner_token)
     ).json()
     again = _push(hub, host, _sample(4))
 
@@ -162,7 +162,7 @@ def test_a_runner_token_cannot_reach_the_lane(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     token = seed_runner(hub, "rn_a")
 
-    assert hub.client.post(_LANE, json={"facts": []}, headers=_bearer(token)).status_code == 401
+    assert hub.client.post(_LANE, json={"facts": []}, headers=bearer(token)).status_code == 401
     assert hub.client.post(_LANE, json={"facts": []}).status_code == 401
 
 
@@ -170,7 +170,7 @@ def test_a_host_token_cannot_reach_the_runner_lane(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     host = _host(hub)
 
-    assert hub.client.post("/api/fleet/events", json={"facts": []}, headers=_bearer(host["token"])).status_code == 401
+    assert hub.client.post("/api/fleet/events", json={"facts": []}, headers=bearer(host["token"])).status_code == 401
 
 
 # --- reading a host's usage ---------------------------------------------------
@@ -183,7 +183,7 @@ def _hosted_runner(hub: HubHarness, host: dict[str, Any], name: str, *, subscrip
     registered = hub.client.post(
         "/api/fleet/runners",
         json={"workspace_id": "w1", "subscription": subscription},
-        headers=_bearer(runner["token"]),
+        headers=bearer(runner["token"]),
     )
     assert registered.status_code == 201, registered.text
     return runner
@@ -200,7 +200,7 @@ def test_a_hosted_runner_shows_its_hosts_newest_sample_for_the_slug_it_registere
 
     _push(hub, host, _sample(1, pct=10.0), _sample(2, pct=55.0))
 
-    fleet_read = hub.client.get(f"/api/fleet/runners/{runner['runner_id']}", headers=_bearer(runner["token"])).json()
+    fleet_read = hub.client.get(f"/api/fleet/runners/{runner['runner_id']}", headers=bearer(runner["token"])).json()
     operator_read = hub.client.get(f"/api/runners/{runner['runner_id']}").json()
     listed = {r["runner_id"]: r for r in hub.client.get("/api/runners").json()["runners"]}
     assert _slugs(fleet_read["subscriptions"]) == [("anthropic", 55.0)]
@@ -249,7 +249,7 @@ def test_a_runner_with_no_host_reports_and_shows_its_own_samples_as_before(tmp_p
     hub = build_hub(tmp_path)
     token = seed_runner(hub, "rn_a")
 
-    ack = hub.client.post("/api/fleet/events", json={"facts": [_sample(1, pct=33.0)]}, headers=_bearer(token)).json()
+    ack = hub.client.post("/api/fleet/events", json={"facts": [_sample(1, pct=33.0)]}, headers=bearer(token)).json()
 
     assert ack["applied"] == [1]
     assert _slugs(hub.client.get("/api/runners/rn_a").json()["subscriptions"]) == [("anthropic", 33.0)]

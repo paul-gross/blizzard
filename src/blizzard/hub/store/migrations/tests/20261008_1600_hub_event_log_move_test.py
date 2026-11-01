@@ -4,12 +4,10 @@ nothing twice, while an event whose id the hub log gives another event takes a f
 batches; the downgrade, with one tenant only, moves them back exactly; and a downgrade then upgrade keeps every export
 event once."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -19,6 +17,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -134,11 +133,18 @@ def _index_names(engine: sa.Engine, table: str) -> set[str]:
 
 
 @contextmanager
-def _rows_each_delete_removed() -> Iterator[list[tuple[str, int]]]:
+def _rows_each_delete_removed() -> Generator[list[tuple[str, int]]]:
     """Every ``DELETE`` any engine runs while the context is open, as the table it names and the rows it removed."""
     deletes: list[tuple[str, int]] = []
 
-    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+    def record(
+        conn: sa.Connection,
+        cursor: DBAPICursor,
+        statement: str,
+        parameters: object,
+        context: ExecutionContext | None,
+        executemany: bool,
+    ) -> None:
         words = statement.split()
         if words[0].upper() == "DELETE":
             deletes.append((words[2], cursor.rowcount))

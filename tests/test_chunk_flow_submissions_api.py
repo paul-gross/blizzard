@@ -14,7 +14,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import HubHarness, add_tenant, build_hub, hub_store_connections, seed_session, seed_user
-from tests.test_transcript_segments_api import _bearer, _cookie, _enrolled_runner_token, _ingest_chunk
+from tests.test_transcript_segments_api import bearer, cookie, enrolled_runner_token, ingest_chunk
 
 pytestmark = pytest.mark.component
 
@@ -28,7 +28,7 @@ def _flows(hub: HubHarness) -> FlowStore:
 
 def test_the_read_serves_every_submission_in_arrival_order_with_its_closure(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id, other_chunk = _ingest_chunk(hub), _ingest_chunk(hub, pointer_token="default:2")
+    chunk_id, other_chunk = ingest_chunk(hub), ingest_chunk(hub, pointer_token="default:2")
     flows = _flows(hub)
     first = flows.submit(chunk_id, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
     flows.submit(other_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
@@ -68,7 +68,7 @@ def test_the_read_serves_every_submission_in_arrival_order_with_its_closure(tmp_
 
 def test_a_chunk_never_submitted_serves_no_items(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions")
 
@@ -86,7 +86,7 @@ def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
 
 def test_another_tenants_chunk_is_404_as_if_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _ingest_chunk(hub)
+    chunk_id = ingest_chunk(hub)
     _flows(hub).submit(chunk_id, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
     other = add_tenant(hub.engine, "bravo")
     hub.hub_services.tenants.open_tenants.refresh()
@@ -105,17 +105,17 @@ def test_the_read_is_401_with_no_session(tmp_path: Path) -> None:
 def test_the_read_is_200_at_guest(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
-    chunk_id = _ingest_chunk(hub, headers=_cookie(contributor))
+    chunk_id = ingest_chunk(hub, headers=cookie(contributor))
     guest = seed_session(hub, seed_user(hub, username="grace", role=Role.GUEST))
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions", headers=_cookie(guest))
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions", headers=cookie(guest))
 
     assert resp.status_code == 200
     assert resp.json()["items"] == []
 
 
 def test_the_read_refuses_a_runner_principal(tmp_path: Path) -> None:
-    token = _enrolled_runner_token(tmp_path)
+    token = enrolled_runner_token(tmp_path)
     hub = build_hub(tmp_path, auth_mode="oauth")
 
-    assert hub.client.get("/api/chunks/ch_x/flow-submissions", headers=_bearer(token)).status_code == 403
+    assert hub.client.get("/api/chunks/ch_x/flow-submissions", headers=bearer(token)).status_code == 403

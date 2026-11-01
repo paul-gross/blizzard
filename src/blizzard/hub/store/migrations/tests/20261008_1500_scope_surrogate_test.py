@@ -1,7 +1,5 @@
 """Tests proving the ``20261008_1500_scope_surrogate`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import logging
@@ -27,18 +25,18 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.migration_support_store_migrations import schema_snapshot
 from tests.migration_support_tenant_carry_over_migration import (
-    _BACKFILL,
-    _BEFORE,
-    _LINKS_AT_HEAD,
-    _foreign_key_violations,
-    _rows_each_update_changed,
-    _seed_every_tenant_owned_table,
-    _store,
-    _tables,
-    _tenant_rows,
+    BACKFILL,
+    BEFORE,
+    LINKS_AT_HEAD,
+    foreign_key_violations,
+    rows_each_update_changed,
+    scratch_store,
+    seed_every_tenant_owned_table,
+    tables,
+    tenant_rows,
 )
-from tests.migration_support_tenant_keys_migration import _SECOND_TENANT, _T0, _snapshot, _tenant_ids
-from tests.migration_support_tenant_tighten_migration import _index_names, _seeded_at_the_keys
+from tests.migration_support_tenant_keys_migration import SECOND_TENANT, T0, schema_of, tenant_ids
+from tests.migration_support_tenant_tighten_migration import index_names, seeded_at_the_keys
 from tests.support import hub_store_connections
 
 pytestmark = [pytest.mark.component]
@@ -62,7 +60,7 @@ _LABELLED = frozenset({"findings", "finding_sets"})
 
 def _seeded_at_the_tighten(tmp_path: Path) -> tuple[str, sa.Engine]:
     """A store holding one row in every tenant-owned table in its one tenant, each scope link naming the seeded scope."""
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_TIGHTEN)
     return db_url, engine
 
@@ -72,8 +70,8 @@ def _rows(engine: sa.Engine) -> dict[str, list[str]]:
     with engine.connect() as conn:
         return {
             table: sorted(
-                repr(sorted(row._mapping.items()))
-                for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table)))
+                repr(sorted(row.items()))
+                for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table))).mappings()
             )
             for table in sa.inspect(engine).get_table_names()
             if table != "alembic_version"
@@ -82,9 +80,7 @@ def _rows(engine: sa.Engine) -> dict[str, list[str]]:
 
 def _add_second_tenant(engine: sa.Engine) -> None:
     with engine.begin() as conn:
-        conn.execute(
-            sa.text(f"INSERT INTO tenants VALUES ('{_SECOND_TENANT}', 'second', :at, 'migration')"), {"at": _T0}
-        )
+        conn.execute(sa.text(f"INSERT INTO tenants VALUES ('{SECOND_TENANT}', 'second', :at, 'migration')"), {"at": T0})
 
 
 def _copy_scope_into_second_tenant(engine: sa.Engine, slug: str, *, named: str) -> None:
@@ -96,7 +92,7 @@ def _copy_scope_into_second_tenant(engine: sa.Engine, slug: str, *, named: str) 
                 "INSERT INTO scopes (slug, description, created_at, revision, tenant_id)"
                 " SELECT :slug, description, created_at, revision, :tenant FROM scopes"
             ),
-            {"slug": slug, "tenant": _SECOND_TENANT},
+            {"slug": slug, "tenant": SECOND_TENANT},
         )
         for table, column, _ in _CHILDREN:
             inspector = sa.inspect(conn)
@@ -118,7 +114,7 @@ def _copy_scope_into_second_tenant(engine: sa.Engine, slug: str, *, named: str) 
             ]
             conn.execute(
                 sa.text(f"INSERT INTO {table} ({', '.join(columns)}) SELECT {', '.join(values)} FROM {table}"),
-                {"named": named, "tenant": _SECOND_TENANT},
+                {"named": named, "tenant": SECOND_TENANT},
             )
 
 
@@ -162,7 +158,7 @@ def _revision_module() -> ModuleType:
 
 def _rows_in_any_tenant(engine: sa.Engine) -> dict[str, list[str]]:
     """``_rows`` but ``tenants``, with the tenant and scope ids masked: comparable across two stores minting their own."""
-    [tenant] = _tenant_ids(engine)
+    [tenant] = tenant_ids(engine)
     masked = [(tenant, "<tenant>"), *((scope_id, "<scope>") for scope_id in _scope_ids(engine).values())]
     rows = {table: table_rows for table, table_rows in _rows(engine).items() if table != "tenants"}
     for old, new in masked:
@@ -197,8 +193,8 @@ def _seed_past_a_batch(engine: sa.Engine, count: int) -> None:
     """``count`` scopes spread over two tenants, so a page boundary falls inside one tenant; one lifecycle fact and one
     routine link (a two-column key, spread over several routines) naming each."""
     _add_second_tenant(engine)
-    [first] = [tenant for tenant in _tenant_ids(engine) if tenant != _SECOND_TENANT]
-    scopes = [{"slug": f"s{n:05d}", "tenant": first if n % 2 else _SECOND_TENANT, "at": _T0} for n in range(count)]
+    [first] = [tenant for tenant in tenant_ids(engine) if tenant != SECOND_TENANT]
+    scopes = [{"slug": f"s{n:05d}", "tenant": first if n % 2 else SECOND_TENANT, "at": T0} for n in range(count)]
     with engine.begin() as conn:
         conn.execute(
             sa.text(
@@ -219,8 +215,6 @@ def _seed_past_a_batch(engine: sa.Engine, count: int) -> None:
             [{**scope, "routine": f"rtn_{n % 3}"} for n, scope in enumerate(scopes)],
         )
 
-
-_SURROGATE = "20261008_1500_scope_surrogate"
 
 _CARRY_OVER_SECOND_TENANT = "ten_01J9Z3M0P8QK7V2S4W6X8Y0A1C"
 
@@ -293,10 +287,10 @@ def _links(engine: sa.Engine, reads: dict[str, str]) -> dict[str, list[tuple[obj
 def _carried_over_with_links(tmp_path: Path, revision: str) -> tuple[MigrationRunner, sa.Engine]:
     """A pre-tenant store holding a row in every tenant-owned table and the links of ``_LINKED_SEED``, migrated to
     ``revision``."""
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
-    runner.upgrade(_BEFORE)
-    _seed_every_tenant_owned_table(engine)
+    runner.upgrade(BEFORE)
+    seed_every_tenant_owned_table(engine)
     _seed_linked_rows(engine)
     runner.upgrade(revision)
     return runner, engine
@@ -308,17 +302,17 @@ def _rows_by_column(engine: sa.Engine) -> dict[str, list[str]]:
     with engine.connect() as conn:
         return {
             table: sorted(
-                repr(sorted(row._mapping.items()))
-                for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table)))
+                repr(sorted(row.items()))
+                for row in conn.execute(sa.select(sa.text("*")).select_from(sa.table(table))).mappings()
             )
-            for table in _tables(engine)
+            for table in tables(engine)
         }
 
 
 def test_the_upgrade_links_every_row_to_its_own_tenants_scope_by_a_minted_id(tmp_path: Path) -> None:
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     try:
-        [first] = _tenant_ids(engine)
+        [first] = tenant_ids(engine)
         with engine.connect() as conn:
             slug = conn.execute(sa.text("SELECT slug FROM scopes")).scalar_one()
         _add_second_tenant(engine)
@@ -331,22 +325,22 @@ def test_the_upgrade_links_every_row_to_its_own_tenants_scope_by_a_minted_id(tmp
 
         assert {table: len(rows) for table, rows in _rows(engine).items()} == counts
         ids = _scope_ids(engine)
-        assert set(ids) == {(first, slug), (_SECOND_TENANT, "second-slug")}
+        assert set(ids) == {(first, slug), (SECOND_TENANT, "second-slug")}
         for scope_id in ids.values():
             parsed = Id.parse(scope_id)
             assert parsed is not None and parsed.prefix == "scp"
             minted_at = parsed.minted_at
-            assert minted_at is not None and abs(minted_at - _T0) < timedelta(milliseconds=1)
+            assert minted_at is not None and abs(minted_at - T0) < timedelta(milliseconds=1)
         with engine.connect() as conn:
             for table, slug_column, id_column in _CHILDREN:
                 linked = conn.execute(sa.text(f"SELECT tenant_id, {id_column} FROM {table}")).all()
                 assert sorted(linked) == sorted(
-                    [(first, ids[(first, slug)]), (_SECOND_TENANT, ids[(_SECOND_TENANT, "second-slug")])]
+                    [(first, ids[(first, slug)]), (SECOND_TENANT, ids[(SECOND_TENANT, "second-slug")])]
                 ), table
                 columns = {c["name"] for c in sa.inspect(conn).get_columns(table)}
                 assert (slug_column in columns) == (table in _LABELLED), table
             labels = conn.execute(sa.text("SELECT tenant_id, scope_slug FROM findings")).all()
-            assert sorted(labels) == sorted([(first, slug), (_SECOND_TENANT, "second-slug")])
+            assert sorted(labels) == sorted([(first, slug), (SECOND_TENANT, "second-slug")])
     finally:
         engine.dispose()
 
@@ -364,13 +358,13 @@ def test_after_the_upgrade_a_slug_is_unique_within_its_tenant_and_every_link_is_
         assert {u["name"]: u["column_names"] for u in inspector.get_unique_constraints("scopes")} == {
             "uq_scopes_tenant_slug": ["tenant_id", "slug"]
         }
-        assert "ix_scopes_tenant_id" not in _index_names(engine, "scopes")
+        assert "ix_scopes_tenant_id" not in index_names(engine, "scopes")
         assert inspector.get_pk_constraint("routine_scopes") == {
             "name": "pk_routine_scopes",
             "constrained_columns": ["routine_id", "scope_id"],
         }
-        assert "ix_routine_scopes_tenant_scope_id" in _index_names(engine, "routine_scopes")
-        assert not {"ix_routine_scopes_tenant_scope_slug", "ix_routine_scopes_tenant_id"} & _index_names(
+        assert "ix_routine_scopes_tenant_scope_id" in index_names(engine, "routine_scopes")
+        assert not {"ix_routine_scopes_tenant_scope_slug", "ix_routine_scopes_tenant_id"} & index_names(
             engine, "routine_scopes"
         )
         for table, _, id_column in _CHILDREN:
@@ -385,9 +379,9 @@ def test_after_the_upgrade_a_slug_is_unique_within_its_tenant_and_every_link_is_
             " VALUES (:scope_id, 'slug-1', 'd', :at, 1, :tenant)"
         )
         with engine.begin() as conn:
-            conn.execute(insert, {"scope_id": "scp_second", "at": _T0, "tenant": _SECOND_TENANT})
+            conn.execute(insert, {"scope_id": "scp_second", "at": T0, "tenant": SECOND_TENANT})
         with pytest.raises(IntegrityError), engine.begin() as conn:
-            conn.execute(insert, {"scope_id": "scp_third", "at": _T0, "tenant": _SECOND_TENANT})
+            conn.execute(insert, {"scope_id": "scp_third", "at": T0, "tenant": SECOND_TENANT})
     finally:
         engine.dispose()
 
@@ -406,7 +400,7 @@ def test_a_rerun_over_a_store_relinked_part_way_finishes_with_the_same_ids(
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        [tenant] = _tenant_ids(engine)
+        [tenant] = tenant_ids(engine)
         _name_lost_slugs(engine, tenant)
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             stopped(_revision_module(), conn)
@@ -423,10 +417,10 @@ def test_a_rerun_over_a_store_relinked_part_way_finishes_with_the_same_ids(
         (tmp_path / "reference").mkdir()
         reference_url, reference = _seeded_at_the_tighten(tmp_path / "reference")
         try:
-            [reference_tenant] = _tenant_ids(reference)
+            [reference_tenant] = tenant_ids(reference)
             _name_lost_slugs(reference, reference_tenant)
             migration_runner(HubConfig(root=tmp_path / "reference", db_url=reference_url)).upgrade(_SURROGATE)
-            assert _snapshot(engine) == _snapshot(reference)
+            assert schema_of(engine) == schema_of(reference)
             assert _rows_in_any_tenant(engine) == _rows_in_any_tenant(reference)
         finally:
             reference.dispose()
@@ -442,7 +436,7 @@ def test_the_upgrade_mints_and_carries_ids_in_bounded_batches_across_more_than_o
         count = 2 * batch + 7
         _seed_past_a_batch(engine, count)
 
-        with _rows_each_update_changed() as updates:
+        with rows_each_update_changed() as updates:
             runner.upgrade(_SURROGATE)
 
         ids = _scope_ids(engine)
@@ -463,7 +457,7 @@ def test_the_upgrade_mints_a_stand_in_scope_for_every_slug_a_row_names_but_its_t
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        [first] = _tenant_ids(engine)
+        [first] = tenant_ids(engine)
         with engine.connect() as conn:
             slug = conn.execute(sa.text("SELECT slug FROM scopes")).scalar_one()
         _add_second_tenant(engine)
@@ -477,7 +471,7 @@ def test_the_upgrade_mints_a_stand_in_scope_for_every_slug_a_row_names_but_its_t
             runner.upgrade(_SURROGATE)
 
         assert runner.current_revision() == _SURROGATE
-        stand_ins = {(first, name) for name in lost.values()} | {(_SECOND_TENANT, slug)}
+        stand_ins = {(first, name) for name in lost.values()} | {(SECOND_TENANT, slug)}
         assert "minted 7 stand-in scopes" in caplog.text
         assert {table: len(rows) for table, rows in _rows(engine).items()} == {
             **counts,
@@ -485,7 +479,7 @@ def test_the_upgrade_mints_a_stand_in_scope_for_every_slug_a_row_names_but_its_t
         }
         assert not sa.inspect(engine).has_table("scope_stand_ins")
         ids = _scope_ids(engine)
-        assert set(ids) == {(first, slug), (_SECOND_TENANT, "second-slug"), *stand_ins}
+        assert set(ids) == {(first, slug), (SECOND_TENANT, "second-slug"), *stand_ins}
         with engine.connect() as conn:
             minted = conn.execute(
                 sa.text("SELECT tenant_id, slug, scope_id, description, created_at, revision FROM scopes")
@@ -510,9 +504,9 @@ def test_with_one_tenant_the_downgrade_deletes_the_stand_ins_and_restores_the_st
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        [tenant] = _tenant_ids(engine)
+        [tenant] = tenant_ids(engine)
         lost = _name_lost_slugs(engine, tenant)
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), _rows(engine)
 
         runner.upgrade(_SURROGATE)
         assert {(tenant, name) for name in lost.values()} <= set(_scope_ids(engine))
@@ -521,7 +515,7 @@ def test_with_one_tenant_the_downgrade_deletes_the_stand_ins_and_restores_the_st
             runner.downgrade(_TIGHTEN)
 
         assert runner.current_revision() == _TIGHTEN
-        assert _snapshot(engine) == snapshot
+        assert schema_of(engine) == snapshot
         assert _rows(engine) == rows
     finally:
         engine.dispose()
@@ -532,16 +526,16 @@ def test_the_downgrade_refuses_a_store_holding_two_tenants_and_changes_nothing(t
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
         runner.upgrade(_SURROGATE)
-        [first] = _tenant_ids(engine)
+        [first] = tenant_ids(engine)
         _add_second_tenant(engine)
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), _rows(engine)
 
         with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
             runner.downgrade(_TIGHTEN)
 
-        assert first in str(refused.value) and _SECOND_TENANT in str(refused.value)
+        assert first in str(refused.value) and SECOND_TENANT in str(refused.value)
         assert runner.current_revision() == _SURROGATE
-        assert _snapshot(engine) == snapshot
+        assert schema_of(engine) == snapshot
         assert _rows(engine) == rows
     finally:
         engine.dispose()
@@ -551,17 +545,17 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
     db_url, engine = _seeded_at_the_tighten(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), _rows(engine)
 
         runner.upgrade(_SURROGATE)
-        assert _snapshot(engine) != snapshot
+        assert schema_of(engine) != snapshot
         assert re.fullmatch(r"scp_[0-9A-Z]{26}", next(iter(_scope_ids(engine).values())))
         with warnings.catch_warnings():
             warnings.simplefilter("error", SAWarning)
             runner.downgrade(_TIGHTEN)
 
         assert runner.current_revision() == _TIGHTEN
-        assert _snapshot(engine) == snapshot
+        assert schema_of(engine) == snapshot
         assert _rows(engine) == rows
     finally:
         engine.dispose()
@@ -588,7 +582,7 @@ def test_reattaching_a_table_missing_only_its_slug_foreign_key_restores_it_on_sq
 
 
 def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_path: Path) -> None:
-    runner, engine = _carried_over_with_links(tmp_path, _BEFORE)
+    runner, engine = _carried_over_with_links(tmp_path, BEFORE)
     try:
         links = _links(engine, _LINKS_BEFORE)
         assert {slug for _, slug in links["routine_scopes"]} == {"slug-1", "beta"}
@@ -596,9 +590,9 @@ def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_pat
 
         runner.upgrade("head")
 
-        assert _links(engine, _LINKS_AT_HEAD) == links
-        assert _foreign_key_violations(engine) == []
-        [(tenant_id, *_)] = _tenant_rows(engine)
+        assert _links(engine, LINKS_AT_HEAD) == links
+        assert foreign_key_violations(engine) == []
+        [(tenant_id, *_)] = tenant_rows(engine)
         with engine.connect() as conn:
             assert conn.execute(
                 sa.text("SELECT tenant_id, next_ref FROM work_item_sequence WHERE source = 'hub'")
@@ -611,20 +605,20 @@ def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_pat
 def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remains_and_then_exactly(
     tmp_path: Path,
 ) -> None:
-    runner, engine = _carried_over_with_links(tmp_path, _BACKFILL)
+    runner, engine = _carried_over_with_links(tmp_path, BACKFILL)
     try:
-        [first] = [tenant_id for tenant_id, *_ in _tenant_rows(engine)]
+        [first] = [tenant_id for tenant_id, *_ in tenant_rows(engine)]
         backfilled = schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
         runner.upgrade(_SURROGATE)
         with engine.begin() as conn:
             conn.execute(
                 sa.text("INSERT INTO tenants VALUES (:tenant, 'second', :at, 'migration')"),
-                {"tenant": _CARRY_OVER_SECOND_TENANT, "at": _T0},
+                {"tenant": _CARRY_OVER_SECOND_TENANT, "at": T0},
             )
         tightened = schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
 
         with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
-            runner.downgrade(_BACKFILL)
+            runner.downgrade(BACKFILL)
 
         assert first in str(refused.value) and _CARRY_OVER_SECOND_TENANT in str(refused.value)
         assert runner.current_revision() == _SURROGATE
@@ -634,9 +628,9 @@ def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remai
             conn.execute(
                 sa.text("DELETE FROM tenants WHERE tenant_id = :tenant"), {"tenant": _CARRY_OVER_SECOND_TENANT}
             )
-        runner.downgrade(_BACKFILL)
+        runner.downgrade(BACKFILL)
 
-        assert runner.current_revision() == _BACKFILL
+        assert runner.current_revision() == BACKFILL
         assert (schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == backfilled
     finally:
         engine.dispose()

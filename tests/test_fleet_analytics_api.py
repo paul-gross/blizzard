@@ -17,7 +17,6 @@ import pytest
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
     build_hub,
@@ -66,8 +65,7 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     unless ``with_run_context`` is False — the chunk id the route resolves through."""
     store_connections = hub_store_connections(hub.engine)
     mint_graph(hub.engine, _GRAPH_ID, name=_GRAPH_NAME, nodes={_NODE_ID: "build"}, at=_NOW)
-    items = WorkItemStore(store_connections)
-    item = seed_work_item(items, graph_id=_GRAPH_ID, author=WorkItemAuthor.user("u_1"), at=_NOW)
+    item = seed_work_item(store_connections, graph_id=_GRAPH_ID, author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
         seed_scope(store_connections, _SCOPE, at=_NOW)
         RunContextStore(store_connections).record(
@@ -172,7 +170,7 @@ def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str]:
     _push_usage(hub, chunk_id=chunk_id, node_id=_NODE_ID, epoch=1, seq=3, cost_usd=0.2)
     mint_graph(hub.engine, _REMINT_GRAPH_ID, name=_GRAPH_NAME, nodes={_REMINT_NODE_ID: "build"}, at=_NOW)
     remint_item = seed_work_item(
-        WorkItemStore(hub_store_connections(hub.engine)),
+        hub_store_connections(hub.engine),
         graph_id=_REMINT_GRAPH_ID,
         author=WorkItemAuthor.user("u_1"),
         at=_NOW,

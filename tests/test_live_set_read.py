@@ -29,7 +29,7 @@ from tests.support import (
     seed_graph,
     stamp,
 )
-from tests.test_fleet_auth import _bearer, _enroll, _register
+from tests.test_fleet_auth import bearer, enroll_runner, register_runner
 
 pytestmark = pytest.mark.component
 
@@ -206,14 +206,14 @@ def test_live_read_equals_the_full_derivation_minus_terminal_statuses(tmp_path: 
 
 def _peek(hub: HubHarness, token: str) -> tuple[object, object]:
     get = hub.client.get("/api/fleet/queue/peek")
-    post = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=_bearer(token))
+    post = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=bearer(token))
     assert get.status_code == post.status_code == 200
     return get.json(), post.json()
 
 
 def _token(hub: HubHarness) -> str:
-    _register(hub, runner_id="runner-a", workspace_id="ws-a")
-    return _enroll(hub, "runner-a")
+    register_runner(hub, runner_id="runner-a", workspace_id="ws-a")
+    return enroll_runner(hub, "runner-a")
 
 
 _READS = [
@@ -238,7 +238,7 @@ def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_coun
 
     def post(hub: HubHarness, token: str):
         return lambda: hub.client.post(
-            "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=_bearer(token)
+            "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=bearer(token)
         )
 
     reads = {
@@ -298,7 +298,7 @@ def test_a_done_prerequisite_unblocks_its_dependent_and_a_stopped_one_does_not(t
     assert blocked["ch_after_stopped"] is not None
 
     matched = hub.client.post(
-        "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=_bearer(token)
+        "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=bearer(token)
     ).json()["entries"]
     assert [e["chunk_id"] for e in matched] == ["ch_after_done"]
 

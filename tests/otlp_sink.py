@@ -7,7 +7,7 @@ any non-200 value refuses the request with that code. Use 500 to refuse at once 
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,9 +26,9 @@ LOGS_PATH = "/v1/logs"
 class OtlpSink:
     url: str
     status: int = 200
-    requests: list[ExportTraceServiceRequest] = field(default_factory=list)
-    metric_requests: list[ExportMetricsServiceRequest] = field(default_factory=list)
-    log_requests: list[ExportLogsServiceRequest] = field(default_factory=list)
+    requests: list[ExportTraceServiceRequest] = field(default_factory=list[ExportTraceServiceRequest])
+    metric_requests: list[ExportMetricsServiceRequest] = field(default_factory=list[ExportMetricsServiceRequest])
+    log_requests: list[ExportLogsServiceRequest] = field(default_factory=list[ExportLogsServiceRequest])
 
     @property
     def traces_endpoint(self) -> str:
@@ -41,28 +41,32 @@ class OtlpSink:
         return [span for rs in self.resource_spans() for ss in rs.scope_spans for span in ss.spans]
 
 
+def _decoded[M: ExportTraceServiceRequest | ExportMetricsServiceRequest | ExportLogsServiceRequest](
+    message: M, body: bytes
+) -> M:
+    message.ParseFromString(body)
+    return message
+
+
 @contextmanager
-def otlp_sink() -> Iterator[OtlpSink]:
+def otlp_sink() -> Generator[OtlpSink]:
     """A running sink on a free loopback port, stopped on exit."""
     sink: OtlpSink
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
-            received = {
-                TRACES_PATH: (ExportTraceServiceRequest, sink.requests),
-                METRICS_PATH: (ExportMetricsServiceRequest, sink.metric_requests),
-                LOGS_PATH: (ExportLogsServiceRequest, sink.log_requests),
-            }
-            if sink.status != 200 or self.path not in received:
+            if sink.status != 200 or self.path not in (TRACES_PATH, METRICS_PATH, LOGS_PATH):
                 self.send_response(sink.status if sink.status != 200 else 404)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            message, kept = received[self.path]
-            request = message()
-            request.ParseFromString(body)
-            kept.append(request)
+            if self.path == TRACES_PATH:
+                sink.requests.append(_decoded(ExportTraceServiceRequest(), body))
+            elif self.path == METRICS_PATH:
+                sink.metric_requests.append(_decoded(ExportMetricsServiceRequest(), body))
+            else:
+                sink.log_requests.append(_decoded(ExportLogsServiceRequest(), body))
             self.send_response(200)
             self.send_header("Content-Type", "application/x-protobuf")
             self.send_header("Content-Length", "0")

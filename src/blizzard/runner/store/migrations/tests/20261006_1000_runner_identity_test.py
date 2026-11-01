@@ -1,7 +1,5 @@
 """Runner-store migrations: the store keys nothing on the runner's id and keeps one identity row."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -24,14 +22,14 @@ from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
-    _LATER,
-    _NEW,
-    _RUNNER,
-    _columns,
-    _keyed,
-    _leases,
-    _rows,
-    _seed_identity_before_the_scope,
+    LATER,
+    NEW,
+    RUNNER,
+    column_names,
+    keyed_metadata,
+    leases_table,
+    rows_of,
+    seed_identity_before_the_scope,
 )
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 from tests.runner_trace_leases import closed_lease
@@ -49,7 +47,7 @@ _OLD = datetime(2026, 9, 1, 12, tzinfo=UTC)
 
 _hub_control = sa.Table(
     "hub_control",
-    _keyed,
+    keyed_metadata,
     sa.Column("runner_id", sa.String(), primary_key=True),
     sa.Column("paused", sa.Boolean()),
     sa.Column("updated_at", UtcDateTime()),
@@ -57,14 +55,14 @@ _hub_control = sa.Table(
 
 _daemon_liveness = sa.Table(
     "daemon_liveness",
-    _keyed,
+    keyed_metadata,
     sa.Column("runner_id", sa.String(), primary_key=True),
     sa.Column("alive_at", UtcDateTime()),
 )
 
 _local_pause_facts = sa.Table(
     "local_pause_facts",
-    _keyed,
+    keyed_metadata,
     sa.Column("id", sa.Integer(), primary_key=True),
     sa.Column("runner_id", sa.String()),
     sa.Column("paused", sa.Boolean()),
@@ -90,25 +88,25 @@ def _seed_a_store_spanning_a_rename(engine: sa.Engine) -> None:
             _hub_control.insert(),
             [
                 {"runner_id": "runner-local", "paused": True, "updated_at": _OLD},
-                {"runner_id": "r-claude", "paused": False, "updated_at": _NEW},
+                {"runner_id": "r-claude", "paused": False, "updated_at": NEW},
             ],
         )
         conn.execute(
             _daemon_liveness.insert(),
-            [{"runner_id": "runner-local", "alive_at": _OLD}, {"runner_id": "r-claude", "alive_at": _NEW}],
+            [{"runner_id": "runner-local", "alive_at": _OLD}, {"runner_id": "r-claude", "alive_at": NEW}],
         )
         conn.execute(
             _local_pause_facts.insert(),
             [
                 {"runner_id": "runner-local", "paused": True, "set_at": _OLD, "set_by": "operator"},
-                {"runner_id": "r-claude", "paused": False, "set_at": _NEW, "set_by": "operator"},
+                {"runner_id": "r-claude", "paused": False, "set_at": NEW, "set_by": "operator"},
             ],
         )
         conn.execute(
-            _leases.insert(),
+            leases_table.insert(),
             [
                 {"lease_id": "l_old", "chunk_id": "ch_1", "epoch": 1, "runner_id": "runner-local", "created_at": _OLD},
-                {"lease_id": "l_new", "chunk_id": "ch_2", "epoch": 1, "runner_id": "r-claude", "created_at": _NEW},
+                {"lease_id": "l_new", "chunk_id": "ch_2", "epoch": 1, "runner_id": "r-claude", "created_at": NEW},
             ],
         )
 
@@ -182,9 +180,13 @@ def _register(store: SqlAlchemyRunnerStore, identity: RunnerIdentityHolder, regi
     identity.hold(registered)
 
 
-def _cursor_rows(store: SqlAlchemyRunnerStore) -> int:
-    with store._engine.connect() as conn:
-        return conn.exec_driver_sql("SELECT count(*) FROM trace_cursor").scalar_one()
+def _cursor_rows(url: str) -> int:
+    engine = create_engine_from_url(url)
+    try:
+        with engine.connect() as conn:
+            return conn.exec_driver_sql("SELECT count(*) FROM trace_cursor").scalar_one()
+    finally:
+        engine.dispose()
 
 
 def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_history_row(tmp_path: Path) -> None:
@@ -194,17 +196,17 @@ def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_h
         migration.upgrade(_IDENTITY)
 
         for table in _KEYED_TABLES:
-            assert "runner_id" not in _columns(engine, table)
-        _seed_identity_before_the_scope(migration, engine)  # the identity migration itself holds no identity
+            assert "runner_id" not in column_names(engine, table)
+        seed_identity_before_the_scope(migration, engine)  # the identity migration itself holds no identity
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
-        assert _rows(engine, "SELECT count(*) FROM hub_control") == [(1,)]
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
+        assert rows_of(engine, "SELECT count(*) FROM hub_control") == [(1,)]
         assert store.hub_paused() is False  # r-claude's mirror, not the older id's pause
-        assert store.hub_contact_at() == _NEW
-        assert _rows(engine, "SELECT count(*) FROM daemon_liveness") == [(1,)]
-        assert store.last_daemon_liveness() == _NEW
-        assert _rows(engine, "SELECT paused FROM local_pause_facts ORDER BY id") == [(1,), (0,)]
-        assert _rows(engine, "SELECT lease_id FROM leases ORDER BY lease_id") == [("l_new",), ("l_old",)]
+        assert store.hub_contact_at() == NEW
+        assert rows_of(engine, "SELECT count(*) FROM daemon_liveness") == [(1,)]
+        assert store.last_daemon_liveness() == NEW
+        assert rows_of(engine, "SELECT paused FROM local_pause_facts ORDER BY id") == [(1,), (0,)]
+        assert rows_of(engine, "SELECT lease_id FROM leases ORDER BY lease_id") == [("l_new",), ("l_old",)]
     finally:
         engine.dispose()
 
@@ -212,8 +214,8 @@ def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_h
 @pytest.mark.parametrize(
     ("facts", "paused", "reason"),
     [
-        ([("runner-local", True, _NEW, "usage limit: claude_code")], False, None),
-        ([("r-claude", True, _OLD, _CEILING), ("runner-local", False, _NEW, None)], True, _CEILING),
+        ([("runner-local", True, NEW, "usage limit: claude_code")], False, None),
+        ([("r-claude", True, _OLD, _CEILING), ("runner-local", False, NEW, None)], True, _CEILING),
     ],
     ids=["former-id-paused-last", "former-id-cleared-last"],
 )
@@ -226,18 +228,18 @@ def test_identity_migration_keeps_the_kept_ids_local_brake_when_a_former_id_wrot
         with engine.begin() as conn:
             conn.execute(
                 _daemon_liveness.insert(),
-                [{"runner_id": "runner-local", "alive_at": _OLD}, {"runner_id": "r-claude", "alive_at": _NEW}],
+                [{"runner_id": "runner-local", "alive_at": _OLD}, {"runner_id": "r-claude", "alive_at": NEW}],
             )
             conn.execute(
                 _local_pause_facts.insert(),
                 [{"runner_id": i, "paused": p, "set_at": at, "set_by": "runner", "reason": r} for i, p, at, r in facts],
             )
-        _seed_identity_before_the_scope(migration, engine)
+        seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
 
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
         assert (store.local_paused(), store.local_pause_reason()) == (paused, reason)
-        assert _rows(engine, "SELECT count(*) FROM local_pause_facts") == [(len(facts) + 1,)]
+        assert rows_of(engine, "SELECT count(*) FROM local_pause_facts") == [(len(facts) + 1,)]
     finally:
         engine.dispose()
 
@@ -246,28 +248,28 @@ def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_
     migration, engine = _store_at_parent(tmp_path)
     try:
         _seed_a_store_spanning_a_rename(engine)
-        _seed_identity_before_the_scope(migration, engine)
+        seed_identity_before_the_scope(migration, engine)
         migration.upgrade("head")
-        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER)
-        store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _LATER))
-        store.set_hub_paused(paused=True, at=_LATER)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors(), RUNNER)
+        store.record_runner_identity(RunnerIdentity(RUNNER, "r-claude", LATER))
+        store.set_hub_paused(paused=True, at=LATER)
 
         migration.downgrade(_IDENTITY_PARENT)
         assert "runner_identity" not in sa.inspect(engine).get_table_names()
-        assert _rows(engine, "SELECT runner_id, paused FROM hub_control") == [("r-claude", 1)]
-        assert _rows(engine, "SELECT runner_id FROM daemon_liveness") == [("r-claude",)]
-        assert _rows(engine, "SELECT DISTINCT runner_id FROM local_pause_facts") == [("r-claude",)]
-        assert _rows(engine, "SELECT DISTINCT runner_id FROM leases") == [("r-claude",)]
+        assert rows_of(engine, "SELECT runner_id, paused FROM hub_control") == [("r-claude", 1)]
+        assert rows_of(engine, "SELECT runner_id FROM daemon_liveness") == [("r-claude",)]
+        assert rows_of(engine, "SELECT DISTINCT runner_id FROM local_pause_facts") == [("r-claude",)]
+        assert rows_of(engine, "SELECT DISTINCT runner_id FROM leases") == [("r-claude",)]
         assert not next(c for c in sa.inspect(engine).get_columns("leases") if c["name"] == "runner_id")["nullable"]
 
         # Up again the store holds no identity to claim its rows for, so the tightening revision refuses them.
         with pytest.raises(RuntimeError, match="name no runner"):
             migration.upgrade("head")
-        assert _rows(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
-        assert _rows(engine, "SELECT paused FROM hub_control") == [(1,)]
+        assert rows_of(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
+        assert rows_of(engine, "SELECT paused FROM hub_control") == [(1,)]
         with engine.connect() as conn:
-            assert conn.execute(sa.select(_liveness_unscoped.c.alive_at)).scalars().all() == [_NEW]
-        assert _rows(engine, "SELECT count(*) FROM local_pause_facts") == [(2,)]
+            assert conn.execute(sa.select(_liveness_unscoped.c.alive_at)).scalars().all() == [NEW]
+        assert rows_of(engine, "SELECT count(*) FROM local_pause_facts") == [(2,)]
     finally:
         engine.dispose()
 
@@ -276,9 +278,9 @@ def test_identity_migration_downgrades_a_never_registered_store_onto_the_pre_cha
     migration, engine = _store_at_parent(tmp_path)
     try:
         migration.upgrade("head")
-        SqlAlchemyRunnerStore(engine, runner_store_errors()).set_hub_paused(paused=True, at=_LATER)
+        SqlAlchemyRunnerStore(engine, runner_store_errors()).set_hub_paused(paused=True, at=LATER)
         migration.downgrade(_IDENTITY_PARENT)
-        assert _rows(engine, "SELECT runner_id, paused FROM hub_control") == [("runner-local", 1)]
+        assert rows_of(engine, "SELECT runner_id, paused FROM hub_control") == [("runner-local", 1)]
     finally:
         engine.dispose()
 
@@ -292,10 +294,10 @@ def test_frozen_keyed_tables_carry_the_runner_id_until_the_identity_revision(tab
     engine = create_engine_from_url(url)
     try:
         runner.upgrade(_IDENTITY_PARENT)
-        assert "runner_id" in _columns(engine, table)
+        assert "runner_id" in column_names(engine, table)
         assert "runner_identity" not in sa.inspect(engine).get_table_names()
         runner.upgrade(_IDENTITY)
-        assert "runner_id" not in _columns(engine, table)
+        assert "runner_id" not in column_names(engine, table)
         assert "runner_identity" in sa.inspect(engine).get_table_names()
     finally:
         engine.dispose()
@@ -320,7 +322,8 @@ def test_a_replay_tells_a_lease_minted_before_the_migration_under_the_latest_reg
 def test_an_upgraded_runner_holds_its_cursor_until_its_first_registration_then_tells_what_closed_meanwhile(
     tmp_path: Path,
 ) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_REGISTERED.runner_id)
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    store = make_store(url, runner_id=_REGISTERED.runner_id)
     clock = FixedClock(_CLOSED_AT)
     exporter = InMemoryTraceExporter()
 
@@ -330,7 +333,7 @@ def test_an_upgraded_runner_holds_its_cursor_until_its_first_registration_then_t
         )
 
     sweep(RunnerIdentityHolder(_REGISTERED)).sweep()  # the runner before its upgrade opens the cursor
-    opened = _cursor_rows(store)
+    opened = _cursor_rows(url)
     clock.advance(timedelta(seconds=30))
     closed_lease(store, "lease-01", opened=clock.now() - timedelta(minutes=1), closed=clock.now())
     clock.advance(timedelta(seconds=30))
@@ -338,10 +341,10 @@ def test_an_upgraded_runner_holds_its_cursor_until_its_first_registration_then_t
     upgraded = sweep(identity)
 
     upgraded.sweep()
-    assert (exporter.attempts, _cursor_rows(store)) == (0, opened)
+    assert (exporter.attempts, _cursor_rows(url)) == (0, opened)
 
     _register(store, identity, _REGISTERED)
     upgraded.sweep()
     told = [span for batch in exporter.batches for span in batch]
     assert told and _runners(told) == {(_REGISTERED.runner_id, "r-claude")}
-    assert _cursor_rows(store) > opened
+    assert _cursor_rows(url) > opened

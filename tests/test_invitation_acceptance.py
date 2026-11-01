@@ -45,7 +45,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_auth_login_api import FakeOAuthProvider, _state_from_redirect
+from tests.test_auth_login_api import FakeOAuthProvider, state_from_redirect
 
 pytestmark = pytest.mark.component
 
@@ -73,7 +73,7 @@ def _sign_in(hub: HubHarness, token: str, *, session: str | None = None) -> Any:
     if session is not None:
         hub.client.cookies.set("bz_session", session)
     authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False)
-    state = _state_from_redirect(authorize.headers["location"])
+    state = state_from_redirect(authorize.headers["location"])
     return hub.client.get(f"/api/auth/github/callback?code=code&state={state}", follow_redirects=False)
 
 

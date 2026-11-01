@@ -19,12 +19,12 @@ import tempfile
 import threading
 import time
 import weakref
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, NotRequired, Required, TypedDict
 from urllib.parse import urlparse
 
 import httpx2
@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, make_url
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.sql.base import Executable
+from typing_extensions import TypeIs
 
 from blizzard import __version__
 from blizzard.auth_core import Role
@@ -80,7 +81,6 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     HubWorkItem,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
 )
@@ -614,8 +614,7 @@ class FakeWorkSource:
         return f"{self.repo}#{pointer.ref}"
 
 
-def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
-    return x
+_fake_work_source_conforms: type[IWorkSource] = FakeWorkSource
 
 
 class FakeBatchWorkSource(FakeWorkSource):
@@ -704,8 +703,7 @@ class WorkSourceRegistry:
         return None
 
 
-def _conforms_work_source_registry(x: WorkSourceRegistry) -> IWorkSourceRegistry:
-    return x
+_work_source_registry_conforms: type[IWorkSourceRegistry] = WorkSourceRegistry
 
 
 class FakeAnnotator:
@@ -745,8 +743,7 @@ class FakeAnnotator:
         return {ref: frozenset(markers) for ref, markers in self._marks.items() if markers}
 
 
-def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
-    return x
+_fake_annotator_conforms: type[IWorkAnnotator] = FakeAnnotator
 
 
 class FakeCloser:
@@ -779,8 +776,7 @@ class FakeCloser:
         self.traces.append(trace)
 
 
-def _conforms_fake_closer(x: FakeCloser) -> IWorkCloser:
-    return x
+_fake_closer_conforms: type[IWorkCloser] = FakeCloser
 
 
 class _OmitTitle:
@@ -794,12 +790,84 @@ OMIT_TITLE = _OmitTitle()
 """Sentinel — a forge payload with no ``title`` key at all (real GitHub never sends this)."""
 
 
+class ForgeIssue(TypedDict, total=False):
+    """One issue a :func:`github_double` serves — ``title`` may be ``None`` or :data:`OMIT_TITLE` to model the
+    degenerate shapes, and ``comments`` grows as the double takes posts."""
+
+    title: str | None | _OmitTitle
+    body: Required[str]
+    comments: list[str]
+
+
+class ForgePull(TypedDict):
+    """One pull request the double holds."""
+
+    head: str
+    base: str
+    merged: bool
+    state: str
+    merge_commit_sha: str | None
+
+
+class ForgeIssueState(TypedDict):
+    """An issue's state as the double last had it patched."""
+
+    state: str
+    state_reason: str | None
+
+
+class ForgeState(TypedDict):
+    """A :func:`github_double`'s mutable state — a test seeds and reads it through :func:`forge_state`."""
+
+    next_pull: int
+    pulls: dict[int, ForgePull]
+    repo_labels: dict[str, set[str]]
+    repo_label_colors: dict[str, str | None]
+    issue_labels: dict[str, set[str]]
+    issue_state: dict[str, ForgeIssueState]
+    pr_numbers: set[int]
+    issues: dict[str, ForgeIssue]
+    forbidden: bool
+    label_add_forbidden: bool
+
+
+class _IssueStateBody(TypedDict):
+    state: str
+    state_reason: NotRequired[str | None]
+
+
+class _CommentBody(TypedDict):
+    body: str
+
+
+class _PullBody(TypedDict):
+    head: str
+    base: str
+
+
+class _MergeBody(TypedDict):
+    sha: NotRequired[str | None]
+
+
+class _LabelBody(TypedDict):
+    name: str
+    color: NotRequired[str | None]
+
+
+class ForgeDouble(TestClient):
+    """A :func:`github_double`'s client — a ``TestClient`` carrying the double's :class:`ForgeState`."""
+
+    def __init__(self, app: FastAPI, state: ForgeState) -> None:
+        super().__init__(app)
+        self.forge_state = state
+
+
 def github_double(
     *,
     conflict_branches: set[str] | None = None,
-    issues: dict[str, dict[str, Any]] | None = None,
+    issues: dict[str, ForgeIssue] | None = None,
     pull_numbers: set[int] | None = None,
-) -> TestClient:
+) -> ForgeDouble:
     """A tiny GitHub-shaped forge double for the real HTTP adapters.
 
     Exercises the adapter HTTP shaping against a minimal GitHub-REST-v3 surface — issue
@@ -808,36 +876,40 @@ def github_double(
     from fastapi.responses import JSONResponse
 
     conflict = conflict_branches or set()
-    issue_store = issues or {}
+    issue_store: dict[str, ForgeIssue] = issues or {}
     app = FastAPI()
-    state: dict[str, object] = {
+    state: ForgeState = {
         "next_pull": 1,
         "pulls": {},
         "repo_labels": {},
+        "repo_label_colors": {},
         "issue_labels": {},
+        "issue_state": {},
         "pr_numbers": set(pull_numbers or set()),
         "issues": issue_store,
+        "forbidden": False,
+        "label_add_forbidden": False,
     }
 
     @app.get("/repos/{owner}/{repo}/issues/{number}")
-    def get_issue(owner: str, repo: str, number: int) -> dict[str, Any]:
+    def get_issue(owner: str, repo: str, number: int) -> JSONResponse:
         key = f"{owner}/{repo}#{number}"
-        data = issue_store.get(key, {"body": f"issue {number}", "comments": []})
+        data = issue_store.get(key, ForgeIssue(body=f"issue {number}", comments=[]))
         payload: dict[str, object] = {"number": number, "body": data["body"]}
         # A double laxer than the forge it stands for would hide bugs, so ``title`` is
         # present by default and a test opts into the degenerate shapes explicitly.
         title = data.get("title", f"issue {number}")
-        if title is not OMIT_TITLE:
+        if not isinstance(title, _OmitTitle):
             payload["title"] = title
-        return payload
+        return JSONResponse(content=payload)
 
     @app.patch("/repos/{owner}/{repo}/issues/{number}")
-    def update_issue_state(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
+    def update_issue_state(owner: str, repo: str, number: int, body: _IssueStateBody) -> JSONResponse:
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
         # A number the double's fixed issue store doesn't know about is the "gone"
         # case a closer must surface distinctly from a generic failure.
-        issue_state: dict[str, dict[str, Any]] = state.setdefault("issue_state", {})  # type: ignore[assignment]
+        issue_state = state["issue_state"]
         key = f"{owner}/{repo}#{number}"
         if key not in issue_store and key not in issue_state:
             return JSONResponse(status_code=404, content={"message": "Not Found"})
@@ -849,17 +921,18 @@ def github_double(
         request: Request, owner: str, repo: str, number: int, page: int = 1, per_page: int = 30
     ) -> JSONResponse:
         key = f"{owner}/{repo}#{number}"
-        if key not in issue_store and key not in state.setdefault("issue_state", {}):  # type: ignore[call-overload]
+        if key not in issue_store and key not in state["issue_state"]:
             return JSONResponse(status_code=404, content={"message": "Not Found"})
-        comments = issue_store.get(key, {}).get("comments", [])
+        issue = issue_store.get(key)
+        comments = issue.get("comments", []) if issue is not None else []
         chunk = comments[(page - 1) * per_page : page * per_page]
-        headers = {}
+        headers: dict[str, str] = {}
         if page * per_page < len(comments):
             headers["Link"] = f'<{request.url.include_query_params(page=page + 1, per_page=per_page)}>; rel="next"'
         return JSONResponse(content=[{"body": c} for c in chunk], headers=headers)
 
     @app.post("/repos/{owner}/{repo}/issues/{number}/comments")
-    def post_comment(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
+    def post_comment(owner: str, repo: str, number: int, body: _CommentBody) -> JSONResponse:
         key = f"{owner}/{repo}#{number}"
         if key not in issue_store:
             return JSONResponse(status_code=404, content={"message": "Not Found"})
@@ -867,14 +940,14 @@ def github_double(
         return JSONResponse(status_code=201, content={"body": body["body"]})
 
     @app.post("/repos/{owner}/{repo}/pulls")
-    def create_pull(owner: str, repo: str, body: dict[str, Any]) -> JSONResponse:
+    def create_pull(owner: str, repo: str, body: _PullBody) -> JSONResponse:
         pulls = state["pulls"]
-        if any(p["state"] == "open" and p["head"] == body["head"] for p in pulls.values()):  # type: ignore[union-attr]
+        if any(p["state"] == "open" and p["head"] == body["head"] for p in pulls.values()):
             # GitHub 422s a second PR for the same head — the redelivery reuse path.
             return JSONResponse(status_code=422, content={"message": "A pull request already exists"})
-        number = int(state["next_pull"])  # type: ignore[arg-type]
+        number = state["next_pull"]
         state["next_pull"] = number + 1
-        state["pulls"][number] = {  # type: ignore[index]
+        pulls[number] = {
             "head": body["head"],
             "base": body["base"],
             "merged": False,
@@ -891,56 +964,60 @@ def github_double(
         )
 
     @app.get("/repos/{owner}/{repo}/pulls")
-    def list_pulls(owner: str, repo: str, state_: str = "open") -> list[dict[str, Any]]:
-        pulls = state["pulls"]
-        return [
-            {
-                "number": n,
-                "head": {"ref": p["head"]},
-                "state": p["state"],
-                "html_url": f"http://forge/{owner}/{repo}/pull/{n}",
-            }
-            for n, p in pulls.items()  # type: ignore[union-attr]
-            if p["state"] == state_
-        ]
+    def list_pulls(owner: str, repo: str, state_: str = "open") -> JSONResponse:
+        return JSONResponse(
+            content=[
+                {
+                    "number": n,
+                    "head": {"ref": p["head"]},
+                    "state": p["state"],
+                    "html_url": f"http://forge/{owner}/{repo}/pull/{n}",
+                }
+                for n, p in state["pulls"].items()
+                if p["state"] == state_
+            ]
+        )
 
     @app.get("/repos/{owner}/{repo}/pulls/{number}")
-    def get_pull(owner: str, repo: str, number: int) -> dict[str, Any]:
-        p = state["pulls"].get(number, {})  # type: ignore[union-attr]
-        return {
-            "number": number,
-            "head": {"ref": p.get("head")},
-            "merged": p.get("merged", False),
-            "state": p.get("state", "open"),
-            "merge_commit_sha": p.get("merge_commit_sha"),
-        }
+    def get_pull(owner: str, repo: str, number: int) -> JSONResponse:
+        p = state["pulls"].get(number)
+        return JSONResponse(
+            content={
+                "number": number,
+                "head": {"ref": p["head"] if p is not None else None},
+                "merged": p["merged"] if p is not None else False,
+                "state": p["state"] if p is not None else "open",
+                "merge_commit_sha": p["merge_commit_sha"] if p is not None else None,
+            }
+        )
 
     @app.put("/repos/{owner}/{repo}/pulls/{number}/merge")
-    def merge_pull(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
-        pull = state["pulls"].get(number, {})  # type: ignore[union-attr]
-        if pull.get("head") in conflict:
+    def merge_pull(owner: str, repo: str, number: int, body: _MergeBody) -> JSONResponse:
+        pull = state["pulls"].get(number)
+        if pull is not None and pull["head"] in conflict:
             return JSONResponse(status_code=409, content={"message": "not mergeable"})
         merge_sha = f"merged-{body.get('sha')}"
-        pull.update({"merged": True, "state": "closed", "merge_commit_sha": merge_sha})
+        if pull is not None:
+            pull.update({"merged": True, "state": "closed", "merge_commit_sha": merge_sha})
         return JSONResponse(status_code=200, content={"sha": merge_sha, "merged": True, "message": "ok"})
 
     def _forbidden_if_armed() -> JSONResponse | None:
-        """The ``forbidden`` lever a test arms via ``client.forge_state["forbidden"]
+        """The ``forbidden`` lever a test arms via ``forge_state(client)["forbidden"]
         = True`` — an insufficient-scope 403 (the rate-limit 403 is not modelled)."""
-        if state.get("forbidden"):
+        if state["forbidden"]:
             return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
         return None
 
     @app.post("/repos/{owner}/{repo}/labels")
-    def create_repo_label(owner: str, repo: str, body: dict[str, Any]) -> JSONResponse:
+    def create_repo_label(owner: str, repo: str, body: _LabelBody) -> JSONResponse:
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
-        repo_labels = state["repo_labels"].setdefault(f"{owner}/{repo}", set())  # type: ignore[union-attr]
+        repo_labels = state["repo_labels"].setdefault(f"{owner}/{repo}", set())
         name = body["name"]
         if name in repo_labels:
             return JSONResponse(status_code=422, content={"message": "already_exists"})
         repo_labels.add(name)
-        state.setdefault("repo_label_colors", {})[name] = body.get("color")  # type: ignore[union-attr]
+        state["repo_label_colors"][name] = body.get("color")
         return JSONResponse(status_code=201, content={"name": name})
 
     @app.post("/repos/{owner}/{repo}/issues/{number}/labels")
@@ -949,10 +1026,10 @@ def github_double(
             return forbidden
         # `label_add_forbidden` fails only this route; the broad `forbidden` lever can't
         # isolate an add failure since it trips the bootstrap POST first.
-        if state.get("label_add_forbidden"):
+        if state["label_add_forbidden"]:
             return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
         key = f"{owner}/{repo}#{number}"
-        issue_labels = state["issue_labels"].setdefault(key, set())  # type: ignore[union-attr]
+        issue_labels = state["issue_labels"].setdefault(key, set())
         issue_labels.update(body)
         return JSONResponse(status_code=200, content=[{"name": name} for name in sorted(issue_labels)])
 
@@ -961,7 +1038,7 @@ def github_double(
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
         key = f"{owner}/{repo}#{number}"
-        issue_labels = state["issue_labels"].setdefault(key, set())  # type: ignore[union-attr]
+        issue_labels = state["issue_labels"].setdefault(key, set())
         if name not in issue_labels:
             return JSONResponse(status_code=404, content={"message": "Label does not exist"})
         issue_labels.discard(name)
@@ -975,8 +1052,8 @@ def github_double(
             return forbidden
         repo_key = f"{owner}/{repo}"
         wanted = set(labels.split(",")) if labels else None
-        issue_labels_map: dict[str, set[str]] = state["issue_labels"]  # type: ignore[assignment]
-        pr_numbers: set[int] = state["pr_numbers"]  # type: ignore[assignment]
+        issue_labels_map = state["issue_labels"]
+        pr_numbers = state["pr_numbers"]
         numbers = sorted(
             int(key.rpartition("#")[2])
             for key, names in issue_labels_map.items()
@@ -984,7 +1061,7 @@ def github_double(
         )
         start = (page - 1) * per_page
         page_numbers = numbers[start : start + per_page]
-        items: list[dict[str, Any]] = []
+        items: list[dict[str, object]] = []
         for n in page_numbers:
             item: dict[str, object] = {
                 "number": n,
@@ -993,22 +1070,35 @@ def github_double(
             if n in pr_numbers:
                 item["pull_request"] = {"url": f"http://forge/{repo_key}/pulls/{n}"}
             items.append(item)
-        headers = {}
+        headers: dict[str, str] = {}
         if start + per_page < len(numbers):
             next_url = str(request.url.include_query_params(page=page + 1))
             headers["Link"] = f'<{next_url}>; rel="next"'
         return JSONResponse(status_code=200, content=items, headers=headers)
 
-    client = TestClient(app)
-    client.forge_state = state  # type: ignore[attr-defined] # tests flip PR fate (e.g. close-without-merge)
-    return client
+    # Tests flip PR fate (e.g. close-without-merge) through the state the client carries.
+    return ForgeDouble(app, state)
 
 
-def forge_state(double: TestClient) -> dict[str, object]:
-    """Typed accessor for a :func:`github_double`'s mutable state dict — a test
+def forge_state(double: ForgeDouble) -> ForgeState:
+    """Typed accessor for a :func:`github_double`'s mutable state — a test
     seeds/reads ``issue_labels``/``repo_labels``/``pr_numbers``/``forbidden``/
     ``label_add_forbidden`` directly."""
-    return double.forge_state  # type: ignore[attr-defined]
+    return double.forge_state
+
+
+def _string_keyed(value: object) -> TypeIs[dict[str, object]]:
+    """Whether ``value`` is a decoded JSON object — a dict whose every key is a string."""
+    return _object_iterable(value) and isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _object_iterable(value: object) -> TypeIs[Iterable[object]]:
+    return isinstance(value, Iterable)
+
+
+def _object_list(value: object) -> TypeIs[list[object]]:
+    """Whether ``value`` is a decoded JSON array."""
+    return isinstance(value, list)
 
 
 def runner_token(runner_id: str) -> str:
@@ -1110,9 +1200,9 @@ class RunnerFleetClient(TestClient):
         return super().request(method, url, *args, **kwargs)
 
     def _caller(self, url: str, path: str, kwargs: Mapping[str, Any]) -> str:
-        body = kwargs.get("json")
-        if isinstance(body, dict) and isinstance(body.get("runner_id"), str):
-            return str(body["runner_id"])
+        body: object = kwargs.get("json")
+        if _string_keyed(body) and isinstance(runner_id := body.get("runner_id"), str):
+            return runner_id
         if path.startswith(_FLEET_RUNNERS_PREFIX):
             return path.removeprefix(_FLEET_RUNNERS_PREFIX).split("/", 1)[0]
         query = httpx2.URL(url).params.get("runner_id") or httpx2.QueryParams(kwargs.get("params")).get("runner_id")
@@ -1126,7 +1216,7 @@ class RunnerFleetClient(TestClient):
             f"runner ids are unique across the hub: name {runner_id!r} with this tenant's {self._runner_prefix!r} prefix"
         )
         with self._seeding:
-            workspace_id = body.get("workspace_id") if isinstance(body, dict) else None
+            workspace_id = body.get("workspace_id") if _string_keyed(body) else None
             seed_runner(self._services, runner_id, workspace_id=str(workspace_id or "w1"), register=connect)
             self._present.add(runner_id)
             if connect:
@@ -1731,6 +1821,28 @@ def free_port() -> int:
     raise RuntimeError(f"no free port in the band starting at {band}")
 
 
+class RouteClaimReply(TypedDict):
+    """POST /api/fleet/routes' decoded 201 body (``RouteClaimResponse``)."""
+
+    chunk_id: str
+    runner_id: str
+    workspace_id: str
+    environment_ids: list[str]
+    envelope: dict[str, object]
+    route_token: str
+
+
+class FactAck(TypedDict):
+    """POST /api/fleet/events' decoded ack (``RunnerFactAck``)."""
+
+    runner_id: str
+    high_water: int
+    applied: list[int]
+    already_applied: list[int]
+    rejected: list[int]
+    route_ended: list[int]
+
+
 def parse_sse_frames(text: str) -> list[dict[str, str]]:
     """Parse an ``text/event-stream`` payload into ``[{id, event, data}]`` dicts.
 
@@ -1762,14 +1874,16 @@ async def drain_stream(broker: EventBroker, *, last_event_id: int = 0) -> list[d
     Starlette's ``TestClient`` buffers a whole response body, so it cannot consume an
     infinite live stream incrementally. Instead this drives the route's async generator
     directly with a request that reports itself disconnected, emitting the replay tail."""
-    from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream
+    from starlette.types import Message
 
-    class _DisconnectedRequest:
-        async def is_disconnected(self) -> bool:
-            return True
+    from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream
+
+    async def _disconnected() -> Message:
+        return {"type": "http.disconnect"}
 
     chunks: list[bytes] = []
-    stream = Stream(broker, _DisconnectedRequest(), Cursor(last_event_id), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""}, _disconnected)
+    stream = Stream(broker, request, Cursor(last_event_id), RESERVED_COMMENT)
     async for chunk in stream.frames():
         chunks.append(chunk)
     return parse_sse_frames(b"".join(chunks).decode())
@@ -1784,14 +1898,16 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
     return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
 
 
-def pointer_token(pointer: dict[str, Any]) -> str:
+def pointer_token(pointer: Mapping[str, str]) -> str:
     """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token —
     the request-side shape a test builds from the same dict it asserts the response
     (``{source, ref, label, web_url}``) against."""
     return f"{pointer['source']}:{pointer['ref']}"
 
 
-def ingest(hub: HubHarness, pointers: list[dict[str, Any]], *, promote: bool = True, project: str | None = None) -> str:
+def ingest(
+    hub: HubHarness, pointers: Sequence[Mapping[str, str]], *, promote: bool = True, project: str | None = None
+) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and, by default,
     promote it to ready — each dict converts to its ``{source}:{ref}`` ingest token.
     ``project`` names the project by id or slug; ``None`` leaves the hub to infer it.
@@ -2002,13 +2118,13 @@ def assert_all_timestamps_utc(payload: object) -> None:
     A route test calls this once on its response; a route that later adds a seventh
     timestamp field is covered without the test itself changing.
     """
-    if isinstance(payload, dict):
+    if _string_keyed(payload):
         for key, value in payload.items():
             if key.endswith("_at") and value is not None:
                 assert_utc_iso(value)
             else:
                 assert_all_timestamps_utc(value)
-    elif isinstance(payload, list):
+    elif _object_list(payload):
         for item in payload:
             assert_all_timestamps_utc(item)
 
@@ -2040,7 +2156,7 @@ def make_ready(hub: HubHarness, chunk_id: str) -> None:
     hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())
 
 
-def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict[str, Any]:
+def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> RouteClaimReply:
     """Promote ``chunk_id`` (a replay once promoted) and claim it for ``runner_id`` through POST
     /routes — the route a runner must hold before its first ``lease.minted`` above the claim's
     reservation is admitted. Only a ``ready`` chunk is claimable."""
@@ -2055,7 +2171,7 @@ def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dic
 
 def report_lease(
     hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1", route_token: str | None = None
-) -> dict[str, Any]:
+) -> FactAck:
     """Report a runner-minted ``lease.minted`` fact through POST /events.
 
     A component test calls this first so the hub knows the chunk's latest epoch.
@@ -2081,7 +2197,7 @@ def report_escalation(
     runner_id: str = "r1",
     takeover_command: str = "cd env && claude --resume s",
     **fields: object,
-) -> dict[str, Any]:
+) -> FactAck:
     """Report a runner's ``escalation.recorded`` fact through POST /events — the chunk derives
     ``needs_human`` when the fence admits it. ``fields`` rides the payload verbatim
     (``lease_id``, ``wrapped_takeover_command``, ``cause``, ``detail``, ``route_token``); the
@@ -2097,7 +2213,7 @@ def report_escalation(
 
 def report_question(
     hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, question_id: str = "q_1", runner_id: str = "r1"
-) -> dict[str, Any]:
+) -> FactAck:
     """Report a runner's ``question.asked`` fact through POST /events; the caller reads
     ``applied``/``rejected`` off the returned ack."""
     payload = {"chunk_id": chunk_id, "question_id": question_id, "epoch": epoch, "question": "which?"}
@@ -2259,7 +2375,7 @@ def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at:
 
 
 def seed_work_item(
-    store: IWriteWorkItemRepository,
+    connections: ScopedConnections,
     *,
     source: str = "hub",
     graph_id: str,
@@ -2270,35 +2386,30 @@ def seed_work_item(
     at: datetime,
     project_id: ProjectId | None = None,
 ) -> HubWorkItem:
-    """Seed one hub-owned work item plus its resting chunk in ``project_id`` — the store's tenant's only
-    project when ``None`` — mirroring production's own two-step mint (``WorkItemEditService.create``):
-    there is no chunkless filing path to seed around. Callers still seed ``graph_id``'s own row first
-    (``seed_graph``); this only seeds the item and its chunk."""
+    """Seed one hub-owned work item plus its resting chunk, through a :class:`WorkItemStore` over
+    ``connections``, in ``project_id`` — the tenant's only project when ``None`` — mirroring production's own
+    two-step mint (``WorkItemEditService.create``): there is no chunkless filing path to seed around. Callers
+    still seed ``graph_id``'s own row first (``seed_graph``); this only seeds the item and its chunk."""
+    store = WorkItemStore(connections)
     ref = store.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
-    project = project_id if project_id is not None else _only_project_of_items(store)
+    project = project_id if project_id is not None else ProjectId(_only_project_of(connections))
     chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at, project_id=project)
     return store.create_with_chunk(
         pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
     )
 
 
-def _only_project_of_items(store: IWriteWorkItemRepository) -> ProjectId:
-    """The only project of the tenant ``store`` writes, read through the adapter's own connections; raises when
-    the tenant holds none or several, or when ``store`` is not the store's adapter."""
-    if not isinstance(store, WorkItemStore):
-        raise TypeError(f"a work item seeded naming no project needs a WorkItemStore; got {type(store).__name__}")
-    return ProjectId(_only_project_of(store._store))
-
-
 @contextmanager
-def capture_statements(engine: Engine) -> Iterator[list[tuple[str, Any]]]:
+def capture_statements(engine: Engine) -> Generator[list[tuple[str, Any]]]:
     """Every statement ``engine`` issues while the context is open, in issue order —
     statement text plus its bound parameters, ready to re-run later (e.g. under
     ``EXPLAIN QUERY PLAN``) with no drift from what was actually sent."""
     statements: list[tuple[str, Any]] = []
 
-    def _listener(conn, cursor, statement, parameters, context, executemany):
+    def _listener(
+        conn: sa.Connection, cursor: object, statement: str, parameters: Any, context: object, executemany: bool
+    ) -> None:
         statements.append((statement, parameters))
 
     event.listen(engine, "before_cursor_execute", _listener)
@@ -2437,8 +2548,7 @@ class InMemoryEgressWriter:
         return ManifestCommitted(f"_manifests/{len(self.manifests)}.json")
 
 
-def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
-    return x
+_in_memory_egress_writer_conforms: type[IEgressWriter] = InMemoryEgressWriter
 
 
 _DRAINABLE_SOURCE = "wsrc_github"

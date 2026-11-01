@@ -28,7 +28,7 @@ from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ShellCommand
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.test_runner_status_cli import _TWO_RUNNERS, _host_of, _init_runner, _registered_store, _serve_local_api
+from tests.test_runner_status_cli import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
 from tests.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -100,8 +100,8 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     """End-to-end proof, over the real live socket: the resumed session's
     forwarded env authorizes a worker verb against the SAME closed reference lease the
     parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_lease(store)
     assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
 
@@ -121,7 +121,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
 
     _foreground(monkeypatch, fake_call)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
@@ -134,8 +134,8 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
 
 @pytest.mark.component
 def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_parked_lease(store)
 
     calls: list[tuple[str, bool, str]] = []
@@ -153,7 +153,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
     # not replace it, so the exec'd child still sees this.
     monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
@@ -180,13 +180,13 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
 
 @pytest.mark.component
 def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_parked_lease(store)
 
     _foreground(monkeypatch, lambda command, **_: 7)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 7
@@ -200,8 +200,8 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     """A ``Ctrl-C`` into the interactive session must not strand the takeover open —
     the end-PATCH runs in a ``finally`` around the child, firing even for the
     ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx2.HTTPError` handler misses."""
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_parked_lease(store)
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
@@ -209,7 +209,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 
     _foreground(monkeypatch, fake_call)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
         # assert the exit code, not the exception; the end-PATCH must fire before that.
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -220,8 +220,8 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 
 @pytest.mark.component
 def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -246,7 +246,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     calls: list[str] = []
     _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
@@ -303,7 +303,7 @@ def test_pasting_the_composed_command_on_a_host_of_several_runners_reaches_the_n
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths: list[str] = []
-    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+    host_of(TWO_RUNNERS, monkeypatch, paths)
     argv = shlex.split(TakeoverCommand("ch_1", str(tmp_path), "beta").wrapped)[3:]
 
     CliRunner().invoke(runner_group, ["takeover", *argv])
@@ -329,14 +329,14 @@ def _open_stranded_takeover(store: SqlAlchemyRunnerStore) -> None:
 def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     calls: list[str] = []
     _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         first = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
         again = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
 
@@ -351,8 +351,8 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
 @pytest.mark.component
 def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A PATCH 404 is a clear message, not the generic could-not-reach-the-runner failure."""
-    root = _init_runner(tmp_path)
-    store = _registered_store(root)
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     real_get = RunnerDaemon.get
@@ -367,7 +367,7 @@ def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(RunnerDaemon, "get", stale_list)
 
-    with _serve_local_api(root):
+    with serve_local_api(root):
         result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output

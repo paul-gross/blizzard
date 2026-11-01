@@ -290,8 +290,8 @@ exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tests/node_modules"]
 extraPaths = ["src", "exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-# Shipping code is held to strict; the tests are not yet. A store migration test under `src` that is not yet typed opts
-# itself back down with a `# pyright: standard` header (`bzh:strict-types`).
+# Shipping code and the store migration tests colocated under `src` are held to strict, with no file opting back down
+# (`bzh:strict-types`); the tests under `tests/` are not yet.
 strict = ["src", "exemplars/python"]
 reportMissingTypeStubs = false
 

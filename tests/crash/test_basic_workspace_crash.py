@@ -13,7 +13,7 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.tools.invariants import Invariants
 from tests.config_inputs import load_hub_config
 from tests.crash.support import start_runner, terminate, wait_death, wait_status
-from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
+from tests.crash.test_kill9_sweep import abandon_graph_yaml, await_marker, leases_for_chunk, wait_for_closure
 from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub
 from tests.fleet_world import REPO_NAME, bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.runner_fakes import daemon_store
@@ -92,7 +92,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
     (workspace / ".blizzard-mock-harness-fence").write_text("basic release crash\n")
     marker = tmp_path / "hang-once.marker"
     landed_file = "LANDED.md"
-    graph = yaml.safe_load(_abandon_graph_yaml(landed_file, marker))
+    graph = yaml.safe_load(abandon_graph_yaml(landed_file, marker))
     forge_port, hub_port = free_port(), free_port()
     with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
@@ -110,8 +110,8 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
         runner_proc = start_runner(runner_dir, crash_point=point)
         try:
             assert wait_status(hub, chunk_id, {"running"}) == "running"
-            _await_marker(marker)
-            before = _leases_for_chunk(runner_dir, chunk_id)
+            await_marker(marker)
+            before = leases_for_chunk(runner_dir, chunk_id)
             assert len(before) == 1
             detached = hub.post(f"/api/chunks/{chunk_id}/detach")
             assert detached.status_code == 202, detached.text
@@ -131,10 +131,10 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
                 engine.dispose()
 
             runner_proc = start_runner(runner_dir, crash_point=None)
-            assert _wait_for_closure(runner_dir, before[0][0]) == "released"
+            assert wait_for_closure(runner_dir, before[0][0]) == "released"
             status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120)
             assert status == "done", f"basic runner did not recover from release: {status}"
-            assert len(_leases_for_chunk(runner_dir, chunk_id)) == 2
+            assert len(leases_for_chunk(runner_dir, chunk_id)) == 2
             violations = Invariants(
                 runner_db_url=config.db_url, hub_db_url=load_hub_config(tmp_path / "hub").db_url
             ).run(after_recovery=True)

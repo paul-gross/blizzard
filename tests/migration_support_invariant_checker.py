@@ -8,7 +8,7 @@ import sqlalchemy as sa
 
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 
-_NOW = datetime(2026, 7, 14, tzinfo=UTC)
+NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 
 def insert(table: sa.Table) -> sa.Insert:
@@ -19,7 +19,7 @@ def insert(table: sa.Table) -> sa.Insert:
     return statement
 
 
-_PROJECT_INVARIANTS = frozenset(
+PROJECT_INVARIANTS = frozenset(
     {
         "hub:chunk-project-in-tenant",
         "hub:routine-scope-same-project",

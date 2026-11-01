@@ -368,17 +368,19 @@ def test_an_invocation_on_a_hub_epoch_is_refused() -> None:
 def _planted() -> StepFacts:
     base = fx.graph("g1", "build", "review", "gate")
     nodes = [replace(n, prompt=SENTINEL, checks=[SENTINEL], judgement_prompt=SENTINEL) for n in base.nodes]
-    return StepFacts(
-        chunk_id="ch_1",
-        graphs={"g1": replace(base, nodes=nodes), "g2": fx.G2},
-        pin_graph_id="g1",
-        work_refs=("blizzard#1",),
-        work_sources=("blizzard",),
-        usage=(fx.usage(),),
-        questions=(TracedQuestion("q1", 1, fx.at(15), fx.at(16)),),
-        decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
-        decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
-        transitions=(fx.to("g1", "review", 90, 2, decision_id="d1", choice_name="approve"),),
+    return replace(
+        StepFacts(
+            chunk_id="ch_1",
+            graphs={"g1": replace(base, nodes=nodes), "g2": fx.G2},
+            pin_graph_id="g1",
+            work_refs=("blizzard#1",),
+            work_sources=("blizzard",),
+            usage=(fx.usage(),),
+            questions=(TracedQuestion("q1", 1, fx.at(15), fx.at(16)),),
+            decisions=(TracedDecision("d1", "g1-gate", 1, fx.at(20)),),
+            decision_resolutions=(TracedDecisionResolution("d1", fx.at(40), choice="approve"),),
+            transitions=(fx.to("g1", "review", 90, 2, decision_id="d1", choice_name="approve"),),
+        ),
         **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 70)),
     )
 

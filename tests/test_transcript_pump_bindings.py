@@ -24,7 +24,7 @@ from tests.runner_fakes import (
     make_store,
 )
 from tests.support import capture_statements, count_rows_read
-from tests.test_transcript_pump import _batch, _incomplete_batch, _turn
+from tests.test_transcript_pump import incomplete_batch, normalized_turn, transcript_batch
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +34,8 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 def _ctx(sessions: list[str], *, batches=None):
     store = make_store("sqlite://")
     source = FakeTranscriptSource(
-        batches_by_session=batches or {s: _batch([_turn(0, "hi")], next_token="p") for s in sessions}
+        batches_by_session=batches
+        or {s: transcript_batch([normalized_turn(0, "hi")], next_token="p") for s in sessions}
     )
     harness = FakeHarness(
         handle=WorkerHandle(session_id="s", pid=1, process_start_time="1", pgid=1),
@@ -127,8 +128,8 @@ def test_drain_segment_resolves_bindings_once_across_read_windows() -> None:
             calls["n"] += 1
             token = f"p{calls['n']}"
             if calls["n"] < windows:
-                return _incomplete_batch([_turn(calls["n"], "more")], next_token=token)
-            return _batch([_turn(calls["n"], "end")], next_token=token)
+                return incomplete_batch([normalized_turn(calls["n"], "more")], next_token=token)
+            return transcript_batch([normalized_turn(calls["n"], "end")], next_token=token)
 
         source.turns_since = windowed
         measured.append(

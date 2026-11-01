@@ -17,7 +17,7 @@ from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
-from tests.test_fleet_auth import _bearer, _seed_enrolled
+from tests.test_fleet_auth import bearer, seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -213,8 +213,8 @@ def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kind
 
 
 def test_runner_bearer_token_is_rejected(tmp_path: Path) -> None:
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
 
-    resp = hub.client.get("/api/activity", headers=_bearer(token))
+    resp = hub.client.get("/api/activity", headers=bearer(token))
     assert resp.status_code == 403

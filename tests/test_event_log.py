@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.migration_support_event_log import _T0
+from tests.migration_support_event_log import T0
 from tests.support import (
     chunk_stores,
     count_queries,
@@ -35,16 +35,16 @@ pytestmark = [pytest.mark.unit]
 
 
 def _at(seconds: int) -> datetime:
-    return _T0 + timedelta(seconds=seconds)
+    return T0 + timedelta(seconds=seconds)
 
 
 def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
-        seed_graph(conn, "gr_1", at=_T0)
-        seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
-        seed_chunk(conn, "ch_b", graph_id="gr_1", at=_T0)
-    clock = FixedClock(_T0)
+        seed_graph(conn, "gr_1", at=T0)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_b", graph_id="gr_1", at=T0)
+    clock = FixedClock(T0)
     return chunk_stores(engine, clock), engine, clock
 
 
@@ -174,10 +174,10 @@ def test_list_events_cap_keeps_the_newest_rows_regardless_of_severity(tmp_path: 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
     store, engine, clock = _store(tmp_path)
     with engine.begin() as conn:  # seed the requeue and stop cases' chunks
-        seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
-        seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
-        seed_chunk(conn, "ch_e", graph_id="gr_1", at=_T0)
-        seed_chunk(conn, "ch_f", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_c", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_d", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_e", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_f", graph_id="gr_1", at=T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
     store.escalations.record_escalation(
@@ -289,10 +289,10 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
         root.mkdir()
         _, engine = migrate_to(root, "head")
         with engine.begin() as conn:
-            seed_graph(conn, "gr_1", at=_T0)
+            seed_graph(conn, "gr_1", at=T0)
             for i in range(n):
-                seed_chunk(conn, f"ch_{i}", graph_id="gr_1", at=_T0)
-        store = chunk_stores(engine, FixedClock(_T0))
+                seed_chunk(conn, f"ch_{i}", graph_id="gr_1", at=T0)
+        store = chunk_stores(engine, FixedClock(T0))
         for i in range(n):
             store.escalations.record_escalation(
                 f"ch_{i}",
@@ -397,7 +397,7 @@ def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
 def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Path) -> None:
     store, engine, _clock = _store(tmp_path)
     with engine.begin() as conn:
-        seed_chunk(conn, "ch_tie", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_tie", graph_id="gr_1", at=T0)
         for command in ("first", "second"):
             conn.execute(
                 insert(s.escalations).values(
@@ -439,8 +439,8 @@ def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_
         )
 
     with engine.begin() as conn:
-        seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=_T0)
-        seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=T0)
         # The newer recorded_at lands first, so it holds the lower id.
         escalate(conn, "ch_a", "newer", at=_at(20))
         escalate(conn, "ch_a", "older", at=_at(10))
@@ -495,7 +495,7 @@ def test_activity_events_since_narrows_an_unknown_severity_by_its_kind_and_an_un
     store, engine, _clock = _store(tmp_path)
     _seed_unrecognized_severities(engine)
 
-    by_message = {e.message: e.severity for e in store.events.activity_events_since(_T0, limit=10)}
+    by_message = {e.message: e.severity for e in store.events.activity_events_since(T0, limit=10)}
 
     assert by_message == {
         "recognized": EventLogSeverity.INFO,

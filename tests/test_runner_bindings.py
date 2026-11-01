@@ -10,8 +10,8 @@ from typing import Any
 import pytest
 
 from tests.support import count_queries, emitted_events
-from tests.test_fleet_auth import _bearer
-from tests.test_ingest_project_api import _ingest, _two_projects
+from tests.test_fleet_auth import bearer
+from tests.test_ingest_project_api import ingest_project, two_projects
 
 pytestmark = pytest.mark.component
 
@@ -27,10 +27,10 @@ class _World:
     """A hub holding two projects, each with one ready chunk, and a runner under a host."""
 
     def __init__(self, tmp_path: Path, *, hosted: bool = True) -> None:
-        self.hub, _, _ = _two_projects(tmp_path)
+        self.hub, _, _ = two_projects(tmp_path)
         self.chunks: dict[str, str] = {}
         for slug, token in (("default", "a:1"), ("second", "b:1")):
-            _, body = _ingest(self.hub, token)
+            _, body = ingest_project(self.hub, token)
             self.chunks[slug] = body["chunk_id"]
             assert self.hub.client.post(f"/api/chunks/{body['chunk_id']}/promote").status_code == 202
         self.host = self.hub.client.post("/api/hosts", json={"name": "box"}).json()
@@ -50,19 +50,19 @@ class _World:
                 for s in (["max"] if subscriptions is None else subscriptions)
             ],
         }
-        resp = self.hub.client.post("/api/fleet/host", json=body, headers=_bearer(self.host["token"]))
+        resp = self.hub.client.post("/api/fleet/host", json=body, headers=bearer(self.host["token"]))
         assert resp.status_code == 200, resp.text
 
     def register(self, **body: Any) -> dict[str, Any]:
         resp = self.hub.client.post(
-            "/api/fleet/runners", json={"workspace_id": "ws-a", **body}, headers=_bearer(self.token)
+            "/api/fleet/runners", json={"workspace_id": "ws-a", **body}, headers=bearer(self.token)
         )
         assert resp.status_code == 201, resp.text
         return resp.json()
 
     def peek(self, **body: Any) -> list[str]:
         resp = self.hub.client.post(
-            "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES, **body}, headers=_bearer(self.token)
+            "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES, **body}, headers=bearer(self.token)
         )
         assert resp.status_code == 200, resp.text
         return [e["chunk_id"] for e in resp.json()["entries"]]
@@ -110,7 +110,7 @@ def test_the_runner_views_carry_the_same_flags_as_the_answer(tmp_path: Path) -> 
     listed = next(
         r for r in world.hub.client.get("/api/runners").json()["runners"] if r["runner_id"] == world.runner_id
     )
-    own = world.hub.client.get(f"/api/fleet/runners/{world.runner_id}", headers=_bearer(world.token)).json()
+    own = world.hub.client.get(f"/api/fleet/runners/{world.runner_id}", headers=bearer(world.token)).json()
 
     for view in (detail, listed, own):
         assert view["bindings"] == answer["bindings"]
@@ -293,7 +293,7 @@ def test_the_declared_agents_are_stored_and_read_back_on_every_runner_view(tmp_p
     listed = next(
         r for r in world.hub.client.get("/api/runners").json()["runners"] if r["runner_id"] == world.runner_id
     )
-    own = world.hub.client.get(f"/api/fleet/runners/{world.runner_id}", headers=_bearer(world.token)).json()
+    own = world.hub.client.get(f"/api/fleet/runners/{world.runner_id}", headers=bearer(world.token)).json()
     assert [view["agents"] for view in (detail, listed, own)] == [3, 3, 3]
     assert detail["bindings"][0]["agents"] == 1
 
@@ -312,7 +312,7 @@ def test_a_non_positive_agents_is_refused(tmp_path: Path, agents: int) -> None:
     world = _World(tmp_path)
 
     resp = world.hub.client.post(
-        "/api/fleet/runners", json={"workspace_id": "ws-a", "agents": agents}, headers=_bearer(world.token)
+        "/api/fleet/runners", json={"workspace_id": "ws-a", "agents": agents}, headers=bearer(world.token)
     )
 
     assert resp.status_code == 422, resp.text

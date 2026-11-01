@@ -20,15 +20,15 @@ from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
 from tests.support import build_hub, hub_scoped
-from tests.test_tenant_isolation import _seeded, _Two
+from tests.test_tenant_isolation import Two, seeded
 
 pytestmark = pytest.mark.component
 
 
 @pytest.fixture
-def two(tmp_path: Path) -> _Two:
+def two(tmp_path: Path) -> Two:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    return _Two(hub, *_seeded(hub, "alpha", "beta"))
+    return Two(hub, *seeded(hub, "alpha", "beta"))
 
 
 #: The reads an adapter offers with no argument: every listing a tenant's stores answer whole.
@@ -43,7 +43,7 @@ def _text_of(row: sa.Row[Any]) -> str:
     return " ".join(str(value) for value in row if isinstance(value, str))
 
 
-def test_every_row_a_tenant_wrote_carries_that_tenant(two: _Two) -> None:
+def test_every_row_a_tenant_wrote_carries_that_tenant(two: Two) -> None:
     written: dict[str, set[str]] = {}
     with two.hub.engine.connect() as conn:
         for table in _tenant_owned():
@@ -77,7 +77,7 @@ def _adapters(stores: TenantStores) -> Iterator[tuple[str, object]]:
                 yield f"{field.name}.{inner.name}", getattr(value, inner.name)
 
 
-def test_each_tenants_adapters_read_back_none_of_the_others_records(two: _Two) -> None:
+def test_each_tenants_adapters_read_back_none_of_the_others_records(two: Two) -> None:
     core = build_hub_core(two.hub.engine, clock=two.hub.clock)
     called: set[str] = set()
     for reader, other in ((two.first, two.second), (two.second, two.first)):

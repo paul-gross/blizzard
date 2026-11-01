@@ -85,9 +85,11 @@ def test_get_many_matches_across_a_batch_boundary_within_one_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    store, _ = _store_and_engine(tmp_path)
+    store, engine = _store_and_engine(tmp_path)
     items = [
-        seed_work_item(store, source="hub", graph_id="gr_1", author=WorkItemAuthor.user("usr_1"), at=_NOW)
+        seed_work_item(
+            hub_store_connections(engine), source="hub", graph_id="gr_1", author=WorkItemAuthor.user("usr_1"), at=_NOW
+        )
         for _ in range(7)
     ]
 

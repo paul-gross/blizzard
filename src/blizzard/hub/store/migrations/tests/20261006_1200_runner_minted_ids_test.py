@@ -3,14 +3,13 @@ registration is keyed by a minted ``rn_`` id and named after its old id, every r
 it, enrolled and revoked tokens keep resolving, the hub's own executor rows and unregistered ids stay
 put, and a downgrade restores the old ids."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import json
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -191,7 +190,7 @@ class _FrozenRegistry:
     def __init__(self, tmp_path: Path) -> None:
         self._db_url = _db_url(tmp_path)
 
-    def _rows(self, statement: str, **params: object) -> list[sa.Row]:
+    def _rows(self, statement: str, **params: object) -> list[sa.Row[Any]]:
         engine = create_engine_from_url(self._db_url)
         try:
             with engine.connect() as conn:
@@ -202,7 +201,7 @@ class _FrozenRegistry:
     def minted(self) -> dict[str, str]:
         return {r.name: r.runner_id for r in self._rows("SELECT name, runner_id FROM runner_registrations")}
 
-    def registration(self, runner_id: str) -> sa.Row | None:
+    def registration(self, runner_id: str) -> sa.Row[Any] | None:
         rows = self._rows(
             "SELECT name, added_at, added_by, registered_at FROM runner_registrations WHERE runner_id = :runner_id",
             runner_id=runner_id,

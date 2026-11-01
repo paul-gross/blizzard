@@ -44,12 +44,12 @@ from blizzard.hub.forge.registry import ForgeBinding
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
-_REPO = "/repos/acme/widget"
+REPO = "/repos/acme/widget"
 
 type _Answer = httpx2.Response | Exception
 
 
-def _reply(status: int, body: Any = None, headers: dict[str, str] | None = None) -> httpx2.Response:
+def reply(status: int, body: Any = None, headers: dict[str, str] | None = None) -> httpx2.Response:
     content = b"" if body is None else json.dumps(body).encode()
     return httpx2.Response(status, content=content, headers=headers)
 
@@ -77,7 +77,7 @@ class _Recorded:
         return [request.url.path for request in self.requests]
 
 
-class _Harness:
+class Harness:
     def __init__(
         self, routes: Mapping[tuple[str, str], Sequence[_Answer]], *, api_url: str = "https://api.github.com"
     ) -> None:
@@ -115,7 +115,7 @@ class _Harness:
         return asyncio.run(go())
 
 
-def _pull(
+def pull(
     *, number: int = 7, state: str = "open", mergeable_state: Any = "clean", merged_at: str | None = None, **extra: Any
 ) -> dict[str, Any]:
     return {
@@ -131,12 +131,12 @@ def _pull(
     }
 
 
-def _run(status: Any = "completed", conclusion: Any = "success", **extra: Any) -> dict[str, Any]:
+def workflow_run(status: Any = "completed", conclusion: Any = "success", **extra: Any) -> dict[str, Any]:
     return {"id": 11, "name": "build", "status": status, "conclusion": conclusion, **extra}
 
 
-_PRESENT = {("GET", _REPO): [_reply(200, {"full_name": "acme/widget"})]}
-_ABSENT = {("GET", _REPO): [_reply(404, {"message": "Not Found"})]}
+_PRESENT = {("GET", REPO): [reply(200, {"full_name": "acme/widget"})]}
+_ABSENT = {("GET", REPO): [reply(404, {"message": "Not Found"})]}
 
 
 def test_the_offered_constant_is_the_github_kinds_capabilities() -> None:
@@ -162,7 +162,7 @@ def test_the_offered_constant_is_the_github_kinds_capabilities() -> None:
     ],
 )
 def test_a_mergeable_state_maps_to_its_seam_word(mergeable_state: Any, mergeability: Mergeability) -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull(mergeable_state=mergeable_state))]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(200, pull(mergeable_state=mergeable_state))]})
 
     change = harness.run(lambda forge: forge.change(7))
 
@@ -170,7 +170,7 @@ def test_a_mergeable_state_maps_to_its_seam_word(mergeable_state: Any, mergeabil
 
 
 def test_a_pull_request_reads_as_a_change() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull())]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(200, pull())]})
 
     change = harness.run(lambda forge: forge.change(7))
 
@@ -194,7 +194,7 @@ def test_a_pull_request_reads_as_a_change() -> None:
 def test_a_closed_pull_request_is_merged_only_with_merged_at(
     merged_at: str | None, state: ChangeState, merged_revision: str | None
 ) -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull(state="closed", merged_at=merged_at))]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(200, pull(state="closed", merged_at=merged_at))]})
 
     change = harness.run(lambda forge: forge.change(7))
 
@@ -204,31 +204,31 @@ def test_a_closed_pull_request_is_merged_only_with_merged_at(
 @pytest.mark.parametrize(
     ("run", "outcome"),
     [
-        (_run("completed", "success"), CheckOutcome.PASSED),
-        (_run("completed", "neutral"), CheckOutcome.NEUTRAL),
-        (_run("completed", "skipped"), CheckOutcome.NEUTRAL),
-        (_run("completed", "failure"), CheckOutcome.FAILED),
-        (_run("completed", "timed_out"), CheckOutcome.FAILED),
-        (_run("completed", "action_required"), CheckOutcome.FAILED),
-        (_run("completed", "cancelled"), CheckOutcome.PENDING),
-        (_run("completed", "stale"), CheckOutcome.PENDING),
-        (_run("completed", "startup_failure"), CheckOutcome.PENDING),
-        (_run("completed", "a-conclusion-github-adds-later"), CheckOutcome.PENDING),
-        (_run("completed", None), CheckOutcome.PENDING),
+        (workflow_run("completed", "success"), CheckOutcome.PASSED),
+        (workflow_run("completed", "neutral"), CheckOutcome.NEUTRAL),
+        (workflow_run("completed", "skipped"), CheckOutcome.NEUTRAL),
+        (workflow_run("completed", "failure"), CheckOutcome.FAILED),
+        (workflow_run("completed", "timed_out"), CheckOutcome.FAILED),
+        (workflow_run("completed", "action_required"), CheckOutcome.FAILED),
+        (workflow_run("completed", "cancelled"), CheckOutcome.PENDING),
+        (workflow_run("completed", "stale"), CheckOutcome.PENDING),
+        (workflow_run("completed", "startup_failure"), CheckOutcome.PENDING),
+        (workflow_run("completed", "a-conclusion-github-adds-later"), CheckOutcome.PENDING),
+        (workflow_run("completed", None), CheckOutcome.PENDING),
         ({"id": 11, "name": "build", "status": "completed"}, CheckOutcome.PENDING),
         ({"id": 11, "name": "build"}, CheckOutcome.PENDING),
-        (_run("queued", None), CheckOutcome.PENDING),
-        (_run("in_progress", None), CheckOutcome.PENDING),
-        (_run("waiting", None), CheckOutcome.PENDING),
-        (_run("requested", None), CheckOutcome.PENDING),
-        (_run("completed", 3), CheckOutcome.PENDING),
+        (workflow_run("queued", None), CheckOutcome.PENDING),
+        (workflow_run("in_progress", None), CheckOutcome.PENDING),
+        (workflow_run("waiting", None), CheckOutcome.PENDING),
+        (workflow_run("requested", None), CheckOutcome.PENDING),
+        (workflow_run("completed", 3), CheckOutcome.PENDING),
     ],
     ids=lambda value: (
         str(value) if isinstance(value, CheckOutcome) else f"{value.get('status')}-{value.get('conclusion')}"
     ),
 )
 def test_a_check_runs_status_and_conclusion_fold_into_one_outcome(run: dict[str, Any], outcome: CheckOutcome) -> None:
-    harness = _Harness({("GET", f"{_REPO}/commits/h1/check-runs"): [_reply(200, {"check_runs": [run]})]})
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [run]})]})
 
     (check,) = harness.run(lambda forge: forge.checks("h1"))
 
@@ -236,8 +236,8 @@ def test_a_check_runs_status_and_conclusion_fold_into_one_outcome(run: dict[str,
 
 
 def test_a_check_carries_its_forge_word_and_log_link_for_display() -> None:
-    run = _run("completed", "failure", id=42, details_url="https://ci/42")
-    harness = _Harness({("GET", f"{_REPO}/commits/h1/check-runs"): [_reply(200, {"check_runs": [run]})]})
+    run = workflow_run("completed", "failure", id=42, details_url="https://ci/42")
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [run]})]})
 
     (check,) = harness.run(lambda forge: forge.checks("h1"))
 
@@ -245,12 +245,12 @@ def test_a_check_carries_its_forge_word_and_log_link_for_display() -> None:
 
 
 def test_check_runs_are_paged_past_the_first_hundred() -> None:
-    first = [_run(id=n) for n in range(100)]
-    harness = _Harness(
+    first = [workflow_run(id=n) for n in range(100)]
+    harness = Harness(
         {
-            ("GET", f"{_REPO}/commits/h1/check-runs"): [
-                _reply(200, {"check_runs": first}),
-                _reply(200, {"check_runs": [_run("completed", "failure", id=100)]}),
+            ("GET", f"{REPO}/commits/h1/check-runs"): [
+                reply(200, {"check_runs": first}),
+                reply(200, {"check_runs": [workflow_run("completed", "failure", id=100)]}),
             ]
         }
     )
@@ -262,7 +262,7 @@ def test_check_runs_are_paged_past_the_first_hundred() -> None:
 
 
 def test_a_check_run_list_holding_something_other_than_runs_is_unavailable() -> None:
-    harness = _Harness({("GET", f"{_REPO}/commits/h1/check-runs"): [_reply(200, {"check_runs": ["build"]})]})
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": ["build"]})]})
 
     with pytest.raises(ForgeUnavailable):
         harness.run(lambda forge: forge.checks("h1"))
@@ -291,7 +291,7 @@ def test_a_comparison_carries_what_the_head_gate_and_base_merge_read() -> None:
             }
         ],
     }
-    harness = _Harness({("GET", f"{_REPO}/compare/base...c2"): [_reply(200, payload)]})
+    harness = Harness({("GET", f"{REPO}/compare/base...c2"): [reply(200, payload)]})
 
     comparison = harness.run(lambda forge: forge.compare("base", "c2"))
 
@@ -320,7 +320,7 @@ def test_a_comparison_shorter_than_its_total_or_at_the_file_cap_says_so() -> Non
         "commits": [{"sha": "c1", "parents": []}],
         "files": files,
     }
-    harness = _Harness({("GET", f"{_REPO}/compare/a...b"): [_reply(200, payload)]})
+    harness = Harness({("GET", f"{REPO}/compare/a...b"): [reply(200, payload)]})
 
     comparison = harness.run(lambda forge: forge.compare("a", "b"))
 
@@ -329,14 +329,14 @@ def test_a_comparison_shorter_than_its_total_or_at_the_file_cap_says_so() -> Non
 
 
 def test_a_branch_tip_is_its_refs_object_sha() -> None:
-    harness = _Harness({("GET", f"{_REPO}/git/ref/heads/main"): [_reply(200, {"object": {"sha": "tip"}})]})
+    harness = Harness({("GET", f"{REPO}/git/ref/heads/main"): [reply(200, {"object": {"sha": "tip"}})]})
 
     assert harness.run(lambda forge: forge.branch_tip("main")) == "tip"
 
 
 def test_a_present_commit_carries_its_authored_instant() -> None:
     body = {"commit": {"author": {"date": "2026-10-01T09:30:00Z"}}}
-    harness = _Harness({("GET", f"{_REPO}/commits/c1"): [_reply(200, body)]})
+    harness = Harness({("GET", f"{REPO}/commits/c1"): [reply(200, body)]})
 
     presence = harness.run(lambda forge: forge.commit_exists("c1"))
 
@@ -344,13 +344,13 @@ def test_a_present_commit_carries_its_authored_instant() -> None:
 
 
 def test_changes_filter_by_base_and_head_themselves_and_page_closed_ones() -> None:
-    first = [_pull(number=200 - n, state="closed", merged_at="2026-10-01T00:00:00Z") for n in range(99)]
-    first.append(_pull(number=1, state="closed") | {"base": {"ref": "release", "sha": "r"}})
-    harness = _Harness(
+    first = [pull(number=200 - n, state="closed", merged_at="2026-10-01T00:00:00Z") for n in range(99)]
+    first.append(pull(number=1, state="closed") | {"base": {"ref": "release", "sha": "r"}})
+    harness = Harness(
         {
-            ("GET", f"{_REPO}/pulls"): [
-                _reply(200, first),
-                _reply(200, [_pull(number=50, state="closed") | {"head": {"ref": "other", "sha": "o"}}]),
+            ("GET", f"{REPO}/pulls"): [
+                reply(200, first),
+                reply(200, [pull(number=50, state="closed") | {"head": {"ref": "other", "sha": "o"}}]),
             ]
         }
     )
@@ -370,7 +370,7 @@ def test_changes_filter_by_base_and_head_themselves_and_page_closed_ones() -> No
 
 @pytest.mark.component
 def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls"): [_reply(200, [], {"ETag": '"v1"'}), _reply(304)]})
+    harness = Harness({("GET", f"{REPO}/pulls"): [reply(200, [], {"ETag": '"v1"'}), reply(304)]})
 
     async def poll(forge: GitHubLanding) -> None:
         record = ResolvedRepository(
@@ -398,7 +398,7 @@ def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:
 
 
 def test_open_change_posts_as_the_hub_user() -> None:
-    harness = _Harness({("POST", f"{_REPO}/pulls"): [_reply(201, _pull(number=9))]})
+    harness = Harness({("POST", f"{REPO}/pulls"): [reply(201, pull(number=9))]})
 
     change = harness.run(lambda forge: forge.open_change("feat", "main", "Title", "Body"))
 
@@ -408,7 +408,7 @@ def test_open_change_posts_as_the_hub_user() -> None:
 
 
 def test_every_call_carries_the_credential_and_a_thirty_second_timeout() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull())]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(200, pull())]})
 
     harness.run(lambda forge: forge.change(7))
 
@@ -418,8 +418,8 @@ def test_every_call_carries_the_credential_and_a_thirty_second_timeout() -> None
 
 
 def test_an_enterprise_server_origin_keeps_its_api_path() -> None:
-    harness = _Harness(
-        {("GET", f"/api/v3{_REPO}/pulls/7"): [_reply(200, _pull())]}, api_url="https://ghe.example.com/api/v3/"
+    harness = Harness(
+        {("GET", f"/api/v3{REPO}/pulls/7"): [reply(200, pull())]}, api_url="https://ghe.example.com/api/v3/"
     )
 
     harness.run(lambda forge: forge.change(7))
@@ -433,15 +433,15 @@ def test_an_enterprise_server_origin_keeps_its_api_path() -> None:
 @pytest.mark.parametrize(
     ("answer", "outcome"),
     [
-        (_reply(202, {"message": "Updating pull request branch."}), UpdateOutcome.ACCEPTED),
-        (_reply(422, {"message": "merge conflict between base and head"}), UpdateOutcome.CONFLICT),
-        (_reply(422, {"message": "expected head sha didn't match current head ref"}), UpdateOutcome.REFUSED),
-        (_reply(405, {"message": "Pull Request is not mergeable"}), UpdateOutcome.REFUSED),
+        (reply(202, {"message": "Updating pull request branch."}), UpdateOutcome.ACCEPTED),
+        (reply(422, {"message": "merge conflict between base and head"}), UpdateOutcome.CONFLICT),
+        (reply(422, {"message": "expected head sha didn't match current head ref"}), UpdateOutcome.REFUSED),
+        (reply(405, {"message": "Pull Request is not mergeable"}), UpdateOutcome.REFUSED),
     ],
     ids=["accepted", "conflict", "other-422", "405"],
 )
 def test_update_from_base_answers_the_outcome_by_merge(answer: httpx2.Response, outcome: UpdateOutcome) -> None:
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/update-branch"): [answer]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/update-branch"): [answer]})
 
     update = harness.run(lambda forge: forge.update_from_base(7, "h1"))
 
@@ -451,7 +451,7 @@ def test_update_from_base_answers_the_outcome_by_merge(answer: httpx2.Response, 
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_update_from_base_refused_the_credential_is_auth(status: int) -> None:
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/update-branch"): [_reply(status, {"message": "Forbidden"})]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/update-branch"): [reply(status, {"message": "Forbidden"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.update_from_base(7, "h1"))
@@ -461,7 +461,7 @@ def test_update_from_base_refused_the_credential_is_auth(status: int) -> None:
 
 @pytest.mark.parametrize("method", list(MergeMethod))
 def test_merge_answers_the_landed_revision_under_its_method(method: MergeMethod) -> None:
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/merge"): [_reply(200, {"merged": True, "sha": "landed"})]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(200, {"merged": True, "sha": "landed"})]})
 
     assert harness.run(lambda forge: forge.merge(7, "h1", method, "msg")) == "landed"
     sent = json.loads(harness.recorded.requests[0].content)
@@ -470,9 +470,7 @@ def test_merge_answers_the_landed_revision_under_its_method(method: MergeMethod)
 
 @pytest.mark.parametrize("status", [405, 409, 422])
 def test_merge_refused_is_rejected_with_the_forges_message_and_never_retried(status: int) -> None:
-    harness = _Harness(
-        {("PUT", f"{_REPO}/pulls/7/merge"): [_reply(status, {"message": "Pull Request is not mergeable"})]}
-    )
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(status, {"message": "Pull Request is not mergeable"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg"))
@@ -482,10 +480,10 @@ def test_merge_refused_is_rejected_with_the_forges_message_and_never_retried(sta
 
 
 def test_a_merge_answer_without_its_revision_reads_the_change_for_it() -> None:
-    harness = _Harness(
+    harness = Harness(
         {
-            ("PUT", f"{_REPO}/pulls/7/merge"): [_reply(200, {"merged": True})],
-            ("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull(state="closed", merged_at="2026-10-04T11:00:00Z"))],
+            ("PUT", f"{REPO}/pulls/7/merge"): [reply(200, {"merged": True})],
+            ("GET", f"{REPO}/pulls/7"): [reply(200, pull(state="closed", merged_at="2026-10-04T11:00:00Z"))],
         }
     )
 
@@ -528,11 +526,11 @@ def test_a_merge_answer_without_its_revision_reads_the_change_for_it() -> None:
 def test_rerun_check_reruns_the_actions_job_and_classifies_the_forges_answer(
     status: int, message: str, expected: Rerun
 ) -> None:
-    harness = _Harness({("POST", f"{_REPO}/actions/jobs/11/rerun"): [_reply(status, {"message": message})]})
+    harness = Harness({("POST", f"{REPO}/actions/jobs/11/rerun"): [reply(status, {"message": message})]})
 
     assert harness.run(lambda forge: forge.rerun_check("11")) == expected
     assert [(request.method, request.url.path) for request in harness.recorded.requests] == [
-        ("POST", f"{_REPO}/actions/jobs/11/rerun")
+        ("POST", f"{REPO}/actions/jobs/11/rerun")
     ]
 
 
@@ -541,7 +539,7 @@ def test_rerun_check_reruns_the_actions_job_and_classifies_the_forges_answer(
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_a_refused_credential_on_any_other_call_is_auth(status: int) -> None:
-    harness = _Harness({("GET", f"{_REPO}/compare/a...b"): [_reply(status, {"message": "Bad credentials"})]})
+    harness = Harness({("GET", f"{REPO}/compare/a...b"): [reply(status, {"message": "Bad credentials"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.compare("a", "b"))
@@ -550,7 +548,7 @@ def test_a_refused_credential_on_any_other_call_is_auth(status: int) -> None:
 
 
 def test_any_other_4xx_is_rejected_with_the_forges_message() -> None:
-    harness = _Harness({("POST", f"{_REPO}/pulls"): [_reply(422, {"message": "A pull request already exists"})]})
+    harness = Harness({("POST", f"{REPO}/pulls"): [reply(422, {"message": "A pull request already exists"})]})
 
     with pytest.raises(ForgeRejected) as raised:
         harness.run(lambda forge: forge.open_change("feat", "main", "t", "b"))
@@ -561,22 +559,22 @@ def test_any_other_4xx_is_rejected_with_the_forges_message() -> None:
 @pytest.mark.parametrize(
     ("route", "call", "what"),
     [
-        (("GET", f"{_REPO}/pulls/7"), lambda forge: forge.change(7), ForgeObject.CHANGE),
+        (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7), ForgeObject.CHANGE),
         (
-            ("PUT", f"{_REPO}/pulls/7/merge"),
+            ("PUT", f"{REPO}/pulls/7/merge"),
             lambda forge: forge.merge(7, "h", MergeMethod.MERGE, "m"),
             ForgeObject.CHANGE,
         ),
-        (("PUT", f"{_REPO}/pulls/7/update-branch"), lambda forge: forge.update_from_base(7, "h"), ForgeObject.CHANGE),
-        (("GET", f"{_REPO}/compare/a...b"), lambda forge: forge.compare("a", "b"), ForgeObject.REVISION),
-        (("GET", f"{_REPO}/commits/h/check-runs"), lambda forge: forge.checks("h"), ForgeObject.REVISION),
+        (("PUT", f"{REPO}/pulls/7/update-branch"), lambda forge: forge.update_from_base(7, "h"), ForgeObject.CHANGE),
+        (("GET", f"{REPO}/compare/a...b"), lambda forge: forge.compare("a", "b"), ForgeObject.REVISION),
+        (("GET", f"{REPO}/commits/h/check-runs"), lambda forge: forge.checks("h"), ForgeObject.REVISION),
     ],
     ids=["change", "merge", "update-branch", "compare", "checks"],
 )
 def test_a_404_with_the_repository_present_names_what_the_call_asked_for(
     route: tuple[str, str], call: Callable[[GitHubLanding], Awaitable[object]], what: ForgeObject
 ) -> None:
-    harness = _Harness({route: [_reply(404, {"message": "Not Found"})], **_PRESENT})
+    harness = Harness({route: [reply(404, {"message": "Not Found"})], **_PRESENT})
 
     with pytest.raises(ForgeNotFound) as raised:
         harness.run(call)
@@ -587,16 +585,16 @@ def test_a_404_with_the_repository_present_names_what_the_call_asked_for(
 @pytest.mark.parametrize(
     ("route", "call"),
     [
-        (("GET", f"{_REPO}/pulls/7"), lambda forge: forge.change(7)),
-        (("GET", f"{_REPO}/git/ref/heads/main"), lambda forge: forge.branch_tip("main")),
-        (("GET", f"{_REPO}/commits/c1"), lambda forge: forge.commit_exists("c1")),
+        (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7)),
+        (("GET", f"{REPO}/git/ref/heads/main"), lambda forge: forge.branch_tip("main")),
+        (("GET", f"{REPO}/commits/c1"), lambda forge: forge.commit_exists("c1")),
     ],
     ids=["change", "branch_tip", "commit_exists"],
 )
 def test_a_404_with_the_repository_missing_too_is_a_missing_repository(
     route: tuple[str, str], call: Callable[[GitHubLanding], Awaitable[object]]
 ) -> None:
-    harness = _Harness({route: [_reply(404, {"message": "Not Found"})], **_ABSENT})
+    harness = Harness({route: [reply(404, {"message": "Not Found"})], **_ABSENT})
 
     with pytest.raises(ForgeNotFound) as raised:
         harness.run(call)
@@ -605,31 +603,31 @@ def test_a_404_with_the_repository_missing_too_is_a_missing_repository(
 
 
 def test_a_missing_branch_tip_on_a_present_repository_is_none() -> None:
-    harness = _Harness({("GET", f"{_REPO}/git/ref/heads/gone"): [_reply(404, {})], **_PRESENT})
+    harness = Harness({("GET", f"{REPO}/git/ref/heads/gone"): [reply(404, {})], **_PRESENT})
 
     assert harness.run(lambda forge: forge.branch_tip("gone")) is None
 
 
 def test_a_missing_commit_on_a_present_repository_is_absent() -> None:
-    harness = _Harness({("GET", f"{_REPO}/commits/c1"): [_reply(404, {})], **_PRESENT})
+    harness = Harness({("GET", f"{REPO}/commits/c1"): [reply(404, {})], **_PRESENT})
 
     assert harness.run(lambda forge: forge.commit_exists("c1")) == CommitPresence(False)
 
 
 def test_the_probes_answer_is_kept_for_sixty_seconds() -> None:
-    harness = _Harness({("GET", f"{_REPO}/git/ref/heads/gone"): [_reply(404, {})], **_PRESENT})
+    harness = Harness({("GET", f"{REPO}/git/ref/heads/gone"): [reply(404, {})], **_PRESENT})
 
     async def misses(forge: GitHubLanding) -> None:
         await forge.branch_tip("gone")
         harness.clock.advance(timedelta(seconds=59))
         await forge.branch_tip("gone")
-        assert harness.recorded.paths().count(_REPO) == 1
+        assert harness.recorded.paths().count(REPO) == 1
         harness.clock.advance(timedelta(seconds=1))
         await forge.branch_tip("gone")
 
     harness.run(misses)
 
-    assert harness.recorded.paths().count(_REPO) == 2
+    assert harness.recorded.paths().count(REPO) == 2
 
 
 @pytest.mark.parametrize(
@@ -658,7 +656,7 @@ def test_the_probes_answer_is_kept_for_sixty_seconds() -> None:
 def test_a_rate_limit_says_when_to_resume_and_is_never_retried(
     status: int, headers: dict[str, str], body: dict[str, str], resume_after: int
 ) -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(status, body, headers)]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(status, body, headers)]})
 
     with pytest.raises(ForgeRateLimited) as raised:
         harness.run(lambda forge: forge.change(7))
@@ -668,7 +666,7 @@ def test_a_rate_limit_says_when_to_resume_and_is_never_retried(
 
 
 def test_a_rate_limited_rerun_is_rate_limited_not_refused() -> None:
-    harness = _Harness({("POST", f"{_REPO}/actions/jobs/11/rerun"): [_reply(403, {}, {"x-ratelimit-remaining": "0"})]})
+    harness = Harness({("POST", f"{REPO}/actions/jobs/11/rerun"): [reply(403, {}, {"x-ratelimit-remaining": "0"})]})
 
     with pytest.raises(ForgeRateLimited):
         harness.run(lambda forge: forge.rerun_check("11"))
@@ -676,11 +674,11 @@ def test_a_rate_limited_rerun_is_rate_limited_not_refused() -> None:
 
 @pytest.mark.parametrize(
     "failure",
-    [_reply(502, {}), _reply(500), httpx2.ConnectError("refused"), httpx2.ReadTimeout("timed out")],
+    [reply(502, {}), reply(500), httpx2.ConnectError("refused"), httpx2.ReadTimeout("timed out")],
     ids=["502", "500", "refused", "timeout"],
 )
 def test_an_unavailable_forge_is_retried_after_one_then_three_seconds(failure: _Answer) -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [failure]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [failure]})
 
     with pytest.raises(ForgeUnavailable) as raised:
         harness.run(lambda forge: forge.change(7))
@@ -691,14 +689,14 @@ def test_an_unavailable_forge_is_retried_after_one_then_three_seconds(failure: _
 
 
 def test_a_retry_that_gets_an_answer_answers_it() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(503), _reply(200, _pull())]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(503), reply(200, pull())]})
 
     assert harness.run(lambda forge: forge.change(7)).number == 7
     assert harness.sleeps == [1.0]
 
 
 def test_a_write_holds_the_credentials_lock_around_each_attempt_never_through_the_wait() -> None:
-    harness = _Harness({("PUT", f"{_REPO}/pulls/7/merge"): [_reply(502), _reply(200, {"merged": True, "sha": "x"})]})
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(502), reply(200, {"merged": True, "sha": "x"})]})
 
     harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg"))
 
@@ -707,7 +705,7 @@ def test_a_write_holds_the_credentials_lock_around_each_attempt_never_through_th
 
 
 def test_a_read_takes_no_lock() -> None:
-    harness = _Harness({("GET", f"{_REPO}/pulls/7"): [_reply(200, _pull())]})
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [reply(200, pull())]})
 
     harness.run(lambda forge: forge.change(7))
 

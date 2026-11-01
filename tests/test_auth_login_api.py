@@ -46,7 +46,7 @@ class FakeOAuthProvider:
         return identity
 
 
-def _state_from_redirect(location: str) -> str:
+def state_from_redirect(location: str) -> str:
     # `RedirectResponse` urlencodes the query string the fake's `authorize_url` built.
     return location.rsplit("state=", 1)[1]
 
@@ -124,7 +124,7 @@ def test_full_dance_ends_with_a_session_cookie_and_a_working_me(tmp_path: Path) 
     known_ada(hub)
 
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
 
     callback_resp = hub.client.get(f"/api/auth/github/callback?code=code1&state={state}", follow_redirects=False)
     assert callback_resp.status_code in (302, 307)
@@ -144,7 +144,7 @@ def test_no_provider_token_is_ever_set_as_a_cookie(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
     known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
 
     callback_resp = hub.client.get(f"/api/auth/github/callback?code=code1&state={state}", follow_redirects=False)
 
@@ -156,7 +156,7 @@ def test_no_provider_token_is_ever_set_as_a_cookie(tmp_path: Path) -> None:
 
 def _login(hub: HubHarness, provider: FakeOAuthProvider, code: str) -> None:
     authorize_resp = hub.client.get(f"/api/auth/{provider.name}/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
     resp = hub.client.get(f"/api/auth/{provider.name}/callback?code={code}&state={state}", follow_redirects=False)
     assert resp.status_code in (302, 307), resp.text
 
@@ -242,7 +242,7 @@ def test_provider_handle_rename_refreshes_without_reminting(tmp_path: Path) -> N
 
 def _callback(hub: HubHarness, provider: FakeOAuthProvider, code: str) -> Any:
     authorize_resp = hub.client.get(f"/api/auth/{provider.name}/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
     return hub.client.get(f"/api/auth/{provider.name}/callback?code={code}&state={state}", follow_redirects=False)
 
 
@@ -310,7 +310,7 @@ def test_callback_rejects_a_failed_exchange_and_emits_a_login_failed_fact(tmp_pa
     github = FakeOAuthProvider(name="github")
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
 
     resp = hub.client.get(f"/api/auth/github/callback?code=unknown-code&state={state}", follow_redirects=False)
     assert resp.status_code == 400
@@ -323,7 +323,7 @@ def test_callback_refuses_a_state_minted_for_a_different_provider(tmp_path: Path
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github, "oidc-co": oidc})
 
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
 
     resp = hub.client.get(f"/api/auth/oidc-co/callback?code=abc&state={state}", follow_redirects=False)
     assert resp.status_code == 400
@@ -339,7 +339,7 @@ def test_callback_state_is_single_use(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
     known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
 
     first = hub.client.get(f"/api/auth/github/callback?code=c1&state={state}", follow_redirects=False)
     assert first.status_code in (302, 307)
@@ -358,7 +358,7 @@ def test_logout_deletes_the_session_row_and_the_cookie_stops_resolving(tmp_path:
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
     known_ada(hub)
     authorize_resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
-    state = _state_from_redirect(authorize_resp.headers["location"])
+    state = state_from_redirect(authorize_resp.headers["location"])
     hub.client.get(f"/api/auth/github/callback?code=c1&state={state}", follow_redirects=False)
     assert hub.client.get("/api/me").status_code == 200
 

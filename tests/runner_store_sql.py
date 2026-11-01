@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,7 +52,7 @@ def _stored_revision(conn: sqlite3.Connection) -> str | None:
 
 
 @contextmanager
-def _open(store: Path) -> Iterator[tuple[sqlite3.Connection, dict[str, Any]]]:
+def _open(store: Path) -> Generator[tuple[sqlite3.Connection, dict[str, Any]]]:
     contract = load_contract()
     conn = sqlite3.connect(store)
     try:

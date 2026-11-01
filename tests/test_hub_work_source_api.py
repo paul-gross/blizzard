@@ -616,14 +616,14 @@ def test_patch_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_every_work_source_route(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)
     ref = warn_hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
 
     hub = build_hub(tmp_path)
-    headers = _bearer(token)
+    headers = bearer(token)
     assert hub.client.get("/api/work-sources", headers=headers).status_code == 403
     assert hub.client.get("/api/work-sources/hub/items", headers=headers).status_code == 403
     assert (

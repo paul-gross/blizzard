@@ -77,7 +77,7 @@ def _turns_over_cap(fraction: float) -> int:
     """How many no-text turns sum past ``fraction`` of the cap, MEASURED off the real wire
     shape. A hard-coded byte figure here drifted 3x unnoticed and silently tripled every
     batch derived from it — the count a test wants is a function of the shape, not a literal."""
-    per_turn = len(json.dumps(_turn_wire(_turn(0, ""), 0)).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    per_turn = len(json.dumps(_turn_wire(normalized_turn(0, ""), 0)).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
     return _cap_share(fraction) // per_turn
 
 
@@ -115,7 +115,7 @@ def _ledger_row_stub() -> TranscriptSegmentState:
     )
 
 
-def _turn(index: int, text: str) -> NormalizedTurn:
+def normalized_turn(index: int, text: str) -> NormalizedTurn:
     return NormalizedTurn(
         index=index,
         kind="asst",
@@ -197,13 +197,13 @@ def _sidechain_turn(index: int, *, sidechain_text: str) -> NormalizedTurn:
         tool=_tool_call(""),
         thinking_redacted=False,
         sidechain=SidechainConversation(
-            agent_id="sub_1", agent_type="general", link="linked", turns=[_turn(0, sidechain_text)]
+            agent_id="sub_1", agent_type="general", link="linked", turns=[normalized_turn(0, sidechain_text)]
         ),
         truncated=False,
     )
 
 
-def _batch(
+def transcript_batch(
     turns: list[NormalizedTurn],
     *,
     next_token: str,
@@ -230,13 +230,15 @@ def _batch(
     )
 
 
-def _incomplete_batch(
+def incomplete_batch(
     turns: list[NormalizedTurn], *, next_token: str, unlinked_sidechains: list[SidechainConversation] | None = None
 ) -> TranscriptBatch:
     """``_batch``'s ``complete=False`` counterpart — the per-batch read budget ran out
     before this whole window was covered, so ``next_position`` is where a caller resumes
     RIGHT NOW, not next tick."""
-    return replace(_batch(turns, next_token=next_token, unlinked_sidechains=unlinked_sidechains), complete=False)
+    return replace(
+        transcript_batch(turns, next_token=next_token, unlinked_sidechains=unlinked_sidechains), complete=False
+    )
 
 
 def _assert_gapless_contiguous(pending: Sequence[BufferedTranscriptDelta], *, total_turns: int) -> list[dict[str, Any]]:
@@ -255,7 +257,7 @@ def _assert_gapless_contiguous(pending: Sequence[BufferedTranscriptDelta], *, to
 
 def _unlinked_sidechain(agent_id: str) -> SidechainConversation:
     return SidechainConversation(
-        agent_id=agent_id, agent_type="general", link="unlinked", turns=[_turn(0, "orphaned subagent turn")]
+        agent_id=agent_id, agent_type="general", link="unlinked", turns=[normalized_turn(0, "orphaned subagent turn")]
     )
 
 
@@ -318,7 +320,7 @@ def _spawn_one_segment(ctx) -> str:
 
 
 def test_pump_is_a_noop_when_ship_is_false() -> None:
-    ctx, source = _ctx(ship=False, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=False, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
     TranscriptPump(ctx).run()
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
@@ -328,7 +330,7 @@ def test_pump_is_a_noop_when_ship_is_false() -> None:
 def test_pump_skips_a_segment_already_stopped_from_shipping() -> None:
     """`_pump_one`'s first guard — an already-latched segment never reads the
     source at all. No prior test ever seeded `shipping_stopped_reason` first."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
 
@@ -367,7 +369,12 @@ def test_pump_retries_from_the_same_cursor_when_the_source_is_unavailable() -> N
 
 
 def test_pump_ships_a_record_and_advances_the_cursor() -> None:
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi"), _turn(1, "there")], next_token="pos-1")})
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": transcript_batch([normalized_turn(0, "hi"), normalized_turn(1, "there")], next_token="pos-1")
+        },
+    )
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -391,13 +398,13 @@ def test_pump_ships_a_record_and_advances_the_cursor() -> None:
 
 
 def test_pump_never_reads_before_the_cursor() -> None:
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
     # A real source never re-serves the same turns at the same position; scripting the
     # second read to advance keeps the fake honest about what `since` is carried into.
-    source._batches["sess-a"] = _batch([_turn(1, "more")], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(1, "more")], next_token="pos-2")
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[0][2] is None  # first read: from the start
@@ -408,7 +415,7 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
     """A window can move the source's read position without producing any turn — e.g. a run
     of control records the normalizer drops. The cursor must still advance, or every later
     tick re-reads and re-normalizes the exact same bytes from the same stale position."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -419,7 +426,7 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
     assert segment.normalizer_version == "fake/1"  # learned even with nothing to ship
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # nothing to ship — no record enqueued
 
-    source._batches["sess-a"] = _batch([_turn(0, "finally a turn")], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "finally a turn")], next_token="pos-2")
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[-1][2] == TranscriptPosition("pos-1")  # read from the advanced cursor
@@ -432,7 +439,7 @@ def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
     """A single turn over the cap is truncated in place, not dropped. The TRANSIENT
     reason — ``truncated_reason``, never ``shipping_stopped_reason``."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, huge)], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -461,13 +468,13 @@ def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
     SAME field the chunk-budget stop reads, permanently ending the segment. It must not —
     the very next tick, with a fresh small turn available, still ships."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, huge)], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
     assert ctx.stores.transcript_ledger.transcript_segment(segment_id).truncated_reason == "record_cap_exceeded"  # type: ignore[union-attr]
 
-    source._batches["sess-a"] = _batch([_turn(0, "small")], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "small")], next_token="pos-2")
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[1][2] == TranscriptPosition("pos-1")  # read past the truncated batch
@@ -479,13 +486,13 @@ def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
     """A segment hitting ``record_cap_exceeded`` every tick (never latched) must still warn
     only once — not once per tick, or a chatty session floods the fact lane."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, huge)], next_token="pos-1")})
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-2")
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-3")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-3")
     TranscriptPump(ctx).run()
 
     assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 3  # every tick still shipped, shrunk
@@ -496,16 +503,18 @@ def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
 def test_pump_warns_once_per_reason_even_as_the_segments_displayed_reason_alternates() -> None:
     """A guard on the DISPLAYED reason changing re-warns on every tick for a segment whose
     reason alternates. The warning latches per (segment, reason) instead."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1", truncated=True)})
+    ctx, source = _ctx(
+        ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1", truncated=True)}
+    )
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()  # tick 1: source_read_truncated (mild) — new reason, warns
 
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-2")
     TranscriptPump(ctx).run()  # tick 2: record_cap_exceeded (worse) — new reason, warns
 
-    source._batches["sess-a"] = _batch([_turn(0, "bye")], next_token="pos-3", truncated=True)
+    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "bye")], next_token="pos-3", truncated=True)
     TranscriptPump(ctx).run()  # tick 3: source_read_truncated AGAIN — same reason, no re-warn
 
     fact_events = ctx.stores.outbound.pending_outbound()
@@ -523,7 +532,9 @@ def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
     transcript, not an oversized ``text`` — must shrink too, or the record still ships
     over cap and the hub rejects it."""
     huge_output = "y" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_tool_turn(0, output=huge_output)], next_token="pos-1")})
+    ctx, _source = _ctx(
+        ship=True, batches={"sess-a": transcript_batch([_tool_turn(0, output=huge_output)], next_token="pos-1")}
+    )
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -549,7 +560,7 @@ def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
     shrinkable as a top-level one — the shrink must recurse into ``sidechain.turns``."""
     huge = "z" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(
-        ship=True, batches={"sess-a": _batch([_sidechain_turn(0, sidechain_text=huge)], next_token="pos-1")}
+        ship=True, batches={"sess-a": transcript_batch([_sidechain_turn(0, sidechain_text=huge)], next_token="pos-1")}
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -572,7 +583,7 @@ def test_record_overhead_bounds_every_group_envelope_the_batch_can_produce() -> 
     them — over BOTH range fields, since a later group's start widens just as its end does,
     and a bound over one axis alone leaves the other's digits under-counted."""
     segment = _ledger_row_stub()
-    batch = _batch([_turn(0, "")], next_token="pos-1")
+    batch = transcript_batch([normalized_turn(0, "")], next_token="pos-1")
     turn_count = 100_000
 
     budgeted = _record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
@@ -617,8 +628,8 @@ def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> N
     under-cap records instead needs no shrinking and drops nothing."""
     # Each turn's own JSON overhead (index/kind/timestamp/tool=None/…) is small but not
     # zero; enough turns with no shrinkable text still sums past the cap.
-    many_turns = [_turn(i, "") for i in range(_turns_over_cap(1.5))]
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
+    many_turns = [normalized_turn(i, "") for i in range(_turns_over_cap(1.5))]
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(many_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -643,7 +654,7 @@ def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrink
     now splits into several under-cap records with every byte intact,
     rather than shrinking one combined record's content down to fit."""
     many_turns = [_tool_turn(i, output="x" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(many_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -667,7 +678,7 @@ def test_pump_splits_a_severely_oversized_batch_instead_of_shrinking_every_field
     shape — splits into several fully-intact records. Mirrors the finding's own 50-turn
     measurement, which used to require lossy shrinking; splitting needs none."""
     window_turns = [_tool_turn(i, output="x" * _cap_share(0.06)) for i in range(50)]  # ~3 caps' worth
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(window_turns, next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(window_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -692,7 +703,7 @@ def test_pump_shrinks_an_oversized_tool_input_value_instead_of_emptying_the_reco
     empty-turns slice with the hub-accepted content lost entirely."""
     huge_content = "w" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(
-        ship=True, batches={"sess-a": _batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
+        ship=True, batches={"sess-a": transcript_batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -718,7 +729,7 @@ def test_pump_shrinks_non_ascii_content_by_a_real_fraction_not_to_near_zero() ->
     ``keep_fraction`` to 0.0 on CJK content, emptying a field only ~18% over cap."""
     huge_content = "文" * (_cap_share(1.18) // 6)  # each `文` escapes to 6 bytes; ~18% over cap
     ctx, _source = _ctx(
-        ship=True, batches={"sess-a": _batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
+        ship=True, batches={"sess-a": transcript_batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -745,7 +756,8 @@ def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_r
     whole claimed range is lost the same way if the candidate is never offered."""
     huge_raw = "u" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(
-        ship=True, batches={"sess-a": _batch([_unparsed_input_tool_turn(0, raw=huge_raw)], next_token="pos-1")}
+        ship=True,
+        batches={"sess-a": transcript_batch([_unparsed_input_tool_turn(0, raw=huge_raw)], next_token="pos-1")},
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -770,7 +782,7 @@ def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() ->
     — the batch splits into several under-cap records, each fully intact,
     not a single shrunk-or-emptied one."""
     edits = [_input_tool_turn(i, content="e" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(edits, next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(edits, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -806,7 +818,7 @@ def test_pump_skips_rather_than_silently_re_shipping_when_turns_carry_no_next_po
         session_id="sess-a",
         available=True,
         reason=None,
-        turns=[_turn(0, "hi")],
+        turns=[normalized_turn(0, "hi")],
         unlinked_sidechains=[],
         next_position=None,
         complete=True,
@@ -833,7 +845,9 @@ def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -
     """The same stuck source against a segment that HAS pumped: `new_cursor` falls back to its
     own cursor, so a null-check passes. The guard is that the cursor CHANGED, and it skips
     rather than raises, so the loop's other segments still proceed."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "first")], next_token="pos-1")})
+    ctx, source = _ctx(
+        ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "first")], next_token="pos-1")}
+    )
     segment_id = _spawn_one_segment(ctx)
     TranscriptPump(ctx).run()
     assert ctx.stores.transcript_ledger.transcript_segment(segment_id).cursor == "pos-1"  # type: ignore[union-attr]
@@ -842,7 +856,7 @@ def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -
         session_id="sess-a",
         available=True,
         reason=None,
-        turns=[_turn(0, "second"), _turn(1, "third")],
+        turns=[normalized_turn(0, "second"), normalized_turn(1, "third")],
         unlinked_sidechains=[],
         next_position=None,  # stuck: turns to ship, nowhere to advance to
         complete=True,
@@ -866,7 +880,7 @@ def test_pump_marks_and_warns_when_the_source_read_itself_came_back_truncated() 
     """`TranscriptBatch.truncated` (the main file's own tail cap) must latch the segment,
     fire a fact-lane warning, and — since this batch carries turns — mark the shipped
     wire record `record_truncated: true` too, not just the local, silent flag."""
-    batch = _batch([_turn(0, "hi")], next_token="pos-1", truncated=True)
+    batch = transcript_batch([normalized_turn(0, "hi")], next_token="pos-1", truncated=True)
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     segment_id = _spawn_one_segment(ctx)
 
@@ -888,7 +902,7 @@ def test_pump_marks_and_warns_when_the_sidechain_fanout_budget_ran_out() -> None
     """`TranscriptBatch.sidechain_truncated` (the sidecar fan-out budget) is a distinct
     read-incompleteness signal from the main file's own tail cap, and must latch and warn
     exactly the same way."""
-    batch = _batch([_turn(0, "hi")], next_token="pos-1", sidechain_truncated=True)
+    batch = transcript_batch([normalized_turn(0, "hi")], next_token="pos-1", sidechain_truncated=True)
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     segment_id = _spawn_one_segment(ctx)
 
@@ -905,7 +919,7 @@ def test_pump_marks_and_warns_when_the_sidechain_fanout_budget_ran_out() -> None
 def test_pump_marks_and_warns_on_a_truncated_source_read_with_no_turns() -> None:
     """The turnless branch can be tail/sidecar-truncated too — no turns to claim a range
     over, but the loss still needs a trace, exactly like the with-turns case above."""
-    batch = _batch([], next_token="pos-1", truncated=True)
+    batch = transcript_batch([], next_token="pos-1", truncated=True)
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     segment_id = _spawn_one_segment(ctx)
 
@@ -921,7 +935,7 @@ def test_pump_marks_and_warns_on_a_truncated_source_read_with_no_turns() -> None
 
 
 def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_finalizes() -> None:
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     # Fake the chunk already at its 64 MB budget via a prior record, cheaply — no real content.
     ctx.stores.transcript_ledger.record_transcript_deltas(
@@ -959,7 +973,9 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
 def test_a_raise_before_the_warning_leaves_the_dropped_sidechain_unlatched() -> None:
     """The latch is taken where the warning is emitted, not at the read: a failure between
     the two would otherwise mark the agent warned about while nothing ever warned."""
-    batch = _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+    batch = transcript_batch(
+        [normalized_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+    )
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     _spawn_one_segment(ctx)
     real_record = ctx.stores.transcript_ledger.record_transcript_deltas
@@ -990,7 +1006,9 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
     ctx, _source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+            )
         },
     )
     segment_id = _spawn_one_segment(ctx)
@@ -1020,7 +1038,7 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
 def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     """A same-session resume must not leave two open
     segments reading it — the pump only ever finds ONE, picking up where it left off."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
     TranscriptPump(ctx).run()
     first_pending = len(ctx.stores.transcript_ledger.pending_transcript_outbound())
@@ -1038,7 +1056,9 @@ def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     assert len(open_segments) == 1  # exactly one open segment ever reads "sess-a"
     assert open_segments[0].cursor == "pos-1"  # carried forward, not re-read from the start
 
-    source._batches["sess-a"] = _batch([_turn(0, "hi"), _turn(1, "more")], next_token="pos-2")
+    source._batches["sess-a"] = transcript_batch(
+        [normalized_turn(0, "hi"), normalized_turn(1, "more")], next_token="pos-2"
+    )
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[-1][2] == TranscriptPosition("pos-1")  # reads from gen 1's cursor, not from None
@@ -1054,7 +1074,8 @@ def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
     ``run()`` — so ``Attempt.close`` must pump the lease's own segment first, or content
     written since the last pump never ships."""
     ctx, _source = _ctx(
-        ship=True, batches={"sess-a": _batch([_turn(0, "last output before failure")], next_token="pos-1")}
+        ship=True,
+        batches={"sess-a": transcript_batch([normalized_turn(0, "last output before failure")], next_token="pos-1")},
     )
     segment_id = _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
@@ -1078,7 +1099,7 @@ def test_pump_lease_yields_to_its_own_deadline() -> None:
     """``pump_lease`` must honor an already-elapsed deadline exactly like
     ``run()`` does — the bound ``Attempt.close`` computes before calling it, so a slow
     transcript-source read can never delay the closure it precedes past a few seconds."""
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
@@ -1105,7 +1126,7 @@ def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
     """``pump_lease`` honoring a deadline is worth nothing unless
     ``Attempt.close`` actually computes and passes one. Passing ``None`` there survives
     every other case, so the bound is pinned at the closure boundary itself."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     ctx = replace(ctx, clock=_AdvancingClock(instant=_NOW))
     _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
@@ -1182,7 +1203,7 @@ def test_lease_close_survives_a_raising_transcript_source() -> None:
 def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
     """``run()`` iterates every open segment with no bound unless given a ``deadline``. One
     already past on entry must stop it before the first segment, leaving the rest for later."""
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
     ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
@@ -1252,7 +1273,7 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
     """Without a per-segment `try`, one segment's pump failure aborts `run()`'s whole loop
     before a later segment is attempted. One bad segment must not stop the others."""
     store = make_store("sqlite://")
-    good_batch = _batch([_turn(0, "hi")], next_token="pos-1")
+    good_batch = transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")
     source = _PartiallyRaisingTranscriptSource(raising_session="sess-bad", batch=good_batch)
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-bad", pid=1, process_start_time="1", pgid=1),
@@ -1321,7 +1342,9 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_alongside_a_normal_record()
     """A subagent conversation whose parent turn is outside the read window surfaces on
     ``batch.unlinked_sidechains``, never silently dropped. #247's schema has no field for
     it, so it rides its own fact-lane warning rather than the wire record."""
-    batch = _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+    batch = transcript_batch(
+        [normalized_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+    )
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     _spawn_one_segment(ctx)
 
@@ -1342,7 +1365,7 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_with_no_turns() -> None:
     """The turnless-batch path must not silently advance the cursor when an unlinked
     sidechain was the only thing in the window — that loss still needs a trace, even
     though (unlike a truncation) it claims no turn range on the wire lane at all."""
-    batch = _batch([], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+    batch = transcript_batch([], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     segment_id = _spawn_one_segment(ctx)
 
@@ -1368,19 +1391,21 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
     ctx, source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+            )
         },
     )
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = _batch(
-        [_turn(1, "again")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+    source._batches["sess-a"] = transcript_batch(
+        [normalized_turn(1, "again")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
     )
     TranscriptPump(ctx).run()
     # A second, distinct subagent still gets its own first warning.
-    source._batches["sess-a"] = _batch(
-        [_turn(2, "again")],
+    source._batches["sess-a"] = transcript_batch(
+        [normalized_turn(2, "again")],
         next_token="pos-3",
         unlinked_sidechains=[_unlinked_sidechain("sub_1"), _unlinked_sidechain("sub_2")],
     )
@@ -1405,7 +1430,7 @@ def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> Non
     # The midpoint of the two caps — in the band by construction, however either moves.
     per_turn = (TRANSCRIPT_RECORD_MAX_BYTES + HUB_RECORD_MAX_BYTES) // 2 // 5
     turns = [_tool_turn(i, output="x" * per_turn) for i in range(5)]
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -1447,8 +1472,8 @@ def test_pump_isolates_a_single_pathological_turn_from_its_siblings() -> None:
     """A single turn over cap even after shrinking still falls back to
     an explicit empty-turns record, scoped to just its own range. Sibling turns in the
     same batch ship normally, in their own record(s), never swept up in its loss."""
-    turns = [_turn(0, "before"), _unshrinkable_tool_turn(1), _turn(2, "after")]
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    turns = [normalized_turn(0, "before"), _unshrinkable_tool_turn(1), normalized_turn(2, "after")]
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -1476,7 +1501,7 @@ def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_wh
     cursor write, they must ship all-or-nothing against the 64 MB per-chunk budget —
     summed across every record the batch would produce, not just checked against one."""
     turns = [_tool_turn(i, output="x" * 300_000) for i in range(5)]  # splits into >1 record
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch(turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     # Close enough to the budget that THIS tick's own (summed, multi-record) total tips it,
     # but not already AT the budget — the pre-read guard already covers that simpler case.
@@ -1562,9 +1587,9 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
     `pump_lease` must loop reading the same segment until it catches up, not stop after
     one window like `run()` does."""
     batches = [
-        _incomplete_batch([_turn(0, "a")], next_token="pos-1"),
-        _incomplete_batch([_turn(1, "b")], next_token="pos-2"),
-        _batch([_turn(2, "c")], next_token="pos-3"),  # complete=True — the drain's last read
+        incomplete_batch([normalized_turn(0, "a")], next_token="pos-1"),
+        incomplete_batch([normalized_turn(1, "b")], next_token="pos-2"),
+        transcript_batch([normalized_turn(2, "c")], next_token="pos-3"),  # complete=True — the drain's last read
     ]
     source = _SequencedTranscriptSource("sess-a", batches)
     harness = FakeHarness(
@@ -1641,9 +1666,9 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
     segment is marked truncated (the new incomplete-closure reason) and the fact-lane
     warning fires, rather than the remaining unread content vanishing once it finalizes."""
     batches = [
-        _incomplete_batch([_turn(0, "a")], next_token="pos-1"),
-        _incomplete_batch([_turn(1, "b")], next_token="pos-2"),
-        _batch([_turn(2, "c")], next_token="pos-3"),
+        incomplete_batch([normalized_turn(0, "a")], next_token="pos-1"),
+        incomplete_batch([normalized_turn(1, "b")], next_token="pos-2"),
+        transcript_batch([normalized_turn(2, "c")], next_token="pos-3"),
     ]
     clock = FixedClock(instant=_NOW)
     inner = _SequencedTranscriptSource("sess-a", batches)
@@ -1742,7 +1767,7 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
     different session id) whose deadline expires right after the first now marks the second."""
     clock = FixedClock(instant=_NOW)
     source = _AdvanceClockAfterSessionSource(
-        batches={"sess-a": _batch([_turn(0, "a")], next_token="pos-1")},
+        batches={"sess-a": transcript_batch([normalized_turn(0, "a")], next_token="pos-1")},
         clock=clock,
         jump=timedelta(seconds=10),
         advance_after="sess-a",
@@ -1808,7 +1833,7 @@ def test_pump_warns_a_dropped_sidechain_even_when_the_cursor_guard_skips_the_seg
         session_id="sess-a",
         available=True,
         reason=None,
-        turns=[_turn(0, "hi")],
+        turns=[normalized_turn(0, "hi")],
         unlinked_sidechains=[_unlinked_sidechain("sub_1")],
         next_position=None,
         complete=True,
@@ -1854,7 +1879,7 @@ def test_pump_shrinks_a_multi_edit_shaped_tool_input_instead_of_emptying_the_rec
     them as shrinkable. Mutation-verify by reverting to the flat top-level-only walk."""
     huge = "e" * (TRANSCRIPT_RECORD_MAX_BYTES // 2)
     turn = _multi_edit_tool_turn(0, old=huge, new=huge)
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([turn], next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch([turn], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -1879,7 +1904,7 @@ def test_pump_shrinking_a_multi_edit_input_never_mutates_the_sources_own_turn() 
     the harness batch's own ``ToolCall``, which the shrink pass then mutates in place."""
     huge = "e" * (TRANSCRIPT_RECORD_MAX_BYTES // 2)
     turn = _multi_edit_tool_turn(0, old=huge, new=huge)
-    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([turn], next_token="pos-1")})
+    ctx, _source = _ctx(ship=True, batches={"sess-a": transcript_batch([turn], next_token="pos-1")})
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
@@ -1900,7 +1925,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
     """A prolonged hub outage leaves buffered content resident
     indefinitely — the pump must not pile more onto it. Transient backpressure, not a
     latch: it self-clears once the outstanding total drops back under the cap."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     over_cap_ctx = replace(
         ctx,
@@ -1940,8 +1965,8 @@ def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_lo
     ctx, source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1"),
-            "sess-b": _batch([_turn(0, "hi")], next_token="pos-1"),
+            "sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1"),
+            "sess-b": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1"),
         },
     )
     segment_a_id = _spawn_one_segment(ctx)
@@ -1988,7 +2013,7 @@ def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read
     """The backpressure gate returning early looked
     identical to a caught-up segment to ``pump_lease``'s drain loop — the segment finalized
     with its content never even attempted, no truncated_reason, no fact-lane warning."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx, source = _ctx(ship=True, batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
@@ -2072,7 +2097,7 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
         session_id="sess-a",
         available=True,
         reason=None,
-        turns=[_turn(0, "first"), _turn(1, "second")],
+        turns=[normalized_turn(0, "first"), normalized_turn(1, "second")],
         unlinked_sidechains=[],
         next_position=None,
         complete=True,
@@ -2105,7 +2130,11 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
 def test_a_configured_chunk_budget_stops_shipping_where_the_default_would_not() -> None:
     """The whole point of the knob: the same already-shipped total that is nowhere near the
     64 MB default stops the lane once an operator narrows the budget to it."""
-    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")}, chunk_max_bytes=500)
+    ctx, source = _ctx(
+        ship=True,
+        batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")},
+        chunk_max_bytes=500,
+    )
     segment_id = _spawn_one_segment(ctx)
     ctx.stores.transcript_ledger.record_transcript_deltas(
         segment_id=segment_id,
@@ -2132,7 +2161,7 @@ def test_a_widened_chunk_budget_ships_past_the_default_ceiling() -> None:
     64 MB default keeps shipping under a widened budget rather than latching stopped."""
     ctx, _source = _ctx(
         ship=True,
-        batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")},
+        batches={"sess-a": transcript_batch([normalized_turn(0, "hi")], next_token="pos-1")},
         chunk_max_bytes=CHUNK_TRANSCRIPT_MAX_BYTES * 4,
     )
     segment_id = _spawn_one_segment(ctx)
@@ -2161,7 +2190,7 @@ def test_a_configured_record_cap_shrinks_a_batch_the_default_would_ship_whole() 
     marks the record truncated where the 8 MB default would have shipped the text intact."""
     ctx, _source = _ctx(
         ship=True,
-        batches={"sess-a": _batch([_turn(0, "x" * 4000)], next_token="pos-1")},
+        batches={"sess-a": transcript_batch([normalized_turn(0, "x" * 4000)], next_token="pos-1")},
         record_max_bytes=1500,
     )
     segment_id = _spawn_one_segment(ctx)
@@ -2206,7 +2235,9 @@ def test_a_result_whose_call_shipped_last_window_rides_as_an_output_patch() -> N
     ctx, _source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch([], next_token="pos-2", late_tool_outputs=[LateToolOutput("toolu_A", "the result", False)])
+            "sess-a": transcript_batch(
+                [], next_token="pos-2", late_tool_outputs=[LateToolOutput("toolu_A", "the result", False)]
+            )
         },
     )
     _spawn_one_segment(ctx)
@@ -2224,7 +2255,9 @@ def test_a_sidechain_links_by_a_pair_a_previous_window_persisted() -> None:
     no pair at all — only the segment's own accumulated map still names the parent."""
     ctx, _source = _ctx(
         ship=True,
-        batches={"sess-a": _batch([], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("agent-7")])},
+        batches={
+            "sess-a": transcript_batch([], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("agent-7")])
+        },
     )
     segment_id = _spawn_one_segment(ctx)
     ctx.stores.transcript_ledger.advance_transcript_cursor(
@@ -2248,7 +2281,11 @@ def test_a_pair_learned_this_window_is_persisted_for_the_next_one() -> None:
     so a crash cannot leave a pair remembered for content the segment never read."""
     ctx, _source = _ctx(
         ship=True,
-        batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-2", agent_tool_use_ids={"agent-7": "toolu_T"})},
+        batches={
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")], next_token="pos-2", agent_tool_use_ids={"agent-7": "toolu_T"}
+            )
+        },
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -2265,7 +2302,9 @@ def test_a_sidechain_with_no_pair_anywhere_is_still_dropped_and_warned() -> None
     ctx, _source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch([_turn(0, "hi")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("ghost")])
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("ghost")]
+            )
         },
     )
     _spawn_one_segment(ctx)
@@ -2283,8 +2322,8 @@ def test_a_linked_sidechain_no_longer_warns_as_dropped() -> None:
     ctx, _source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch(
-                [_turn(0, "hi")],
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")],
                 next_token="pos-2",
                 unlinked_sidechains=[_unlinked_sidechain("agent-7")],
                 agent_tool_use_ids={"agent-7": "toolu_T"},
@@ -2305,8 +2344,8 @@ def test_synthesized_turns_advance_the_range_so_the_next_window_does_not_overlap
     ctx, _source = _ctx(
         ship=True,
         batches={
-            "sess-a": _batch(
-                [_turn(0, "hi")],
+            "sess-a": transcript_batch(
+                [normalized_turn(0, "hi")],
                 next_token="pos-2",
                 late_tool_outputs=[LateToolOutput("toolu_A", "out", False)],
                 unlinked_sidechains=[_unlinked_sidechain("agent-7")],

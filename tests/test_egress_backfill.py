@@ -20,18 +20,18 @@ from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
-from tests.test_egress_events_sweep import _OLD_VERSION, _Events
+from tests.test_egress_events_sweep import OLD_VERSION, Events
 from tests.test_egress_sweep import (
-    _SETTLED,
-    _closed_step,
-    _cursor_rows,
-    _home_project,
-    _hub,
-    _kinds,
-    _project_of,
-    _rows,
-    _store,
-    _sweep,
+    SETTLED,
+    closed_step,
+    egress_cursor_rows,
+    egress_hub,
+    egress_rows,
+    egress_store,
+    egress_sweep,
+    home_project,
+    kinds,
+    project_of,
 )
 from tests.trace_hub import seed_open_tenant_chunk, trace_store
 from tests.worker_http import bind_stubs
@@ -66,7 +66,7 @@ def _service(hub: HubHarness, config: EgressConfig, writer: InMemoryEgressWriter
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressBackfill(
         steps=trace_store(hub),
-        egress=_store(hub),
+        egress=egress_store(hub),
         event_reads=corpus,
         paths=FilePathPolicy("absolute"),
         clock=hub.clock,
@@ -86,55 +86,58 @@ def _data_files(directory: Path) -> list[Path]:
 
 
 def test_the_backfill_writes_the_live_sweeps_rows_for_the_same_window(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _SETTLED)
+    hub, graph = egress_hub(tmp_path, SETTLED)
     live = InMemoryEgressWriter()
-    _sweep(hub, live).sweep()
+    egress_sweep(hub, live).sweep()
     since = hub.clock.now()
-    _closed_step(hub, graph, 1, usage=2)
-    _closed_step(hub, graph, 2, usage=1)
+    closed_step(hub, graph, 1, usage=2)
+    closed_step(hub, graph, 2, usage=1)
     hub.clock.advance(timedelta(seconds=1))
-    _sweep(hub, live).sweep()
+    egress_sweep(hub, live).sweep()
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
-    assert len(_rows(live, "steps")) == 2
-    assert len(_rows(live, "invocations")) == 3
+    assert len(egress_rows(live, "steps")) == 2
+    assert len(egress_rows(live, "invocations")) == 3
 
     written = InMemoryEgressWriter()
-    result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+    result = _service(hub, SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
 
-    assert _without_export_time(_rows(written, "steps")) == _without_export_time(_rows(live, "steps"))
-    assert _without_export_time(_rows(written, "invocations")) == _without_export_time(_rows(live, "invocations"))
+    assert _without_export_time(egress_rows(written, "steps")) == _without_export_time(egress_rows(live, "steps"))
+    assert _without_export_time(egress_rows(written, "invocations")) == _without_export_time(
+        egress_rows(live, "invocations")
+    )
     assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 3), ("events", 0)]
     assert all(p.backfill for p, _ in written.manifests)
 
 
 def test_the_backfill_writes_each_open_tenants_rows(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _SETTLED)
+    hub, graph = egress_hub(tmp_path, SETTLED)
     since = hub.clock.now()
-    chunk_id = _closed_step(hub, graph, 1)
+    chunk_id = closed_step(hub, graph, 1)
     seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
     until = hub.clock.now() + timedelta(seconds=5)
     hub.clock.advance(timedelta(seconds=6))
     written = InMemoryEgressWriter()
 
-    result = _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+    result = _service(hub, SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
 
-    assert [r["chunk_id"] for r in _rows(written, "steps")] == [chunk_id, "ch_other"]
-    assert [r["chunk_id"] for r in _rows(written, "invocations")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in egress_rows(written, "steps")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in egress_rows(written, "invocations")] == [chunk_id, "ch_other"]
     assert [(c.dataset, c.rows) for c in result.datasets] == [("steps", 2), ("invocations", 2), ("events", 1)]
     home = (default_tenant(hub.engine), hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine)))
     other = ("ten_other", "ten_other")
     tenants = {
-        d: [(r["tenant_id"], r["tenant_name"]) for r in _rows(written, d)] for d in ("steps", "invocations", "events")
+        d: [(r["tenant_id"], r["tenant_name"]) for r in egress_rows(written, d)]
+        for d in ("steps", "invocations", "events")
     }
     assert tenants == {"steps": [home, other], "invocations": [home, other], "events": [other]}
 
 
 def test_a_backfill_rewrites_its_window_naming_each_rows_project_as_known_now(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _SETTLED)
+    hub, graph = egress_hub(tmp_path, SETTLED)
     since = hub.clock.now()
-    project_id, _, name = _home_project(hub)
-    _closed_step(hub, graph, 1)
+    project_id, _, name = home_project(hub)
+    closed_step(hub, graph, 1)
     seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
     until = hub.clock.now() + timedelta(seconds=5)
     hub.clock.advance(timedelta(seconds=6))
@@ -142,43 +145,43 @@ def test_a_backfill_rewrites_its_window_naming_each_rows_project_as_known_now(tm
     assert moved.status_code == 200, moved.text
     written = InMemoryEgressWriter()
 
-    _service(hub, _SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
+    _service(hub, SETTLED, written).backfill(since, until, dataset=None, dry_run=False)
 
     home, other = (project_id, "storefront", name), ("proj_ten_other", "default", "Default")
-    projects = {d: [_project_of(r) for r in _rows(written, d)] for d in ("steps", "invocations", "events")}
+    projects = {d: [project_of(r) for r in egress_rows(written, d)] for d in ("steps", "invocations", "events")}
     assert projects == {"steps": [home, other], "invocations": [home, other], "events": [other]}
-    assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
+    assert [r["record_type"] for r in egress_rows(written, "events")] == ["dropped"]
 
 
 def test_the_window_is_half_open(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _SETTLED)
-    _sweep(hub, InMemoryEgressWriter()).sweep()
+    hub, graph = egress_hub(tmp_path, SETTLED)
+    egress_sweep(hub, InMemoryEgressWriter()).sweep()
     since = hub.clock.now()
-    _closed_step(hub, graph, 1)  # closes 5s in
+    closed_step(hub, graph, 1)  # closes 5s in
     closed_at = hub.clock.now()
     hub.clock.advance(timedelta(seconds=1))
     written = InMemoryEgressWriter()
-    service = _service(hub, _SETTLED, written)
+    service = _service(hub, SETTLED, written)
 
     service.backfill(since, closed_at, dataset="steps", dry_run=False)
-    assert _rows(written, "steps") == []
+    assert egress_rows(written, "steps") == []
 
     service.backfill(since, closed_at + timedelta(microseconds=1), dataset="steps", dry_run=False)
-    assert len(_rows(written, "steps")) == 1
+    assert len(egress_rows(written, "steps")) == 1
 
 
 def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursors_stay(tmp_path: Path) -> None:
     config = _real(tmp_path)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     hub.clock.advance(timedelta(days=1))
-    _closed_step(hub, graph, 2)
-    cursors = _cursor_rows(hub)
-    newest = _store(hub).newest_cursor("steps")
+    closed_step(hub, graph, 2)
+    cursors = egress_cursor_rows(hub)
+    newest = egress_store(hub).newest_cursor("steps")
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
 
@@ -193,19 +196,19 @@ def test_a_real_directory_holds_backfill_files_per_date_partition_and_the_cursor
     assert sorted(f.parent.name for f in files) == ["date=2026-07-13", "date=2026-07-14"]
     manifests = [json.loads(m.read_text()) for m in (directory / "_manifests").glob("*.json")]
     assert [m["backfill"] for m in manifests] == [True]  # one page, one pass, one manifest
-    assert _cursor_rows(hub) == cursors
-    assert _store(hub).newest_cursor("steps") == newest
+    assert egress_cursor_rows(hub) == cursors
+    assert egress_store(hub).newest_cursor("steps") == newest
 
 
 def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Path) -> None:
     config = _real(tmp_path, max_rows_per_file=2)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     since = hub.clock.now()
     for ref in (1, 2, 3):
-        _closed_step(hub, graph, ref, usage=1)
+        closed_step(hub, graph, ref, usage=1)
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
     directory = tmp_path / "out"
@@ -224,7 +227,7 @@ def test_a_dry_run_writes_nothing_and_counts_what_a_wet_run_counts(tmp_path: Pat
 
 def test_a_bad_window_or_dataset_is_422_naming_its_bound(tmp_path: Path) -> None:
     config = _real(tmp_path, datasets=("steps",), backfill_max_window=3600)
-    hub, _ = _hub(tmp_path, config)
+    hub, _ = egress_hub(tmp_path, config)
     now = hub.clock.now() - timedelta(hours=2)
 
     inverted = _backfill(hub, now, now)
@@ -245,7 +248,7 @@ def test_a_bad_window_or_dataset_is_422_naming_its_bound(tmp_path: Path) -> None
 
 
 def test_the_export_off_is_409_for_a_wet_run_and_a_dry_run_still_counts(tmp_path: Path) -> None:
-    hub, _ = _hub(tmp_path)
+    hub, _ = egress_hub(tmp_path)
     now = hub.clock.now()
     wet = _backfill(hub, now - timedelta(seconds=1), now)
     assert wet.status_code == 409
@@ -259,13 +262,13 @@ def test_the_export_off_is_409_for_a_wet_run_and_a_dry_run_still_counts(tmp_path
 
 
 def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path, _SETTLED)
-    _sweep(hub, InMemoryEgressWriter()).sweep()
+    hub, graph = egress_hub(tmp_path, SETTLED)
+    egress_sweep(hub, InMemoryEgressWriter()).sweep()
     since = hub.clock.now()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     failing = InMemoryEgressWriter()
     failing.fail = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=1, required_bytes=2)
-    object.__setattr__(hub.hub_services, "egress_backfill", _service(hub, _SETTLED, failing))
+    object.__setattr__(hub.hub_services, "egress_backfill", _service(hub, SETTLED, failing))
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
 
@@ -275,16 +278,16 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
     body = resp.json()
     assert body["cause"] == "low-disk"
     assert body["datasets"] == [{"dataset": "steps", "rows": 0, "files": 0}]
-    assert _kinds(hub) == []
+    assert kinds(hub) == []
 
 
 def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     config = _real(tmp_path, backfill_max_window=3600)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     bound = bind_stubs(post=lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json))
 
     dry = bound.runner.invoke(
@@ -304,9 +307,7 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     assert "backfill_max_window" in wide.output
 
 
-def _events_backfill(
-    world: _Events, since: datetime, until: datetime, *, dry_run: bool = False
-) -> tuple[Any, InMemoryEgressWriter]:
+def _events_backfill(world: Events, since: datetime, until: datetime, *, dry_run: bool = False) -> tuple:
     written = InMemoryEgressWriter()
     config = EgressConfig(directory=Path("unused"), settle_seconds=0)
     result = _service(world.hub, config, written).backfill(since, until, dataset="events", dry_run=dry_run)
@@ -314,14 +315,14 @@ def _events_backfill(
 
 
 def test_an_events_backfill_by_step_start_after_an_upgrade_writes_every_current_derivation(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     since = world.hub.clock.now() - timedelta(seconds=30)
-    second = _closed_step(world.hub, world.graph, 2)
+    second = closed_step(world.hub, world.graph, 2)
     until = world.hub.clock.now() + timedelta(seconds=1)
     world.segment("sg_a")
     world.segment("sg_b", second)
-    world.derive("sg_a", 1, version=_OLD_VERSION)
-    world.derive("sg_b", 2, version=_OLD_VERSION, chunk_id=second)
+    world.derive("sg_a", 1, version=OLD_VERSION)
+    world.derive("sg_b", 2, version=OLD_VERSION, chunk_id=second)
     world.hub.clock.advance(timedelta(days=3))
     world.derive("sg_a", 2)  # the upgrade re-derives sg_a long after the window
     world.hub.clock.advance(timedelta(days=1))
@@ -329,7 +330,7 @@ def test_an_events_backfill_by_step_start_after_an_upgrade_writes_every_current_
 
     result, written = _events_backfill(world, since, until)
 
-    rows = _rows(written, "events")
+    rows = egress_rows(written, "events")
     derivations = [
         (r["segment_id"], r["extractor_version"], r["event_count"]) for r in rows if r["record_type"] == "derivation"
     ]
@@ -342,10 +343,10 @@ def test_an_events_backfill_by_step_start_after_an_upgrade_writes_every_current_
 def test_an_events_backfill_skips_a_step_that_started_outside_the_window_whatever_its_derived_at(
     tmp_path: Path,
 ) -> None:
-    world = _Events(tmp_path)  # this chunk's step starts before the window
+    world = Events(tmp_path)  # this chunk's step starts before the window
     world.hub.clock.advance(timedelta(hours=1))
     since = world.hub.clock.now()
-    inside = _closed_step(world.hub, world.graph, 2)
+    inside = closed_step(world.hub, world.graph, 2)
     world.segment("sg_old")
     world.segment("sg_new", inside)
     world.derive("sg_old", 1)  # derived inside the window
@@ -355,11 +356,11 @@ def test_an_events_backfill_skips_a_step_that_started_outside_the_window_whateve
 
     _, written = _events_backfill(world, since, until)
 
-    assert {r["segment_id"] for r in _rows(written, "events")} == {"sg_new"}
+    assert {r["segment_id"] for r in egress_rows(written, "events")} == {"sg_new"}
 
 
 def test_an_events_dry_run_counts_without_writing(tmp_path: Path) -> None:
-    world = _Events(tmp_path)
+    world = Events(tmp_path)
     since = world.hub.clock.now() - timedelta(seconds=30)
     world.segment("sg_a")
     world.derive("sg_a", 2)
@@ -372,4 +373,4 @@ def test_an_events_dry_run_counts_without_writing(tmp_path: Path) -> None:
     assert nothing.batches == []
     assert dry.dry_run
     assert [(c.dataset, c.rows, c.files) for c in dry.datasets] == [(c.dataset, c.rows, c.files) for c in wet.datasets]
-    assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
+    assert [r["record_type"] for r in egress_rows(written, "events")] == ["dropped"]

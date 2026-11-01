@@ -63,14 +63,14 @@ from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_hub
 
 pytestmark = pytest.mark.component
 
-_SETTLED = EgressConfig(directory=Path("unused"), settle_seconds=0, sweep_seconds=60)
+SETTLED = EgressConfig(directory=Path("unused"), settle_seconds=0, sweep_seconds=60)
 _LOW_DISK = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=5, required_bytes=10)
 _IO = EgressFailure(EgressFailureCause.IO_ERROR, "no such directory")
 _SEQ = itertools.count(1000)
 _PATHS = FilePathPolicy("absolute")
 
 
-def _hub(tmp_path: Path, config: EgressConfig | None = None) -> tuple[HubHarness, Graph]:
+def egress_hub(tmp_path: Path, config: EgressConfig | None = None) -> tuple[HubHarness, Graph]:
     return trace_hub(tmp_path, egress=config) if config is not None else trace_hub(tmp_path)
 
 
@@ -84,7 +84,7 @@ def _app(hub: HubHarness) -> FastAPI:
     return hub.app
 
 
-def _store(hub: HubHarness) -> EgressStore:
+def egress_store(hub: HubHarness) -> EgressStore:
     return EgressStore(
         hub_store_connections(hub.engine),
         hub_events=hub_events_of(hub.engine),
@@ -92,8 +92,8 @@ def _store(hub: HubHarness) -> EgressStore:
     )
 
 
-def _sweep(
-    hub: HubHarness, writer: IEgressWriter, config: EgressConfig = _SETTLED, *, store: EgressStore | None = None
+def egress_sweep(
+    hub: HubHarness, writer: IEgressWriter, config: EgressConfig = SETTLED, *, store: EgressStore | None = None
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
@@ -138,31 +138,31 @@ def _push_usage(hub: HubHarness, chunk_id: str, node_id: str, *, cost: float | N
     assert resp.status_code == 200, resp.text
 
 
-def _node_id(graph: Graph, name: str = "build") -> str:
+def graph_node_id(graph: Graph, name: str = "build") -> str:
     return next(n.node_id for n in graph.nodes if n.name == name)
 
 
-def _closed_step(hub: HubHarness, graph: Graph, ref: int, *, usage: int = 1) -> str:
+def closed_step(hub: HubHarness, graph: Graph, ref: int, *, usage: int = 1) -> str:
     """A chunk claimed, billed ``usage`` times, and moved out of ``build`` — one closed runner step."""
     chunk_id = ingest(hub, [{"source": "default", "ref": str(ref)}])
     claim(hub, chunk_id, seq=next(_SEQ))
     for _ in range(usage):
-        _push_usage(hub, chunk_id, _node_id(graph))
+        _push_usage(hub, chunk_id, graph_node_id(graph))
     hub.clock.advance(timedelta(seconds=5))
     pass_build(hub, chunk_id, graph)
     return chunk_id
 
 
-def _kinds(hub: HubHarness) -> list[str]:
+def kinds(hub: HubHarness) -> list[str]:
     return hub_event_kinds(hub.engine, "egress-")
 
 
-def _cursor_rows(hub: HubHarness) -> int:
+def egress_cursor_rows(hub: HubHarness) -> int:
     with hub.engine.connect() as conn:
         return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(schema.egress_cursor))).scalar_one()
 
 
-def _rows(writer: InMemoryEgressWriter, dataset: str) -> list[dict[str, object]]:
+def egress_rows(writer: InMemoryEgressWriter, dataset: str) -> list[dict[str, object]]:
     return [dict(row.values) for b in writer.batches if b.schema.name == dataset for row in b.rows]
 
 
@@ -174,43 +174,43 @@ def _tenant_of(row: dict[str, object]) -> tuple[object, object]:
     return (row["tenant_id"], row["tenant_name"])
 
 
-def _project_of(row: dict[str, object]) -> tuple[object, object, object]:
+def project_of(row: dict[str, object]) -> tuple[object, object, object]:
     return (row["project_id"], row["project_slug"], row["project_name"])
 
 
-def _home_project(hub: HubHarness) -> tuple[str, str, str]:
+def home_project(hub: HubHarness) -> tuple[str, str, str]:
     """The default tenant's only project as ``(project_id, slug, name)``."""
     project = hub.services.projects.get(ProjectId(default_project(hub.engine)))
     assert project is not None
     return (project.project_id, project.slug, project.name)
 
 
-def _anchored(hub: HubHarness, writer: IEgressWriter, config: EgressConfig = _SETTLED) -> None:
-    _sweep(hub, writer, config).sweep()
+def _anchored(hub: HubHarness, writer: IEgressWriter, config: EgressConfig = SETTLED) -> None:
+    egress_sweep(hub, writer, config).sweep()
 
 
 def test_no_directory_yields_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
-    _closed_step(hub, graph, 1)
+    hub, graph = egress_hub(tmp_path)
+    closed_step(hub, graph, 1)
 
     assert hub.hub_services.egress_export is None
     assert hub.hub_services.egress_unavailable is None
     assert [s.logger_name for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
-    assert _cursor_rows(hub) == 0
+    assert egress_cursor_rows(hub) == 0
 
 
 def test_a_directory_yields_the_sweep_and_the_first_pass_writes_only_the_anchor(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "out", settle_seconds=300)
-    hub, graph = _hub(tmp_path, config)
-    _closed_step(hub, graph, 1)  # closed before the export was on
+    hub, graph = egress_hub(tmp_path, config)
+    closed_step(hub, graph, 1)  # closed before the export was on
     assert [s.logger_name for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == ["blizzard.hub.egress"]
     writer = InMemoryEgressWriter()
 
-    _sweep(hub, writer, config).sweep()
+    egress_sweep(hub, writer, config).sweep()
 
     anchor = hub.clock.now() - timedelta(seconds=300)
-    steps = _store(hub).newest_cursor("steps")
-    invocations = _store(hub).newest_cursor("invocations")
+    steps = egress_store(hub).newest_cursor("steps")
+    invocations = egress_store(hub).newest_cursor("invocations")
     assert steps is not None
     assert invocations is not None
     assert steps.step is not None
@@ -218,17 +218,17 @@ def test_a_directory_yields_the_sweep_and_the_first_pass_writes_only_the_anchor(
     assert steps.usage == invocations.usage == UsagePosition(anchor)
     assert invocations.step is None
     assert (steps.row_count, invocations.row_count) == (0, 0)
-    events = _store(hub).newest_cursor("events")
+    events = egress_store(hub).newest_cursor("events")
     assert events is not None
     assert (events.events, events.step) == (EventsPosition(anchor), None)
     assert writer.batches == []
-    _sweep(hub, writer, config).sweep()
+    egress_sweep(hub, writer, config).sweep()
     assert writer.batches == []
-    assert _cursor_rows(hub) == 3
+    assert egress_cursor_rows(hub) == 3
 
 
 def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_manifest(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     seen: list[tuple[int, int]] = []
 
     class Watching(InMemoryEgressWriter):
@@ -236,27 +236,27 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
             self, egress_pass: EgressPass, placed: Sequence[PlacedFile]
         ) -> ManifestCommitted | EgressFailure:
             # The manifest is being written: this dataset's cursor has not moved yet.
-            seen.append((_cursor_rows(hub), len(self.manifests)))
+            seen.append((egress_cursor_rows(hub), len(self.manifests)))
             return super().commit_pass(egress_pass, placed)
 
     writer = Watching()
     _anchored(hub, writer)
-    chunk_id = _closed_step(hub, graph, 1, usage=2)
+    chunk_id = closed_step(hub, graph, 1, usage=2)
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
-    assert [r["chunk_id"] for r in _rows(writer, "steps")] == [chunk_id]
-    assert [r["usage_id"] for r in _rows(writer, "invocations")] == [1, 2]
-    step = _rows(writer, "steps")[0]
+    assert [r["chunk_id"] for r in egress_rows(writer, "steps")] == [chunk_id]
+    assert [r["usage_id"] for r in egressegress_rows(writer, "invocations")] == [1, 2]
+    step = egress_rows(writer, "steps")[0]
     assert step["invocations"] == 2
     assert step["cost_billed_usd"] == Decimal("1.000000000")
     # steps wrote first: invocations' commit already saw steps' cursor row, and neither had advanced before its own.
     assert seen == [(3, 0), (4, 1)]
-    steps = _store(hub).newest_cursor("steps")
+    steps = egress_store(hub).newest_cursor("steps")
     assert steps is not None
     assert (steps.row_count, len(steps.files)) == (1, 2)
     assert steps.files[-1].startswith("_manifests/")
-    invocations = _store(hub).newest_cursor("invocations")
+    invocations = egress_store(hub).newest_cursor("invocations")
     assert invocations is not None
     assert invocations.row_count == 2
     assert (
@@ -265,31 +265,31 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
 
 
 def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    chunk_id = _closed_step(hub, graph, 1)
+    chunk_id = closed_step(hub, graph, 1)
     closed = hub.clock.now()
     seed_open_tenant_chunk(hub, "ten_other", "ch_other", closed)
     hub.clock.advance(timedelta(seconds=3))
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
-    assert [(r["chunk_id"], r["graph_id"]) for r in _rows(writer, "steps")] == [
+    assert [(r["chunk_id"], r["graph_id"]) for r in egress_rows(writer, "steps")] == [
         (chunk_id, graph.graph_id),
         ("ch_other", "gr_ten_other"),
     ]
-    assert [r["chunk_id"] for r in _rows(writer, "invocations")] == [chunk_id, "ch_other"]
-    assert [r["chunk_id"] for r in _rows(writer, "events")] == ["ch_other"]
+    assert [r["chunk_id"] for r in egressegress_rows(writer, "invocations")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in egress_rows(writer, "events")] == ["ch_other"]
     home = (default_tenant(hub.engine), _tenant_name(hub))
-    assert [_tenant_of(r) for r in _rows(writer, "steps")] == [home, ("ten_other", "ten_other")]
-    assert [_tenant_of(r) for r in _rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
-    assert [_tenant_of(r) for r in _rows(writer, "events")] == [("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in egress_rows(writer, "steps")] == [home, ("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in egressegress_rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in egress_rows(writer, "events")] == [("ten_other", "ten_other")]
     other_project = ("proj_ten_other", "default", "Default")
-    assert [_project_of(r) for r in _rows(writer, "steps")] == [_home_project(hub), other_project]
-    assert [_project_of(r) for r in _rows(writer, "invocations")] == [_home_project(hub), other_project]
-    assert [(r["record_type"], _project_of(r)) for r in _rows(writer, "events")] == [("dropped", other_project)]
-    steps, invocations, events = (_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
+    assert [project_of(r) for r in egress_rows(writer, "steps")] == [home_project(hub), other_project]
+    assert [project_of(r) for r in egressegress_rows(writer, "invocations")] == [home_project(hub), other_project]
+    assert [(r["record_type"], project_of(r)) for r in egress_rows(writer, "events")] == [("dropped", other_project)]
+    steps, invocations, events = (egress_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
     assert steps is not None and steps.step is not None
     assert invocations is not None
     assert events is not None and events.events is not None
@@ -299,14 +299,14 @@ def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_pa
 
 
 def test_rows_land_in_the_partition_of_their_own_time(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    first = _closed_step(hub, graph, 1)
+    first = closed_step(hub, graph, 1)
     hub.clock.advance(timedelta(days=1))
-    second = _closed_step(hub, graph, 2)
+    second = closed_step(hub, graph, 2)
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
     by_partition = {(b.schema.name, str(b.partition)): [r.values["chunk_id"] for r in b.rows] for b in writer.batches}
     assert by_partition[("steps", "2026-07-13")] == [first]
@@ -319,55 +319,55 @@ def test_rows_land_in_the_partition_of_their_own_time(tmp_path: Path) -> None:
 
 def test_a_row_inside_the_settle_window_waits_until_it_has_stood_the_full_window(tmp_path: Path) -> None:
     config = EgressConfig(directory=Path("unused"), settle_seconds=300)
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer, config)
-    _closed_step(hub, graph, 1)  # usage recorded at +0s, the step closed at +5s
+    closed_step(hub, graph, 1)  # usage recorded at +0s, the step closed at +5s
 
     hub.clock.advance(timedelta(seconds=294))
-    _sweep(hub, writer, config).sweep()
+    egress_sweep(hub, writer, config).sweep()
     assert writer.batches == []
 
     hub.clock.advance(timedelta(seconds=5))
-    _sweep(hub, writer, config).sweep()
-    assert (len(_rows(writer, "steps")), len(_rows(writer, "invocations"))) == (0, 1)
+    egress_sweep(hub, writer, config).sweep()
+    assert (len(egress_rows(writer, "steps")), len(egressegress_rows(writer, "invocations"))) == (0, 1)
 
     hub.clock.advance(timedelta(seconds=1))
-    _sweep(hub, writer, config).sweep()
-    assert len(_rows(writer, "steps")) == 1
+    egress_sweep(hub, writer, config).sweep()
+    assert len(egress_rows(writer, "steps")) == 1
 
 
 def test_batch_limit_bounds_a_pass_and_later_passes_take_the_rest_in_order(tmp_path: Path) -> None:
     config = EgressConfig(directory=Path("unused"), settle_seconds=0, batch_limit=1)
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer, config)
-    _closed_step(hub, graph, 1, usage=2)
-    _closed_step(hub, graph, 2)
+    closed_step(hub, graph, 1, usage=2)
+    closed_step(hub, graph, 2)
 
     for _ in range(6):
-        _sweep(hub, writer, config).sweep()
+        egress_sweep(hub, writer, config).sweep()
 
-    assert sorted(int(str(r["usage_id"])) for r in _rows(writer, "invocations")) == [1, 2, 3]
-    assert len(_rows(writer, "steps")) == 2
+    assert sorted(int(str(r["usage_id"])) for r in egressegress_rows(writer, "invocations")) == [1, 2, 3]
+    assert len(egress_rows(writer, "steps")) == 2
 
 
 def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_invocations(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    chunk_id = _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
-    assert [r["invocations"] for r in _rows(writer, "steps")] == [1]
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
+    assert [r["invocations"] for r in egress_rows(writer, "steps")] == [1]
 
     hub.clock.advance(timedelta(hours=3))
-    _push_usage(hub, chunk_id, _node_id(graph), cost=0.25, late=True)  # forwarded after the step was written
-    _sweep(hub, writer).sweep()
+    _push_usage(hub, chunk_id, graph_node_id(graph), cost=0.25, late=True)  # forwarded after the step was written
+    egress_sweep(hub, writer).sweep()
 
-    copies = [r for r in _rows(writer, "steps") if r["chunk_id"] == chunk_id]
+    copies = [r for r in egress_rows(writer, "steps") if r["chunk_id"] == chunk_id]
     assert [c["invocations"] for c in copies] == [1, 2]
     newest = max(copies, key=lambda c: str(c["exported_at"]))
-    invoked = [r for r in _rows(writer, "invocations") if r["chunk_id"] == chunk_id]
+    invoked = [r for r in egress_rows(writer, "invocations") if r["chunk_id"] == chunk_id]
     assert newest["invocations"] == len(invoked)
     for column in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens"):
         assert newest[column] == sum(r[column] for r in invoked)  # type: ignore[misc]
@@ -385,89 +385,89 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
 
 
 def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
     seed_runner(hub, "r1", name="night-runner")
-    chunk_id = _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
 
     # A rename by restart: same id, new name.
     hub.services.fleet.register(added_runner(hub, "r1"), "w1", name="day-runner")
     hub.clock.advance(timedelta(hours=3))
-    _push_usage(hub, chunk_id, _node_id(graph))
-    _sweep(hub, writer).sweep()
+    _push_usage(hub, chunk_id, graph_node_id(graph))
+    egress_sweep(hub, writer).sweep()
 
     named = [("r1", "night-runner"), ("r1", "day-runner")]
-    assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "steps")] == named
-    assert [(r["runner_id"], r["runner_name"]) for r in _rows(writer, "invocations")] == named
+    assert [(r["runner_id"], r["runner_name"]) for r in egress_rows(writer, "steps")] == named
+    assert [(r["runner_id"], r["runner_name"]) for r in egressegress_rows(writer, "invocations")] == named
 
 
 def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
     tenant, before = default_tenant(hub.engine), _tenant_name(hub)
-    chunk_id = _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
 
     with hub.engine.begin() as conn:
         conn.execute(sa.update(schema.tenants).where(schema.tenants.c.tenant_id == tenant).values(name="renamed"))
     hub.hub_services.tenants.open_tenants.refresh()
     hub.clock.advance(timedelta(hours=3))
-    _push_usage(hub, chunk_id, _node_id(graph))
-    _sweep(hub, writer).sweep()
+    _push_usage(hub, chunk_id, graph_node_id(graph))
+    egress_sweep(hub, writer).sweep()
 
     named = [(tenant, before), (tenant, "renamed")]
-    assert [_tenant_of(r) for r in _rows(writer, "steps")] == named
-    assert [_tenant_of(r) for r in _rows(writer, "invocations")] == named
+    assert [_tenant_of(r) for r in egress_rows(writer, "steps")] == named
+    assert [_tenant_of(r) for r in egressegress_rows(writer, "invocations")] == named
 
 
 def test_rows_name_their_project_as_known_when_written_and_a_later_copy_follows_a_slug_change(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    project_id, slug, name = _home_project(hub)
-    chunk_id = _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
+    project_id, slug, name = home_project(hub)
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
 
     moved = hub.client.patch(f"/api/projects/{project_id}", json={"slug": "storefront"})
     assert moved.status_code == 200, moved.text
     hub.clock.advance(timedelta(hours=3))
-    _push_usage(hub, chunk_id, _node_id(graph))
-    _sweep(hub, writer).sweep()
+    _push_usage(hub, chunk_id, graph_node_id(graph))
+    egress_sweep(hub, writer).sweep()
 
     named = [(project_id, slug, name), (project_id, "storefront", name)]
-    assert [_project_of(r) for r in _rows(writer, "steps")] == named
-    assert [_project_of(r) for r in _rows(writer, "invocations")] == named
+    assert [project_of(r) for r in egress_rows(writer, "steps")] == named
+    assert [project_of(r) for r in egressegress_rows(writer, "invocations")] == named
 
 
 def test_one_sweep_names_each_chunks_own_project_across_two_projects_of_a_tenant(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    home = _home_project(hub)
-    first = _closed_step(hub, graph, 1)
-    second = _closed_step(hub, graph, 2)
+    home = home_project(hub)
+    first = closed_step(hub, graph, 1)
+    second = closed_step(hub, graph, 2)
     mobile = seed_project(hub.engine, "mobile")
     with hub.engine.begin() as conn:
         chunks = schema.chunks
         conn.execute(hub_scoped(sa.update(chunks).where(chunks.c.chunk_id == second).values(project_id=mobile)))
     hub.clock.advance(timedelta(seconds=3))
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
     expected = {first: home, second: (mobile, "mobile", "mobile")}
     for dataset in ("steps", "invocations"):
-        assert {r["chunk_id"]: _project_of(r) for r in _rows(writer, dataset)} == expected, dataset
+        assert {r["chunk_id"]: project_of(r) for r in egress_rows(writer, dataset)} == expected, dataset
 
 
 def test_the_exports_failure_and_recovery_reach_the_hub_log_and_no_tenants_log(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
-    sweep = _sweep(hub, writer)
+    sweep = egress_sweep(hub, writer)
     sweep.sweep()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
     hub.clock.advance(timedelta(seconds=3))
     writer.fail = _IO
@@ -477,66 +477,66 @@ def test_the_exports_failure_and_recovery_reach_the_hub_log_and_no_tenants_log(t
 
     sweep.sweep()
 
-    assert [r["chunk_id"] for r in _rows(writer, "steps")][-1] == "ch_other"
-    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    assert [r["chunk_id"] for r in egress_rows(writer, "steps")][-1] == "ch_other"
+    assert kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
     with hub.engine.connect() as conn:
         tenant_kinds = conn.execute(hub_scoped(sa.select(schema.event_log.c.kind))).scalars().all()
     assert [kind for kind in tenant_kinds if kind.startswith("egress-")] == []
 
 
 def test_usage_for_a_step_that_is_still_open_only_moves_the_position(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     claim(hub, chunk_id, seq=next(_SEQ))
-    _push_usage(hub, chunk_id, _node_id(graph))
+    _push_usage(hub, chunk_id, graph_node_id(graph))
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
-    assert _rows(writer, "steps") == []
-    assert len(_rows(writer, "invocations")) == 1
-    pending = _store(hub).newest_cursor("steps")
+    assert egress_rows(writer, "steps") == []
+    assert len(egressegress_rows(writer, "invocations")) == 1
+    pending = egress_store(hub).newest_cursor("steps")
     assert pending is not None
     assert pending.usage.usage_id == 1
     hub.clock.advance(timedelta(seconds=5))
     pass_build(hub, chunk_id, graph)
-    _sweep(hub, writer).sweep()
-    assert [r["invocations"] for r in _rows(writer, "steps")] == [1]
+    egress_sweep(hub, writer).sweep()
+    assert [r["invocations"] for r in egress_rows(writer, "steps")] == [1]
 
 
 def test_steps_read_usage_even_when_invocations_are_not_exported(tmp_path: Path) -> None:
     config = EgressConfig(directory=Path("unused"), settle_seconds=0, datasets=("steps",))
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer, config)
-    chunk_id = _closed_step(hub, graph, 1)
-    _sweep(hub, writer, config).sweep()
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer, config).sweep()
     hub.clock.advance(timedelta(minutes=1))
-    _push_usage(hub, chunk_id, _node_id(graph))
+    _push_usage(hub, chunk_id, graph_node_id(graph))
 
-    _sweep(hub, writer, config).sweep()
+    egress_sweep(hub, writer, config).sweep()
 
-    assert [r["invocations"] for r in _rows(writer, "steps")] == [1, 2]
-    assert _rows(writer, "invocations") == []
-    assert _store(hub).newest_cursor("invocations") is None
+    assert [r["invocations"] for r in egress_rows(writer, "steps")] == [1, 2]
+    assert egressegress_rows(writer, "invocations") == []
+    assert egress_store(hub).newest_cursor("invocations") is None
 
 
 @pytest.mark.parametrize("failure", [_IO, _LOW_DISK])
 def test_a_failed_write_holds_the_cursor_backs_off_and_is_announced_once(
     tmp_path: Path, failure: EgressFailure
 ) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    start = _store(hub).newest_cursor("steps")
-    _closed_step(hub, graph, 1)
+    start = egress_store(hub).newest_cursor("steps")
+    closed_step(hub, graph, 1)
     writer.fail = failure
 
-    _sweep_once = _sweep(hub, writer)
+    _sweep_once = egress_sweep(hub, writer)
     _sweep_once.sweep()
-    assert _store(hub).newest_cursor("steps") == start
-    assert _kinds(hub) == ["egress-write-failed"]
+    assert egress_store(hub).newest_cursor("steps") == start
+    assert kinds(hub) == ["egress-write-failed"]
     [row] = hub_event_rows(hub.engine)
     detail = hub_event_detail(row)
     assert detail["cause"] == failure.cause.value
@@ -553,7 +553,7 @@ def test_a_failed_write_holds_the_cursor_backs_off_and_is_announced_once(
 
     counting = Counting()
     counting.fail = failure
-    retry = _sweep(hub, counting)
+    retry = egress_sweep(hub, counting)
     retry.sweep()
     hub.clock.advance(timedelta(seconds=60))
     retry.sweep()
@@ -564,28 +564,28 @@ def test_a_failed_write_holds_the_cursor_backs_off_and_is_announced_once(
     hub.clock.advance(timedelta(seconds=60))
     retry.sweep()
     assert calls == first + 1
-    assert _kinds(hub) == ["egress-write-failed"]
-    assert _store(hub).newest_cursor("steps") == start
+    assert kinds(hub) == ["egress-write-failed"]
+    assert egress_store(hub).newest_cursor("steps") == start
 
     counting.fail = None
     hub.clock.advance(timedelta(seconds=240))
     retry.sweep()
-    assert len(_rows(counting, "steps")) == 1
-    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    assert len(egress_rows(counting, "steps")) == 1
+    assert kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
 
-    _closed_step(hub, graph, 10)
+    closed_step(hub, graph, 10)
     retry.sweep()
-    assert len(_rows(counting, "steps")) == 2
-    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    assert len(egress_rows(counting, "steps")) == 2
+    assert kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
 
 
 def test_the_backoff_stops_doubling_at_its_cap(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     writer.fail = _IO
-    sweep = _sweep(hub, writer)
+    sweep = egress_sweep(hub, writer)
     for _ in range(8):
         hub.clock.advance(BACKOFF_CAP)
         sweep.sweep()
@@ -596,55 +596,55 @@ def test_the_backoff_stops_doubling_at_its_cap(tmp_path: Path) -> None:
     assert writer.batches == []
     hub.clock.advance(timedelta(seconds=1))
     sweep.sweep()
-    assert len(_rows(writer, "steps")) == 1
+    assert len(egress_rows(writer, "steps")) == 1
 
 
 def test_a_restart_during_an_outage_does_not_announce_it_again(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     writer.fail = _IO
-    _sweep(hub, writer).sweep()
-    assert _kinds(hub) == ["egress-write-failed"]
+    egress_sweep(hub, writer).sweep()
+    assert kinds(hub) == ["egress-write-failed"]
 
-    restarted = _sweep(hub, writer)  # a new process: no latch in memory
+    restarted = egress_sweep(hub, writer)  # a new process: no latch in memory
     hub.clock.advance(timedelta(seconds=60))
     restarted.sweep()
-    assert _kinds(hub) == ["egress-write-failed"]
+    assert kinds(hub) == ["egress-write-failed"]
 
     writer.fail = None
     hub.clock.advance(timedelta(seconds=60))
     restarted.sweep()
-    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    assert kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
 
 
 def test_an_empty_pass_after_a_failure_announces_nothing_until_a_pass_places_files(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     writer.fail = _IO
-    _sweep(hub, writer).sweep()
-    assert _kinds(hub) == ["egress-write-failed"]
+    egress_sweep(hub, writer).sweep()
+    assert kinds(hub) == ["egress-write-failed"]
 
     # The held row is still inside a long settle window, so the next due pass writes nothing:
     # an empty pass proves nothing about the directory and must not announce a recovery.
     writer.fail = None
-    settling = _sweep(hub, writer, EgressConfig(directory=Path("unused"), settle_seconds=600, sweep_seconds=60))
+    settling = egress_sweep(hub, writer, EgressConfig(directory=Path("unused"), settle_seconds=600, sweep_seconds=60))
     hub.clock.advance(timedelta(seconds=60))
     settling.sweep()
     assert writer.batches == []
-    assert _kinds(hub) == ["egress-write-failed"]
+    assert kinds(hub) == ["egress-write-failed"]
 
     hub.clock.advance(timedelta(seconds=600))
     settling.sweep()
-    assert len(_rows(writer, "steps")) == 1
-    assert _kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
+    assert len(egress_rows(writer, "steps")) == 1
+    assert kinds(hub) == ["egress-write-failed", "egress-write-recovered"]
 
 
 def test_a_failure_in_the_second_dataset_keeps_the_first_datasets_cursor_advanced(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
 
     class FailsInvocations(InMemoryEgressWriter):
         def write(self, batch: EgressBatch) -> FilesWritten | EgressFailure:
@@ -652,21 +652,21 @@ def test_a_failure_in_the_second_dataset_keeps_the_first_datasets_cursor_advance
 
     writer = FailsInvocations()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
 
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
 
-    steps = _store(hub).newest_cursor("steps")
-    invocations = _store(hub).newest_cursor("invocations")
+    steps = egress_store(hub).newest_cursor("steps")
+    invocations = egress_store(hub).newest_cursor("invocations")
     assert steps is not None
     assert steps.row_count == 1
     assert invocations is not None
     assert invocations.row_count == 0
-    assert _kinds(hub) == ["egress-write-failed"]
+    assert kinds(hub) == ["egress-write-failed"]
 
 
 def test_a_write_that_raises_is_a_failure_like_any_other(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
 
     class Raises(InMemoryEgressWriter):
         def write(self, batch: EgressBatch) -> FilesWritten | EgressFailure:
@@ -674,37 +674,37 @@ def test_a_write_that_raises_is_a_failure_like_any_other(tmp_path: Path) -> None
 
     writer = Raises()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
-    assert _kinds(hub) == ["egress-write-failed"]
+    closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
+    assert kinds(hub) == ["egress-write-failed"]
 
 
 def test_turning_the_export_off_and_on_resumes_from_the_cursor(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
-    _closed_step(hub, graph, 1)
-    _sweep(hub, writer).sweep()
+    closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
     hub.clock.advance(timedelta(days=2))
-    closed_while_off = _closed_step(hub, graph, 2)
+    closed_while_off = closed_step(hub, graph, 2)
     hub.clock.advance(timedelta(days=2))
 
     resumed = InMemoryEgressWriter()
-    _sweep(hub, resumed).sweep()
+    egress_sweep(hub, resumed).sweep()
 
-    assert [r["chunk_id"] for r in _rows(resumed, "steps")] == [closed_while_off]
-    assert _kinds(hub) == []
+    assert [r["chunk_id"] for r in egress_rows(resumed, "steps")] == [closed_while_off]
+    assert kinds(hub) == []
 
 
 def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     directory = tmp_path / "out"
     directory.mkdir()
     settings = EgressWriterSettings(max_rows_per_file=100, min_free_bytes=0)
-    store = _store(hub)
+    store = egress_store(hub)
     first = NdjsonEgressWriter(directory, settings, "aaaaaa")
     _anchored(hub, first)
-    chunk_id = _closed_step(hub, graph, 1)
+    chunk_id = closed_step(hub, graph, 1)
 
     class Killed(Exception):
         pass
@@ -714,7 +714,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
             raise Killed
 
     with pytest.raises(Killed):
-        _sweep(
+        egress_sweep(
             hub,
             first,
             store=DiesBeforeCursor(
@@ -728,7 +728,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
     hub.clock.advance(timedelta(seconds=10))
 
     second = NdjsonEgressWriter(directory, settings, "bbbbbb")
-    _sweep(hub, second, store=store).sweep()
+    egress_sweep(hub, second, store=store).sweep()
 
     def rows(prefix: str) -> list[dict[str, object]]:
         out = []
@@ -749,11 +749,11 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
 def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -> None:
     (tmp_path / "out").mkdir()
     config = EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
-    _closed_step(hub, graph, 1, usage=2)
+    closed_step(hub, graph, 1, usage=2)
 
     sweep.sweep()
 
@@ -772,15 +772,15 @@ def test_a_real_directory_holds_files_and_manifests_that_agree(tmp_path: Path) -
 
 def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -> None:
     config = EgressConfig(directory=tmp_path / "never-made", settle_seconds=0, min_free_bytes=0)
-    hub, graph = _hub(tmp_path, config)
+    hub, graph = egress_hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
 
     sweep.sweep()
 
-    assert _kinds(hub) == ["egress-write-failed"]
+    assert kinds(hub) == ["egress-write-failed"]
 
 
 def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejection(
@@ -790,12 +790,12 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
         "blizzard.hub.composition.build_egress_writer", lambda *_args: EgressUnavailable("parquet needs pyarrow")
     )
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
-    hub, _graph = _hub(tmp_path, config)
+    hub, _graph = egress_hub(tmp_path, config)
 
     assert hub.hub_services.egress_export is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
     hub_app._announce_rejected_egress(config, hub.hub_services)
-    assert _kinds(hub) == ["egress-config-rejected"]
+    assert kinds(hub) == ["egress-config-rejected"]
     assert hub.client.get("/api/health").status_code == 200
 
 
@@ -810,12 +810,12 @@ def test_each_dataset_schema_names_exactly_its_row_fields_in_order(schema_, row)
 
 
 def test_the_store_returns_usage_in_position_order_past_a_position_and_bounded_by_the_limit(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
-    store = _store(hub)
+    hub, graph = egress_hub(tmp_path)
+    store = egress_store(hub)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     claim(hub, chunk_id, seq=next(_SEQ))
     for _ in range(4):
-        _push_usage(hub, chunk_id, _node_id(graph))
+        _push_usage(hub, chunk_id, graph_node_id(graph))
         hub.clock.advance(timedelta(seconds=1))
     start = UsagePosition(hub.clock.now() - timedelta(days=1))
 
@@ -830,13 +830,13 @@ def test_the_store_returns_usage_in_position_order_past_a_position_and_bounded_b
 
 
 def test_the_store_answers_each_datasets_own_newest_cursor(tmp_path: Path) -> None:
-    hub, _graph = _hub(tmp_path)
-    store = _store(hub)
+    hub, _graph = egress_hub(tmp_path)
+    store = egress_store(hub)
     assert store.newest_cursor("steps") is None
     writer = InMemoryEgressWriter()
     _anchored(hub, writer)
     hub.clock.advance(timedelta(seconds=30))
-    _sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
     steps, invocations = store.newest_cursor("steps"), store.newest_cursor("invocations")
     assert steps is not None
     assert invocations is not None
@@ -846,44 +846,44 @@ def test_the_store_answers_each_datasets_own_newest_cursor(tmp_path: Path) -> No
 
 
 def test_an_idle_pass_reads_no_closing_candidates_however_many_steps_are_open(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
-    sweep = _sweep(hub, writer)
+    sweep = egress_sweep(hub, writer)
     sweep.sweep()
-    _closed_step(hub, graph, 1)
+    closed_step(hub, graph, 1)
     measured: list[tuple[int, int]] = []
     for batch in range(3):
         for ref in range(3):
             chunk_id = ingest(hub, [{"source": "default", "ref": str(100 + batch * 3 + ref)}])
             claim(hub, chunk_id, seq=next(_SEQ))
-            _push_usage(hub, chunk_id, _node_id(graph))
+            _push_usage(hub, chunk_id, graph_node_id(graph))
         hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()  # reads the new rows once and moves past them
-        cursor_rows = _cursor_rows(hub)
+        cursor_rows = egress_cursor_rows(hub)
         measured.append((count_queries(hub.engine, sweep.sweep), count_rows_read(hub.engine, sweep.sweep)))
-        assert _cursor_rows(hub) == cursor_rows
+        assert egress_cursor_rows(hub) == cursor_rows
 
     assert len(set(measured)) == 1
-    assert len(_rows(writer, "steps")) == 1
+    assert len(egress_rows(writer, "steps")) == 1
 
 
 def test_a_step_open_while_the_cursor_passed_is_written_once_when_it_closes(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
+    hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
-    sweep = _sweep(hub, writer)
+    sweep = egress_sweep(hub, writer)
     sweep.sweep()
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     claim(hub, chunk_id, seq=next(_SEQ))
-    _push_usage(hub, chunk_id, _node_id(graph))
+    _push_usage(hub, chunk_id, graph_node_id(graph))
     for _ in range(3):
         hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()
-    assert _rows(writer, "steps") == []
+    assert egress_rows(writer, "steps") == []
 
     pass_build(hub, chunk_id, graph)
     for _ in range(3):
         hub.clock.advance(timedelta(seconds=1))
         sweep.sweep()
 
-    assert [r["chunk_id"] for r in _rows(writer, "steps")] == [chunk_id]
-    assert len(_rows(writer, "invocations")) == 1
+    assert [r["chunk_id"] for r in egress_rows(writer, "steps")] == [chunk_id]
+    assert len(egressegress_rows(writer, "invocations")) == 1

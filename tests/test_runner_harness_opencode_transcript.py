@@ -34,7 +34,7 @@ _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "ope
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
-def _error_factory() -> TranscriptErrorFactory:
+def error_factory() -> TranscriptErrorFactory:
     return TranscriptErrorFactory(structlog.get_logger("test"))
 
 
@@ -83,7 +83,7 @@ def _reasoning_part(session_id: str, message_id: str, part_id: str, text: str = 
     return {"id": part_id, "sessionID": session_id, "messageID": message_id, "type": "reasoning", "text": text}
 
 
-def _tool_part(
+def tool_part(
     session_id: str,
     message_id: str,
     part_id: str,
@@ -129,15 +129,15 @@ def _step_finish_part(session_id: str, message_id: str, part_id: str, *, input_t
     }
 
 
-def _user_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
+def user_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
     return {"info": {"id": message_id, "sessionID": session_id, "role": "user"}, "parts": parts}
 
 
-def _assistant_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
+def assistant_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
     return {"info": {"id": message_id, "sessionID": session_id, "role": "assistant"}, "parts": parts}
 
 
-def _export(session_id: str, messages: list[dict[str, Any]], **info_kwargs: Any) -> str:
+def opencode_export(session_id: str, messages: list[dict[str, Any]], **info_kwargs: Any) -> str:
     return json.dumps({"info": _session_info(session_id, **info_kwargs), "messages": messages})
 
 
@@ -146,24 +146,24 @@ def _export(session_id: str, messages: list[dict[str, Any]], **info_kwargs: Any)
 
 @pytest.mark.unit
 def test_cold_turns_since_produces_env_asst_thinking_tool_turns() -> None:
-    export = _export(
+    export = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "hello")]),
-            _assistant_message(
+            user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "hello")]),
+            assistant_message(
                 "sess-1",
                 "m-asst",
                 [
                     _reasoning_part("sess-1", "m-asst", "p-think"),
                     _text_part("sess-1", "m-asst", "p-text", "hi there"),
-                    _tool_part(
+                    tool_part(
                         "sess-1", "m-asst", "p-tool", call_id="call-1", input={"cmd": "ls"}, output="file1\nfile2"
                     ),
                 ],
             ),
         ],
     )
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": export}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": export}), error_factory())
 
     batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
 
@@ -194,15 +194,15 @@ def test_cold_turns_since_produces_env_asst_thinking_tool_turns() -> None:
 
 @pytest.mark.unit
 def test_cold_turns_since_tolerates_an_empty_tool_title() -> None:
-    export = _export(
+    export = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "hello")]),
-            _assistant_message(
+            user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "hello")]),
+            assistant_message(
                 "sess-1",
                 "m-asst",
                 [
-                    _tool_part(
+                    tool_part(
                         "sess-1",
                         "m-asst",
                         "p-tool",
@@ -216,7 +216,7 @@ def test_cold_turns_since_tolerates_an_empty_tool_title() -> None:
             ),
         ],
     )
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": export}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": export}), error_factory())
 
     batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
 
@@ -235,33 +235,33 @@ def test_forward_turns_since_only_reemits_the_identity_that_changed() -> None:
     ``LateToolOutput`` patch instead, the same shape Claude Code's own late-output case uses."""
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
                 [
-                    _user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "go")]),
-                    _assistant_message(
+                    user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "go")]),
+                    assistant_message(
                         "sess-1",
                         "m-asst",
-                        [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
+                        [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
                     ),
                 ],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     first = source.turns_since("sess-1", spawn_cwd=None, since=None)
     assert first.turns[-1].tool is not None
     assert first.turns[-1].tool.output is None
     assert first.late_tool_outputs == []
 
-    exporter.scripts["sess-1"] = _export(
+    exporter.scripts["sess-1"] = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "go")]),
-            _assistant_message(
+            user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "go")]),
+            assistant_message(
                 "sess-1",
                 "m-asst",
-                [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="completed", output="done")],
+                [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="completed", output="done")],
             ),
         ],
     )
@@ -287,26 +287,26 @@ def test_a_tool_part_updated_with_no_output_yet_ships_nothing() -> None:
     not shipped — not a duplicate turn, not an empty patch."""
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
                 [
-                    _assistant_message(
+                    assistant_message(
                         "sess-1",
                         "m-asst",
-                        [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
+                        [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
                     )
                 ],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     first = source.turns_since("sess-1", spawn_cwd=None, since=None)
 
-    exporter.scripts["sess-1"] = _export(
+    exporter.scripts["sess-1"] = opencode_export(
         "sess-1",
         [
-            _assistant_message(
-                "sess-1", "m-asst", [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="running")]
+            assistant_message(
+                "sess-1", "m-asst", [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="running")]
             )
         ],
     )
@@ -321,8 +321,8 @@ def test_a_tool_part_updated_with_no_output_yet_ships_nothing() -> None:
 
 @pytest.mark.unit
 def test_malformed_cursor_token_is_unreadable_not_a_silent_reset() -> None:
-    exporter = FakeExporter({"sess-1": _export("sess-1", [])})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    exporter = FakeExporter({"sess-1": opencode_export("sess-1", [])})
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     with capture_logs() as logs:
         batch = source.turns_since("sess-1", spawn_cwd=None, since=TranscriptPosition(token="not json"))
@@ -336,7 +336,7 @@ def test_malformed_cursor_token_is_unreadable_not_a_silent_reset() -> None:
 @pytest.mark.unit
 def test_export_failure_is_unreadable() -> None:
     exporter = FakeExporter({"sess-1": OpenCodeExportError("no such session")})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     with capture_logs() as logs:
         batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
@@ -349,7 +349,7 @@ def test_export_failure_is_unreadable() -> None:
 @pytest.mark.unit
 def test_malformed_export_shape_is_unreadable() -> None:
     exporter = FakeExporter({"sess-1": "{}"})  # missing required `info`/`messages`
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
 
@@ -362,14 +362,14 @@ def test_malformed_export_shape_is_unreadable() -> None:
 
 @pytest.mark.unit
 def test_a_linked_child_session_attaches_as_a_sidechain() -> None:
-    root = _export(
+    root = opencode_export(
         "root-1",
         [
-            _assistant_message(
+            assistant_message(
                 "root-1",
                 "m-asst",
                 [
-                    _tool_part(
+                    tool_part(
                         "root-1",
                         "m-asst",
                         "p-task",
@@ -383,12 +383,12 @@ def test_a_linked_child_session_attaches_as_a_sidechain() -> None:
             )
         ],
     )
-    child = _export(
+    child = opencode_export(
         "child-1",
-        [_user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
+        [user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
         parent_id="root-1",
     )
-    source = OpenCodeTranscriptSource(FakeExporter({"root-1": root, "child-1": child}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"root-1": root, "child-1": child}), error_factory())
 
     batch = source.turns_since("root-1", spawn_cwd=None, since=None)
 
@@ -402,14 +402,14 @@ def test_a_linked_child_session_attaches_as_a_sidechain() -> None:
 
 
 def _root_with_child_candidate(child_session_id: str = "child-1") -> str:
-    return _export(
+    return opencode_export(
         "root-1",
         [
-            _assistant_message(
+            assistant_message(
                 "root-1",
                 "m-asst",
                 [
-                    _tool_part(
+                    tool_part(
                         "root-1",
                         "m-asst",
                         "p-task",
@@ -430,8 +430,8 @@ def test_a_child_export_whose_parent_id_mismatches_surfaces_as_unlinked_and_is_r
     later tick, without ever violating the cursor's own never-re-admit contract for the
     already-shipped spawning tool part."""
     root = _root_with_child_candidate()
-    exporter = FakeExporter({"root-1": root, "child-1": _export("child-1", [], parent_id="some-other-root")})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    exporter = FakeExporter({"root-1": root, "child-1": opencode_export("child-1", [], parent_id="some-other-root")})
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     with capture_logs() as logs:
         first = source.turns_since("root-1", spawn_cwd=None, since=None)
@@ -445,9 +445,9 @@ def test_a_child_export_whose_parent_id_mismatches_surfaces_as_unlinked_and_is_r
     assert first.agent_tool_use_ids == {}  # not yet a confirmed pair — nothing to link by
 
     # The mismatch resolves on a later tick: the child's own `parentID` now names `root-1`.
-    exporter.scripts["child-1"] = _export(
+    exporter.scripts["child-1"] = opencode_export(
         "child-1",
-        [_user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
+        [user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
         parent_id="root-1",
     )
     second = source.turns_since("root-1", spawn_cwd=None, since=first.next_position)
@@ -471,7 +471,7 @@ def test_a_child_export_that_fails_once_then_succeeds() -> None:
     becomes readable, rather than a permanent, silent loss."""
     root = _root_with_child_candidate()
     exporter = FakeExporter({"root-1": root, "child-1": OpenCodeExportError("gone")})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     with capture_logs() as logs:
         first = source.turns_since("root-1", spawn_cwd=None, since=None)
@@ -482,9 +482,9 @@ def test_a_child_export_that_fails_once_then_succeeds() -> None:
     assert unresolved.agent_id == "child-1"
     assert unresolved.turns == []
 
-    exporter.scripts["child-1"] = _export(
+    exporter.scripts["child-1"] = opencode_export(
         "child-1",
-        [_user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
+        [user_message("child-1", "m-child-user", [_text_part("child-1", "m-child-user", "p", "dig in")])],
         parent_id="root-1",
     )
     second = source.turns_since("root-1", spawn_cwd=None, since=first.next_position)
@@ -504,28 +504,28 @@ def test_a_child_export_that_fails_once_then_succeeds() -> None:
 def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
                 [
-                    _user_message("sess-1", "m-u1", [_text_part("sess-1", "m-u1", "p", "go")]),
-                    _assistant_message(
+                    user_message("sess-1", "m-u1", [_text_part("sess-1", "m-u1", "p", "go")]),
+                    assistant_message(
                         "sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1", input_tokens=10)]
                     ),
                 ],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     start = source.tail_position("sess-1", spawn_cwd=None)
     assert start is not None
 
-    exporter.scripts["sess-1"] = _export(
+    exporter.scripts["sess-1"] = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m-u1", [_text_part("sess-1", "m-u1", "p-u1", "go")]),
-            _assistant_message("sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1", input_tokens=10)]),
-            _user_message("sess-1", "m-u2", [_text_part("sess-1", "m-u2", "p-u2", "again")]),
-            _assistant_message("sess-1", "m-a2", [_step_finish_part("sess-1", "m-a2", "p-fin2", input_tokens=20)]),
+            user_message("sess-1", "m-u1", [_text_part("sess-1", "m-u1", "p-u1", "go")]),
+            assistant_message("sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1", input_tokens=10)]),
+            user_message("sess-1", "m-u2", [_text_part("sess-1", "m-u2", "p-u2", "again")]),
+            assistant_message("sess-1", "m-a2", [_step_finish_part("sess-1", "m-a2", "p-fin2", input_tokens=20)]),
         ],
     )
     end = source.tail_position("sess-1", spawn_cwd=None)
@@ -555,13 +555,13 @@ def test_read_raw_lines_reuses_the_export_a_preceding_tail_position_just_fetched
     session — `_worker_sample`'s own shape — costs one real export, not two."""
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
-                [_assistant_message("sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1")])],
+                [assistant_message("sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1")])],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     end = source.tail_position("sess-1", spawn_cwd=None)
     assert exporter.calls == ["sess-1"]
@@ -578,14 +578,14 @@ def test_read_raw_lines_still_fetches_fresh_for_a_different_session_than_the_mem
     a `read_raw_lines` for another."""
     exporter = FakeExporter(
         {
-            "sess-1": _export("sess-1", []),
-            "sess-2": _export(
+            "sess-1": opencode_export("sess-1", []),
+            "sess-2": opencode_export(
                 "sess-2",
-                [_assistant_message("sess-2", "m-a1", [_step_finish_part("sess-2", "m-a1", "p-fin1")])],
+                [assistant_message("sess-2", "m-a1", [_step_finish_part("sess-2", "m-a1", "p-fin1")])],
             ),
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     source.tail_position("sess-1", spawn_cwd=None)
     lines = source.read_raw_lines("sess-2", spawn_cwd=None, start=None, end=None)
@@ -599,16 +599,16 @@ def test_tail_position_never_reuses_a_stale_memo_even_when_one_is_available() ->
     """`tail_position` is a forward-read anchor — it must always be genuinely fresh, never
     one call stale, even though it keeps refreshing the memo for others to consume."""
     exporter = FakeExporter(
-        {"sess-1": _export("sess-1", [_user_message("sess-1", "m1", [_text_part("sess-1", "m1", "p1", "go")])])}
+        {"sess-1": opencode_export("sess-1", [user_message("sess-1", "m1", [_text_part("sess-1", "m1", "p1", "go")])])}
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     first = source.tail_position("sess-1", spawn_cwd=None)
 
-    exporter.scripts["sess-1"] = _export(
+    exporter.scripts["sess-1"] = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m1", [_text_part("sess-1", "m1", "p1", "go")]),
-            _user_message("sess-1", "m2", [_text_part("sess-1", "m2", "p2", "again")]),
+            user_message("sess-1", "m1", [_text_part("sess-1", "m1", "p1", "go")]),
+            user_message("sess-1", "m2", [_text_part("sess-1", "m2", "p2", "again")]),
         ],
     )
     second = source.tail_position("sess-1", spawn_cwd=None)
@@ -621,20 +621,20 @@ def test_tail_position_never_reuses_a_stale_memo_even_when_one_is_available() ->
 def test_read_raw_lines_with_no_range_returns_every_usage_bearing_message() -> None:
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
                 [
-                    _assistant_message(
+                    assistant_message(
                         "sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1", input_tokens=10)]
                     ),
-                    _assistant_message(
+                    assistant_message(
                         "sess-1", "m-a2", [_step_finish_part("sess-1", "m-a2", "p-fin2", input_tokens=20)]
                     ),
                 ],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     lines = source.read_raw_lines("sess-1", spawn_cwd=None, start=None, end=None)
 
@@ -643,8 +643,8 @@ def test_read_raw_lines_with_no_range_returns_every_usage_bearing_message() -> N
 
 @pytest.mark.unit
 def test_read_raw_lines_malformed_range_token_is_empty_not_raised() -> None:
-    exporter = FakeExporter({"sess-1": _export("sess-1", [])})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    exporter = FakeExporter({"sess-1": opencode_export("sess-1", [])})
+    source = OpenCodeTranscriptSource(exporter, error_factory())
 
     lines = source.read_raw_lines("sess-1", spawn_cwd=None, start=TranscriptPosition(token="not json"), end=None)
 
@@ -653,7 +653,7 @@ def test_read_raw_lines_malformed_range_token_is_empty_not_raised() -> None:
 
 @pytest.mark.unit
 def test_read_raw_lines_export_failure_is_empty() -> None:
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), error_factory())
 
     assert source.read_raw_lines("sess-1", spawn_cwd=None) == []
 
@@ -663,22 +663,22 @@ def test_read_raw_lines_export_failure_is_empty() -> None:
 
 @pytest.mark.unit
 def test_tail_position_on_an_unreadable_session_is_none() -> None:
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), error_factory())
 
     assert source.tail_position("sess-1", spawn_cwd=None) is None
 
 
 @pytest.mark.unit
 def test_size_bytes_equals_the_raw_exporter_outputs_byte_length() -> None:
-    raw = _export("sess-1", [])
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": raw}), _error_factory())
+    raw = opencode_export("sess-1", [])
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": raw}), error_factory())
 
     assert source.size_bytes("sess-1", spawn_cwd=None) == len(raw.encode("utf-8"))
 
 
 @pytest.mark.unit
 def test_size_bytes_on_export_failure_is_none() -> None:
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": OpenCodeExportError("gone")}), error_factory())
 
     assert source.size_bytes("sess-1", spawn_cwd=None) is None
 
@@ -688,14 +688,14 @@ def test_size_bytes_on_export_failure_is_none() -> None:
 def test_context_tokens_from_real_root_exports(version: str, expected: int) -> None:
     raw = (_PACKAGE_ROOT / "contracts" / "opencode" / version / "root_export.json").read_text()
     session_id = json.loads(raw)["info"]["id"]
-    source = OpenCodeTranscriptSource(FakeExporter({session_id: raw}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({session_id: raw}), error_factory())
     assert source.context_tokens(session_id, spawn_cwd=None) == expected
 
 
 @pytest.mark.unit
 def test_context_tokens_skips_summaries_empty_turns_and_child_sessions() -> None:
     def assistant(mid: str, tokens: dict[str, Any], **metadata: Any) -> dict[str, Any]:
-        message = _assistant_message("root", mid, [])
+        message = assistant_message("root", mid, [])
         message["info"].update(tokens=tokens, **metadata)
         return message
 
@@ -704,23 +704,25 @@ def test_context_tokens_skips_summaries_empty_turns_and_child_sessions() -> None
     after = {"input": 8698, "output": 162, "reasoning": 148, "cache": {"read": 10112, "write": 3}}
     zero = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
     messages = [assistant("before", before), assistant("summary", summary, agent="compaction", summary=True)]
-    exporter = FakeExporter({"root": _export("root", messages), "child": _export("child", [], parent_id="root")})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    exporter = FakeExporter(
+        {"root": opencode_export("root", messages), "child": opencode_export("child", [], parent_id="root")}
+    )
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     assert source.context_tokens("root", spawn_cwd=None) == 270446
     messages.extend([assistant("after", after), assistant("empty", zero), assistant("summary2", summary, summary=True)])
-    exporter.scripts["root"] = _export("root", messages)
+    exporter.scripts["root"] = opencode_export("root", messages)
     # Consume the source's single-use export memo before reading the new export.
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     assert source.context_tokens("root", spawn_cwd=None) == 18813
     assert "child" not in exporter.calls
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "raw", [_export("root", []), "not json", _export("root", [_assistant_message("root", "a", [])])]
+    "raw", [opencode_export("root", []), "not json", opencode_export("root", [assistant_message("root", "a", [])])]
 )
 def test_context_tokens_unknown_without_a_readable_qualifying_turn(raw: str) -> None:
-    source = OpenCodeTranscriptSource(FakeExporter({"root": raw}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"root": raw}), error_factory())
     assert source.context_tokens("root", spawn_cwd=None) is None
 
 
@@ -746,7 +748,7 @@ def test_pinned_compaction_export_through_the_source_never_ships_a_compaction_tu
     """The same claim, proven through the source's own ``turns_since`` rather than
     ``build_turns`` alone — the seam a real pump reads."""
     raw = json.dumps(_load_contract("compaction.json"))
-    source = OpenCodeTranscriptSource(FakeExporter({"ses_compaction": raw}), _error_factory())
+    source = OpenCodeTranscriptSource(FakeExporter({"ses_compaction": raw}), error_factory())
 
     batch = source.turns_since("ses_compaction", spawn_cwd=None, since=None)
 

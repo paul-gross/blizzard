@@ -13,6 +13,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
@@ -93,7 +94,7 @@ def _seed(engine: sa.Engine) -> None:
             )
 
 
-def _runner(tmp_path: Path):
+def _runner(tmp_path: Path) -> tuple[MigrationRunner, str]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     return migration_runner(HubConfig(root=tmp_path, db_url=db_url)), db_url
 

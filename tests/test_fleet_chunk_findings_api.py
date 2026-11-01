@@ -18,7 +18,6 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import HubHarness, build_hub, default_project, hub_store_connections, seed_scope, seed_work_item
 
 pytestmark = pytest.mark.component
@@ -70,7 +69,7 @@ def _accept(hub: HubHarness, proposal_id: str = "gprop_1") -> str:
 def _seed_chunk_answering_no_proposal(hub: HubHarness) -> str:
     """A plain hub work item, minted with no garden-proposal accept behind it."""
     item = seed_work_item(
-        WorkItemStore(hub_store_connections(hub.engine)),
+        hub_store_connections(hub.engine),
         graph_id="gr_garden",
         author=WorkItemAuthor.user("u_1"),
         at=_NOW,

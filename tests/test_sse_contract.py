@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.api.events import _RESERVED_COMMENT as _HUB_RESERVED_COMMENT
+from blizzard.hub.api.events import RESERVED_COMMENT as _HUB_RESERVED_COMMENT
 from blizzard.hub.events.broker import EVENT_TYPES as _HUB_EVENT_TYPES
 from blizzard.hub.events.broker import EventBroker as _HubEventBroker
-from blizzard.runner.api.events import _RESERVED_COMMENT as _RUNNER_RESERVED_COMMENT
+from blizzard.runner.api.events import RESERVED_COMMENT as _RUNNER_RESERVED_COMMENT
 from blizzard.runner.events.broker import EVENT_TYPES as _RUNNER_EVENT_TYPES
 from blizzard.runner.events.broker import EventBroker as _RunnerEventBroker
 from blizzard.wire.sse import SSE_FRAME_MODELS as _HUB_SSE_FRAME_MODELS

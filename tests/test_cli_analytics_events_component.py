@@ -18,7 +18,7 @@ from click.testing import Result
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
 from tests.support import HubHarness, seed_session, seed_user
-from tests.test_analytics_events_api import _cookie, _seeded_hub
+from tests.test_analytics_events_api import cookie, seeded_hub
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
@@ -30,7 +30,7 @@ def _relay(hub: HubHarness, token: str) -> Bound:
     """Route the CLI's requests onward to the real, wired app —
     carrying the same session cookie a logged-in operator's local session store would
     attach, so the real auth stack runs too."""
-    headers = _cookie(token)
+    headers = cookie(token)
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
         return hub.client.get(url, params=params, headers=headers)
@@ -67,7 +67,7 @@ def _invoke(bound: Bound, *args: str) -> Result:
 
 
 def test_the_default_table_reads_the_real_events(tmp_path: Path) -> None:
-    hub, token, _chunk_id = _seeded_hub(tmp_path)
+    hub, token, _chunk_id = seeded_hub(tmp_path)
     bound = _relay(hub, token)
 
     result = _invoke(bound)
@@ -78,7 +78,7 @@ def test_the_default_table_reads_the_real_events(tmp_path: Path) -> None:
 
 
 def test_each_filter_flag_round_trips_to_a_filtered_result(tmp_path: Path) -> None:
-    hub, token, _chunk_id = _seeded_hub(tmp_path)
+    hub, token, _chunk_id = seeded_hub(tmp_path)
     bound = _relay(hub, token)
 
     by_kind = _invoke(bound, "--kind", "skill_invocation", "--json")
@@ -103,7 +103,7 @@ def test_each_filter_flag_round_trips_to_a_filtered_result(tmp_path: Path) -> No
 
 
 def test_ndjson_streams_every_line_unmodified_and_untruncated(tmp_path: Path) -> None:
-    hub, token, _chunk_id = _seeded_hub(tmp_path)
+    hub, token, _chunk_id = seeded_hub(tmp_path)
     bound = _relay(hub, token)
     paged = _invoke(bound, "--json")
     expected = json.loads(paged.stdout)["events"]

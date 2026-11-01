@@ -27,11 +27,11 @@ from tests.support import HubHarness, build_hub, pointer_token, report_lease
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 
 
-def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
+def writable(hub: HubHarness) -> IWriteChunkMovementRepository:
     return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
-def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
+def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     """Mint the packaged adv-dwf graph, ingest a chunk, repin it onto adv-dwf, and claim a
     route — the same sequence ``tests/test_delivery_conflict_routing.py`` uses."""
     definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)
@@ -71,7 +71,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         )
         for branch, commit in (("feat/from-e1", "a"), ("feat/from-e2", "b"))
     ]
-    _writable(hub).record_transition(
+    writable(hub).record_transition(
         transition_id="tr_seed_deliver",
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         chunk_id=chunk_id,
@@ -93,7 +93,7 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     letting the error escape and re-crash the tick on every poll."""
     double = GitHubDouble()
     hub = build_hub(tmp_path, forges=double.forges)
-    chunk_id, nodes = _mint_and_claim(hub)
+    chunk_id, nodes = mint_and_claim(hub)
     _seed_at_deliver_with_two_branches_for_one_repo(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 

@@ -284,10 +284,10 @@ def test_the_module_set_after_import_is_the_same_with_tracing_on_and_off() -> No
 
 
 def test_an_untraced_command_invocation_never_loads_the_span_emitter() -> None:
-    from tests.test_layering import _loaded_after_running
+    from tests.test_layering import loaded_after_running
 
     for argv in (["runner", "chunk", "--help"], ["hub", "chunk", "--help"]):
-        loaded = _loaded_after_running(argv, {"BLIZZARD_TRACEPARENT": "", "BLIZZARD_RUNNER_URL": ""})
+        loaded = loaded_after_running(argv, {"BLIZZARD_TRACEPARENT": "", "BLIZZARD_RUNNER_URL": ""})
         assert "blizzard.foundation.cli_spans" not in loaded, argv
 
 

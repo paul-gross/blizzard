@@ -40,7 +40,7 @@ from blizzard.wire.events import EventsResponse, EventView
 
 router = APIRouter(prefix="/api", tags=["meta"], dependencies=[Depends(tenant_bound)])
 
-_RESERVED_COMMENT = ": blizzard hub event stream\n\n"
+RESERVED_COMMENT = ": blizzard hub event stream\n\n"
 # These two reads are bounded below the hub's general list maximum: 200 is a real ceiling here.
 FEED_MAX_LIMIT = 200
 
@@ -64,7 +64,7 @@ async def events_stream(
     owner = viewer.user_id if viewer is not None else None
     session = PresentedSession(request).id_hash if viewer is not None else None
     stream = Stream(
-        services.events, request, cursor, _RESERVED_COMMENT, shutdown, admits=admits, owner=owner, session=session
+        services.events, request, cursor, RESERVED_COMMENT, shutdown, admits=admits, owner=owner, session=session
     )
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 

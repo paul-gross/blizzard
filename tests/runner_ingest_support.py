@@ -21,6 +21,7 @@ from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import load_host_config
+from tests.runner_fakes import FakeProbe
 from tests.runner_init_fakes import FakeInitHub, init_runner
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 
@@ -134,7 +135,8 @@ def rows(engine: sa.Engine, table: str, **where: object) -> list[dict[str, Any]]
     shape = reflect(engine).tables[table]
     stmt = sa.select(shape).where(*(shape.c[k] == v for k, v in where.items()))
     with engine.connect() as conn:
-        return [dict(r._mapping) for r in conn.execute(stmt.order_by(*shape.primary_key.columns))]
+        found = conn.execute(stmt.order_by(*shape.primary_key.columns))
+        return [dict(r) for r in found.mappings()]
 
 
 def content(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
@@ -152,15 +154,6 @@ def contents(engine: sa.Engine, table: str, **where: object) -> list[dict[str, A
     return sorted((content(table, r) for r in rows(engine, table, **where)), key=repr)
 
 
-class NoProcess:
-    """No recorded process is alive: the seeded leases name pids of this machine's own processes."""
-
-    def is_alive(self, pid: int, start_time: str | None = None) -> bool:
-        return False
-
-    def start_time(self, pid: int) -> str | None:
-        return None
-
-
 def invariant_violations(engine: sa.Engine) -> list[object]:
-    return list(runner_invariants(engine, process=NoProcess()).run())  # type: ignore[arg-type]
+    # No recorded process is alive: the seeded leases name pids of this machine's own processes.
+    return list(runner_invariants(engine, process=FakeProbe()).run())

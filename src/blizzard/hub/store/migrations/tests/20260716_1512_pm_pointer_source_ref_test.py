@@ -3,8 +3,6 @@ frozen shape, the issue-URL backfill and verbatim survivors, a canonical-URL dow
 identical down-then-up round trip, and an idempotent rerun over an already reshaped store; a
 fresh store reaches the pre-reshape shape and its work-ref table keeps the ``chunk_id`` foreign key."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -19,10 +17,10 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_pin_hub_api import (
-    _MIGRATION_CLOCK,
-    _PM_POINTER_SOURCE_REF,
-    _assert_table_shape_is_frozen,
-    _store,
+    MIGRATION_CLOCK,
+    PM_POINTER_SOURCE_REF,
+    assert_table_shape_is_frozen,
+    scratch_store,
 )
 from tests.support import hub_scoped_engine
 
@@ -96,8 +94,8 @@ def _seed(engine: sa.Engine) -> None:
 
 @pytest.mark.unit
 def test_the_pm_pointer_revisions_table_shape_is_frozen_at_its_own_revision(tmp_path: Path) -> None:
-    _assert_table_shape_is_frozen(
-        tmp_path, _PM_POINTER_SOURCE_REF, "chunk_pm_pointers", {"id", "chunk_id", "source", "ref"}
+    assert_table_shape_is_frozen(
+        tmp_path, PM_POINTER_SOURCE_REF, "chunk_pm_pointers", {"id", "chunk_id", "source", "ref"}
     )
 
 
@@ -106,7 +104,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
     """The ``{provider, url}`` -> ``{source, ref}`` reshape reads and writes this
     revision's own table shape, and ``downgrade()``'s canonicalized reconstruction (the
     constant placeholder owner) re-upgrades to the identical ``(source, ref)``."""
-    _runner, url = _store(tmp_path, _RUNNER_LOCAL_PAUSE)
+    _runner, url = scratch_store(tmp_path, _RUNNER_LOCAL_PAUSE)
     engine = hub_scoped_engine(create_engine_from_url(url))
     try:
         with engine.begin() as conn:
@@ -128,14 +126,14 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
             eng.dispose()
         return (row[0], row[1])
 
-    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK)
-    runner.upgrade(_PM_POINTER_SOURCE_REF)
+    runner = MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
+    runner.upgrade(PM_POINTER_SOURCE_REF)
     assert _pointer("source, ref") == ("blizzard", "26")
 
     runner.downgrade(_RUNNER_LOCAL_PAUSE)
     assert _pointer("provider, url") == ("github", "https://github.com/unknown/blizzard/issues/26")
 
-    runner.upgrade(_PM_POINTER_SOURCE_REF)
+    runner.upgrade(PM_POINTER_SOURCE_REF)
     assert _pointer("source, ref") == ("blizzard", "26")  # down-then-up is stable
 
 

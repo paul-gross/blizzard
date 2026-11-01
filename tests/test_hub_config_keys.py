@@ -19,7 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.sweeps.names import SweepName
 from tests.config_inputs import load_hub_config
-from tests.test_host_config_keys import _document_carrying_every_key
+from tests.test_host_config_keys import document_carrying_every_key
 
 pytestmark = pytest.mark.unit
 
@@ -59,7 +59,7 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
 
     monkeypatch.setattr(ConfigView, "_check", recording)
     root = _initialised(tmp_path)
-    document = _document_carrying_every_key(HUB_REGISTRY, _SAMPLES)
+    document = document_carrying_every_key(HUB_REGISTRY, _SAMPLES)
     # Replaces the module's parser alone: the flag registry is parsed with the real one.
     monkeypatch.setattr(hub_config, "tomllib", SimpleNamespace(loads=lambda _text: document))
     load_hub_config(root, allow_external_db=True)

@@ -1,7 +1,5 @@
 """Tests proving the ``20261008_1200_tenant_id_backfill`` revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,19 +12,19 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_tenant_carry_over_migration import (
-    _BACKFILL,
-    _BEFORE,
-    _SEED,
-    _T0,
-    _TENANTS,
-    _keyed_tables,
-    _row_counts,
-    _rows_each_update_changed,
-    _schema,
-    _seed_every_tenant_owned_table,
-    _store,
-    _tenant_rows,
-    _tenants_of,
+    BACKFILL,
+    BEFORE,
+    SEED,
+    T0,
+    TENANTS,
+    keyed_tables,
+    row_counts,
+    rows_each_update_changed,
+    schema,
+    scratch_store,
+    seed_every_tenant_owned_table,
+    tenant_rows,
+    tenants_of,
 )
 
 pytestmark = [pytest.mark.component]
@@ -34,7 +32,7 @@ pytestmark = [pytest.mark.component]
 
 def _backfill_batch_rows() -> int:
     """The backfill's batch size, read from the revision as Alembic loads it."""
-    revision = ScriptDirectory(str(MIGRATIONS_DIR)).get_revision(_BACKFILL)
+    revision = ScriptDirectory(str(MIGRATIONS_DIR)).get_revision(BACKFILL)
     assert revision is not None
     return revision.module._BATCH_ROWS
 
@@ -47,7 +45,7 @@ def _seed_past_a_batch(engine: sa.Engine) -> int:
     with engine.begin() as conn:
         conn.execute(
             sa.text("INSERT INTO event_log (recorded_at, severity, kind, message) VALUES (:at, 'info', 'k', 'm')"),
-            [{"at": _T0}] * count,
+            [{"at": T0}] * count,
         )
         conn.execute(
             sa.text("INSERT INTO graph_artifacts (graph_id, name, ordinal, content) VALUES (:graph, :name, 1, '')"),
@@ -66,15 +64,15 @@ def _tenant_counts(engine: sa.Engine, table: str) -> dict[str | None, int]:
 def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Path) -> None:
     """Re-entry: a run that stopped after keying some tables, and stamping some of their rows, is
     completed — no column added twice, every row still null stamped."""
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
+        runner.upgrade(BEFORE)
         with engine.begin() as conn:
-            for statement in _SEED:
-                conn.execute(sa.text(statement), {"at": _T0})
-        runner.upgrade(_TENANTS)
-        [(tenant_id, *_)] = _tenant_rows(engine)
+            for statement in SEED:
+                conn.execute(sa.text(statement), {"at": T0})
+        runner.upgrade(TENANTS)
+        [(tenant_id, *_)] = tenant_rows(engine)
         with engine.begin() as conn:
             conn.execute(sa.text("ALTER TABLE graphs ADD COLUMN tenant_id VARCHAR"))
             conn.execute(sa.text("ALTER TABLE chunks ADD COLUMN tenant_id VARCHAR"))
@@ -82,26 +80,26 @@ def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Pa
                 sa.text("UPDATE chunks SET tenant_id = :tenant WHERE chunk_id = 'ch_1'"), {"tenant": tenant_id}
             )
 
-        runner.upgrade(_BACKFILL)
+        runner.upgrade(BACKFILL)
 
-        assert all(_keyed_tables(engine).values())
+        assert all(keyed_tables(engine).values())
         assert [c["name"] for c in sa.inspect(engine).get_columns("chunks")].count("tenant_id") == 1
         for table in ("graphs", "chunks", "event_log"):
-            assert set(_tenants_of(engine, table)) == {tenant_id}, table
+            assert set(tenants_of(engine, table)) == {tenant_id}, table
     finally:
         engine.dispose()
 
 
 def test_the_backfill_stamps_every_row_of_a_table_holding_more_than_one_batch(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_TENANTS)
+        runner.upgrade(TENANTS)
         count = _seed_past_a_batch(engine)
-        [(tenant_id, *_)] = _tenant_rows(engine)
+        [(tenant_id, *_)] = tenant_rows(engine)
 
-        with _rows_each_update_changed() as updates:
-            runner.upgrade(_BACKFILL)
+        with rows_each_update_changed() as updates:
+            runner.upgrade(BACKFILL)
 
         for table in ("event_log", "graph_artifacts"):
             assert _tenant_counts(engine, table) == {tenant_id: count}, table
@@ -116,13 +114,13 @@ def test_the_backfill_stamps_every_row_of_a_table_holding_more_than_one_batch(tm
 def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_rest(tmp_path: Path) -> None:
     """Re-entry inside a table: the rows a stopped run already stamped are scattered through the key range and span
     whole pages, and the rerun stamps every row between and after them."""
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_TENANTS)
+        runner.upgrade(TENANTS)
         count = _seed_past_a_batch(engine)
         batch = _backfill_batch_rows()
-        [(tenant_id, *_)] = _tenant_rows(engine)
+        [(tenant_id, *_)] = tenant_rows(engine)
         with engine.begin() as conn:
             conn.execute(sa.text("ALTER TABLE event_log ADD COLUMN tenant_id VARCHAR"))
             conn.execute(sa.text("ALTER TABLE graph_artifacts ADD COLUMN tenant_id VARCHAR"))
@@ -135,7 +133,7 @@ def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_res
             )
         assert all(None in _tenant_counts(engine, table) for table in ("event_log", "graph_artifacts"))
 
-        runner.upgrade(_BACKFILL)
+        runner.upgrade(BACKFILL)
 
         for table in ("event_log", "graph_artifacts"):
             assert _tenant_counts(engine, table) == {tenant_id: count}, table
@@ -144,38 +142,38 @@ def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_res
 
 
 def test_the_backfill_refuses_a_store_holding_two_tenants_and_changes_nothing(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_TENANTS)
+        runner.upgrade(TENANTS)
         with engine.begin() as conn:
             conn.execute(
                 sa.text("INSERT INTO tenants VALUES ('ten_01J9Z3M0P8QK7V2S4W6X8Y0A1B', 'second', :at, 'migration')"),
-                {"at": _T0},
+                {"at": T0},
             )
 
         with pytest.raises(RuntimeError, match="needs exactly one"):
-            runner.upgrade(_BACKFILL)
+            runner.upgrade(BACKFILL)
 
-        assert runner.current_revision() == _TENANTS
-        assert {table for table, keyed in _keyed_tables(engine).items() if keyed} == {"invitations", "invitation_facts"}
+        assert runner.current_revision() == TENANTS
+        assert {table for table, keyed in keyed_tables(engine).items() if keyed} == {"invitations", "invitation_facts"}
     finally:
         engine.dispose()
 
 
 def test_the_backfill_downgrade_removes_exactly_the_column_it_added(tmp_path: Path) -> None:
-    db_url, engine = _store(tmp_path)
+    db_url, engine = scratch_store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        runner.upgrade(_BEFORE)
-        _seed_every_tenant_owned_table(engine)
-        runner.upgrade(_TENANTS)
-        schema_before, counts_before = _schema(engine), _row_counts(engine)
+        runner.upgrade(BEFORE)
+        seed_every_tenant_owned_table(engine)
+        runner.upgrade(TENANTS)
+        schema_before, counts_before = schema(engine), row_counts(engine)
 
-        runner.upgrade(_BACKFILL)
-        runner.downgrade(_TENANTS)
+        runner.upgrade(BACKFILL)
+        runner.downgrade(TENANTS)
 
-        assert _schema(engine) == schema_before
-        assert _row_counts(engine) == counts_before
+        assert schema(engine) == schema_before
+        assert row_counts(engine) == counts_before
     finally:
         engine.dispose()

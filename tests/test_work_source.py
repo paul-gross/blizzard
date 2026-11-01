@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.composition import TenantStores, build_hub_core, build_live_config
@@ -34,6 +33,8 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support import (
     OMIT_TITLE,
     OP,
+    ForgeDouble,
+    ForgeIssue,
     WorkSourceRegistry,
     config_authoring,
     default_tenant,
@@ -117,7 +118,9 @@ def _registry(
 
 
 def test_fetch_reads_issue_body_and_comments() -> None:
-    issues = {"acme/widget#12": {"title": "the bug title", "body": "the bug", "comments": ["me too", "repro"]}}
+    issues: dict[str, ForgeIssue] = {
+        "acme/widget#12": {"title": "the bug title", "body": "the bug", "comments": ["me too", "repro"]}
+    }
     source = GitHubWorkSource(
         github_double(issues=issues), source_id="widget", slug="widget", repo="acme/widget", web_base="https://x"
     )
@@ -139,7 +142,7 @@ def test_label_renders_source_name_hash_ref() -> None:
 
 def test_fetch_maps_a_missing_or_null_title_to_empty_string() -> None:
     """The forge's ``title`` is absent or ``null`` for some pointer shapes — never raise, degrade to ""."""
-    issues = {
+    issues: dict[str, ForgeIssue] = {
         "acme/widget#5": {"title": OMIT_TITLE, "body": "no title key", "comments": []},
         "acme/widget#6": {"title": None, "body": "null title", "comments": []},
     }
@@ -396,10 +399,10 @@ def test_set_status_adds_the_desired_label_and_removes_the_other() -> None:
     pointer = WorkRef(source="widget", ref="1")
 
     source.set_status(pointer, WorkStatusMarker.INGESTED)
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
     source.set_status(pointer, WorkStatusMarker.IN_PROGRESS)
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}
 
 
 def test_set_status_is_idempotent() -> None:
@@ -410,7 +413,7 @@ def test_set_status_is_idempotent() -> None:
     source.set_status(pointer, WorkStatusMarker.INGESTED)
     source.set_status(pointer, WorkStatusMarker.INGESTED)
 
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
 
 def test_clear_status_removes_every_marker() -> None:
@@ -421,7 +424,7 @@ def test_clear_status_removes_every_marker() -> None:
 
     source.clear_status(pointer)
 
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()
 
 
 def test_clear_status_over_an_unlabelled_ref_is_a_no_op() -> None:
@@ -437,7 +440,7 @@ def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
 
     source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
 
-    assert forge_state(double)["repo_labels"]["acme/widget"] == {  # type: ignore[index]
+    assert forge_state(double)["repo_labels"]["acme/widget"] == {
         "blizzard:ingested",
         "blizzard:in-progress",
     }
@@ -478,7 +481,7 @@ def test_marked_refs_reports_a_doubly_labelled_ref_as_carrying_both_markers() ->
     """A ref that has somehow acquired both markers reads as *wrong* to the
     reconciler's diff, not as already-correct — ``marked_refs`` must surface it."""
     double = github_double()
-    forge_state(double)["issue_labels"]["acme/widget#3"] = {"blizzard:ingested", "blizzard:in-progress"}  # type: ignore[index]
+    forge_state(double)["issue_labels"]["acme/widget#3"] = {"blizzard:ingested", "blizzard:in-progress"}
     source = GitHubWorkSource(double, source_id="widget", slug="widget", repo="acme/widget", web_base="https://x")
 
     result = source.marked_refs()
@@ -601,7 +604,7 @@ def test_close_issues_the_documented_patch() -> None:
 
     source.close(WorkRef(source="widget", ref="1"), trace=None)
 
-    assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
+    assert forge_state(double)["issue_state"]["acme/widget#1"] == {
         "state": "closed",
         "state_reason": "completed",
     }
@@ -615,7 +618,7 @@ def test_close_is_idempotent() -> None:
     source.close(pointer, trace=None)
     source.close(pointer, trace=None)  # must not raise — a clean no-op re-close
 
-    assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
+    assert forge_state(double)["issue_state"]["acme/widget#1"] == {
         "state": "closed",
         "state_reason": "completed",
     }
@@ -654,11 +657,11 @@ _TRACE = DeliveryTrace(
 _CLOSING_KEYWORD = re.compile(r"\b(close[sd]?|fix(es|ed)?|resolve[sd]?)\b", re.IGNORECASE)
 
 
-def _trace_comments(double: TestClient, key: str = "acme/widget#1") -> list[str]:
+def _trace_comments(double: ForgeDouble, key: str = "acme/widget#1") -> list[str]:
     return [c for c in forge_state(double)["issues"][key]["comments"] if "blizzard-delivery:ch_9" in c]  # type: ignore[index]
 
 
-def _closer_over(issues: dict[str, dict[str, object]]) -> tuple[TestClient, GitHubWorkSource]:
+def _closer_over(issues: dict[str, ForgeIssue]) -> tuple[ForgeDouble, GitHubWorkSource]:
     double = github_double(issues=issues)
     return double, GitHubWorkSource(double, source_id="widget", slug="widget", repo="acme/widget", web_base="https://x")
 
@@ -673,7 +676,7 @@ def test_close_with_a_trace_comments_the_landing_then_closes() -> None:
     assert "https://github.com/acme/widget/commit/0123456789abcdef" in comment
     assert "ch_9" in comment
     assert not _CLOSING_KEYWORD.search(comment)
-    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"
 
 
 def test_a_repeat_close_posts_no_second_comment() -> None:
@@ -697,7 +700,7 @@ def test_a_comment_followed_by_a_failed_close_is_not_repeated_on_retry() -> None
     source.close(pointer, trace=_TRACE)
 
     assert len(_trace_comments(double)) == 1
-    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"  # type: ignore[index]
+    assert forge_state(double)["issue_state"]["acme/widget#1"]["state"] == "closed"
 
 
 def test_the_marker_is_found_past_the_first_page_of_comments() -> None:
@@ -716,7 +719,7 @@ def test_close_without_a_trace_posts_no_comment() -> None:
 
     source.close(WorkRef(source="widget", ref="1"), trace=None)
 
-    assert forge_state(double)["issues"]["acme/widget#1"].get("comments", []) == []  # type: ignore[index]
+    assert forge_state(double)["issues"]["acme/widget#1"].get("comments", []) == []
 
 
 def test_close_a_missing_item_with_a_trace_raises_work_item_gone() -> None:

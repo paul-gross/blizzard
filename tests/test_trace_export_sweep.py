@@ -45,7 +45,7 @@ pytestmark = pytest.mark.component
 _SETTLED = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600)
 
 
-def _sweep(hub: HubHarness) -> TraceExportSweep:
+def trace_export_sweep(hub: HubHarness) -> TraceExportSweep:
     assert hub.hub_services.trace_export is not None
     return hub.hub_services.trace_export
 
@@ -70,7 +70,7 @@ def _hub(tmp_path: Path, config: TracingConfig = _SETTLED) -> tuple[HubHarness, 
     return hub, exporter
 
 
-def _closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:
+def closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:
     graph = hub.services.graphs.get_enabled_by_name("default-delivery")
     assert graph is not None
     return transitioned_and_stopped(hub, graph, ref)
@@ -91,14 +91,14 @@ def _root(chunk_id: str) -> int:
 
 def test_the_first_pass_starts_the_cursor_at_now_and_exports_nothing(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    _closed_pair(hub)  # closed before tracing was on: history is told only by replay
+    closed_pair(hub)  # closed before tracing was on: history is told only by replay
     hub.clock.advance(timedelta(seconds=1))
 
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     assert trace_store(hub).newest_cursor() == TraceCheckpoint(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
     assert exporter.attempts == 0
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 0
     assert _row_count(hub) == 1
 
@@ -107,7 +107,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     hub, exporter = _hub(tmp_path)
-    sweep = _sweep(hub)
+    sweep = trace_export_sweep(hub)
     append = sweep._steps.append_cursor
     attempts = 0
 
@@ -126,20 +126,20 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
     sweep.sweep()
     assert attempts == 2
     assert trace_store(hub).newest_cursor() == TraceCheckpoint(CursorKey.opening(hub.clock.now()), 0, hub.clock.now())
-    _closed_pair(hub)
+    closed_pair(hub)
     sweep.sweep()
     assert len(_roots(exporter)) == 2
 
 
 def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_acceptance(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, TracingConfig(settle_seconds=0, batch_limit=1))
-    _sweep(hub).sweep()
-    moved, stopped = _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    moved, stopped = closed_pair(hub)
     tie = hub.clock.now()
     keys = sorted([CursorKey(tie, moved, 1), CursorKey(tie, stopped, 1), CursorKey.chunk_finished(tie, stopped)])
 
     for _ in range(8):
-        _sweep(hub).sweep()
+        trace_export_sweep(hub).sweep()
 
     # One item a batch, in cursor order, each batch's cursor row written after it was accepted.
     assert [len({s.context.trace_id for s in batch}) for batch in exporter.batches] == [
@@ -155,11 +155,11 @@ def test_closed_steps_are_told_in_total_order_and_the_cursor_moves_after_accepta
 
 def test_each_chunk_is_told_in_both_traces_exactly_once_however_often_the_sweep_runs(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
-    _moved, stopped = _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    _moved, stopped = closed_pair(hub)
 
     for _ in range(5):
-        _sweep(hub).sweep()
+        trace_export_sweep(hub).sweep()
         hub.clock.advance(timedelta(seconds=61))
 
     assert _chunk_spans(exporter, "chunk work") == [chunk_span_id(stopped)]
@@ -176,111 +176,111 @@ def test_each_chunk_is_told_in_both_traces_exactly_once_however_often_the_sweep_
 
 def test_a_step_inside_the_settle_window_waits(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, TracingConfig(settle_seconds=300))
-    _sweep(hub).sweep()
-    _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    closed_pair(hub)
 
     hub.clock.advance(timedelta(seconds=299))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 0
 
     hub.clock.advance(timedelta(seconds=1))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert len(_roots(exporter)) == 2
 
 
 @pytest.mark.parametrize("mode", ["refuses", "raises"])
 def test_a_failed_export_holds_the_cursor_backs_off_and_is_announced_once(tmp_path: Path, mode: str) -> None:
     hub, exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     start = trace_store(hub).newest_cursor()
-    _closed_pair(hub)
+    closed_pair(hub)
     exporter.fail = mode == "refuses"
     exporter.raises = mode == "raises"
 
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 1
     assert trace_store(hub).newest_cursor() == start
     assert _kinds(hub) == ["trace-export-failed"]
 
     # The first retry waits one interval, the next two: a sweep in between does not call the exporter.
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 1
     hub.clock.advance(timedelta(seconds=60))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 2
     hub.clock.advance(timedelta(seconds=60))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 2
     hub.clock.advance(timedelta(seconds=60))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == 3
     assert _kinds(hub) == ["trace-export-failed"]
     assert trace_store(hub).newest_cursor() == start
 
     exporter.fail = exporter.raises = False
     hub.clock.advance(timedelta(seconds=240))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert len(_roots(exporter)) == 2
     assert _kinds(hub) == ["trace-export-failed", "trace-export-recovered"]
 
-    _closed_pair(hub, ref=10)
-    _sweep(hub).sweep()
+    closed_pair(hub, ref=10)
+    trace_export_sweep(hub).sweep()
     assert len(_roots(exporter)) == 4
     assert _kinds(hub) == ["trace-export-failed", "trace-export-recovered"]
 
 
 def test_the_backoff_stops_doubling_at_its_cap(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path, TracingConfig(settle_seconds=0, max_lag_seconds=86400))
-    _sweep(hub).sweep()
-    _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    closed_pair(hub)
     exporter.fail = True
     for _ in range(8):
         hub.clock.advance(BACKOFF_CAP)
-        _sweep(hub).sweep()
+        trace_export_sweep(hub).sweep()
     attempts = exporter.attempts
 
     hub.clock.advance(BACKOFF_CAP - timedelta(seconds=1))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == attempts
     hub.clock.advance(timedelta(seconds=1))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert exporter.attempts == attempts + 1
 
 
 def test_a_restart_during_an_outage_does_not_announce_it_again(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
-    _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    closed_pair(hub)
     exporter.fail = True
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     assert _kinds(hub) == ["trace-export-failed"]
 
     restarted, again = _hub(tmp_path)
     restarted.clock.instant = hub.clock.now()
     again.fail = True
-    _sweep(restarted).sweep()
+    trace_export_sweep(restarted).sweep()
     assert again.attempts == 1
     assert _kinds(restarted) == ["trace-export-failed"]
 
     again.fail = False
     restarted.clock.advance(timedelta(seconds=60))
-    _sweep(restarted).sweep()
+    trace_export_sweep(restarted).sweep()
     assert len(_roots(again)) == 2
     assert _kinds(restarted) == ["trace-export-failed", "trace-export-recovered"]
 
 
 def test_an_unsent_step_older_than_the_lag_cap_jumps_the_cursor_and_records_the_window(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     start = trace_store(hub).newest_cursor()
     assert start is not None
-    _closed_pair(hub)
+    closed_pair(hub)
     exporter.fail = True
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     hub.clock.advance(timedelta(seconds=3600 + 60))
     exporter.fail = False
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     boundary = hub.clock.now() - timedelta(seconds=3600)
     newest = trace_store(hub).newest_cursor()
@@ -295,29 +295,29 @@ def test_an_unsent_step_older_than_the_lag_cap_jumps_the_cursor_and_records_the_
 
 def test_a_cursor_stale_only_because_the_fleet_was_idle_never_jumps(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     hub.clock.advance(timedelta(days=3))
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     assert _row_count(hub) == 1
     assert _kinds(hub) == []
-    _closed_pair(hub)
-    _sweep(hub).sweep()
+    closed_pair(hub)
+    trace_export_sweep(hub).sweep()
     assert len(_roots(exporter)) == 2
 
 
 def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(tmp_path: Path) -> None:
     hub, _exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
     start = trace_store(hub).newest_cursor()
     assert start is not None
-    _closed_pair(hub)  # closed while tracing was off again
+    closed_pair(hub)  # closed while tracing was off again
 
     restarted, exporter = _hub(tmp_path)
     restarted.clock.instant = hub.clock.now()
     restarted.clock.advance(timedelta(seconds=3600 + 60))
-    _sweep(restarted).sweep()
+    trace_export_sweep(restarted).sweep()
 
     assert trace_store(restarted).newest_cursor() == TraceCheckpoint(
         CursorKey.opening(restarted.clock.now()), 0, restarted.clock.now()
@@ -335,8 +335,8 @@ def _skipped_count(hub: HubHarness) -> int:
 
 def _gapped_restart(tmp_path: Path) -> HubHarness:
     hub, _exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
-    _closed_pair(hub)
+    trace_export_sweep(hub).sweep()
+    closed_pair(hub)
     restarted, _again = _hub(tmp_path)
     restarted.clock.instant = hub.clock.now()
     restarted.clock.advance(timedelta(seconds=3600 + 60))
@@ -347,7 +347,7 @@ def test_a_failed_jump_write_retries_and_records_the_skipped_window_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     restarted = _gapped_restart(tmp_path)
-    sweep = _sweep(restarted)
+    sweep = trace_export_sweep(restarted)
     append = sweep._steps.append_cursor
     attempts = 0
 
@@ -372,7 +372,7 @@ def test_a_jump_whose_cursor_write_never_succeeds_records_no_skipped_window(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     restarted = _gapped_restart(tmp_path)
-    sweep = _sweep(restarted)
+    sweep = trace_export_sweep(restarted)
 
     def append_always_failed(record: TraceCheckpoint) -> None:
         raise OSError("cursor store down")
@@ -386,12 +386,12 @@ def test_a_jump_whose_cursor_write_never_succeeds_records_no_skipped_window(
 
 def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> None:
     hub, _exporter = _hub(tmp_path)
-    _sweep(hub).sweep()
+    trace_export_sweep(hub).sweep()
 
     restarted, _again = _hub(tmp_path)
     restarted.clock.instant = hub.clock.now()
     restarted.clock.advance(timedelta(seconds=3600 + 60))
-    _sweep(restarted).sweep()
+    trace_export_sweep(restarted).sweep()
 
     assert _row_count(restarted) == 2
     assert _kinds(restarted) == []
@@ -399,7 +399,7 @@ def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> Non
 
 def test_a_hub_with_tracing_off_has_no_trace_sweep_and_writes_no_cursor(tmp_path: Path) -> None:
     hub, _graph = trace_hub(tmp_path)
-    _closed_pair(hub)
+    closed_pair(hub)
     assert hub.hub_services.trace_export is None
     assert hub.app is not None
     hub.app.state.shutdown = None
@@ -476,9 +476,9 @@ def _open_steps(hub: HubHarness, count: int, seqs: itertools.count[int]) -> None
 
 def test_an_idle_pass_reads_no_closing_candidates_however_many_steps_are_open(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    sweep = _sweep(hub)
+    sweep = trace_export_sweep(hub)
     sweep.sweep()
-    _closed_pair(hub)
+    closed_pair(hub)
     seqs = itertools.count(100)
     measured: list[tuple[int, int]] = []
     for _ in range(3):
@@ -495,7 +495,7 @@ def test_an_idle_pass_reads_no_closing_candidates_however_many_steps_are_open(tm
 
 def test_an_open_step_that_closes_later_is_told_once_after_the_cursor_passed_its_opening(tmp_path: Path) -> None:
     hub, exporter = _hub(tmp_path)
-    sweep = _sweep(hub)
+    sweep = trace_export_sweep(hub)
     sweep.sweep()
     graph = hub.services.graphs.get_enabled_by_name("default-delivery")
     assert graph is not None

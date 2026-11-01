@@ -86,7 +86,7 @@ def _wire_endpoints() -> dict[str, tuple[str, str]]:
     return {**_IHUBCLIENT_ENDPOINTS, **setup}
 
 
-def _assert_ihubclient_endpoint_table_matches_protocol() -> None:
+def assert_ihubclient_endpoint_table_matches_protocol() -> None:
     """The guard's own table must name exactly ``IHubClient``'s method set.
 
     Pure import + dict compare, no fleet and no network; shared with the unit-tier
@@ -111,7 +111,7 @@ def _assert_ihubclient_endpoint_table_matches_protocol() -> None:
 def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
     """Re-runs ``_assert_ihubclient_endpoint_table_matches_protocol`` under this
     module's ``service_gate`` too."""
-    _assert_ihubclient_endpoint_table_matches_protocol()
+    assert_ihubclient_endpoint_table_matches_protocol()
 
 
 def test_each_setup_port_table_matches_its_protocol_method_set() -> None:

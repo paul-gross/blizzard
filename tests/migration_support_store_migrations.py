@@ -102,13 +102,14 @@ def assert_frozen_table_lacks_a_later_revisions_columns(
             assert column not in after
 
 
-def _spawn_cwd_round_trip(
-    config, runner, parent: str, row: dict[str, object], *, registered: bool = False
+def spawn_cwd_round_trip(
+    db_url: str, runner: MigrationRunner, parent: str, row: dict[str, object], *, registered: bool = False
 ) -> list[object]:
-    """Downgrade to ``parent``, seed one segment row there, upgrade — the column's value on that row. A runner store
+    """Downgrade the store at ``db_url`` to ``parent``, seed one segment row there, upgrade — the column's value on
+    that row. A runner store
     upgrades with a runner registered (``registered``)."""
     runner.downgrade(parent)
-    engine = create_engine_from_url(config.db_url)
+    engine = create_engine_from_url(db_url)
     try:
         with engine.begin() as conn:
             assert "spawn_cwd" not in {c["name"] for c in sa.inspect(conn).get_columns("transcript_segments")}
@@ -118,10 +119,10 @@ def _spawn_cwd_round_trip(
     finally:
         engine.dispose()
     if registered:
-        upgrade_runner_store_as_registered(runner, config.db_url)
+        upgrade_runner_store_as_registered(runner, db_url)
     else:
         runner.upgrade("head")
-    engine = create_engine_from_url(config.db_url)
+    engine = create_engine_from_url(db_url)
     try:
         with engine.connect() as conn:
             return [r.spawn_cwd for r in conn.execute(sa.text("SELECT spawn_cwd FROM transcript_segments"))]

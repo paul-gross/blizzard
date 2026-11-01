@@ -34,11 +34,11 @@ from tests.runner_fakes import (
 )
 from tests.test_runner_harness_opencode_transcript import (
     FakeExporter,
-    _assistant_message,
-    _error_factory,
-    _export,
-    _tool_part,
-    _user_message,
+    assistant_message,
+    error_factory,
+    opencode_export,
+    tool_part,
+    user_message,
 )
 
 pytestmark = pytest.mark.component
@@ -89,20 +89,20 @@ def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() ->
     plus one output-patch turn — never the completed call a second time."""
     exporter = FakeExporter(
         {
-            "sess-1": _export(
+            "sess-1": opencode_export(
                 "sess-1",
                 [
-                    _user_message("sess-1", "m-user", []),
-                    _assistant_message(
+                    user_message("sess-1", "m-user", []),
+                    assistant_message(
                         "sess-1",
                         "m-asst",
-                        [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
+                        [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="pending")],
                     ),
                 ],
             )
         }
     )
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     store = make_store("sqlite://")
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=1, process_start_time="1", pgid=1),
@@ -128,14 +128,14 @@ def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() ->
     assert pending_turn["tool"]["output"] is None
     assert pending_turn["tool"].get("output_patch") is not True
 
-    exporter.scripts["sess-1"] = _export(
+    exporter.scripts["sess-1"] = opencode_export(
         "sess-1",
         [
-            _user_message("sess-1", "m-user", []),
-            _assistant_message(
+            user_message("sess-1", "m-user", []),
+            assistant_message(
                 "sess-1",
                 "m-asst",
-                [_tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="completed", output="done")],
+                [tool_part("sess-1", "m-asst", "p-tool", call_id="call-1", status="completed", output="done")],
             ),
         ],
     )
@@ -163,14 +163,14 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
     """End to end: a child session export that fails once, then succeeds, surfaces
     as an unlinked sidechain (never lost) and is picked up through the pump's own
     cross-window agent-id route once it resolves — never a duplicate on a further tick."""
-    root = _export(
+    root = opencode_export(
         "root-1",
         [
-            _assistant_message(
+            assistant_message(
                 "root-1",
                 "m-asst",
                 [
-                    _tool_part(
+                    tool_part(
                         "root-1",
                         "m-asst",
                         "p-task",
@@ -184,7 +184,7 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
         ],
     )
     exporter = FakeExporter({"root-1": root, "child-1": OpenCodeExportError("gone")})
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     store = make_store("sqlite://")
     harness = FakeHarness(
         handle=WorkerHandle(session_id="root-1", pid=1, process_start_time="1", pgid=1),
@@ -229,7 +229,9 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
     assert kinds.count("transcript-sidechain-dropped") == 1
     assert [t for t in _shipped_turns(ctx) if t["kind"] == "sidechain"] == []
 
-    exporter.scripts["child-1"] = _export("child-1", [_user_message("child-1", "m-child-user", [])], parent_id="root-1")
+    exporter.scripts["child-1"] = opencode_export(
+        "child-1", [user_message("child-1", "m-child-user", [])], parent_id="root-1"
+    )
 
     TranscriptPump(ctx).run()
 
@@ -249,7 +251,7 @@ def test_a_live_capture_ships_a_timestamp_on_every_turn_and_sidechain_turn() -> 
     scripts: dict[str, str | Exception] = {"sess-1": (capture / "root_export.json").read_text()}
     scripts.update({child: (capture / f"child_{child}.json").read_text() for child in children})
     exporter = FakeExporter(scripts)
-    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    source = OpenCodeTranscriptSource(exporter, error_factory())
     store = make_store("sqlite://")
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-1", pid=1, process_start_time="1", pgid=1),

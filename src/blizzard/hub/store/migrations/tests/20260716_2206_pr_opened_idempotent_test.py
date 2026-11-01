@@ -2,8 +2,6 @@
 uniqueness lands only at this revision, the upgrade keeps the earliest of each duplicate and
 enforces the constraint after, and a down-then-up cycle round-trips the deduplicated rows."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -19,9 +17,9 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_pin_hub_api import (
-    _MIGRATION_CLOCK,
-    _PM_POINTER_SOURCE_REF,
-    _store,
+    MIGRATION_CLOCK,
+    PM_POINTER_SOURCE_REF,
+    scratch_store,
 )
 from tests.support import hub_scoped_engine
 
@@ -140,10 +138,10 @@ def _seed(engine: sa.Engine) -> None:
 def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_it(tmp_path: Path) -> None:
     """``0014`` is the one revision that constrains (chunk_id, repo); the revision that
     *creates* the table must not already carry the constraint off ``src/blizzard/hub/store/schema.py``."""
-    _runner, url = _store(tmp_path, _DELIVERY_PR_FACTS)
+    _runner, url = scratch_store(tmp_path, _DELIVERY_PR_FACTS)
     assert _unique_constraint_names(url, "delivery_pr_opened") == set()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
     assert "uq_delivery_pr_opened_chunk_repo" in _unique_constraint_names(url, "delivery_pr_opened")
 
 
@@ -152,7 +150,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     """A store carrying the dogfood duplicates upgrades rather than failing the
     constraint add: every row but the earliest (lowest ``id``) per (chunk_id, repo) is
     deleted, and a distinct (chunk_id, repo) pair is untouched."""
-    _runner, url = _store(tmp_path, _PM_POINTER_SOURCE_REF)
+    _runner, url = scratch_store(tmp_path, PM_POINTER_SOURCE_REF)
     engine = hub_scoped_engine(create_engine_from_url(url))
     insert = sa.text(
         "INSERT INTO delivery_pr_opened (id, chunk_id, repo, pr_number, pr_url, commit_hash, opened_at)"
@@ -166,7 +164,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     finally:
         engine.dispose()
 
-    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=_MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
+    MigrationRunner(script_location=MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK).upgrade(_PR_OPENED_IDEMPOTENT)
 
     engine = hub_scoped_engine(create_engine_from_url(url))
     try:

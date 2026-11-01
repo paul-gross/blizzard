@@ -124,10 +124,10 @@ def test_forge_reference_is_always_none(tmp_path: Path) -> None:
 
 
 def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         title="widget is broken",
         body="steps to repro",
@@ -144,10 +144,12 @@ def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
 
 def test_fetch_resolves_a_user_author_s_login(tmp_path: Path) -> None:
     """The one place a bare ``user_id`` is ever resolved to a login."""
-    source, items, _, users, engine, _ = _source(tmp_path)
+    source, _, _, users, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     user = _user(users, username="alice")
-    created = seed_work_item(items, graph_id=graph.graph_id, author=WorkItemAuthor.user(user.user_id), at=_T0)
+    created = seed_work_item(
+        hub_store_connections(engine), graph_id=graph.graph_id, author=WorkItemAuthor.user(user.user_id), at=_T0
+    )
 
     item = source.fetch(WorkRef(source="hub", ref=created.ref))
 
@@ -159,10 +161,10 @@ def test_fetch_resolves_a_user_author_s_login(tmp_path: Path) -> None:
 
 def test_fetch_names_a_fleet_author_s_runner_chunk_and_node(tmp_path: Path) -> None:
     """No route mints a fleet author — proven from a directly-seeded store row."""
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
-    created = seed_work_item(items, graph_id=graph.graph_id, author=author, at=_T0)
+    created = seed_work_item(hub_store_connections(engine), graph_id=graph.graph_id, author=author, at=_T0)
 
     item = source.fetch(WorkRef(source="hub", ref=created.ref))
 
@@ -176,10 +178,10 @@ def test_fetch_names_a_fleet_author_s_runner_chunk_and_node(tmp_path: Path) -> N
 
 
 def test_fetch_carries_an_absent_stated_priority_through(tmp_path: Path) -> None:
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
@@ -192,10 +194,10 @@ def test_fetch_carries_an_absent_stated_priority_through(tmp_path: Path) -> None
 
 
 def test_fetch_carries_a_set_stated_priority_through(tmp_path: Path) -> None:
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=WorkItemPriority.HIGH.value,
@@ -217,7 +219,7 @@ def test_fetch_a_withdrawn_ref_raises(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -233,7 +235,7 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -265,14 +267,14 @@ def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_pa
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     open_item = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         title="open",
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     withdrawn = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         title="withdrawn",
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
@@ -560,7 +562,7 @@ def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -579,7 +581,7 @@ def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> Non
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -607,7 +609,7 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -675,10 +677,10 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
 
 
 def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp_path: Path) -> None:
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -707,7 +709,7 @@ def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_fi
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -736,10 +738,10 @@ def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_fi
 def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     """`close()` is safe to repeat — a redelivered close-intent drain sweep, or any
     other retry, must not append a second `delivered` fact."""
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -761,10 +763,10 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
     """A proposal delivered before `delivered` existed left a `resolved` fact carrying
     its `proposal_id` — `has_delivery_for_proposal` must still gate on it, or a reopened
     finding gets silently redelivered by a later, unrelated retry."""
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -796,11 +798,11 @@ def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed
 
 
 def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_path: Path) -> None:
-    source, items, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     project = default_project(engine)
     graph = _graph(engine)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=graph.graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -847,7 +849,7 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=_graph(engine).graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -872,7 +874,7 @@ def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_d
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=_graph(engine).graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
@@ -899,7 +901,7 @@ def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_p
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock)
     created = seed_work_item(
-        items,
+        hub_store_connections(engine),
         graph_id=_graph(engine).graph_id,
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,

@@ -10,7 +10,6 @@ import pytest
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
 from tests.support import (
     FakeBatchWorkSource,
@@ -123,13 +122,12 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
             hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
         )
         store = hub_store_connections(hub.engine)
-        items = WorkItemStore(store)
         refs = ChunkWorkRefsStore(store, hub.clock, facts=ChunkFactsStore(store, hub.clock))
         seed_runner(hub, "runner-x", name="r-x", register=False)
         ids: list[str] = []
         for i in range(count):
             item = seed_work_item(
-                items,
+                store,
                 graph_id=graph.graph_id,
                 title=f"t{i}",
                 body="b",

@@ -4,15 +4,13 @@ The back-fill enqueues one pending intent per already-landed or hand-completed,
 non-ephemeral chunk's still-open work ref, narrowed to no source: an opted-in and a
 never-opted-in source both back-fill alike."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert, select
+from sqlalchemy import Connection, insert, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
@@ -29,7 +27,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _T1 = datetime(2026, 1, 2, tzinfo=UTC)
 
 
-def _seed_graph_and_chunk(conn, chunk_id: str) -> None:
+def _seed_graph_and_chunk(conn: Connection, chunk_id: str) -> None:
     conn.execute(insert(s.chunks).values(chunk_id=chunk_id, graph_id="gr_1", minted_at=_T0))
 
 

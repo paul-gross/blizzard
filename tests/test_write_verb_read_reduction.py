@@ -27,8 +27,8 @@ from tests.support import (
     seed_user,
     serve_default_tenant,
 )
-from tests.test_decisions_api import _GATE_YAML
-from tests.test_questions_api import _asked
+from tests.test_decisions_api import GATE_YAML
+from tests.test_questions_api import ask_question
 
 pytestmark = pytest.mark.component
 
@@ -130,7 +130,7 @@ def test_answer_question_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
     pre-write via ``ChunkChanged.before``, post-write via ``publish``; unchanged by this
     phase, which instead drops the extra ``get_question`` read below."""
     hub = build_hub(tmp_path)
-    chunk_id = _asked(hub)
+    chunk_id = ask_question(hub)
     counting = _wire_counting_facts(hub)
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
@@ -143,7 +143,7 @@ def test_answer_question_calls_get_question_exactly_once(tmp_path: Path) -> None
     """Before: 2 (the pre-answer read, then re-reading the just-written winner to find
     its ``chunk_id``). After: 1 — the pre-answer read already names that chunk."""
     hub = build_hub(tmp_path)
-    _asked(hub)
+    ask_question(hub)
     counting = _wire_counting_questions(hub)
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
@@ -166,7 +166,7 @@ def test_answer_question_resolves_the_session_exactly_once_under_oauth(tmp_path:
     separate manual resolve). After: 1 — a single ``Depends(require(...))`` parameter."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     cookie = _superuser_cookie(hub)
-    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}, headers=cookie)
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": GATE_YAML}, headers=cookie)
     assert graph.status_code == 201, graph.text
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=cookie).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=cookie).status_code == 202
@@ -216,7 +216,7 @@ def test_resolve_decision_resolves_the_session_exactly_once_under_oauth(tmp_path
 def _open_decision_under_oauth(hub: HubHarness, cookie: dict[str, str]) -> str:
     """``_open_decision``'s own setup, cookie-carrying on every session-gated route —
     the claim/lease/completion trio stays bare, since those sit on the runner surface."""
-    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}, headers=cookie)
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": GATE_YAML}, headers=cookie)
     assert graph.status_code == 201, graph.text
     build_node_id = next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:2"]}, headers=cookie).json()["chunk_id"]

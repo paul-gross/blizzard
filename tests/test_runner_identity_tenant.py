@@ -16,7 +16,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.store import schema as runner_schema
-from tests.migration_support_runner_identity_tenant import _NOW, _REGISTERED, _RUNNER, _ctx, _tenant_hub
+from tests.migration_support_runner_identity_tenant import NOW, REGISTERED, RUNNER, started_context, tenant_hub
 from tests.runner_fakes import (
     make_store,
     migrated_store_at,
@@ -54,8 +54,8 @@ def test_no_table_but_the_identity_rows_carries_a_tenant(tmp_path: Path) -> None
 def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path) -> None:
     """The check writes nothing into an empty row; the registration after it records the configured runner and its
     tenant."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
-    ctx = _ctx(store, _tenant_hub())
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=RUNNER)
+    ctx = started_context(store, tenant_hub())
 
     IdentityCheck(ctx).run()
     assert store.runner_identity() is None
@@ -63,20 +63,20 @@ def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path
     Registration(ctx).run()
     recorded = store.runner_identity()
     assert recorded is not None
-    assert (recorded.runner_id, recorded.tenant_id, recorded.tenant_name) == (_RUNNER, "ten_default", "default")
+    assert (recorded.runner_id, recorded.tenant_id, recorded.tenant_name) == (RUNNER, "ten_default", "default")
 
 
 def test_a_mismatched_answer_records_nothing_of_the_other_runners_tenant(tmp_path: Path) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
-    store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED))
-    hub = _tenant_hub("ten_other", "other")
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=RUNNER)
+    store.record_runner_identity(RunnerIdentity(RUNNER, "r-claude", REGISTERED))
+    hub = tenant_hub("ten_other", "other")
     hub.issued[hub.token] = "rn_other"
-    ctx = _ctx(store, hub)
+    ctx = started_context(store, hub)
 
     IdentityCheck(ctx).run()
 
     assert ctx.identity_verdict.verdict().state is IdentityState.MISMATCHED
-    assert store.runner_identity() == RunnerIdentity(_RUNNER, "r-claude", _REGISTERED)
+    assert store.runner_identity() == RunnerIdentity(RUNNER, "r-claude", REGISTERED)
 
 
 @pytest.mark.parametrize(
@@ -91,9 +91,9 @@ def test_a_mismatched_answer_records_nothing_of_the_other_runners_tenant(tmp_pat
 def test_each_registration_keeps_the_tenant_its_reply_names_else_the_rows(
     tmp_path: Path, answered: tuple[str | None, str | None], kept: tuple[str | None, str | None]
 ) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
-    store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED, "ten_default", "default"))
-    ctx = _ctx(store, _tenant_hub(*answered), checked=True)
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=RUNNER)
+    store.record_runner_identity(RunnerIdentity(RUNNER, "r-claude", REGISTERED, "ten_default", "default"))
+    ctx = started_context(store, tenant_hub(*answered), checked=True)
 
     Registration(ctx).run()
 
@@ -103,9 +103,9 @@ def test_each_registration_keeps_the_tenant_its_reply_names_else_the_rows(
 
 
 def test_a_first_registration_after_the_upgrade_fills_the_tenant_when_the_check_could_not(tmp_path: Path) -> None:
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
-    store.record_runner_identity(RunnerIdentity(_RUNNER, "r-claude", _REGISTERED))
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=RUNNER)
+    store.record_runner_identity(RunnerIdentity(RUNNER, "r-claude", REGISTERED))
 
-    Registration(_ctx(store, _tenant_hub(), checked=True)).run()
+    Registration(started_context(store, tenant_hub(), checked=True)).run()
 
-    assert store.runner_identity() == RunnerIdentity(_RUNNER, "r-claude", _NOW, "ten_default", "default")
+    assert store.runner_identity() == RunnerIdentity(RUNNER, "r-claude", NOW, "ten_default", "default")

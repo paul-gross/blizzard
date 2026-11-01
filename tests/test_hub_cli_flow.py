@@ -13,7 +13,7 @@ import pytest
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from tests.test_flow_routes import _Line
+from tests.test_flow_routes import Line
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
@@ -22,13 +22,13 @@ _HUB_URL = "http://hub.local:8421"
 
 
 @pytest.fixture
-def line(tmp_path: Path) -> _Line:
-    built = _Line(tmp_path)
+def line(tmp_path: Path) -> Line:
+    built = Line(tmp_path)
     built.world.poll_due()
     return built
 
 
-def _relay(line: _Line, calls: list[dict[str, str]]) -> Bound:
+def _relay(line: Line, calls: list[dict[str, str]]) -> Bound:
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
         calls.append(dict(params or {}))
         return line.client.get(url, params=params)
@@ -36,7 +36,7 @@ def _relay(line: _Line, calls: list[dict[str, str]]) -> Bound:
     return bind_stubs(get=fake_get)
 
 
-def _invoke(line: _Line, *args: str, calls: list[dict[str, str]] | None = None) -> Result:
+def _invoke(line: Line, *args: str, calls: list[dict[str, str]] | None = None) -> Result:
     result = _relay(line, [] if calls is None else calls).runner.invoke(
         hub_group, list(args), env={"BZ_HUB_URL": _HUB_URL}
     )
@@ -48,7 +48,7 @@ def _json(result: Result) -> Any:
     return json.loads(result.output)
 
 
-def test_flow_list_json_is_the_active_routes_body_and_all_drops_the_filter(line: _Line) -> None:
+def test_flow_list_json_is_the_active_routes_body_and_all_drops_the_filter(line: Line) -> None:
     calls: list[dict[str, str]] = []
 
     assert (
@@ -59,7 +59,7 @@ def test_flow_list_json_is_the_active_routes_body_and_all_drops_the_filter(line:
     assert calls == [{"active": "true"}, {}]
 
 
-def test_flow_list_prints_each_place_the_line_holds(line: _Line) -> None:
+def test_flow_list_prints_each_place_the_line_holds(line: Line) -> None:
     lines = _invoke(line, "flow", "list").output.splitlines()
 
     assert lines[0].startswith(f"{line.flow_id}  ")
@@ -67,20 +67,20 @@ def test_flow_list_prints_each_place_the_line_holds(line: _Line) -> None:
     assert lines[1:3] == [f"  {line.first}  next  position 1", f"  {line.second}  waiting  position 2"]
 
 
-def test_flow_show_json_is_the_flows_body(line: _Line) -> None:
+def test_flow_show_json_is_the_flows_body(line: Line) -> None:
     result = _invoke(line, "flow", "get", line.flow_id, "--json")
 
     assert _json(result) == line.client.get(f"/api/flows/{line.flow_id}").json()
 
 
-def test_flow_show_refuses_an_unknown_flow(line: _Line) -> None:
+def test_flow_show_refuses_an_unknown_flow(line: Line) -> None:
     result = _relay(line, []).runner.invoke(hub_group, ["flow", "get", "flw_missing"], env={"BZ_HUB_URL": _HUB_URL})
 
     assert result.exit_code != 0
     assert "unknown flow flw_missing" in result.output
 
 
-def test_flow_show_record_json_is_the_record_page(line: _Line) -> None:
+def test_flow_show_record_json_is_the_record_page(line: Line) -> None:
     result = _invoke(line, "flow", "get", line.flow_id, "--record", "--limit", "4", "--json")
 
     assert _json(result) == line.client.get(f"/api/flows/{line.flow_id}/record", params={"limit": 4}).json()
@@ -110,7 +110,7 @@ def _fact(fact_id: int) -> dict[str, object]:
     return {"id": fact_id, "flow_id": "flw_1", "submission_id": "sub_1", "chunk_id": "ch_1", "kind": "landed"}
 
 
-def test_flow_show_record_prints_one_line_per_entry_newest_first(line: _Line) -> None:
+def test_flow_show_record_prints_one_line_per_entry_newest_first(line: Line) -> None:
     whole = line.client.get(f"/api/flows/{line.flow_id}/record").json()["facts"]
 
     text = _invoke(line, "flow", "get", line.flow_id, "--record", "--limit", "1").output.splitlines()
@@ -119,7 +119,7 @@ def test_flow_show_record_prints_one_line_per_entry_newest_first(line: _Line) ->
     assert text == [f"{newest['id']}  {newest['at']}  {newest['kind']}  {newest['chunk_id']}  outcome=pending"]
 
 
-def test_chunk_show_prints_one_place_line_per_flow_under_its_status(line: _Line) -> None:
+def test_chunk_show_prints_one_place_line_per_flow_under_its_status(line: Line) -> None:
     lines = _invoke(line, "chunk", "get", line.second).output.splitlines()
 
     assert lines[0].startswith(f"{line.second}  status=delivering")

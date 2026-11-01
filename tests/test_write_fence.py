@@ -22,6 +22,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
 from tests.support import (
+    FactAck,
     HubHarness,
     build_hub,
     chunk_rows,
@@ -85,7 +86,7 @@ _STALE = "stale epoch 1; chunk is at 2"
 _TERMINAL = "chunk is terminal"
 
 
-class _Chunk:
+class Chunk:
     def __init__(self, hub: HubHarness) -> None:
         self.hub = hub
         self.stores = chunk_stores(hub.engine, hub.clock)
@@ -147,7 +148,7 @@ class _Chunk:
         return decision_id
 
 
-def _held_by_a_writer(chunk: _Chunk, submit: Callable[[], object], write: Callable[[object], None]) -> object:
+def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable[[object], None]) -> object:
     with_test_lock_wait(chunk.hub)
     answered: dict[str, object] = {}
     started = threading.Event()
@@ -175,14 +176,14 @@ def _held_by_a_writer(chunk: _Chunk, submit: Callable[[], object], write: Callab
     return answered["result"]
 
 
-def _stop_under_lock(chunk: _Chunk) -> Callable[[object], None]:
+def stop_under_lock(chunk: Chunk) -> Callable[[object], None]:
     def write(handle) -> None:
         chunk.stores.lifecycle.record_stop_locked(handle, chunk.chunk_id, by="operator", at=chunk.hub.clock.now())
 
     return write
 
 
-def _restart_under_lock(chunk: _Chunk) -> Callable[[object], None]:
+def restart_under_lock(chunk: Chunk) -> Callable[[object], None]:
     def write(handle) -> None:
         chunk.stores.movement.record_restart_locked(
             handle,
@@ -197,7 +198,7 @@ def _restart_under_lock(chunk: _Chunk) -> Callable[[object], None]:
 
 
 def test_a_stale_completion_is_refused_and_records_no_transition(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.lease(2)
 
     result = chunk.complete("build", epoch=1, choice="finish")
@@ -208,7 +209,7 @@ def test_a_stale_completion_is_refused_and_records_no_transition(tmp_path: Path)
 
 
 def test_a_completion_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.stop()
 
     result = chunk.complete("build", epoch=1, choice="finish")
@@ -219,7 +220,7 @@ def test_a_completion_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_completion_at_the_current_epoch_after_done_is_refused_as_terminal(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
     assert chunk.detail()["status"] == "done"
 
@@ -231,7 +232,7 @@ def test_a_completion_at_the_current_epoch_after_done_is_refused_as_terminal(tmp
 
 
 def test_a_replayed_completion_still_absorbs_once_the_chunk_is_done(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
 
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
@@ -239,11 +240,9 @@ def test_a_replayed_completion_still_absorbs_once_the_chunk_is_done(tmp_path: Pa
 
 
 def test_a_completion_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
-    result = _held_by_a_writer(
-        chunk, lambda: chunk.complete("build", epoch=1, choice="finish"), _stop_under_lock(chunk)
-    )
+    result = held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="finish"), stop_under_lock(chunk))
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 0
@@ -251,10 +250,10 @@ def test_a_completion_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> N
 
 
 def test_a_completion_blocks_behind_a_restart_and_then_refuses(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
-    result = _held_by_a_writer(
-        chunk, lambda: chunk.complete("build", epoch=1, choice="finish"), _restart_under_lock(chunk)
+    result = held_by_a_writer(
+        chunk, lambda: chunk.complete("build", epoch=1, choice="finish"), restart_under_lock(chunk)
     )
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and _STALE in result["detail"]
@@ -263,7 +262,7 @@ def test_a_completion_blocks_behind_a_restart_and_then_refuses(tmp_path: Path) -
 
 
 def test_a_stale_gate_resolution_is_refused(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     decision_id = chunk.gate_decision()
     chunk.lease(2)
 
@@ -275,7 +274,7 @@ def test_a_stale_gate_resolution_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_gate_resolution_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     decision_id = chunk.gate_decision()
     chunk.stop()
 
@@ -287,13 +286,13 @@ def test_a_gate_resolution_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None
 
 
 def test_a_gate_resolution_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     decision_id = chunk.gate_decision()
 
-    result = _held_by_a_writer(
+    result = held_by_a_writer(
         chunk,
         lambda: chunk.complete("approve-gate", epoch=1, choice="approve", decision_id=decision_id),
-        _stop_under_lock(chunk),
+        stop_under_lock(chunk),
     )
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
@@ -302,7 +301,7 @@ def test_a_gate_resolution_blocks_behind_a_stop_and_then_refuses(tmp_path: Path)
 
 
 def test_a_stale_runner_config_decision_is_refused_and_opens_nothing(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.lease(2)
 
     result = chunk.decide("build", epoch=1)
@@ -313,7 +312,7 @@ def test_a_stale_runner_config_decision_is_refused_and_opens_nothing(tmp_path: P
 
 
 def test_a_runner_config_decision_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.stop()
 
     result = chunk.decide("build", epoch=1)
@@ -324,7 +323,7 @@ def test_a_runner_config_decision_on_a_stopped_chunk_is_refused(tmp_path: Path) 
 
 
 def test_a_runner_config_decision_after_done_is_refused_as_terminal(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
 
     result = chunk.decide("review", epoch=1)
@@ -335,27 +334,27 @@ def test_a_runner_config_decision_after_done_is_refused_as_terminal(tmp_path: Pa
 
 
 def test_a_runner_config_decision_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
-    result = _held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), _stop_under_lock(chunk))
+    result = held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), stop_under_lock(chunk))
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.decisions) == 0
     assert chunk.rows(s.artifacts) == 0
 
 
-def _ask(chunk: _Chunk, *, epoch: int) -> dict[str, Any]:
+def _ask(chunk: Chunk, *, epoch: int) -> FactAck:
     chunk.seq += 1
     return report_question(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
 
-def _escalate(chunk: _Chunk, *, epoch: int) -> dict[str, Any]:
+def _escalate(chunk: Chunk, *, epoch: int) -> FactAck:
     chunk.seq += 1
     return report_escalation(chunk.hub, chunk.chunk_id, epoch=epoch, seq=chunk.seq)
 
 
 def test_a_below_floor_question_after_a_restart_is_rejected_and_parks_nothing(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.restart()
 
     ack = _ask(chunk, epoch=1)
@@ -366,7 +365,7 @@ def test_a_below_floor_question_after_a_restart_is_rejected_and_parks_nothing(tm
 
 
 def test_a_below_floor_escalation_after_a_restart_is_rejected_and_parks_nothing(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.restart()
 
     ack = _escalate(chunk, epoch=1)
@@ -377,7 +376,7 @@ def test_a_below_floor_escalation_after_a_restart_is_rejected_and_parks_nothing(
 
 
 def test_a_question_and_an_escalation_on_a_stopped_chunk_are_rejected(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.stop()
 
     assert _ask(chunk, epoch=1)["rejected"] == [chunk.seq]
@@ -386,14 +385,14 @@ def test_a_question_and_an_escalation_on_a_stopped_chunk_are_rejected(tmp_path: 
 
 
 def test_a_same_epoch_question_and_escalation_still_land(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
 
     assert _ask(chunk, epoch=1)["applied"] == [chunk.seq]
     assert _escalate(chunk, epoch=1)["applied"] == [chunk.seq]
 
 
 def test_a_replayed_question_absorbs_even_once_the_chunk_is_stopped(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     assert _ask(chunk, epoch=1)["applied"] == [chunk.seq]
     chunk.stop()
 
@@ -404,7 +403,7 @@ def test_a_replayed_question_absorbs_even_once_the_chunk_is_stopped(tmp_path: Pa
 
 
 def test_an_intake_blocks_behind_a_restart_and_then_rejects(tmp_path: Path) -> None:
-    chunk = _Chunk(build_hub(tmp_path))
+    chunk = Chunk(build_hub(tmp_path))
     chunk.seq += 1
     seq = chunk.seq
 
@@ -424,7 +423,7 @@ def test_an_intake_blocks_behind_a_restart_and_then_rejects(tmp_path: Path) -> N
         )
         return resp.json()
 
-    result = _held_by_a_writer(chunk, submit, _restart_under_lock(chunk))
+    result = held_by_a_writer(chunk, submit, restart_under_lock(chunk))
 
     assert isinstance(result, dict) and result["rejected"] == [seq]
     assert chunk.rows(s.escalations) == 0
@@ -432,7 +431,7 @@ def test_an_intake_blocks_behind_a_restart_and_then_rejects(tmp_path: Path) -> N
 
 def test_the_store_returns_the_refusal_and_writes_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _Chunk(hub)
+    chunk = Chunk(hub)
     chunk.lease(2)
 
     refused = chunk.stores.escalations.record_escalation(
@@ -467,7 +466,7 @@ def test_the_admission_table(admission: EpochAdmission, epoch: int, admitted: bo
 
 def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _Chunk(hub)
+    chunk = Chunk(hub)
     chunk.lease(2)
 
     def migrate(epoch: int) -> str | FenceRefusal | None:
@@ -509,7 +508,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
 
 def test_the_store_refuses_a_write_at_the_epoch_a_transition_reached_done_as_terminal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _Chunk(hub)
+    chunk = Chunk(hub)
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
 
     refused = chunk.stores.escalations.record_escalation(

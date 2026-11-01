@@ -2,11 +2,9 @@
 tenant's first twelve are distinct; the column ends required; a run stopped after any step finishes as a single run
 does; a re-run changes nothing; and the downgrade restores the store exactly."""
 
-# pyright: standard
-
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +21,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_project_columns_migration import _run_step
+from tests.migration_support_project_columns_migration import run_step
 from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
@@ -56,7 +54,7 @@ def _query(engine: sa.Engine, sql: str, **params: object) -> list[tuple[Any, ...
 
 
 @contextmanager
-def _at_the_parent(tmp_path: Path) -> Iterator[tuple[MigrationRunner, sa.Engine, str]]:
+def _at_the_parent(tmp_path: Path) -> Generator[tuple[MigrationRunner, sa.Engine, str]]:
     """A store at the parent revision holding two tenants: the store's own, with its default project and enough more
     to cross a fill page, and a quiet one with three projects; the store's own tenant's id."""
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -136,7 +134,7 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
         steps = _revision_module().UPGRADE_STEPS
         with engine.begin() as conn:
             for step in steps[:stopped_after]:
-                _run_step(conn, step)
+                run_step(conn, step)
 
         runner.upgrade(_REVISION)
 
@@ -155,7 +153,7 @@ def test_a_re_run_changes_nothing(tmp_path: Path) -> None:
 
         with engine.begin() as conn:
             for step in _revision_module().UPGRADE_STEPS:
-                _run_step(conn, step)
+                run_step(conn, step)
 
         assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _colors(engine, busy) == colors

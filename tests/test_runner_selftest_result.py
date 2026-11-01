@@ -22,7 +22,7 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store
 from tests.support_child_launch import CHILDREN, tool_env
-from tests.test_runner_selftest import _FixedPidAdapter, _RecordingProcessProbe
+from tests.test_runner_selftest import FixedPidAdapter, RecordingProcessProbe
 
 pytestmark = pytest.mark.component
 
@@ -85,10 +85,10 @@ class _SlowWriter:
 def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repository(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
-    adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
+    adapter = FixedPidAdapter(spawn_pid=111, resume_pid=222)
     service = SelfTestService(
         scratch_git=SubprocessScratchGit(children=CHILDREN, env=tool_env()),
-        process=_RecordingProcessProbe(),
+        process=RecordingProcessProbe(),
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
         results=_SlowWriter(store),

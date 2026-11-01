@@ -4,4 +4,4 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)

@@ -5,8 +5,6 @@ stopped part way finishes; the downgrade refuses while two tenants exist and oth
 Seeded from the store's reflected shape at the pinned revisions rather than ``src/blizzard/hub/store/schema.py``, whose
 tables keep changing shape after this revision."""
 
-# pyright: standard
-
 from __future__ import annotations
 
 import warnings
@@ -23,14 +21,14 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_tenant_keys_migration import (
-    _SECOND_TENANT,
-    _T0,
-    _rows,
-    _snapshot,
-    _tenant_column_nullable,
-    _tenant_ids,
+    SECOND_TENANT,
+    T0,
+    rows_of,
+    schema_of,
+    tenant_column_nullable,
+    tenant_ids,
 )
-from tests.migration_support_tenant_tighten_migration import _KEYS, _index_names, _seeded_at_the_keys
+from tests.migration_support_tenant_tighten_migration import KEYS, index_names, seeded_at_the_keys
 
 pytestmark = [pytest.mark.component]
 
@@ -62,10 +60,10 @@ def _tighten_only(engine: sa.Engine, tables: set[str]) -> None:
 
 
 def test_the_upgrade_keeps_every_row_in_its_tenant_and_requires_it_on_every_table(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     try:
-        rows_before = _rows(engine)
-        [tenant_id] = _tenant_ids(engine)
+        rows_before = rows_of(engine)
+        [tenant_id] = tenant_ids(engine)
         loose = _untightened(engine)
         assert {"event_log", "findings", "runner_external_usage", "scopes"} <= loose
 
@@ -73,7 +71,7 @@ def test_the_upgrade_keeps_every_row_in_its_tenant_and_requires_it_on_every_tabl
             warnings.simplefilter("error", SAWarning)
             migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_TIGHTEN)
 
-        assert _rows(engine) == rows_before
+        assert rows_of(engine) == rows_before
         assert _untightened(engine) == set()
         inspector = sa.inspect(engine)
         with engine.connect() as conn:
@@ -83,13 +81,13 @@ def test_the_upgrade_keeps_every_row_in_its_tenant_and_requires_it_on_every_tabl
                     (fk["name"], fk["constrained_columns"], fk["referred_table"])
                     for fk in inspector.get_foreign_keys(table)
                 ], table
-        assert {"ix_event_log_tenant_recorded_at"} <= _index_names(engine, "event_log")
-        assert "ix_event_log_recorded_at" not in _index_names(engine, "event_log")
+        assert {"ix_event_log_tenant_recorded_at"} <= index_names(engine, "event_log")
+        assert "ix_event_log_recorded_at" not in index_names(engine, "event_log")
         assert {
             "ix_transitions_tenant_recorded_at_transition_id",
             "ix_transitions_recorded_at_transition_id",
-        } <= _index_names(engine, "transitions")
-        assert "ix_scopes_tenant_id" in _index_names(engine, "scopes")
+        } <= index_names(engine, "transitions")
+        assert "ix_scopes_tenant_id" in index_names(engine, "scopes")
         assert inspector.get_pk_constraint("runner_external_usage") == {
             "name": "pk_runner_external_usage",
             "constrained_columns": ["runner_id", "slug"],
@@ -99,7 +97,7 @@ def test_the_upgrade_keeps_every_row_in_its_tenant_and_requires_it_on_every_tabl
 
 
 def test_after_the_upgrade_a_row_must_name_a_tenant_the_store_holds(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     try:
         migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_TIGHTEN)
 
@@ -116,26 +114,26 @@ def test_after_the_upgrade_a_row_must_name_a_tenant_the_store_holds(tmp_path: Pa
 def test_a_rerun_over_a_store_tightened_part_way_finishes(tmp_path: Path) -> None:
     """Re-entry: the tables a stopped run already tightened are skipped, the copy a stopped batch left behind is
     cleared, every other table is tightened, and the store ends exactly as a single run leaves it."""
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        rows_before = _rows(engine)
+        rows_before = rows_of(engine)
         _tighten_only(engine, {"event_log", "findings", "runner_external_usage"})
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE _alembic_tmp_scopes (slug VARCHAR)"))  # a stopped copy's leftover
-        assert not _tenant_column_nullable(engine, "event_log")
-        assert _tenant_column_nullable(engine, "scopes")
-        assert runner.current_revision() == _KEYS
+        assert not tenant_column_nullable(engine, "event_log")
+        assert tenant_column_nullable(engine, "scopes")
+        assert runner.current_revision() == KEYS
 
         runner.upgrade(_TIGHTEN)
 
         assert runner.current_revision() == _TIGHTEN
-        assert _rows(engine) == rows_before
+        assert rows_of(engine) == rows_before
         (tmp_path / "reference").mkdir()
-        reference_url, reference = _seeded_at_the_keys(tmp_path / "reference")
+        reference_url, reference = seeded_at_the_keys(tmp_path / "reference")
         try:
             migration_runner(HubConfig(root=tmp_path / "reference", db_url=reference_url)).upgrade(_TIGHTEN)
-            assert _snapshot(engine) == _snapshot(reference)
+            assert schema_of(engine) == schema_of(reference)
         finally:
             reference.dispose()
     finally:
@@ -143,60 +141,60 @@ def test_a_rerun_over_a_store_tightened_part_way_finishes(tmp_path: Path) -> Non
 
 
 def test_the_upgrade_refuses_a_row_without_a_tenant_and_changes_nothing(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
         with engine.begin() as conn:
             conn.execute(sa.text("UPDATE usage_facts SET tenant_id = NULL"))
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         with pytest.raises(RuntimeError, match="usage_facts holds rows without a tenant_id"):
             runner.upgrade(_TIGHTEN)
 
-        assert runner.current_revision() == _KEYS
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert runner.current_revision() == KEYS
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()
 
 
 def test_the_downgrade_refuses_a_store_holding_two_tenants_and_changes_nothing(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
         runner.upgrade(_TIGHTEN)
-        [first] = _tenant_ids(engine)
+        [first] = tenant_ids(engine)
         with engine.begin() as conn:
             conn.execute(
-                sa.text(f"INSERT INTO tenants VALUES ('{_SECOND_TENANT}', 'second', :at, 'migration')"), {"at": _T0}
+                sa.text(f"INSERT INTO tenants VALUES ('{SECOND_TENANT}', 'second', :at, 'migration')"), {"at": T0}
             )
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
-            runner.downgrade(_KEYS)
+            runner.downgrade(KEYS)
 
-        assert first in str(refused.value) and _SECOND_TENANT in str(refused.value)
+        assert first in str(refused.value) and SECOND_TENANT in str(refused.value)
         assert runner.current_revision() == _TIGHTEN
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()
 
 
 def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
-    db_url, engine = _seeded_at_the_keys(tmp_path)
+    db_url, engine = seeded_at_the_keys(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     try:
-        snapshot, rows = _snapshot(engine), _rows(engine)
+        snapshot, rows = schema_of(engine), rows_of(engine)
 
         runner.upgrade(_TIGHTEN)
-        assert _snapshot(engine) != snapshot
+        assert schema_of(engine) != snapshot
         with warnings.catch_warnings():
             warnings.simplefilter("error", SAWarning)
-            runner.downgrade(_KEYS)
+            runner.downgrade(KEYS)
 
-        assert runner.current_revision() == _KEYS
-        assert _snapshot(engine) == snapshot
-        assert _rows(engine) == rows
+        assert runner.current_revision() == KEYS
+        assert schema_of(engine) == snapshot
+        assert rows_of(engine) == rows
     finally:
         engine.dispose()

@@ -538,11 +538,11 @@ def test_reordering_either_list_writes_no_activity_row(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_get_and_put_queue(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import _bearer, _seed_enrolled
+    from tests.test_fleet_auth import bearer, seed_enrolled
 
-    token = _seed_enrolled(tmp_path)
+    token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/queue", headers=_bearer(token)).status_code == 403
-    assert hub.client.put("/api/queue", json={"chunk_ids": []}, headers=_bearer(token)).status_code == 403
-    assert hub.client.get("/api/backlog", headers=_bearer(token)).status_code == 403
-    assert hub.client.put("/api/backlog", json={"chunk_ids": []}, headers=_bearer(token)).status_code == 403
+    assert hub.client.get("/api/queue", headers=bearer(token)).status_code == 403
+    assert hub.client.put("/api/queue", json={"chunk_ids": []}, headers=bearer(token)).status_code == 403
+    assert hub.client.get("/api/backlog", headers=bearer(token)).status_code == 403
+    assert hub.client.put("/api/backlog", json={"chunk_ids": []}, headers=bearer(token)).status_code == 403

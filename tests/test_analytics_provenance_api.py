@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from tests.support import HubHarness, report_lease
-from tests.test_analytics_durations_api import _complete, _cookie, _mint_chunk, _seeded_hub
+from tests.test_analytics_durations_api import complete_node, cookie, mint_chunk, seeded_hub
 
 pytestmark = pytest.mark.component
 
@@ -61,40 +61,40 @@ def _seed(tmp_path: Path):
     """Chunk A: one 30s build step on ``m-a`` under harness ``claude_code``. Chunk B: a 10s
     epoch that ran on both models (a judged fail), then a 20s epoch on ``m-b``. Chunk C: a 5s
     step with no usage fact at all. Chunk D: an epoch on ``m-a`` that never completed."""
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
     build = nodes["build"]
 
-    a = _mint_chunk(hub, token, ref="1")
+    a = mint_chunk(hub, token, ref="1")
     _lease(hub, a, epoch=1)
     _usage(hub, chunk_id=a, node_id=build, epoch=1, model="m-a", harness_id="claude_code", harness_version="1.0")
     hub.clock.advance(timedelta(seconds=30))
-    _complete(hub, a, epoch=1, from_node_id=build, choice="pass")
+    complete_node(hub, a, epoch=1, from_node_id=build, choice="pass")
 
-    b = _mint_chunk(hub, token, ref="2")
+    b = mint_chunk(hub, token, ref="2")
     _lease(hub, b, epoch=1)
     _usage(hub, chunk_id=b, node_id=build, epoch=1, model="m-a")
     _usage(hub, chunk_id=b, node_id=build, epoch=1, model="m-b", kind="judge")
     hub.clock.advance(timedelta(seconds=10))
-    _complete(hub, b, epoch=1, from_node_id=build, choice="fail")
+    complete_node(hub, b, epoch=1, from_node_id=build, choice="fail")
     _lease(hub, b, epoch=2)
     _usage(hub, chunk_id=b, node_id=build, epoch=2, model="m-b")
     hub.clock.advance(timedelta(seconds=20))
-    _complete(hub, b, epoch=2, from_node_id=build, choice="pass")
+    complete_node(hub, b, epoch=2, from_node_id=build, choice="pass")
 
-    c = _mint_chunk(hub, token, ref="3")
+    c = mint_chunk(hub, token, ref="3")
     _lease(hub, c, epoch=1)
     hub.clock.advance(timedelta(seconds=5))
-    _complete(hub, c, epoch=1, from_node_id=build, choice="pass")
+    complete_node(hub, c, epoch=1, from_node_id=build, choice="pass")
 
-    d = _mint_chunk(hub, token, ref="4")
+    d = mint_chunk(hub, token, ref="4")
     _lease(hub, d, epoch=1)
     _usage(hub, chunk_id=d, node_id=build, epoch=1, model="m-a")
     _lease(hub, d, epoch=2)  # proves epoch 1 is over, unfinished
     return hub, token, nodes, {"a": a, "b": b, "c": c, "d": d}
 
 
-def _get(hub: HubHarness, token: str, path: str, **params: str):
-    resp = hub.client.get(f"/api/analytics/{path}", params=params, headers=_cookie(token))
+def _get(hub, token: str, path: str, **params: str):
+    resp = hub.client.get(f"/api/analytics/{path}", params=params, headers=cookie(token))
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -140,7 +140,7 @@ def test_spend_chunks_and_its_ndjson_stream_honor_the_provenance_filters(tmp_pat
     assert [r["chunk_id"] for r in page["spend"]] == [chunks["b"]]
     assert page["spend"][0]["input_tokens"] == 200
     resp = hub.client.get(
-        "/api/analytics/spend/chunks/ndjson", params={"harness_id": "claude_code"}, headers=_cookie(token)
+        "/api/analytics/spend/chunks/ndjson", params={"harness_id": "claude_code"}, headers=cookie(token)
     )
     assert resp.status_code == 200, resp.text
     assert [line.split('"')[3] for line in resp.text.splitlines()] == [chunks["a"]]
@@ -184,10 +184,10 @@ def test_outcomes_count_only_attempts_with_a_matching_usage_fact(tmp_path: Path)
 def test_a_failed_attempts_node_is_still_inferred_from_a_non_matching_epochs_movement(tmp_path: Path) -> None:
     """Epoch 1 (no usage) moved the chunk to ``review``; epoch 2 ran on ``m-e`` and died. The filter
     narrows only the candidate attempts, so epoch 2's failure still resolves to ``review``."""
-    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
-    chunk_id = _mint_chunk(hub, token)
+    hub, token, _graph_id, nodes = seeded_hub(tmp_path)
+    chunk_id = mint_chunk(hub, token)
     _lease(hub, chunk_id, epoch=1)
-    _complete(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="pass")
+    complete_node(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="pass")
     _lease(hub, chunk_id, epoch=2)
     _usage(hub, chunk_id=chunk_id, node_id=nodes["review"], epoch=2, model="m-e")
     _lease(hub, chunk_id, epoch=3)
