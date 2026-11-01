@@ -30,6 +30,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
@@ -383,11 +384,11 @@ class OpenCodeAdapter:
             self._check_plugins(workdir, env)
         env = self._compose_compaction(workdir, env, model if resume_from else model or self._model, compaction_window)
         env = self._deny_unanswerable_asks(workdir, env)
-        # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
+        # Both go through `stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
-            harness_shared.stdout_target(preamble.stdout_path) as stdout_file,
-            harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
+            stdout_target(preamble.stdout_path) as stdout_file,
+            stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -460,7 +461,7 @@ class OpenCodeAdapter:
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self._deny_unanswerable_asks(session_cwd, env)
         try:
-            with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
+            with stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
@@ -510,7 +511,7 @@ class OpenCodeAdapter:
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self._deny_unanswerable_asks(session_cwd, env)
         # Deferred: a resume gets spawn/judge's ownership.
-        with harness_shared.stdout_target(stdout_path) as stdout_file:
+        with stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd,
                 cwd=session_cwd,

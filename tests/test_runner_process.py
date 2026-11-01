@@ -14,8 +14,7 @@ import time
 
 import pytest
 
-from blizzard.runner.process.groups import ProcStat
-from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe, _read_stat
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from tests.runner_fakes import FakeProbe
 
@@ -35,7 +34,7 @@ def test_current_process_is_alive_at_its_own_start_time() -> None:
 def test_absent_pid_is_dead() -> None:
     probe = LinuxProcessProbe()
     # A pid that cannot be running (max+something); start_time is None -> dead.
-    assert ProcStat.of(2**31 - 1).start_time is None
+    assert _read_stat(2**31 - 1).start_time is None
     assert not probe.is_alive(2**31 - 1, "whatever")
 
 
@@ -55,10 +54,10 @@ def test_exited_but_unreaped_worker_reads_dead() -> None:
     start = _await_start_time(probe, proc.pid)
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
-        if ProcStat.of(proc.pid).zombie:
+        if _read_stat(proc.pid).zombie:
             break
         time.sleep(0.02)
-    assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
+    assert _read_stat(proc.pid).zombie, "child did not become a zombie"
     assert not probe.is_alive(proc.pid, start)
     proc.wait()  # reap it so the test process leaves no zombie behind
 
@@ -72,10 +71,10 @@ def test_group_alive_reaps_an_exited_leader_so_it_reads_dead() -> None:
     proc = subprocess.Popen(["true"], start_new_session=True)  # `start_new_session` -> pgid == pid
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
-        if ProcStat.of(proc.pid).zombie:
+        if _read_stat(proc.pid).zombie:
             break
         time.sleep(0.02)
-    assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
+    assert _read_stat(proc.pid).zombie, "child did not become a zombie"
     assert not probe.group_alive(proc.pid)
     with contextlib.suppress(subprocess.TimeoutExpired):
         proc.wait(timeout=0)  # `group_alive` already reaped it — a no-op, not a hang

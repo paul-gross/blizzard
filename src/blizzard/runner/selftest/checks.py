@@ -11,7 +11,6 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import collaborator
@@ -239,10 +238,7 @@ class UsageParsing(Check):
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
         stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
-        try:
-            output = Path(stdout_path).read_text(encoding="utf-8") if os.path.exists(stdout_path) else ""
-        except OSError as exc:
-            return SelfTestCheck(USAGE_PARSING, False, f"could not read the resume check's own stdout: {exc}")
+        output = scratch.elicitation_replies.read(stdout_path)
         try:
             sample = scratch.adapter.parse_usage(output, "resume", model=None)
         except Exception as exc:

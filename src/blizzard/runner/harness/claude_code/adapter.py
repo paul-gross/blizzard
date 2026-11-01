@@ -33,6 +33,7 @@ from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.overload import ProviderOverload
@@ -330,10 +331,10 @@ class ClaudeCodeAdapter:
 
         env = self._worker_env.worker(self._spawn_env(envelope, preamble, session_id))
         # Injected per-lease files surviving the process; both go through
-        # `harness_shared.stdout_target`, empty meaning DEVNULL.
+        # `stdout_target`, empty meaning DEVNULL.
         with (
-            harness_shared.stdout_target(preamble.stdout_path) as stdout_file,
-            harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
+            stdout_target(preamble.stdout_path) as stdout_file,
+            stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -447,7 +448,7 @@ class ClaudeCodeAdapter:
         env = self._worker_env.worker(self.identity_env(preamble, chunk_id, session_id) if preamble is not None else {})
         # Injected per-lease file; unset inherits the runner's own.
         # Deferred like spawn/judge.
-        with harness_shared.stdout_target(stdout_path) as stdout_file:
+        with stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd,
                 cwd=session_cwd,
