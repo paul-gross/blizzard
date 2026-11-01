@@ -17,7 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.read_transaction import read_transaction
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import BorrowedWrite
-from blizzard.hub.store.internal.invariants import _hub_wide
+from blizzard.hub.store.internal.invariants import hub_wide
 from blizzard.hub.store.scoped import UnscopedConnection, statements_of
 from blizzard.hub.store.tenant_guard import UnscopedTenantStatement
 from blizzard.hub.tenancy import StoreScope
@@ -134,7 +134,7 @@ def test_the_hub_wide_mark_is_gone_from_the_shared_connection_once_the_hub_wide_
     engine = create_engine_from_url(init_hub(tmp_path / "hub").db_url)
     scope = StoreScope(default_tenant(engine))
     with hub_level_connections(engine).read_transaction("read") as borrowed:
-        with _hub_wide(borrowed) as conn:
+        with hub_wide(borrowed) as conn:
             conn.execute(sa.select(hub.chunks.c.chunk_id))
         with (
             borrowed.scoped(scope).read("tenant") as conn,

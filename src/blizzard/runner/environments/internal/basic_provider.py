@@ -56,6 +56,10 @@ class BasicWorkspaceProvider:
         self._held_ids = held_ids
         self._run_git = git
 
+    @property
+    def root(self) -> Path:
+        return self._root
+
     def _git(self, cwd: Path, *args: str) -> str:
         return self._run_git.capture(cwd, *args).strip()
 

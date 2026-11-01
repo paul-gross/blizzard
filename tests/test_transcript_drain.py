@@ -476,29 +476,29 @@ def test_drain_bounds_its_own_per_run_record_count() -> None:
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    total = transcript_drain_module._MAX_RECORDS_PER_RUN + 5
+    total = transcript_drain_module.MAX_RECORDS_PER_RUN + 5
     for i in range(total):
         _enqueue_delta(ctx, segment_id, cursor=f"pos-{i}")
 
     TranscriptDrain(ctx).run()
 
-    assert len(hub.transcripts_pushed) == transcript_drain_module._MAX_RECORDS_PER_RUN
+    assert len(hub.transcripts_pushed) == transcript_drain_module.MAX_RECORDS_PER_RUN
     assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 5  # the rest waits for the next tick
 
 
 def test_drain_ships_a_full_ticks_worth_of_records_in_one_request() -> None:
-    """A tick with a full `_MAX_RECORDS_PER_RUN` backlog makes exactly one
+    """A tick with a full `MAX_RECORDS_PER_RUN` backlog makes exactly one
     `push_transcripts` call, not one per record."""
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    for i in range(transcript_drain_module._MAX_RECORDS_PER_RUN):
+    for i in range(transcript_drain_module.MAX_RECORDS_PER_RUN):
         _enqueue_delta(ctx, segment_id, cursor=f"pos-{i}")
 
     TranscriptDrain(ctx).run()
 
     assert len(hub.push_transcripts_calls) == 1
-    assert len(hub.push_transcripts_calls[0]) == transcript_drain_module._MAX_RECORDS_PER_RUN
+    assert len(hub.push_transcripts_calls[0]) == transcript_drain_module.MAX_RECORDS_PER_RUN
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
 
@@ -603,7 +603,7 @@ def test_drain_makes_one_request_against_a_slow_hub_and_stays_within_the_tick_bu
     assert len(hub.push_transcripts_calls) == 1
     assert hub.push_transcripts_calls[0] == seqs
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
-    assert clock.now() < _NOW + timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN)
+    assert clock.now() < _NOW + timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN)
 
 
 def test_drain_bounds_its_own_per_run_wall_clock() -> None:
@@ -611,7 +611,7 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
     The stepping clock reports the deadline already elapsed on its second call, so the
     first record is never even attempted."""
     hub = FakeHub()
-    step = timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN + 1)
+    step = timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN + 1)
     ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
     segment_id = _spawn_one_segment(ctx)
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
@@ -628,7 +628,7 @@ def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline()
     RUN's own deadline outright — the flush must check the deadline before its own (up
     to 50-row) query, not just inside its loop after already paying for it."""
     hub = FakeHub()
-    step = timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN + 1)
+    step = timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN + 1)
     ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
     segment_id = _spawn_one_segment(ctx)
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
@@ -664,9 +664,9 @@ def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> 
     with patch.object(transcript_drain_module.TranscriptPump, "run", _capturing_run):
         TranscriptDrain(ctx).run()
 
-    full_deadline = _NOW + timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN)
+    full_deadline = _NOW + timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN)
     expected_pump_deadline = _NOW + timedelta(
-        seconds=transcript_drain_module._MAX_SECONDS_PER_RUN * transcript_drain_module._PUMP_BUDGET_FRACTION
+        seconds=transcript_drain_module.MAX_SECONDS_PER_RUN * transcript_drain_module.PUMP_BUDGET_FRACTION
     )
     pump_deadline = captured["deadline"]
     assert isinstance(pump_deadline, datetime)
@@ -834,16 +834,16 @@ def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_fina
     )
     drain = TranscriptDrain(ctx)
     content_delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
-    rendered = drain._render(content_delta, {})
-    assert drain._estimated_size(content_delta) >= len(_wire_json(rendered).encode("utf-8"))
+    rendered = drain.render(content_delta, {})
+    assert drain.estimated_size(content_delta) >= len(_wire_json(rendered).encode("utf-8"))
 
     ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
     final_delta = next(d for d in ctx.stores.transcript_ledger.pending_transcript_outbound() if d.final)
     final_segments = ctx.stores.transcript_ledger.transcript_segments([final_delta.segment_id])
-    final_rendered = drain._render(final_delta, final_segments)
-    assert drain._estimated_size(final_delta) >= len(_wire_json(final_rendered).encode("utf-8"))
+    final_rendered = drain.render(final_delta, final_segments)
+    assert drain.estimated_size(final_delta) >= len(_wire_json(final_rendered).encode("utf-8"))
 
 
 def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() -> None:

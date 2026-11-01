@@ -556,7 +556,7 @@ class FakeHub:
         self.default_runner_id = default_runner_id
         # The bearer token this client presents, and the tokens the hub holds, each to the runner id it
         # was issued to: a fleet call resolves its caller from the presented token, refusing an unheld one with 401.
-        self._token = FAKE_RUNNER_TOKEN
+        self.scripted_token = FAKE_RUNNER_TOKEN
         self._held: HubTokenHolder | None = None
         self.issued: dict[str, str] = {FAKE_RUNNER_TOKEN: default_runner_id}
         # The tenant registration and the identity read answer with; ``None`` plays a hub that predates tenants.
@@ -645,11 +645,11 @@ class FakeHub:
         if self._held is not None:
             bearer = self._held.auth_headers().get("Authorization", "")
             return bearer.removeprefix("Bearer ")
-        return self._token
+        return self.scripted_token
 
     @token.setter
     def token(self, value: str) -> None:
-        self._token = value
+        self.scripted_token = value
 
     def presents(self, held: HubTokenHolder) -> None:
         """Present ``held``'s current token on every call from now on."""
@@ -990,6 +990,14 @@ class FakeTranscriptSource:
         self.read_raw_lines_cwds: list[str | None] = []
         self.size_bytes_calls: list[str] = []
         self.context_tokens_calls: list[str] = []
+
+    def script_batch(self, session_id: str, batch: TranscriptBatch) -> None:
+        """Answer ``turns_since`` for ``session_id`` with ``batch`` from now on."""
+        self._batches[session_id] = batch
+
+    def script_tail_position(self, session_id: str, position: TranscriptPosition) -> None:
+        """Answer ``tail_position`` for ``session_id`` with ``position`` from now on."""
+        self._tail_positions[session_id] = position
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None

@@ -183,7 +183,7 @@ class _RealRunner:
         lease = self.store.active_lease_for_chunk(chunk_id)
         assert lease is not None
         envelope = self.ctx.hub.get_envelope(chunk_id)
-        Judgement(self.ctx, lease, envelope, self.store.bindings_for_chunk(chunk_id))._buffer_completion("pass", [], [])
+        Judgement(self.ctx, lease, envelope, self.store.bindings_for_chunk(chunk_id)).buffer_completion("pass", [], [])
 
     def drain(self) -> list[int]:
         """Drain once; the seqs that were buffered going in."""

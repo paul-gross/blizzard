@@ -33,12 +33,12 @@ from blizzard.runner.config import (
 )
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import (
-    _GRADUATED_WORKSPACE_KEYS,
-    _RETIRED_KEYS,
+    GRADUATED_WORKSPACE_KEYS,
+    RETIRED_KEYS,
     HaltedRunner,
     HostConfigError,
-    _graduated_raw,
-    _parse,
+    graduated_raw,
+    parse,
 )
 from blizzard.runner.host_layout import HostLayout
 from tests.config_inputs import FLAG_REGISTRY, load_host_config
@@ -275,17 +275,15 @@ def test_the_default_store_is_omitted_from_the_written_file_and_a_custom_one_is_
 
 
 def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner() -> None:
-    legacy: dict[str, object] = {key: f"v-{key}" for key in _RETIRED_KEYS}
+    legacy: dict[str, object] = {key: f"v-{key}" for key in RETIRED_KEYS}
     legacy.update(workspace_envs=["e1"], workspace_repo=[], max_agents=2, external_subscription_usage={})
 
-    raw = _graduated_raw(legacy, runner_id="rn_graduated", served=("p",))
+    raw = graduated_raw(legacy, runner_id="rn_graduated", served=("p",))
 
     (runner,) = raw["runner"]
     (workspace,) = raw["workspace"]
-    assert not set(_RETIRED_KEYS) & (set(runner) | set(raw))
-    assert {_GRADUATED_WORKSPACE_KEYS[key] for key in _RETIRED_KEYS if key in _GRADUATED_WORKSPACE_KEYS} <= set(
-        workspace
-    )
+    assert not set(RETIRED_KEYS) & (set(runner) | set(raw))
+    assert {GRADUATED_WORKSPACE_KEYS[key] for key in RETIRED_KEYS if key in GRADUATED_WORKSPACE_KEYS} <= set(workspace)
     assert runner["agents"] == 2
     assert all("agents" not in binding for binding in runner["projects"])
     assert runner["subscription"] == "anthropic"
@@ -354,10 +352,10 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     read: set[str] = set()
-    checked = ConfigView._check
+    checked = ConfigView.check
 
     def recording(view: ConfigView, key: str) -> None:
-        read.add(view._join(key))
+        read.add(view.join(key))
         checked(view, key)
 
     monkeypatch.setattr(ConfigView, "_check", recording)

@@ -16,7 +16,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Permission
-from blizzard.cli.runtime import _EarlyShutdownServer
+from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import HubConfig
@@ -45,7 +45,7 @@ def test_handle_exit_sets_the_shutdown_signal_synchronously() -> None:
     """The signal handler sets the event the instant SIGTERM is caught — before uvicorn's
     graceful-drain wait an SSE response never finishes."""
     shutdown = asyncio.Event()
-    server = _EarlyShutdownServer(uvicorn.Config(FastAPI(), log_config=None), shutdown_signal=shutdown)
+    server = EarlyShutdownServer(uvicorn.Config(FastAPI(), log_config=None), shutdown_signal=shutdown)
 
     server.handle_exit(signal.SIGTERM, None)
 

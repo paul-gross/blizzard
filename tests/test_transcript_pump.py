@@ -35,17 +35,17 @@ from blizzard.runner.transcripts.ledger import (
     TranscriptSegmentState,
 )
 from blizzard.runner.transcripts.transcript_pump import (
-    _ARRAY_SEPARATOR_BYTES,
+    ARRAY_SEPARATOR_BYTES,
     CHUNK_TRANSCRIPT_MAX_BYTES,
     MAX_BUFFERED_BYTES,
     PUMP_LEASE_MAX_SECONDS,
     TRANSCRIPT_RECORD_MAX_BYTES,
     TranscriptPump,
-    _record_envelope,
-    _record_overhead,
-    _sidechain_wire,
-    _tool_wire,
-    _turn_wire,
+    record_envelope,
+    record_overhead,
+    sidechain_wire,
+    tool_wire,
+    turn_wire,
 )
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.runner_fakes import (
@@ -83,7 +83,7 @@ def _turns_over_cap(fraction: float) -> int:
 
 def _empty_edits_over_cap(fraction: float) -> int:
     """The same, for `MultiEdit`-shaped `{"old_string": "", "new_string": ""}` entries."""
-    per_edit = len(json.dumps({"old_string": "", "new_string": ""}).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    per_edit = len(json.dumps({"old_string": "", "new_string": ""}).encode("utf-8")) + ARRAY_SEPARATOR_BYTES
     return _cap_share(fraction) // per_edit
 
 
@@ -586,26 +586,24 @@ def test_record_overhead_bounds_every_group_envelope_the_batch_can_produce() -> 
     batch = transcript_batch([normalized_turn(0, "")], next_token="pos-1")
     turn_count = 100_000
 
-    budgeted = _record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
+    budgeted = record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
 
     # Every (start, end) a group of this batch can close on, both fields varied independently.
     for start in (0, 9, 99, 9_999, turn_count):
         for end in (start, start + 9, turn_count):
-            envelope = _record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
+            envelope = record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
             assert len(json.dumps(envelope).encode("utf-8")) <= budgeted, f"under-counted at {start}..{end}"
 
 
 def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
-    """`_sidechain_wire`/`_tool_wire` write every optional field the wire model can default
+    """`sidechain_wire`/`tool_wire` write every optional field the wire model can default
     explicitly, rather than omitting it — the stored payload's own byte length is what
-    `TranscriptDrain._estimated_size` bounds a delta's actual rendered length by, and an
+    `TranscriptDrain.estimated_size` bounds a delta's actual rendered length by, and an
     omitted key there renders bigger once the model fills its own default back in."""
-    tool_wire = _tool_wire(_tool_call(""))
-    assert "output_patch" in tool_wire
-    sidechain_wire = _sidechain_wire(
-        SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[])
-    )
-    assert "parent_tool_use_id" in sidechain_wire
+    wire = tool_wire(_tool_call(""))
+    assert "output_patch" in wire
+    wire = sidechain_wire(SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[]))
+    assert "parent_tool_use_id" in wire
 
     turn = NormalizedTurn(
         index=0,
@@ -617,7 +615,7 @@ def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
         sidechain=SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[]),
         truncated=False,
     )
-    wire = _turn_wire(turn, 0)
+    wire = turn_wire(turn, 0)
     rendered = TurnSegmentView.model_validate(wire).model_dump_json()
     assert len(json.dumps(wire).encode("utf-8")) >= len(rendered.encode("utf-8"))
 
@@ -2212,8 +2210,8 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
     ctx, _source = _ctx(ship=True)
     pump = TranscriptPump(ctx)
 
-    assert pump._record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
-    assert pump._chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
+    assert pump.record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
+    assert pump.chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
 
 
 # --- cross-window correlation ----------------------------------------

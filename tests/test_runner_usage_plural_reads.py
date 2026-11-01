@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.api.host import _subscription_list
+from blizzard.runner.api.host import subscription_list
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.runner_fakes import (
@@ -130,7 +130,7 @@ def test_subscription_list_statement_count_is_flat_in_the_declared_subscriptions
         _record(store, f"sub-{i}", 0, payload=_payload(10.0))
     declarations = _declarations(declared)
 
-    count = count_queries(store.engine, lambda: _subscription_list(declarations, store, {}))
+    count = count_queries(store.engine, lambda: subscription_list(declarations, store, {}))
 
     assert count == 3  # one batched read each: the newest attempts, the newest renewals, the newest samples
 

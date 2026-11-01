@@ -320,7 +320,7 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
 ) -> None:
     world = Events(tmp_path, file_paths=file_paths)
     hub = world.hub
-    hub_app._announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
+    hub_app.announce_rejected_egress(_config(tmp_path, file_paths=file_paths), hub.hub_services)
     world.segment("sg_a")
     world.derive("sg_a", 1)
     world.sweep()

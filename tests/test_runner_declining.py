@@ -116,7 +116,7 @@ def test_both_views_serve_the_reasons(tmp_path: Path) -> None:
     held = hub.services.registry.get_runner(_RUNNER)
     assert held is not None
 
-    view = runners_api._declining_views(held)
+    view = runners_api.declining_views(held)
 
     assert [(d.lever, d.detail, d.subscription, d.until) for d in view] == [
         ("floor", "exhausted", "anthropic", "2026-10-22T14:00:00+00:00"),

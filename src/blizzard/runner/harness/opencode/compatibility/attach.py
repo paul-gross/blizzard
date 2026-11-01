@@ -262,7 +262,7 @@ class OpenCodeAttachProxy:
 
     def _forward_request(self, handler: BaseHTTPRequestHandler) -> None:
         path = urlsplit(handler.path).path
-        request_index = self._record_request(OpenCodeAttachRequest(handler.command, path, None))
+        request_index = self.record_request(OpenCodeAttachRequest(handler.command, path, None))
         target = f"{self._target_url}{handler.path}"
         length = int(handler.headers.get("Content-Length", "0"))
         body = handler.rfile.read(length) if length else None
@@ -279,7 +279,7 @@ class OpenCodeAttachProxy:
                     if path in _EVENT_PATHS:
                         self._forward_event(handler, path, response, request_index)
                     else:
-                        self._forward_buffered(handler, path, response, request_index)
+                        self.forward_buffered(handler, path, response, request_index)
                 finally:
                     self._untrack_response(response)
         except (LoopbackTransportError, TimeoutError, OSError):
@@ -297,7 +297,7 @@ class OpenCodeAttachProxy:
             for handler in handlers:
                 handler.join(timeout=min(0.05, remaining))
 
-    def _forward_buffered(
+    def forward_buffered(
         self,
         handler: BaseHTTPRequestHandler,
         path: str,
@@ -410,7 +410,7 @@ class OpenCodeAttachProxy:
         except OSError:
             return
 
-    def _record_request(self, request: OpenCodeAttachRequest) -> int:
+    def record_request(self, request: OpenCodeAttachRequest) -> int:
         with self._lock:
             index = len(self._requests)
             self._requests.append(request)

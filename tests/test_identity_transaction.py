@@ -113,7 +113,7 @@ def test_the_connections_a_block_hands_out_wrap_faults_through_the_injected_stor
     with _transactions(engine, injected).begin() as writes:
         connections = writes.tenant_connections(StoreScope(tenant))
 
-    assert connections._errors is injected
+    assert connections.errors is injected
 
 
 def test_a_read_inside_the_block_sees_its_own_writes(engine: sa.Engine) -> None:

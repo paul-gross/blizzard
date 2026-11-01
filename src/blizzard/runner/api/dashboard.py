@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 #: A slow hub must not stall the local sections, so the hub call carries its own short
 #: whole-forward budget (see ``HubProxy.forward``).
-_DASHBOARD_HUB_TIMEOUT = 3.0
+DASHBOARD_HUB_TIMEOUT = 3.0
 
 
 @router.get("/dashboard", response_model=DashboardView)
@@ -57,7 +57,7 @@ def _maybe_fleet_summary(request: Request) -> FleetSummaryView | None:
         return None
     try:
         # A hub outage is tolerated degradation, so its log line drops below the default severity.
-        return fleet_summary(proxy, timeout=_DASHBOARD_HUB_TIMEOUT, severity="warning")
+        return fleet_summary(proxy, timeout=DASHBOARD_HUB_TIMEOUT, severity="warning")
     except HTTPException:
         # Hub unreachable, or answered with a non-200 — the local sections still stand.
         return None

@@ -42,7 +42,7 @@ _HUB_RUNNER_ID = "hub"
 # real joins and anti-join included.
 
 
-def _bounded_stmt(
+def bounded_stmt(
     stmt: Select[Any], *, ts_col: Column[Any], pk_col: Column[Any], since: datetime, limit: int
 ) -> Select[Any]:
     """``activity_facts_since``'s shared bound over a source's base statement (never a full-table scan) — a pure
@@ -70,17 +70,17 @@ def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
     return EVENT_LOG_SEVERITY[narrowed_kind] if narrowed_kind is not None else EventLogSeverity.CRITICAL
 
 
-def _deleted_chunk_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
+def deleted_chunk_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(s.chunk_deleted, s.chunk_deleted.c.chunk_id)
 
 
-def _chunk_minted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_minted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(s.chunks, s.chunks.c.chunk_id, s.chunks.c.graph_id, s.chunks.c.minted_at).where(
         s.chunks.c.chunk_id.not_in(deleted)
     )
 
 
-def _chunk_promoted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_promoted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_promoted, s.chunks, s.chunks.c.chunk_id == s.chunk_promoted.c.chunk_id),
         s.chunk_promoted.c.id,
@@ -100,7 +100,7 @@ def _chunk_demoted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select
     ).where(s.chunk_demoted.c.chunk_id.not_in(deleted))
 
 
-def _chunk_grouped_stmt(stmts: ScopedStatements) -> Select[Any]:
+def chunk_grouped_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_grouped, s.chunks, s.chunks.c.chunk_id == s.chunk_grouped.c.chunk_id),
         s.chunk_grouped.c.id,
@@ -110,7 +110,7 @@ def _chunk_grouped_stmt(stmts: ScopedStatements) -> Select[Any]:
     )
 
 
-def _route_created_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def route_created_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.route_created, s.chunks, s.chunks.c.chunk_id == s.route_created.c.chunk_id),
         s.route_created.c.route_id,
@@ -121,7 +121,7 @@ def _route_created_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) 
     ).where(s.route_created.c.chunk_id.not_in(deleted))
 
 
-def _transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         s.transitions,
         s.transitions.c.transition_id,
@@ -132,7 +132,7 @@ def _transitions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) ->
     ).where(s.transitions.c.chunk_id.not_in(deleted))
 
 
-def _chunk_migrations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_migrations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         s.chunk_migrations,
         s.chunk_migrations.c.migration_id,
@@ -142,7 +142,7 @@ def _chunk_migrations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any
     ).where(s.chunk_migrations.c.chunk_id.not_in(deleted))
 
 
-def _chunk_restarts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_restarts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_restarts, s.chunks, s.chunks.c.chunk_id == s.chunk_restarts.c.chunk_id),
         s.chunk_restarts.c.id,
@@ -152,7 +152,7 @@ def _chunk_restarts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any])
     ).where(s.chunk_restarts.c.chunk_id.not_in(deleted))
 
 
-def _decisions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def decisions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.decisions, s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id),
         s.decisions.c.decision_id,
@@ -162,7 +162,7 @@ def _decisions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> S
     ).where(s.decisions.c.chunk_id.not_in(deleted))
 
 
-def _decision_resolutions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def decision_resolutions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     resolved = stmts.scope_join(
         s.decision_resolutions, s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id
     )
@@ -175,7 +175,7 @@ def _decision_resolutions_activity_stmt(stmts: ScopedStatements, deleted: Select
     ).where(s.decisions.c.chunk_id.not_in(deleted))
 
 
-def _questions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def questions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.questions, s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id),
         s.questions.c.question_id,
@@ -186,7 +186,7 @@ def _questions_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> S
     ).where(s.questions.c.chunk_id.not_in(deleted))
 
 
-def _question_answers_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def question_answers_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     answered = stmts.scope_join(
         s.question_answers,
         s.questions,
@@ -202,7 +202,7 @@ def _question_answers_activity_stmt(stmts: ScopedStatements, deleted: Select[Any
     ).where(s.questions.c.chunk_id.not_in(deleted))
 
 
-def _escalations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def escalations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.escalations, s.chunks, s.chunks.c.chunk_id == s.escalations.c.chunk_id),
         s.escalations.c.id,
@@ -212,7 +212,7 @@ def _escalations_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) ->
     ).where(s.escalations.c.chunk_id.not_in(deleted))
 
 
-def _requeues_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def requeues_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.requeues, s.chunks, s.chunks.c.chunk_id == s.requeues.c.chunk_id),
         s.requeues.c.id,
@@ -222,7 +222,7 @@ def _requeues_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Se
     ).where(s.requeues.c.chunk_id.not_in(deleted))
 
 
-def _route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     """Each release with the runner whose route it released: the chunk's ``route_created`` with the
     greatest ``seq`` below the release's, resolved per row inside the bounded page statement."""
     released, created = s.route_released, s.route_created
@@ -271,7 +271,7 @@ def _route_released_entry(r: Row[Any]) -> ActivityEntry:
     )
 
 
-def _chunk_pause_facts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_pause_facts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_pause_facts, s.chunks, s.chunks.c.chunk_id == s.chunk_pause_facts.c.chunk_id),
         s.chunk_pause_facts.c.id,
@@ -282,7 +282,7 @@ def _chunk_pause_facts_activity_stmt(stmts: ScopedStatements, deleted: Select[An
     ).where(s.chunk_pause_facts.c.chunk_id.not_in(deleted))
 
 
-def _chunk_stopped_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_stopped_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_stopped, s.chunks, s.chunks.c.chunk_id == s.chunk_stopped.c.chunk_id),
         s.chunk_stopped.c.id,
@@ -292,7 +292,7 @@ def _chunk_stopped_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) 
     ).where(s.chunk_stopped.c.chunk_id.not_in(deleted))
 
 
-def _chunk_completed_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+def chunk_completed_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_completed, s.chunks, s.chunks.c.chunk_id == s.chunk_completed.c.chunk_id),
         s.chunk_completed.c.id,
@@ -302,7 +302,7 @@ def _chunk_completed_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]
     ).where(s.chunk_completed.c.chunk_id.not_in(deleted))
 
 
-def _chunk_deleted_activity_stmt(stmts: ScopedStatements) -> Select[Any]:
+def chunk_deleted_activity_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_deleted, s.chunks, s.chunks.c.chunk_id == s.chunk_deleted.c.chunk_id),
         s.chunk_deleted.c.id,
@@ -364,7 +364,7 @@ class ChunkEventsStore:
     ) -> list[OperationalEvent]:
         """`src/blizzard/hub/domain/chunk/ports/events.py`'s `IReadChunkEventsRepository.activity_events_since`."""
         with self._store.read("activity_events_since") as conn:
-            deleted = _deleted_chunk_ids_stmt(self._store)
+            deleted = deleted_chunk_ids_stmt(self._store)
             stmt = (
                 self._store.select(s.event_log)
                 .where(s.event_log.c.recorded_at >= since)
@@ -401,11 +401,11 @@ class ChunkEventsStore:
             rows: list[ActivityEntry] = []
             # Resolved once: every fact-source block below excludes a
             # deleted chunk by referencing this same subquery, rather than repeating it.
-            deleted = _deleted_chunk_ids_stmt(self._store)
+            deleted = deleted_chunk_ids_stmt(self._store)
             chunks = chunks_of_project(self._store, project) if project is not None else None
             rows += self._bounded(
                 conn,
-                _chunk_minted_stmt(self._store, deleted),
+                chunk_minted_stmt(self._store, deleted),
                 ts_col=s.chunks.c.minted_at,
                 pk_col=s.chunks.c.chunk_id,
                 since=since,
@@ -422,7 +422,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_promoted_stmt(self._store, deleted),
+                chunk_promoted_stmt(self._store, deleted),
                 ts_col=s.chunk_promoted.c.promoted_at,
                 pk_col=s.chunk_promoted.c.id,
                 since=since,
@@ -456,7 +456,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_grouped_stmt(self._store),
+                chunk_grouped_stmt(self._store),
                 ts_col=s.chunk_grouped.c.grouped_at,
                 pk_col=s.chunk_grouped.c.id,
                 since=since,
@@ -473,7 +473,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _route_created_activity_stmt(self._store, deleted),
+                route_created_activity_stmt(self._store, deleted),
                 ts_col=s.route_created.c.created_at,
                 pk_col=s.route_created.c.route_id,
                 since=since,
@@ -491,7 +491,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _transitions_activity_stmt(self._store, deleted),
+                transitions_activity_stmt(self._store, deleted),
                 ts_col=s.transitions.c.recorded_at,
                 pk_col=s.transitions.c.transition_id,
                 since=since,
@@ -509,7 +509,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_migrations_activity_stmt(self._store, deleted),
+                chunk_migrations_activity_stmt(self._store, deleted),
                 ts_col=s.chunk_migrations.c.recorded_at,
                 pk_col=s.chunk_migrations.c.migration_id,
                 since=since,
@@ -526,7 +526,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_restarts_activity_stmt(self._store, deleted),
+                chunk_restarts_activity_stmt(self._store, deleted),
                 ts_col=s.chunk_restarts.c.recorded_at,
                 pk_col=s.chunk_restarts.c.id,
                 since=since,
@@ -543,7 +543,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _decisions_activity_stmt(self._store, deleted),
+                decisions_activity_stmt(self._store, deleted),
                 ts_col=s.decisions.c.submitted_at,
                 pk_col=s.decisions.c.decision_id,
                 since=since,
@@ -560,7 +560,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _decision_resolutions_activity_stmt(self._store, deleted),
+                decision_resolutions_activity_stmt(self._store, deleted),
                 ts_col=s.decision_resolutions.c.resolved_at,
                 pk_col=s.decision_resolutions.c.decision_id,
                 since=since,
@@ -577,7 +577,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _questions_activity_stmt(self._store, deleted),
+                questions_activity_stmt(self._store, deleted),
                 ts_col=s.questions.c.asked_at,
                 pk_col=s.questions.c.question_id,
                 since=since,
@@ -595,7 +595,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _question_answers_activity_stmt(self._store, deleted),
+                question_answers_activity_stmt(self._store, deleted),
                 ts_col=s.question_answers.c.answered_at,
                 pk_col=s.question_answers.c.question_id,
                 since=since,
@@ -612,7 +612,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _escalations_activity_stmt(self._store, deleted),
+                escalations_activity_stmt(self._store, deleted),
                 ts_col=s.escalations.c.recorded_at,
                 pk_col=s.escalations.c.id,
                 since=since,
@@ -629,7 +629,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _requeues_activity_stmt(self._store, deleted),
+                requeues_activity_stmt(self._store, deleted),
                 ts_col=s.requeues.c.requeued_at,
                 pk_col=s.requeues.c.id,
                 since=since,
@@ -646,7 +646,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _route_released_activity_stmt(self._store, deleted),
+                route_released_activity_stmt(self._store, deleted),
                 ts_col=s.route_released.c.released_at,
                 pk_col=s.route_released.c.id,
                 since=since,
@@ -656,7 +656,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_pause_facts_activity_stmt(self._store, deleted),
+                chunk_pause_facts_activity_stmt(self._store, deleted),
                 ts_col=s.chunk_pause_facts.c.set_at,
                 pk_col=s.chunk_pause_facts.c.id,
                 since=since,
@@ -673,7 +673,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_stopped_activity_stmt(self._store, deleted),
+                chunk_stopped_activity_stmt(self._store, deleted),
                 ts_col=s.chunk_stopped.c.stopped_at,
                 pk_col=s.chunk_stopped.c.id,
                 since=since,
@@ -690,7 +690,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_completed_activity_stmt(self._store, deleted),
+                chunk_completed_activity_stmt(self._store, deleted),
                 ts_col=s.chunk_completed.c.completed_at,
                 pk_col=s.chunk_completed.c.id,
                 since=since,
@@ -707,7 +707,7 @@ class ChunkEventsStore:
             )
             rows += self._bounded(
                 conn,
-                _chunk_deleted_activity_stmt(self._store),
+                chunk_deleted_activity_stmt(self._store),
                 ts_col=s.chunk_deleted.c.deleted_at,
                 pk_col=s.chunk_deleted.c.id,
                 since=since,
@@ -743,8 +743,8 @@ class ChunkEventsStore:
         the source to the facts of those chunks: every source selects the chunk it names as ``chunk_id``."""
         if chunks is not None:
             stmt = stmt.where(stmt.selected_columns.chunk_id.in_(chunks))
-        bounded_stmt = _bounded_stmt(stmt, ts_col=ts_col, pk_col=pk_col, since=since, limit=limit)
-        return [builder(row) for row in conn.execute(bounded_stmt).all()]
+        bounded = bounded_stmt(stmt, ts_col=ts_col, pk_col=pk_col, since=since, limit=limit)
+        return [builder(row) for row in conn.execute(bounded).all()]
 
     def record_event(
         self,

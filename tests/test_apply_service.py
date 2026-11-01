@@ -170,13 +170,20 @@ def _wired(under_lock: ChunkFacts | None, *, pre_lock: ChunkFacts = AT_BUILD) ->
 
 
 def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports, FixedClock]:
+    service, ports, clock, _exclusive = _apply_service_with_lock(under_lock)
+    return service, ports, clock
+
+
+def _apply_service_with_lock(
+    under_lock: ChunkFacts | None,
+) -> tuple[ApplyService, _Ports, FixedClock, _FakeExclusiveWrites]:
     ports, clock, exclusive = _wired(under_lock)
     service = ApplyService(
         facts=cast(IReadChunkFactsRepository, ports),
         movement=cast(IWriteChunkMovementRepository, ports),
         decisions=cast(IWriteChunkDecisionsRepository, ports),
         escalations=cast(IWriteChunkEscalationsRepository, ports),
-        exclusive=exclusive,
+        exclusive=cast(IChunkExclusiveWrites, exclusive),
         route=cast(IReadChunkRouteRepository, ports),
         artifacts=cast(IReadChunkArtifactsRepository, ports),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
@@ -185,7 +192,7 @@ def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports,
         label=lambda _ref: None,
         closer_available=lambda source: source == "hub",
     )
-    return service, ports, clock
+    return service, ports, clock, exclusive
 
 
 def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, FixedClock]:
@@ -194,7 +201,7 @@ def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, 
         facts=cast(IReadChunkFactsRepository, ports),
         route=cast(IWriteChunkRouteRepository, ports),
         decisions=cast(IWriteChunkDecisionsRepository, ports),
-        exclusive=exclusive,
+        exclusive=cast(IChunkExclusiveWrites, exclusive),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
         closer_available=lambda source: source == "hub",

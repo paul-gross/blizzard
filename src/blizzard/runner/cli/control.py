@@ -78,7 +78,7 @@ class _Lever(TypedDict):
     until: str | None
 
 
-class _Throttle(TypedDict):
+class Throttle(TypedDict):
     floor: _Floor
     state: str
     declining: NotRequired[list[str]]
@@ -137,7 +137,7 @@ class _RunnerView(_Tenant):
     workspace_id: str
     identity: NotRequired[object | None]
     pause: _Pause
-    throttle: NotRequired[_Throttle | None]
+    throttle: NotRequired[Throttle | None]
     capacities: _Capacities
     routing_conflicts: NotRequired[list[_Conflict]]
     hub: _Hub
@@ -276,7 +276,7 @@ def _tenant_part(view: _Tenant) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
-def _throttle_lines(throttle: _Throttle | None) -> list[str]:
+def throttle_lines(throttle: Throttle | None) -> list[str]:
     if throttle is None:
         return []
     declining = ", ".join(throttle.get("declining", [])) or "none"
@@ -369,13 +369,13 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     )
     identity = view.get("identity")
     if identity is not None:
-        _echo_identity(IdentityVerdictView.model_validate(identity))
+        echo_identity(IdentityVerdictView.model_validate(identity))
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
     reason = f" — {pause.get('local_reason')}" if pause.get("local_reason") else ""
     click.echo(f"  {brake_state}{reason}")
-    for line in _throttle_lines(view.get("throttle")):
+    for line in throttle_lines(view.get("throttle")):
         click.echo(line)
     cap = view["capacities"]
     bindings = cap.get("bindings", [])
@@ -775,7 +775,7 @@ def _verdict(view: IdentityVerdictView, state: IdentityState) -> IdentityVerdict
     )
 
 
-def _echo_identity(view: IdentityVerdictView) -> None:
+def echo_identity(view: IdentityVerdictView) -> None:
     if isinstance(view.state, Unrecognized):
         # A state a newer runner reports: show it, and claim no refusal or remedy for it.
         click.echo(f"  identity: unknown identity state {view.state.raw!r}")

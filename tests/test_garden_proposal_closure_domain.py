@@ -24,7 +24,7 @@ from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalClosureService,
     GardenProposalPassReasonRequired,
     IWriteGardenProposalClosureRepository,
-    _compose_minted_body,
+    compose_minted_body,
 )
 from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed
 from blizzard.hub.domain.graph.model import Graph
@@ -212,11 +212,11 @@ def test_accept_declining_to_mint_records_declined_and_touches_no_item_service()
     )
 
 
-# --- _compose_minted_body -------------------------------
+# --- compose_minted_body -------------------------------
 
 
 def test_compose_wraps_the_given_body_with_one_findings_bullet() -> None:
-    body = _compose_minted_body("the case", [_finding("fin_1", class_="stale-docstring", locus="a.py:1")])
+    body = compose_minted_body("the case", [_finding("fin_1", class_="stale-docstring", locus="a.py:1")])
 
     assert body.startswith("the case\n\n## Related findings\n\n")
     assert "- `fin_1` — stale-docstring — a.py:1 — live" in body
@@ -230,7 +230,7 @@ def test_compose_carries_one_bullet_per_finding_in_order() -> None:
         _finding("fin_2", class_="c2", locus="b.py:2", state="resolved"),
     ]
 
-    body = _compose_minted_body("the case", findings)
+    body = compose_minted_body("the case", findings)
 
     bullets = [line for line in body.splitlines() if line.startswith("- ")]
     assert bullets == [
@@ -241,14 +241,14 @@ def test_compose_carries_one_bullet_per_finding_in_order() -> None:
 
 def test_compose_wraps_the_proposals_own_body_when_none_is_given() -> None:
     """`accept()` passes ``body`` if given, else ``proposal.body`` — either way,
-    ``_compose_minted_body`` only ever sees the resolved string, never `None`."""
-    body = _compose_minted_body(_proposal().body, [_finding("fin_1")])
+    ``compose_minted_body`` only ever sees the resolved string, never `None`."""
+    body = compose_minted_body(_proposal().body, [_finding("fin_1")])
 
     assert body.startswith("the case\n\n## Related findings\n\n")
 
 
 def test_compose_wraps_a_caller_supplied_override_body() -> None:
-    body = _compose_minted_body("a hand-drafted body", [_finding("fin_1")])
+    body = compose_minted_body("a hand-drafted body", [_finding("fin_1")])
 
     assert body.startswith("a hand-drafted body\n\n## Related findings\n\n")
 
@@ -256,6 +256,6 @@ def test_compose_wraps_a_caller_supplied_override_body() -> None:
 def test_compose_returns_the_body_unchanged_when_findings_is_empty() -> None:
     """A proposal citing no findings, or one whose cited ids have all since stopped
     resolving, mints a bare item — no section, no preamble."""
-    body = _compose_minted_body("the case", [])
+    body = compose_minted_body("the case", [])
 
     assert body == "the case"

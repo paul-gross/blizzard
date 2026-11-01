@@ -29,7 +29,7 @@ _CURSOR_ARITY = 1
 # compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
-def _filtered_stmt(stmts: ScopedStatements, base: Select[Any], criteria: EventQueryCriteria) -> Select[Any]:
+def filtered_stmt(stmts: ScopedStatements, base: Select[Any], criteria: EventQueryCriteria) -> Select[Any]:
     """``base`` — a scoped read of ``transcript_events`` — narrowed by ``criteria``."""
     t = s.transcript_events
     stmt = base.where(t.c.extractor_version == criteria.extractor_version)
@@ -67,31 +67,31 @@ def _filtered_stmt(stmts: ScopedStatements, base: Select[Any], criteria: EventQu
     return stmt
 
 
-def _decode_cursor(cursor: str) -> int:
+def decode_event_cursor(cursor: str) -> int:
     parts = decode_cursor(cursor)
     if len(parts) != _CURSOR_ARITY or type(parts[0]) is not int or parts[0] < 0:
         raise MalformedCursor(cursor)
     return parts[0]
 
 
-def _events_stmt(
+def events_stmt(
     stmts: ScopedStatements, criteria: EventQueryCriteria, *, cursor: str | None, limit: int
 ) -> Select[Any]:
     t = s.transcript_events
-    stmt = _filtered_stmt(stmts, stmts.select(t), criteria)
+    stmt = filtered_stmt(stmts, stmts.select(t), criteria)
     if cursor is not None:
-        stmt = stmt.where(t.c.id > _decode_cursor(cursor))
+        stmt = stmt.where(t.c.id > decode_event_cursor(cursor))
     # `id` alone is already total (`bzh:sql-portable`), unlike the nullable `occurred_at`.
     return stmt.order_by(t.c.id).limit(limit + 1)
 
 
-def _counts_stmt(
+def counts_stmt(
     stmts: ScopedStatements, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None, limit: int | None = None
 ) -> Select[Any]:
     # Labeled "occurrences", never "count" — `Row` inherits `tuple.count`, so a same-named
     # label would shadow attribute access to the aggregate with a bound method.
     base = stmts.select(s.transcript_events, group_col.label("key"), func.count().label("occurrences"))
-    stmt = _filtered_stmt(stmts, base, criteria)
+    stmt = filtered_stmt(stmts, base, criteria)
     if kind is not None:
         # Intersected with `criteria.kind`, never substituted for it: a caller naming a
         # different kind asked for an empty scope and gets one.
@@ -102,7 +102,7 @@ def _counts_stmt(
     return stmt if limit is None else stmt.limit(limit)
 
 
-def _counts_by_node_stmt(stmts: ScopedStatements, criteria: EventQueryCriteria) -> Select[Any]:
+def counts_by_node_stmt(stmts: ScopedStatements, criteria: EventQueryCriteria) -> Select[Any]:
     """Counts by node id, naming each node and graph as ``_node_names`` does."""
     t, gn, g = s.transcript_events, s.graph_nodes, s.graphs
     graph_name = (
@@ -117,7 +117,7 @@ def _counts_by_node_stmt(stmts: ScopedStatements, criteria: EventQueryCriteria) 
         node_name.label("node_name"),
         func.count().label("occurrences"),
     )
-    stmt = _filtered_stmt(stmts, stmts.select(t, *cols), criteria)
+    stmt = filtered_stmt(stmts, stmts.select(t, *cols), criteria)
     stmt = stmt.where(t.c.node_id.is_not(None)).group_by(t.c.node_id)
     return stmt.order_by(func.count().desc(), t.c.node_id.asc())
 
@@ -154,7 +154,7 @@ class AnalyticsEventQueryStore:
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         with self._store.read("events") as conn:
-            rows = conn.execute(_events_stmt(self._store, criteria, cursor=cursor, limit=limit)).all()
+            rows = conn.execute(events_stmt(self._store, criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
         next_cursor = encode_cursor(page_rows[-1].id) if len(rows) > limit else None
         return EventPage(events=[_to_record(row) for row in page_rows], next_cursor=next_cursor)
@@ -172,7 +172,7 @@ class AnalyticsEventQueryStore:
 
     def counts_by_node(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
         with self._store.read("counts_by_node") as conn:
-            rows = conn.execute(_counts_by_node_stmt(self._store, criteria)).all()
+            rows = conn.execute(counts_by_node_stmt(self._store, criteria)).all()
         return [
             KeyedCount(key=row.key, count=row.occurrences, graph_name=row.graph_name, node_name=row.node_name)
             for row in rows
@@ -182,7 +182,7 @@ class AnalyticsEventQueryStore:
         self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None, limit: int | None = None
     ) -> list[KeyedCount]:
         with self._store.read("counts") as conn:
-            rows = conn.execute(_counts_stmt(self._store, criteria, group_col=group_col, kind=kind, limit=limit)).all()
+            rows = conn.execute(counts_stmt(self._store, criteria, group_col=group_col, kind=kind, limit=limit)).all()
         return [KeyedCount(key=row.key, count=row.occurrences) for row in rows]
 
 

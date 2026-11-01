@@ -63,6 +63,10 @@ class OpenAISubscriptionSampler:
         self._http_client = http_client
         self._clock: IClock = clock
 
+    @property
+    def http_client(self) -> Callable[[], httpx2.Client]:
+        return self._http_client
+
     def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         credential = self._read_credential()
         if isinstance(credential, SampleMiss):

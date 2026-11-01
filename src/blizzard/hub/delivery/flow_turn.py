@@ -244,6 +244,10 @@ class TurnRunner:
         self._tracer = tracer or NoopPlatformTracer()
         self._build_bound = build_bound_seconds
 
+    @property
+    def router(self) -> HubNodeRouter:
+        return self._router
+
     async def take(self, turn: Turn, submission: Submission) -> None:
         """Answer for ``turn`` until it ends — or, cancelled at shutdown, let it go without writing its end. The
         ``turn-ended`` and ``withdrawn`` facts its end wrote are announced once that end's transaction committed."""
@@ -310,9 +314,9 @@ class TurnRunner:
             self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
             return None
         action = self._actions.action(node.action) if node.action is not None else None
-        return self._resolve(at, action, submission, ending, cut_off)
+        return self.resolve(at, action, submission, ending, cut_off)
 
-    def _resolve(
+    def resolve(
         self, at: _Visit, action: IHubAction | None, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff
     ) -> _Ready | None:
         chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
@@ -474,13 +478,13 @@ class TurnRunner:
     async def _pass(self, turn: Turn, submission: Submission, ready: _Ready, cut_off: TurnCutOff) -> PassRun:
         chunk, node, epoch = ready.at.chunk, ready.at.node, ready.at.epoch
         hub_exec = DerivedContext.of(StepKey.attempt(chunk.chunk_id, epoch + 1), SpanRole.HUB_EXEC, turn.turn_id)
-        write = partial(self._write_effect, chunk, node, epoch, submission)
+        write = partial(self.write_effect, chunk, node, epoch, submission)
         with self._tracer.under(hub_exec), self._tracer.child(ACTION_PASS_SPAN, {ACTION_NAME: ready.action.spec.name}):
             run = await self._passes.drive(ready.action, ready.visit, ready.forges, write, cut_off=cut_off.set)
             annotate({ACTION_CHOICE: _choice_of(run, ready.action.spec, node) or ""})
         return run
 
-    def _write_effect(
+    def write_effect(
         self, chunk: Chunk, node: Node, epoch: int, submission: Submission, effect: Effect
     ) -> EffectResult:
         """Make one effect a pass recorded durable, answering how the hub took it."""

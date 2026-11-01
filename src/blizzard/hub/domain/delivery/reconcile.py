@@ -300,14 +300,14 @@ class FlowLineReconciler:
             if standing.node.action is None:
                 self._escalate_actionless(standing.chunk, facts, standing.graph)
                 return None
-            return self._submit(standing)
+            return self.submit(standing)
         except TenantClosed:
             raise
         except Exception:
             _log.exception("flow reconcile skipped a visit", chunk_id=standing.chunk.chunk_id)
             return None
 
-    def _submit(self, standing: _Standing) -> Submission | None:
+    def submit(self, standing: _Standing) -> Submission | None:
         """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
         moved — or refuse it, routing its failure choice, when it cannot name them."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch

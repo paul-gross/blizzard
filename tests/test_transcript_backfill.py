@@ -412,7 +412,7 @@ def test_a_session_unreadable_after_the_on_disk_probe_is_deferred_not_sealed() -
         harness_version=None,
     )
     ctx, source = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
-    source._batches["sess-a"] = unreadable
+    source.script_batch("sess-a", unreadable)
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
@@ -423,7 +423,7 @@ def test_a_session_unreadable_after_the_on_disk_probe_is_deferred_not_sealed() -
     assert len(ctx.stores.transcript_ledger.open_transcript_segments()) == 1
 
     # The file comes back; the rerun resumes that same segment rather than reporting it present.
-    source._batches["sess-a"] = _batch("sess-a", [_turn(0, "hello")])
+    source.script_batch("sess-a", _batch("sess-a", [_turn(0, "hello")]))
     second = TranscriptBackfill(ctx).run()
 
     assert (second.imported, second.already_present) == (1, 0)

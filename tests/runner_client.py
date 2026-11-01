@@ -15,6 +15,19 @@ from blizzard.runner.api.wiring import RunnerRegistry
 from blizzard.runner.route_paths import runner_prefix
 
 
+@runtime_checkable
+class _IncludeContext(Protocol):
+    prefix: str
+
+
+@runtime_checkable
+class _MountedRouter(Protocol):
+    """An included router as FastAPI mounts it, matched on its public ``original_router`` and ``include_context``."""
+
+    original_router: APIRouter
+    include_context: _IncludeContext
+
+
 def sole_runner_id(app: FastAPI) -> str:
     """The id of the one runner ``app`` serves."""
     registry: RunnerRegistry = app.state.runners

@@ -99,7 +99,7 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
         assert provider.capacity() == 3
         assert loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID) == ""
         assert loop.usage.workspaces is loop.workspaces
-        assert provider._root == tmp_path / "scratch"
+        assert provider.root == tmp_path / "scratch"
         assert SpawnCwd.of_session(
             loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), str(tmp_path / "scratch" / "chunk")
         ) == str(tmp_path / "scratch" / "chunk")
@@ -160,7 +160,7 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
         harness = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
         assert isinstance(harness, ClaudeCodeAdapter)
-        assert harness._worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
+        assert harness.worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
 
 
 @pytest.mark.unit
@@ -193,10 +193,10 @@ def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_it
         assert ctx.subscriptions[0].sample_interval_seconds == 123
         sampling = graph.host.host_tick.external_usage_sample
         assert sampling is not None
-        (sampled,) = sampling._subscriptions
+        (sampled,) = sampling.subscriptions
         assert sampled.sample_interval_seconds == 123
         assert isinstance(sampled.sampler, AnthropicSubscriptionSampler)
-        assert sampled.sampler._credentials_path == scratch
+        assert sampled.sampler.credentials_path == scratch
 
 
 @pytest.mark.unit
@@ -232,12 +232,12 @@ def test_the_hosts_declared_subscriptions_share_one_host_owned_http_client(tmp_p
     with loop_graph(config) as graph:
         sampling = graph.host.host_tick.external_usage_sample
         assert sampling is not None
-        assert [s.slug for s in sampling._subscriptions] == ["anthropic", "codex"]
-        first_sampler, second_sampler = (s.sampler for s in sampling._subscriptions)
+        assert [s.slug for s in sampling.subscriptions] == ["anthropic", "codex"]
+        first_sampler, second_sampler = (s.sampler for s in sampling.subscriptions)
         assert isinstance(first_sampler, AnthropicSubscriptionSampler)
         assert isinstance(second_sampler, OpenAISubscriptionSampler)
-        assert first_sampler._http_client is graph.host.usage_http_client
-        assert second_sampler._http_client is graph.host.usage_http_client
+        assert first_sampler.http_client is graph.host.usage_http_client
+        assert second_sampler.http_client is graph.host.usage_http_client
 
 
 @pytest.mark.unit
@@ -310,7 +310,7 @@ def test_the_hosts_usage_http_client_is_not_built_merely_by_composing_the_host(t
 
     with loop_graph(config) as graph:
         assert isinstance(graph.host.usage_http_client, LazyUsageHttpClient)
-        assert graph.host.usage_http_client._client is None
+        assert graph.host.usage_http_client.built_client is None
 
 
 @pytest.mark.unit
@@ -348,8 +348,8 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
         harness = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
         assert isinstance(harness, ClaudeCodeAdapter)
-        assert harness._settings_path == settings
-        assert harness._permission_override == "acceptEdits"
+        assert harness.settings_path == settings
+        assert harness.permission_override == "acceptEdits"
 
 
 @pytest.mark.unit
@@ -371,7 +371,7 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
     try:
         adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
-        argv = adapter._settings_args()
+        argv = adapter.settings_args()
     finally:
         graph.close()
 
@@ -397,8 +397,8 @@ def test_registry_threads_the_autonomy_to_both_bindings(tmp_path: Path, autonomy
 
         assert isinstance(claude, ClaudeCodeAdapter)
         assert isinstance(opencode, OpenCodeAdapter)
-        assert claude._autonomy is autonomy
-        assert opencode._autonomy is autonomy
+        assert claude.autonomy is autonomy
+        assert opencode.autonomy is autonomy
 
 
 @pytest.mark.unit
@@ -415,7 +415,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 
     harness = runner_seams(app).harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
-    assert harness._settings_path == settings
+    assert harness.settings_path == settings
     assert " --permission-mode acceptEdits" in harness.resume_command("/w", "s-1", attended=True)
 
 
@@ -474,7 +474,7 @@ def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_p
     with loop_graph(config, events=broker) as graph:
         driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
 
-    assert driver._wiring.events is broker
+    assert driver.wiring.events is broker
 
 
 @pytest.mark.unit
@@ -489,7 +489,7 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
     with loop_graph(config) as graph:
         driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
 
-    assert driver._wiring.events is None
+    assert driver.wiring.events is None
 
 
 @pytest.mark.unit
@@ -826,9 +826,9 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
     def settings_argv(ctx: LoopContext) -> list[str]:
         adapter = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
-        return adapter._settings_args()
+        return adapter.settings_args()
 
-    argv = LoopWiring.of(config, bundle=snapshot)._with_context(settings_argv)
+    argv = LoopWiring.of(config, bundle=snapshot).with_context(settings_argv)
 
     settings = snapshot.path.resolve() / "claude-code" / "settings.json"
     assert argv[:2] == ["--settings", str(settings)]

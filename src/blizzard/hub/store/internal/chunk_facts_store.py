@@ -54,7 +54,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import (
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
-_ALL_FAMILIES: frozenset[str] = frozenset(
+ALL_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
         "stopped",
@@ -81,7 +81,7 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
 )
 
 #: Exactly the families `ChunkFacts.status()` reaches — pinned by a mechanical equivalence test.
-_STATUS_FAMILIES: frozenset[str] = frozenset(
+STATUS_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
         "stopped",
@@ -120,7 +120,7 @@ _STATUS_FAMILY_TABLES: dict[str, tuple[Table, ...]] = {
     "restarts": (s.chunk_restarts,),
     "pauses": (s.chunk_pause_facts,),
 }
-assert _STATUS_FAMILY_TABLES.keys() == _STATUS_FAMILIES, "every status family names its tables"
+assert _STATUS_FAMILY_TABLES.keys() == STATUS_FAMILIES, "every status family names its tables"
 
 
 def status_family_tables() -> tuple[Table, ...]:
@@ -130,11 +130,11 @@ def status_family_tables() -> tuple[Table, ...]:
     return tuple(tables[name] for name in sorted(tables))
 
 
-#: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`_STATUS_FAMILIES`
+#: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`STATUS_FAMILIES`
 #: plus ``usage`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.usage_total`) and
 #: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_epoch`), the
 #: reaches ``status()`` itself doesn't make. :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
-_TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
+_TICK_STATUS_FAMILIES: frozenset[str] = STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
 
 def _rows(
@@ -253,7 +253,7 @@ class ChunkFactsStore:
             )
             if project is not None:
                 candidates = candidates.where(s.chunks.c.project_id == project)
-            facts_by_id = self._load(conn, [r.chunk_id for r in conn.execute(candidates)], families=_STATUS_FAMILIES)
+            facts_by_id = self._load(conn, [r.chunk_id for r in conn.execute(candidates)], families=STATUS_FAMILIES)
         residue = 0
         for facts in facts_by_id.values():
             finished = facts.completed_at() if facts.status() is ChunkStatus.DONE else None
@@ -271,7 +271,7 @@ class ChunkFactsStore:
         if project is not None:
             candidates = candidates.where(s.chunks.c.project_id == project)
         candidate_ids = [r.chunk_id for r in conn.execute(candidates)]
-        facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
+        facts_by_id = self._load(conn, candidate_ids, families=STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
     def _load(
@@ -281,7 +281,7 @@ class ChunkFactsStore:
         *,
         families: frozenset[str] | None = None,
     ) -> dict[str, ChunkFacts]:
-        selected = families if families is not None else _ALL_FAMILIES
+        selected = families if families is not None else ALL_FAMILIES
         if chunk_ids is None:
             return self._load_batch(conn, None, selected)
         result: dict[str, ChunkFacts] = {}

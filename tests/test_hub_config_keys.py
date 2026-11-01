@@ -51,13 +51,13 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     read: set[str] = set()
-    checked = ConfigView._check
+    checked = ConfigView.check
 
     def recording(view: ConfigView, key: str) -> None:
-        read.add(view._join(key))
+        read.add(view.join(key))
         checked(view, key)
 
-    monkeypatch.setattr(ConfigView, "_check", recording)
+    monkeypatch.setattr(ConfigView, "check", recording)
     root = _initialised(tmp_path)
     document = document_carrying_every_key(HUB_REGISTRY, _SAMPLES)
     # Replaces the module's parser alone: the flag registry is parsed with the real one.

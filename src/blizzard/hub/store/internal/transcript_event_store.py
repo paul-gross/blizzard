@@ -48,7 +48,7 @@ def _minted_chunk_ids_subselect(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(s.chunks, s.chunks.c.chunk_id)
 
 
-def _visible_segment_ids_stmt(
+def visible_segment_ids_stmt(
     stmts: ScopedStatements, chunk_id: str | None = None, segment_id: str | None = None
 ) -> Select[Any]:
     """The tenant's visible segments; the superseded-pointer check is a correlated ``NOT EXISTS``
@@ -69,11 +69,11 @@ def _visible_segment_ids_stmt(
     return stmt
 
 
-def _derived_segment_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
+def derived_segment_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(s.transcript_event_derivations, s.transcript_event_derivations.c.segment_id).distinct()
 
 
-def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None) -> Select[Any]:
+def candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None) -> Select[Any]:
     """Each visible segment's own ``content_digest`` and ``harness_version``
     — the latter folds per shipped window, so a still-rejected re-offer that only
     refreshes it still changes the fingerprint. No ``content`` column named — the
@@ -86,12 +86,12 @@ def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None
             s.transcript_segments.c.content_digest,
             s.transcript_segments.c.harness_version,
         )
-        .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id)))
+        .where(s.transcript_segments.c.segment_id.in_(visible_segment_ids_stmt(stmts, chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
     )
 
 
-def _derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
+def derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
     """The change probe's one cheap aggregate read: row count, max
     ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
     count as a scalar subquery, so the whole probe is one statement. No per-row read: a
@@ -106,7 +106,7 @@ def _derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
     )
 
 
-def _current_markers_stmt(stmts: ScopedStatements, extractor_version: str, chunk_id: str | None = None) -> Select[Any]:
+def current_markers_stmt(stmts: ScopedStatements, extractor_version: str, chunk_id: str | None = None) -> Select[Any]:
     """The markers at ``extractor_version``, bounded by the same visible-segment set the digest
     read walks — so a one-chunk candidacy reads only that chunk's markers."""
     return stmts.select(
@@ -115,11 +115,11 @@ def _current_markers_stmt(stmts: ScopedStatements, extractor_version: str, chunk
         s.transcript_event_derivations.c.content_fingerprint,
     ).where(
         (s.transcript_event_derivations.c.extractor_version == extractor_version)
-        & s.transcript_event_derivations.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id))
+        & s.transcript_event_derivations.c.segment_id.in_(visible_segment_ids_stmt(stmts, chunk_id))
     )
 
 
-def _segment_records_stmt(stmts: ScopedStatements, segment_id: str) -> Select[Any]:
+def segment_records_stmt(stmts: ScopedStatements, segment_id: str) -> Select[Any]:
     return (
         stmts.select(s.transcript_segments)
         .where(s.transcript_segments.c.segment_id == segment_id)
@@ -127,20 +127,20 @@ def _segment_records_stmt(stmts: ScopedStatements, segment_id: str) -> Select[An
     )
 
 
-def _marker_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Select[Any]:
+def marker_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Select[Any]:
     return stmts.select(s.transcript_event_derivations).where(
         s.transcript_event_derivations.c.segment_id == segment_id,
         s.transcript_event_derivations.c.extractor_version == extractor_version,
     )
 
 
-def _markers_stmt(stmts: ScopedStatements, extractor_version: str) -> Select[Any]:
+def markers_stmt(stmts: ScopedStatements, extractor_version: str) -> Select[Any]:
     return stmts.select(s.transcript_event_derivations).where(
         s.transcript_event_derivations.c.extractor_version == extractor_version
     )
 
 
-def _segment_records_for_ids_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
+def segment_records_for_ids_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
     return (
         stmts.select(s.transcript_segments)
         .where(s.transcript_segments.c.segment_id.in_(segment_ids))
@@ -148,8 +148,8 @@ def _segment_records_for_ids_stmt(stmts: ScopedStatements, segment_ids: Sequence
     )
 
 
-def _segment_contexts_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
-    """``_segment_records_for_ids_stmt``'s content-free sibling — every column
+def segment_contexts_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
+    """``segment_records_for_ids_stmt``'s content-free sibling — every column
     :meth:`TranscriptEventStore.segment_contexts` needs, minus ``content``."""
     return (
         stmts.select(
@@ -172,23 +172,23 @@ def _segment_contexts_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) 
     )
 
 
-def _delete_events_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Delete:
+def delete_events_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Delete:
     return stmts.delete(s.transcript_events).where(
         s.transcript_events.c.segment_id == segment_id,
         s.transcript_events.c.extractor_version == extractor_version,
     )
 
 
-def _delete_marker_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Delete:
+def delete_marker_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: str) -> Delete:
     return stmts.delete(s.transcript_event_derivations).where(
         s.transcript_event_derivations.c.segment_id == segment_id,
         s.transcript_event_derivations.c.extractor_version == extractor_version,
     )
 
 
-def _drop_identities_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
+def drop_identities_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
     """The chunk, epoch, and spawn generation a drop fact records — ordered so the first
-    row per segment is the one :func:`_segment_contexts_stmt` takes its context from."""
+    row per segment is the one :func:`segment_contexts_stmt` takes its context from."""
     return (
         stmts.select(
             s.transcript_segments,
@@ -202,18 +202,18 @@ def _drop_identities_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -
     )
 
 
-def _insert_drops_stmt(stmts: ScopedStatements) -> Insert:
+def insert_drops_stmt(stmts: ScopedStatements) -> Insert:
     """Executed once per batch with one parameter set per drop fact: the seam stamps the
     tenant into the statement, and a row never carries its own."""
     return stmts.insert(s.transcript_event_drops)
 
 
-def _insert_events_stmt(stmts: ScopedStatements) -> Insert:
-    """Executed once per segment with :func:`_event_rows` as its parameter sets."""
+def insert_events_stmt(stmts: ScopedStatements) -> Insert:
+    """Executed once per segment with :func:`event_rows` as its parameter sets."""
     return stmts.insert(s.transcript_events)
 
 
-def _event_rows(
+def event_rows(
     segment_id: str, extractor_version: str, events: list[TranscriptEvent], provenance: SegmentProvenance
 ) -> list[dict[str, Any]]:
     return [
@@ -243,7 +243,7 @@ def _event_rows(
     ]
 
 
-def _upsert_marker_stmt(
+def upsert_marker_stmt(
     stmts: ScopedStatements,
     segment_id: str,
     extractor_version: str,
@@ -263,11 +263,11 @@ def _upsert_marker_stmt(
     )
 
 
-def _delete_all_events_for_segments_stmt(stmts: ScopedStatements, segment_ids: Collection[str]) -> Delete:
+def delete_all_events_for_segments_stmt(stmts: ScopedStatements, segment_ids: Collection[str]) -> Delete:
     return stmts.delete(s.transcript_events).where(s.transcript_events.c.segment_id.in_(segment_ids))
 
 
-def _delete_all_markers_for_segments_stmt(stmts: ScopedStatements, segment_ids: Collection[str]) -> Delete:
+def delete_all_markers_for_segments_stmt(stmts: ScopedStatements, segment_ids: Collection[str]) -> Delete:
     return stmts.delete(s.transcript_event_derivations).where(
         s.transcript_event_derivations.c.segment_id.in_(segment_ids)
     )
@@ -329,20 +329,20 @@ class TranscriptEventStore:
 
     def visible_segment_ids(self, *, chunk_id: str | None = None, segment_id: str | None = None) -> frozenset[str]:
         with self._store.read("visible_segment_ids") as conn:
-            rows = conn.execute(_visible_segment_ids_stmt(self._store, chunk_id, segment_id)).all()
+            rows = conn.execute(visible_segment_ids_stmt(self._store, chunk_id, segment_id)).all()
         return frozenset(row.segment_id for row in rows)
 
     def derived_segment_ids(self) -> frozenset[str]:
         with self._store.read("derived_segment_ids") as conn:
-            rows = conn.execute(_derived_segment_ids_stmt(self._store)).all()
+            rows = conn.execute(derived_segment_ids_stmt(self._store)).all()
         return frozenset(row.segment_id for row in rows)
 
     def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
         with self._store.read("candidacy") as conn:
-            digest_rows = conn.execute(_candidacy_digests_stmt(self._store, chunk_id)).all()
+            digest_rows = conn.execute(candidacy_digests_stmt(self._store, chunk_id)).all()
             markers = {
                 row.segment_id: row.content_fingerprint
-                for row in conn.execute(_current_markers_stmt(self._store, extractor_version, chunk_id))
+                for row in conn.execute(current_markers_stmt(self._store, extractor_version, chunk_id))
             }
         visible_segment_ids: set[str] = set()
         candidates: list[str] = []
@@ -355,7 +355,7 @@ class TranscriptEventStore:
 
     def derivation_signature(self) -> DerivationSignature:
         with self._store.read("derivation_signature") as conn:
-            row = conn.execute(_derivation_signature_stmt(self._store)).one()
+            row = conn.execute(derivation_signature_stmt(self._store)).one()
         return DerivationSignature(
             segment_count=row.segment_count,
             max_segment_id=row.max_segment_id,
@@ -365,7 +365,7 @@ class TranscriptEventStore:
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
         with self._store.read("segment_derivation_input") as conn:
-            rows = conn.execute(_segment_records_stmt(self._store, segment_id)).all()
+            rows = conn.execute(segment_records_stmt(self._store, segment_id)).all()
         if not rows:
             return None
         first = rows[0]
@@ -384,7 +384,7 @@ class TranscriptEventStore:
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None:
         with self._store.read("derivation_marker") as conn:
-            row = conn.execute(_marker_stmt(self._store, segment_id, extractor_version)).one_or_none()
+            row = conn.execute(marker_stmt(self._store, segment_id, extractor_version)).one_or_none()
         if row is None:
             return None
         return DerivationMarker(
@@ -398,7 +398,7 @@ class TranscriptEventStore:
 
     def derivation_markers(self, extractor_version: str) -> dict[str, DerivationMarker]:
         with self._store.read("derivation_markers") as conn:
-            rows = conn.execute(_markers_stmt(self._store, extractor_version)).all()
+            rows = conn.execute(markers_stmt(self._store, extractor_version)).all()
         return {
             row.segment_id: DerivationMarker(
                 segment_id=row.segment_id,
@@ -420,7 +420,7 @@ class TranscriptEventStore:
             return result
         with self._store.read("segment_derivation_inputs") as conn:
             for batch in id_batches(list(segment_ids)):
-                rows = conn.execute(_segment_records_for_ids_stmt(self._store, batch)).all()
+                rows = conn.execute(segment_records_for_ids_stmt(self._store, batch)).all()
                 for segment_id, group in itertools.groupby(rows, key=lambda row: row.segment_id):
                     group_rows = list(group)
                     try:
@@ -446,7 +446,7 @@ class TranscriptEventStore:
             return result
         with self._store.read("segment_contexts") as conn:
             for batch in id_batches(list(segment_ids)):
-                rows = conn.execute(_segment_contexts_stmt(self._store, batch)).all()
+                rows = conn.execute(segment_contexts_stmt(self._store, batch)).all()
                 for segment_id, group in itertools.groupby(rows, key=lambda row: row.segment_id):
                     group_rows = list(group)
                     result[segment_id] = SegmentContext(
@@ -476,14 +476,14 @@ class TranscriptEventStore:
         provenance: SegmentProvenance,
     ) -> None:
         with self._store.write("replace_segment_events") as conn:
-            conn.execute(_delete_events_stmt(self._store, segment_id, extractor_version))
-            conn.execute(_delete_marker_stmt(self._store, segment_id, extractor_version))
+            conn.execute(delete_events_stmt(self._store, segment_id, extractor_version))
+            conn.execute(delete_marker_stmt(self._store, segment_id, extractor_version))
             if events:
                 conn.execute(
-                    _insert_events_stmt(self._store), _event_rows(segment_id, extractor_version, events, provenance)
+                    insert_events_stmt(self._store), event_rows(segment_id, extractor_version, events, provenance)
                 )
             conn.execute(
-                _upsert_marker_stmt(
+                upsert_marker_stmt(
                     self._store,
                     segment_id,
                     extractor_version,
@@ -501,11 +501,11 @@ class TranscriptEventStore:
             for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
                 # A segment with no stored record writes no drop fact: nothing to record it against.
                 first_by_segment: dict[str, Row[Any]] = {}
-                for row in conn.execute(_drop_identities_stmt(self._store, batch)).all():
+                for row in conn.execute(drop_identities_stmt(self._store, batch)).all():
                     first_by_segment.setdefault(row.segment_id, row)
                 if first_by_segment:
                     conn.execute(
-                        _insert_drops_stmt(self._store),
+                        insert_drops_stmt(self._store),
                         [
                             {
                                 "segment_id": segment_id,
@@ -517,8 +517,8 @@ class TranscriptEventStore:
                             for segment_id, row in first_by_segment.items()
                         ],
                     )
-                conn.execute(_delete_all_events_for_segments_stmt(self._store, batch))
-                conn.execute(_delete_all_markers_for_segments_stmt(self._store, batch))
+                conn.execute(delete_all_events_for_segments_stmt(self._store, batch))
+                conn.execute(delete_all_markers_for_segments_stmt(self._store, batch))
 
 
 _transcript_event_store_conforms: type[IWriteTranscriptEvents] = TranscriptEventStore

@@ -41,31 +41,31 @@ _CRITERIA = OperationalCriteria(
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_lease_min_stmt": m._lease_min_stmt(
+        "lease_min_stmt": m.lease_min_stmt(
             _STMTS,
         ),
-        "_duration_lease_min_stmt": m._duration_lease_min_stmt(_STMTS, _CRITERIA),
-        "_source_chunks_stmt": m._source_chunks_stmt(_STMTS, "github"),
-        "_duration_window_groups_stmt": m._duration_window_groups_stmt(_STMTS, _CRITERIA),
-        "_duration_rows_stmt": m._duration_rows_stmt(_STMTS, _CRITERIA),
-        "_spend_filtered_stmt": m._spend_filtered_stmt(_STMTS, _CRITERIA, *s.usage_facts.c),
-        "_spend_group_stmt": m._spend_group_stmt(_STMTS, _CRITERIA, group_col=s.usage_facts.c.node_id),
-        "_spend_by_node_stmt": m._spend_by_node_stmt(_STMTS, _CRITERIA),
-        "_spend_by_graph_stmt": m._spend_by_graph_stmt(_STMTS, _CRITERIA),
-        "_spend_by_model_stmt": m._spend_by_model_stmt(_STMTS, _CRITERIA),
-        "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(
+        "duration_lease_min_stmt": m.duration_lease_min_stmt(_STMTS, _CRITERIA),
+        "source_chunks_stmt": m.source_chunks_stmt(_STMTS, "github"),
+        "duration_window_groups_stmt": m.duration_window_groups_stmt(_STMTS, _CRITERIA),
+        "duration_rows_stmt": m.duration_rows_stmt(_STMTS, _CRITERIA),
+        "spend_filtered_stmt": m.spend_filtered_stmt(_STMTS, _CRITERIA, *s.usage_facts.c),
+        "spend_group_stmt": m.spend_group_stmt(_STMTS, _CRITERIA, group_col=s.usage_facts.c.node_id),
+        "spend_by_node_stmt": m.spend_by_node_stmt(_STMTS, _CRITERIA),
+        "spend_by_graph_stmt": m.spend_by_graph_stmt(_STMTS, _CRITERIA),
+        "spend_by_model_stmt": m.spend_by_model_stmt(_STMTS, _CRITERIA),
+        "spend_by_chunk_stmt": m.spend_by_chunk_stmt(
             _STMTS, _CRITERIA, cursor=encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"), limit=200
         ),
-        "_judged_distribution_stmt": m._judged_distribution_stmt(_STMTS, _CRITERIA),
-        "_candidate_lease_epochs_stmt": m._candidate_lease_epochs_stmt(_STMTS, _CRITERIA),
-        "_candidate_chunk_ids_stmt": m._candidate_chunk_ids_stmt(_STMTS, _CRITERIA),
-        "_chunk_max_lease_epoch_stmt": m._chunk_max_lease_epoch_stmt(_STMTS, _CRITERIA),
-        "_chunk_transitions_stmt": m._chunk_transitions_stmt(_STMTS, _CRITERIA),
-        "_chunk_migrations_stmt": m._chunk_migrations_stmt(_STMTS, _CRITERIA),
-        "_chunk_bounces_stmt": m._chunk_bounces_stmt(_STMTS, _CRITERIA),
-        "_chunks_graph_stmt": m._chunks_graph_stmt(_STMTS, _CRITERIA),
-        "_candidate_graph_ids_stmt": m._candidate_graph_ids_stmt(_STMTS, _CRITERIA),
-        "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(_STMTS, _CRITERIA),
+        "judged_distribution_stmt": m.judged_distribution_stmt(_STMTS, _CRITERIA),
+        "candidate_lease_epochs_stmt": m.candidate_lease_epochs_stmt(_STMTS, _CRITERIA),
+        "candidate_chunk_ids_stmt": m.candidate_chunk_ids_stmt(_STMTS, _CRITERIA),
+        "chunk_max_lease_epoch_stmt": m.chunk_max_lease_epoch_stmt(_STMTS, _CRITERIA),
+        "chunk_transitions_stmt": m.chunk_transitions_stmt(_STMTS, _CRITERIA),
+        "chunk_migrations_stmt": m.chunk_migrations_stmt(_STMTS, _CRITERIA),
+        "chunk_bounces_stmt": m.chunk_bounces_stmt(_STMTS, _CRITERIA),
+        "chunks_graph_stmt": m.chunks_graph_stmt(_STMTS, _CRITERIA),
+        "candidate_graph_ids_stmt": m.candidate_graph_ids_stmt(_STMTS, _CRITERIA),
+        "graph_entry_nodes_stmt": m.graph_entry_nodes_stmt(_STMTS, _CRITERIA),
     }
 
 
@@ -75,7 +75,7 @@ def test_every_statement_the_store_executes_compiles_under_both_dialects() -> No
             assert str(stmt.compile(dialect=dialect)), name
 
 
-@pytest.mark.parametrize("builder_name", ["_duration_rows_stmt", "_duration_lease_min_stmt"])
+@pytest.mark.parametrize("builder_name", ["duration_rows_stmt", "duration_lease_min_stmt"])
 def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_list(builder_name: str) -> None:
     """Pinned structurally — a row-value ``IN (SELECT ...)`` keyed on the whole
     ``(chunk_id, epoch)`` pair, not ``chunk_id`` alone (which still matches a bare
@@ -89,7 +89,7 @@ def test_graph_entry_nodes_narrows_via_a_correlated_subquery_not_a_bound_id_list
     """``graphs.graph_id`` is a per-mint id, so a materialized list bound one host
     parameter per graph version any chunk has ever run — pinned structurally, the same
     correlated-subquery shape used above."""
-    sql = str(store_module._graph_entry_nodes_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
+    sql = str(store_module.graph_entry_nodes_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
     assert "graph_id IN (SELECT" in sql, sql
 
 
@@ -130,13 +130,13 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 #: Statements whose rows are narrowed by a lease attempt's usage facts, not by a usage fact directly.
 _ATTEMPT_NARROWED = [
-    "_duration_window_groups_stmt",
-    "_judged_distribution_stmt",
-    "_candidate_lease_epochs_stmt",
+    "duration_window_groups_stmt",
+    "judged_distribution_stmt",
+    "candidate_lease_epochs_stmt",
 ]
 
 #: The statements the failure half must leave whole, because the failed node is inferred from earlier movement.
-_LEFT_WHOLE = ["_chunk_transitions_stmt", "_chunk_migrations_stmt", "_chunk_bounces_stmt"]
+_LEFT_WHOLE = ["chunk_transitions_stmt", "chunk_migrations_stmt", "chunk_bounces_stmt"]
 
 
 @pytest.mark.parametrize("builder_name", _ATTEMPT_NARROWED)
@@ -163,5 +163,5 @@ def test_a_provenance_filter_never_narrows_the_failure_halfs_whole_history_fetch
 
 
 def test_spend_filters_the_usage_facts_directly_not_by_exists() -> None:
-    sql = str(store_module._spend_by_model_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
+    sql = str(store_module.spend_by_model_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
     assert "EXISTS" not in sql and "usage_facts.model = " in sql and "GROUP BY usage_facts.model" in sql, sql

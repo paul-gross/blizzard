@@ -217,6 +217,22 @@ class ClaudeCodeAdapter:
         # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
 
+    @property
+    def worker_env(self) -> AllowlistedEnv:
+        return self._worker_env
+
+    @property
+    def settings_path(self) -> str | None:
+        return self._settings_path
+
+    @property
+    def permission_override(self) -> str | None:
+        return self._permission_override
+
+    @property
+    def autonomy(self) -> Autonomy:
+        return self._autonomy
+
     def observe_version(self) -> str | None:
         """See ``src/blizzard/runner/harness/adapter.py``'s ``IHarnessWorkerLifecycle.observe_version``."""
         return self._versions.observe_version(self._binary)
@@ -322,13 +338,13 @@ class ClaudeCodeAdapter:
             cmd += ["--resume", resume_from]
         elif session_id:
             cmd += ["--session-id", session_id]
-        cmd += self._settings_args()
+        cmd += self.settings_args()
         cmd += self._permission_args()
         # The preamble is composed in the core; the adapter only concatenates it ahead of
         # the envelope prompt (``bzh:deterministic-shell``).
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
-        env = self._worker_env.worker(self._spawn_env(envelope, preamble, session_id))
+        env = self._worker_env.worker(self.spawn_env(envelope, preamble, session_id))
         # Injected per-lease files surviving the process; both go through
         # `harness_shared.stdout_target`, empty meaning DEVNULL.
         with (
@@ -388,7 +404,7 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Prefix parity with `resume_with_message` — pinned by
         # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
-        cmd += self._settings_args()
+        cmd += self.settings_args()
         cmd += self._permission_args()
         cmd.append(judgement_prompt)
         env = self._worker_env.worker(
@@ -439,7 +455,7 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Re-attach the worker hooks: this re-enters a long-lived session that later exits
         # on its own, and a resume does not carry the original spawn's `--settings`.
-        cmd += self._settings_args()
+        cmd += self.settings_args()
         cmd += self._permission_args()
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
@@ -465,7 +481,7 @@ class ClaudeCodeAdapter:
             confirm_durable=launched.confirm_durable,
         )
 
-    def _settings_args(self) -> list[str]:
+    def settings_args(self) -> list[str]:
         """The one owner of the settings argv shared by spawn, judge, and resume: the bundle's
         composed ``--settings`` plus the companion flags present, else the runner's own hook
         file."""
@@ -778,7 +794,7 @@ class ClaudeCodeAdapter:
             )
         return env
 
-    def _spawn_env(self, envelope: Envelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
+    def spawn_env(self, envelope: Envelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)
 
 

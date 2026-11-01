@@ -1,6 +1,6 @@
-"""``GET /api/leases/{id}/asks`` and its pure projection, ``runner.api.chunk_asks._rows``.
+"""``GET /api/leases/{id}/asks`` and its pure projection, ``runner.api.chunk_asks.rows``.
 
-Unit tier: ``_rows`` — node-label resolution with an id fallback, oldest-first order, and open,
+Unit tier: ``rows`` — node-label resolution with an id fallback, oldest-first order, and open,
 answered, and superseded questions alike. Component tier: the lease-scoped route over a real
 store via ``TestClient``, the hub reached through a stubbed ``httpx2.Client``."""
 
@@ -16,7 +16,7 @@ import pytest
 from fastapi import FastAPI
 
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.api.chunk_asks import _rows
+from blizzard.runner.api.chunk_asks import rows
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk_asks import ChunkAsksSource
@@ -90,18 +90,18 @@ _DETAIL: dict[str, object] = {
 
 @pytest.mark.unit
 def test_rows_are_oldest_first_and_list_open_and_answered_alike() -> None:
-    rows = _rows(ChunkAsksSource.model_validate(_DETAIL))
-    assert [r.question_id for r in rows] == ["q1", "q2", "q3"]
-    assert [r.answered for r in rows] == [True, True, False]
-    assert rows[0].answer == "a" and rows[0].answered_by == "paul" and rows[0].options == ["a", "b"]
-    assert rows[2].answer is None
+    views = rows(ChunkAsksSource.model_validate(_DETAIL))
+    assert [r.question_id for r in views] == ["q1", "q2", "q3"]
+    assert [r.answered for r in views] == [True, True, False]
+    assert views[0].answer == "a" and views[0].answered_by == "paul" and views[0].options == ["a", "b"]
+    assert views[2].answer is None
 
 
 @pytest.mark.unit
 def test_node_label_is_the_name_and_falls_back_to_the_raw_id() -> None:
-    rows = _rows(ChunkAsksSource.model_validate(_DETAIL))
-    assert rows[0].node == "build"
-    assert rows[1].node == "nd_ghost"
+    views = rows(ChunkAsksSource.model_validate(_DETAIL))
+    assert views[0].node == "build"
+    assert views[1].node == "nd_ghost"
 
 
 @pytest.mark.unit
@@ -121,25 +121,25 @@ def test_node_name_resolves_from_history_transitions() -> None:
             }
         ],
     }
-    assert _rows(ChunkAsksSource.model_validate(detail))[0].node == "build"
+    assert rows(ChunkAsksSource.model_validate(detail))[0].node == "build"
 
 
 @pytest.mark.unit
 def test_a_question_without_a_node_has_no_label() -> None:
     detail = {"questions": [_question("q1", None, "2026-07-21T10:00:00+00:00")]}
-    assert _rows(ChunkAsksSource.model_validate(detail))[0].node is None
+    assert rows(ChunkAsksSource.model_validate(detail))[0].node is None
 
 
 @pytest.mark.unit
 def test_an_answered_row_carries_when_it_was_answered() -> None:
-    rows = _rows(ChunkAsksSource.model_validate(_DETAIL))
-    assert [r.answered_at for r in rows] == ["2026-07-21T10:30:00+00:00", "2026-07-21T11:30:00+00:00", None]
+    views = rows(ChunkAsksSource.model_validate(_DETAIL))
+    assert [r.answered_at for r in views] == ["2026-07-21T10:30:00+00:00", "2026-07-21T11:30:00+00:00", None]
 
 
 @pytest.mark.unit
 def test_a_question_without_a_node_has_no_label_even_when_the_payload_names_nodes() -> None:
     detail = {**_DETAIL, "questions": [_question("q1", None, "2026-07-21T10:00:00+00:00")]}
-    assert _rows(ChunkAsksSource.model_validate(detail))[0].node is None
+    assert rows(ChunkAsksSource.model_validate(detail))[0].node is None
 
 
 def _transition(
@@ -189,8 +189,8 @@ def test_node_names_resolve_from_history_and_migrations_mixed_and_drop_half_pair
             _question("q5", "nd_nameless", "2026-07-21T10:04:00+00:00"),
         ],
     }
-    rows = _rows(ChunkAsksSource.model_validate(detail))
-    assert [r.node for r in rows] == ["plan", "old", "landed", "nd_review", "nd_nameless"]
+    views = rows(ChunkAsksSource.model_validate(detail))
+    assert [r.node for r in views] == ["plan", "old", "landed", "nd_review", "nd_nameless"]
 
 
 # Component — the lease-scoped, hub-proxying route

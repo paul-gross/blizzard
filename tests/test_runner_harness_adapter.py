@@ -41,7 +41,7 @@ _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Lo
 @pytest.fixture(autouse=True)
 def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """A unit test's fake spawn must not depend on whether ``claude`` is really installed
-    on this machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup runs
+    on this machine's ``PATH`` — `ensure_executable`'s `shutil.which` lookup runs
     before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
     absent-from-``PATH`` behavior override this within their own body."""
     monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
@@ -374,7 +374,7 @@ def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert "BZ_HUB_TOKEN" not in env
     assert _SENTINEL_UNLISTED_VAR not in env
@@ -390,7 +390,7 @@ def test_spawn_env_excludes_the_elicitation_marker(spawn_executor: Executor) -> 
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert "BLIZZARD_ELICITATION" not in env
 
@@ -562,7 +562,7 @@ def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPa
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert env["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
 
@@ -579,7 +579,7 @@ def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPa
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert env["LC_ALL"] == "en_US.UTF-8"
     assert env["LC_TIME"] == "fr_FR.UTF-8"
@@ -602,7 +602,7 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert env["PATH"] == "/usr/bin:/bin"
     assert env["HOME"] == "/home/worker"
@@ -625,7 +625,7 @@ def test_spawn_env_carries_the_lease_capability_token(
         lease_token="plaintext-lease-token",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert env["BLIZZARD_LEASE_TOKEN"] == "plaintext-lease-token"
 
@@ -643,7 +643,7 @@ def test_spawn_env_carries_the_scratch_directory_when_the_preamble_names_one(
         tmpdir="/runner/worker-tmp/lease_1",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert env["BLIZZARD_TMPDIR"] == "/runner/worker-tmp/lease_1"
 
@@ -658,7 +658,7 @@ def test_spawn_env_excludes_the_scratch_directory_when_the_preamble_names_none(s
         local_api_url="http://127.0.0.1:8431",
     )
 
-    env = adapter._spawn_env(envelope, preamble, "sess-1")
+    env = adapter.spawn_env(envelope, preamble, "sess-1")
 
     assert "BLIZZARD_TMPDIR" not in env
 
@@ -680,7 +680,7 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_
         tmpdir="/runner/worker-tmp/lease_1",
     )
 
-    spawn_injected = {k for k in adapter._spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}
+    spawn_injected = {k for k in adapter.spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}
     judge_injected = {
         k for k in adapter.identity_env(preamble, "ch_1", "sess-1", elicitation=True) if k.startswith("BLIZZARD_")
     }
@@ -960,8 +960,8 @@ def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_defaul
 ) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
-    adapter, envelope, preamble = _spawn_fixture(spawn_executor)
-    adapter._model = "fable"
+    _, envelope, preamble = _spawn_fixture(spawn_executor)
+    adapter = _adapter(spawn_executor, binary="claude", model="fable")
     expected = {"--model": "opus", "--effort": "high", "--autocompact": "150k"}
 
     adapter.spawn(envelope, preamble, session_hint="sid", model="opus", effort="high", compaction_window="150k")

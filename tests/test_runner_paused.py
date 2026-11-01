@@ -1564,9 +1564,9 @@ def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_on
     key = iso_utc(standing.first_launched_at)
     harness.usage_limit = None
 
-    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_usage_limit_park(_NOW + timedelta(minutes=1), superseded_invocation=key)
     first = store.current_start("lease_1", 1, "judge")
-    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_usage_limit_park(_NOW + timedelta(minutes=2), superseded_invocation=key)
     replayed = store.current_start("lease_1", 1, "judge")
 
     assert first is not None and replayed == first

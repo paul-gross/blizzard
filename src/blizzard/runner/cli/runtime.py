@@ -936,10 +936,10 @@ def host(
             for built in runners
             if built.id in foreign
         ]
-        _start(config, kept, halted, InitCollaborators.of(ctx))
+        start(config, kept, halted, InitCollaborators.of(ctx))
 
 
-def _start(
+def start(
     config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[HaltedRunner], collaborators: InitCollaborators
 ) -> None:
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped."""
@@ -948,7 +948,7 @@ def _start(
     for built in runners:
         if refusal := worker_shell_refusal(built.config.worker_shell):
             raise click.ClickException(f"runner {built.config.name}: {refusal}")
-    bundles = {built.id: _publish_harness_bundle(built.config, collaborators) for built in runners}
+    bundles = {built.id: publish_runner_bundle(built.config, collaborators) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
@@ -1041,7 +1041,7 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
     return None
 
 
-def _publish_harness_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
+def publish_runner_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
     accepted, returning it for the process graph to deliver; a runtime with no
     `[harness] config_dir` is left untouched."""
@@ -1101,7 +1101,7 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
     host_tick = (
         None
         if stepped or hosted.host_stepper is None
-        else _host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
+        else host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
     )
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
@@ -1164,7 +1164,7 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
             Uds(config.socket_path).unlink()
 
 
-def _host_tick_driver(
+def host_tick_driver(
     host: HostProcess, *, tick_seconds: float, stepper: HostPassStepper | None = None
 ) -> PeriodicPassDriver:
     """The host's own thread, passing on the tick's own interval with no jitter, so a credential lapsed across a
@@ -1246,7 +1246,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        bundle = _publish_harness_bundle(runner_built.config, InitCollaborators.of(ctx))
+        bundle = publish_runner_bundle(runner_built.config, InitCollaborators.of(ctx))
         graph = build_runner_process(
             runner_built.config,
             bundle=bundle,

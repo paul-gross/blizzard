@@ -38,6 +38,10 @@ class PeriodicPassDriver:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name=name, daemon=True)
 
+    @property
+    def thread(self) -> threading.Thread:
+        return self._thread
+
     def start(self) -> None:
         self._thread.start()
 

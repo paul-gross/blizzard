@@ -1,5 +1,5 @@
 """Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by every timed sweep,
-and for ``_lifespan``'s task-starting conditions.
+and for ``lifespan``'s task-starting conditions.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
-from blizzard.hub.app import Sweep, _lifespan
+from blizzard.hub.app import Sweep, lifespan
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.sweeps.locks import SweepLocks
@@ -92,7 +92,7 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# _lifespan's task-starting conditions
+# lifespan's task-starting conditions
 
 
 def _roster(every_tenant: dict[SweepName, ISweepsEveryTenant]) -> SweepRoster:
@@ -113,7 +113,7 @@ class _FakeWorkSources:
 
 
 class _FakeServices:
-    """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
+    """A minimal stand-in for ``HubServices`` — only the attributes ``lifespan``
     reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
     ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (started and stopped around the
     sweeps), and ``close_tenant_objects`` (run before the loop stops)."""
@@ -156,7 +156,7 @@ class _FakeState:
 
 
 class _FakeApp:
-    """Duck-types the two attributes ``_lifespan`` reads off a real ``FastAPI``
+    """Duck-types the two attributes ``lifespan`` reads off a real ``FastAPI``
     instance — ``app.state.{services,config,shutdown,platform_tracing,flow_driver}`` — with no ASGI machinery."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
@@ -179,7 +179,7 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     services.event_derivation = event_derivation
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    async with _lifespan(app):  # type: ignore[arg-type]
+    async with lifespan(app):  # type: ignore[arg-type]
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert event_derivation.calls == 1
@@ -195,7 +195,7 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
     services.close_drain = close_drain
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    async with _lifespan(app):  # type: ignore[arg-type]
+    async with lifespan(app):  # type: ignore[arg-type]
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert close_drain.calls == 1
@@ -359,7 +359,7 @@ async def test_a_stepped_sweep_runs_no_pass_at_boot_and_a_timed_one_runs_as_toda
         root=tmp_path, db_url="sqlite:///:memory:", sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED})
     )
 
-    async with _lifespan(_FakeApp(services, config)):  # type: ignore[arg-type]
+    async with lifespan(_FakeApp(services, config)):  # type: ignore[arg-type]
         await asyncio.sleep(0.05)
 
     assert close_drain.calls == 0

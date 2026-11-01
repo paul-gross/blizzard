@@ -56,7 +56,7 @@ _RESTART_MESSAGE = "# The supervisor restarted; continue your task where you lef
 
 #: The message ADVANCE delivers into a session the operator paused and resumed.
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
-_UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
+UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
 
 #: The message a worker generation's own overload backoff delivers on wake.
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
@@ -273,7 +273,7 @@ class DormantSession:
         standing at resume time follows from the settle outcome, since settling is the only
         thing that clears it."""
         lease = self.lease
-        settle = self._pause_park_settled(park, elicitation, bindings)
+        settle = self.pause_park_settled(park, elicitation, bindings)
         if settle is PauseParkSettle.UNSETTLED:
             return
         try:
@@ -326,7 +326,7 @@ class DormantSession:
             _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
             return
         if move is UnpauseMove.RELAUNCH_JUDGE and standing is not None:
-            self._resume_judge_usage_limit_park(now, superseded_invocation=iso_utc(standing.first_launched_at))
+            self.resume_judge_usage_limit_park(now, superseded_invocation=iso_utc(standing.first_launched_at))
             return
         if move is UnpauseMove.CANNOT_RESUME:
             _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
@@ -336,7 +336,7 @@ class DormantSession:
             return
         # The paused generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _ = self._wake(_UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
+        pid, _ = self._wake(UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
             "resumed dormant session after an operator unpause",
@@ -346,7 +346,7 @@ class DormantSession:
             pid=pid,
         )
 
-    def _pause_park_settled(
+    def pause_park_settled(
         self, park: PausePark, elicitation: PendingElicitation | None, bindings: list[EnvBinding]
     ) -> PauseParkSettle:
         """``SETTLED`` (or ``CLEARED``) once nothing of the lease's is alive after `park_paused`'s interrupt —
@@ -419,7 +419,7 @@ class DormantSession:
         Nothing is written on the no-op branch: ``resume_after`` is already durable, and
         `backing_off_facts` re-derives the same fact next tick. A worker generation wakes
         via `_wake` directly; a judge elicitation gets a fresh launch instead, mirroring
-        :meth:`_resume_judge_usage_limit_park` — its own turn already finished normally
+        :meth:`resume_judge_usage_limit_park` — its own turn already finished normally
         before the elicitation overloaded, so there is nothing to "continue" by message."""
         lease = self.lease
         now = self.ctx.clock.now()
@@ -434,7 +434,7 @@ class DormantSession:
         if suppressed:
             return
         if fact.invocation_kind == "judge":
-            self._resume_judge_overload_backoff(now, superseded_invocation=fact.invocation_identity)
+            self.resume_judge_overload_backoff(now, superseded_invocation=fact.invocation_identity)
             return
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None:
@@ -454,9 +454,9 @@ class DormantSession:
             pid=pid,
         )
 
-    def _resume_judge_overload_backoff(self, now: datetime, *, superseded_invocation: str) -> None:
+    def resume_judge_overload_backoff(self, now: datetime, *, superseded_invocation: str) -> None:
         """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch, shaped like
-        :meth:`_resume_judge_usage_limit_park`."""
+        :meth:`resume_judge_usage_limit_park`."""
         lease = self.lease
         # Deferred: `judgement` imports `DormantSession` at module scope, so importing
         # `Judgement` back at module scope here would cycle.
@@ -493,11 +493,11 @@ class DormantSession:
             epoch=lease.epoch,
         )
 
-    def _resume_judge_usage_limit_park(self, now: datetime, *, superseded_invocation: str) -> None:
+    def resume_judge_usage_limit_park(self, now: datetime, *, superseded_invocation: str) -> None:
         """Unpause a judge-usage-limit park: the worker's own turn already
         finished normally before its verdict elicitation hit the limit, so there is nothing
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
-        waking the worker with `_UNPAUSE_MESSAGE`. The stale record is left for the launch to replace, not
+        waking the worker with `UNPAUSE_MESSAGE`. The stale record is left for the launch to replace, not
         cleared first (pinned by `tests/test_elicitation_launch_collect.py`). The park-resume is recorded only
         AFTER the fresh elicitation is durably launched: if a crash lands between them, the lease is still
         pause-parked, so the next pass re-enters this same method rather than the ordinary exited-worker path

@@ -581,7 +581,7 @@ class RunnerIngest:
             raise SourceUnsupported(str(exc)) from exc
         values: dict[tuple[str, ...], str] = {}
         if ids:
-            values[("projects",)] = _bindings_literal(
+            values[("projects",)] = bindings_literal(
                 tuple(ProjectBinding(b.project, ids.get(b.workspace, b.workspace), b.agents) for b in entry.bindings)
             )
         files: list[tuple[Path, Path]] = []
@@ -699,7 +699,7 @@ def _string_literal(value: str) -> str:
     return json.dumps(value)
 
 
-def _bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
+def bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
     entries = (
         f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)}"
         + ("" if b.agents is None else f", agents = {b.agents}")

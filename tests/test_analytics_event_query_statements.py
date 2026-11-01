@@ -42,10 +42,10 @@ _CRITERIA = EventQueryCriteria(
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_filtered_stmt": m._filtered_stmt(_STMTS, _STMTS.select(s.transcript_events), _CRITERIA),
-        "_events_stmt": m._events_stmt(_STMTS, _CRITERIA, cursor=encode_cursor(7), limit=200),
-        "_counts_stmt": m._counts_stmt(_STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
-        "_counts_by_node_stmt": m._counts_by_node_stmt(_STMTS, _CRITERIA),
+        "filtered_stmt": m.filtered_stmt(_STMTS, _STMTS.select(s.transcript_events), _CRITERIA),
+        "events_stmt": m.events_stmt(_STMTS, _CRITERIA, cursor=encode_cursor(7), limit=200),
+        "counts_stmt": m.counts_stmt(_STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
+        "counts_by_node_stmt": m.counts_by_node_stmt(_STMTS, _CRITERIA),
     }
 
 
@@ -66,7 +66,7 @@ def test_a_prefix_filter_compiles_to_a_dialect_independent_comparison() -> None:
     """A prefix match is `substr(...) = ...` under both dialects — LIKE's case folding
     differs between them, so an events page or a count would follow the backend."""
     for dialect in (postgresql.dialect(), sqlite.dialect()):
-        sql = str(_executed_statements()["_filtered_stmt"].compile(dialect=dialect))
+        sql = str(_executed_statements()["filtered_stmt"].compile(dialect=dialect))
         assert "substr" in sql.lower()
         assert "like" not in sql.lower()
 
@@ -93,23 +93,23 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 
 def test_a_zero_events_cursor_decodes_to_offset_zero() -> None:
-    assert store_module._decode_cursor(encode_cursor(0)) == 0
+    assert store_module.decode_event_cursor(encode_cursor(0)) == 0
 
 
 def test_a_negative_events_cursor_is_malformed() -> None:
     with pytest.raises(MalformedCursor):
-        store_module._decode_cursor(encode_cursor(-1))
+        store_module.decode_event_cursor(encode_cursor(-1))
 
 
 def test_an_events_cursor_of_the_wrong_arity_is_malformed_naming_the_cursor() -> None:
     cursor = encode_cursor(7, 8)
     with pytest.raises(MalformedCursor) as exc_info:
-        store_module._decode_cursor(cursor)
+        store_module.decode_event_cursor(cursor)
     assert exc_info.value.cursor == cursor
 
 
 def test_a_counts_limit_follows_the_grouping_and_ordering() -> None:
-    stmt = store_module._counts_stmt(
+    stmt = store_module.counts_stmt(
         _STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read", limit=5
     )
     for dialect in (postgresql.dialect(), sqlite.dialect()):

@@ -157,6 +157,10 @@ class WorkItemEditService:
         self._clock = clock
         self._delete = delete
 
+    @property
+    def delete(self) -> DeleteService:
+        return self._delete
+
     def create(
         self,
         *,

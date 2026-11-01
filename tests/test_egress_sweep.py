@@ -6,6 +6,7 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
+import threading
 from collections.abc import Sequence
 from dataclasses import fields
 from datetime import timedelta
@@ -106,6 +107,7 @@ def egress_sweep(
         events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=config,
+        pass_lock=pass_lock,
     )
 
 

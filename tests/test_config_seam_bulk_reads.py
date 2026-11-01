@@ -432,8 +432,8 @@ def test_the_graph_mint_s_cross_graph_check_is_flat_across_target_counts(graphs_
             }
         )
 
-    _flat(graphs_hub, lambda n: mint._prepared(doc(n)))
-    _, warnings = mint._prepared(doc(_N))
+    _flat(graphs_hub, lambda n: mint.prepared(doc(n)))
+    _, warnings = mint.prepared(doc(_N))
     assert [w for w in warnings if "g1" in w] and not [w for w in warnings if "g0" in w]
 
 

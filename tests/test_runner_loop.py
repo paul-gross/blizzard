@@ -2898,13 +2898,13 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path: Path, monkey
         probe=FakeProbe(),
     )
     epochs: list[int | None] = []
-    original = InterruptedClaims._adopt
+    original = InterruptedClaims.adopt
 
     def traced_adopt(self, chunk_id, view):
         epochs.append(view.latest_epoch)
         return original(self, chunk_id, view)
 
-    monkeypatch.setattr(InterruptedClaims, "_adopt", traced_adopt)
+    monkeypatch.setattr(InterruptedClaims, "adopt", traced_adopt)
     Fill(ctx).run()
     lease = store.active_lease_for_chunk("ch_1")
     assert epochs == [7]

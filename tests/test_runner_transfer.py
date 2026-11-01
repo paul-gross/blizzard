@@ -87,7 +87,7 @@ def _rows(engine: sa.Engine, table: str, **where: object) -> list[dict[str, Any]
     shape = reflect(engine).tables[table]
     stmt = sa.select(shape).where(*(shape.c[k] == v for k, v in where.items()))
     with engine.connect() as conn:
-        return [dict(r._mapping) for r in conn.execute(stmt.order_by(*shape.primary_key.columns))]
+        return [dict(r._mapping) for r in conn.execute(stmt.order_by(*shape.primary_key.columns))]  # pyright: ignore[reportPrivateUsage]  # SQLAlchemy's public mapping view, underscored by design
 
 
 def _everything(engine: sa.Engine) -> dict[str, list[dict[str, Any]]]:

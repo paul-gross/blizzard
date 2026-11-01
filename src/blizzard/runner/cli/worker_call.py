@@ -101,6 +101,11 @@ class WorkerSession:
             self._client = self._collaborators.client_factory()
         return self._client
 
+    @property
+    def span(self) -> CliSpan | None:
+        """This command's span, once :meth:`open_span` has started it."""
+        return self._span
+
     def open_span(self) -> str | None:
         """Start this command's span once — a second identity in the same process reuses it —
         and return the ``traceparent`` to inject, or ``None`` when untraced."""

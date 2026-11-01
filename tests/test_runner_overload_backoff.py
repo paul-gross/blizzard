@@ -307,9 +307,9 @@ def test_a_replayed_judge_backoff_resume_over_the_same_stale_elicitation_records
     key = iso_utc(standing.first_launched_at)
     harness.overload = None
 
-    DormantSession(ctx, lease)._resume_judge_overload_backoff(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_overload_backoff(_NOW + timedelta(minutes=1), superseded_invocation=key)
     first = store.current_start("lease_1", 1, "judge")
-    DormantSession(ctx, lease)._resume_judge_overload_backoff(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_overload_backoff(_NOW + timedelta(minutes=2), superseded_invocation=key)
     replayed = store.current_start("lease_1", 1, "judge")
 
     assert first is not None and replayed == first

@@ -112,7 +112,7 @@ def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None
 
 
 def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() -> None:
-    """A turn stored before this field existed is read back through ``_content_view``'s
+    """A turn stored before this field existed is read back through ``content_view``'s
     ``TurnSegmentView.model_validate``; required here, that read 500s on every such turn."""
     without_field = {
         "name": "Bash",

@@ -105,13 +105,13 @@ _TURNS_ADAPTER: TypeAdapter[list[TurnSegmentView]] = TypeAdapter(list[TurnSegmen
 
 def _rendered_turns(records: list[SegmentRecordContent]) -> tuple[list[TurnSegmentView], bool, bool]:
     """Turns concatenated across stored records, in record order, plus the fold both
-    :func:`_content_view` and :func:`lease_content_view` share: ``final`` true iff any
+    :func:`content_view` and :func:`lease_content_view` share: ``final`` true iff any
     record closed its segment out, ``truncated`` true iff any record lost turns."""
     turns = [turn for turns_json in stored_turns(records) for turn in _TURNS_ADAPTER.validate_json(turns_json)]
     return turns, records_final(records), records_truncated(records)
 
 
-def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+def content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
     turns, final, truncated = _rendered_turns(records)
     return TranscriptSegmentContentView(segment_id=segment_id, final=final, truncated=truncated, turns=turns)
 
@@ -156,4 +156,4 @@ def get_transcript_segment(chunk_id: str, segment_id: str, services: Services) -
     records = services.transcripts.records_for_segment(chunk_id, segment_id)
     if not records:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown segment {segment_id}")
-    return _content_view(segment_id, records)
+    return content_view(segment_id, records)
