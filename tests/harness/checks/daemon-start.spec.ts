@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import * as http from 'node:http';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { type DaemonSpec, freePort, isAlive, startDaemon, stopLive } from '../daemons/process';
 
 // A daemon that answers every route on the port it is given, or exits naming the address in use.
@@ -39,4 +41,22 @@ test('a daemon that takes its own port is started on it', async () => {
   } finally {
     await stopLive(daemon);
   }
+});
+
+test('a spawned daemon that never becomes healthy is stopped before startup fails', async ({}, testInfo) => {
+  test.setTimeout(60_000);
+  const dir = testInfo.outputPath();
+  const pidFile = path.join(dir, 'pid');
+  const hung: DaemonSpec = {
+    ...spec(dir),
+    launch: () => ({
+      command: process.execPath,
+      args: ['-e', "require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", pidFile],
+      env: process.env,
+    }),
+  };
+  await expect(startDaemon(hung)).rejects.toThrow(/did not answer/);
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  expect(pid).toBeGreaterThan(0);
+  expect(isAlive(pid)).toBe(false);
 });
