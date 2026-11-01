@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import httpx2
 import jwt
@@ -49,7 +50,7 @@ def _jti_repository(tmp_path: Path, clock: FixedClock) -> JtiCacheRepository:
     return JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), clock)
 
 
-def _keypair() -> tuple[object, dict[str, str]]:
+def _keypair() -> tuple[rsa.RSAPrivateKey, dict[str, str]]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
     jwk["kid"] = _KID
@@ -64,13 +65,24 @@ def _jwks_cache(jwk: dict[str, str]) -> JwksCache:
     return JwksCache(client, "/api/auth/jwks.json")
 
 
-def _sign(private_key: object, *, claims: dict[str, object]) -> str:
-    return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
+class _Claims(TypedDict, total=False):
+    sub: str
+    username: str
+    email: str
+    role: str
+    aud: str
+    jti: str
+    iat: int
+    exp: int
 
 
-def _claims(**overrides: object) -> dict[str, object]:
+def _sign(private_key: rsa.RSAPrivateKey, *, claims: _Claims) -> str:
+    return jwt.encode(dict(claims), private_key, algorithm="RS256", headers={"kid": _KID})
+
+
+def _claims(**overrides: Unpack[_Claims]) -> _Claims:
     now = datetime.now(UTC)
-    base = {
+    base: _Claims = {
         "sub": "usr_1",
         "username": "alice",
         "email": "alice@example.com",

@@ -3,7 +3,9 @@ activity assembly, and the worker verbs each lease standing accepts."""
 
 from __future__ import annotations
 
+from collections.abc import Container, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -80,8 +82,18 @@ def test_a_fact_older_than_the_mint_never_lowers_the_baseline() -> None:
 # --- LeaseActivity.of -----------------------------------------------------------------
 
 
-def _activity(**overrides: object) -> LeaseActivity:
-    fields: dict[str, object] = {
+class _ActivityFields(TypedDict, total=False):
+    facts: LeaseLivenessFacts | None
+    parked_ids: Container[str]
+    backing_off: Container[str]
+    bindings: Sequence[EnvBinding]
+    alive: bool
+    now: datetime
+    stale_after: timedelta
+
+
+def _activity(*, lease: Lease | None = None, **overrides: Unpack[_ActivityFields]) -> LeaseActivity:
+    fields: _ActivityFields = {
         "facts": LeaseLivenessFacts(latest_heartbeat=_MINT, latest_spawn=_MINT),
         "parked_ids": set(),
         "backing_off": set(),
@@ -91,8 +103,7 @@ def _activity(**overrides: object) -> LeaseActivity:
         "stale_after": HEARTBEAT_STALENESS_THRESHOLD,
     }
     fields.update(overrides)
-    lease = fields.pop("lease", _lease())
-    return LeaseActivity.of(lease, **fields)  # type: ignore[arg-type]
+    return LeaseActivity.of(lease or _lease(), **fields)
 
 
 def test_a_fresh_live_spawned_lease_is_running() -> None:

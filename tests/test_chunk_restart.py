@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
+import httpx2
 import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
@@ -149,7 +150,13 @@ def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     return resp.json()
 
 
-def _restart(hub: HubHarness, chunk_id: str, **body: object):
+class _RestartBody(TypedDict, total=False):
+    node: str
+    by: str
+    to_graph: str
+
+
+def _restart(hub: HubHarness, chunk_id: str, **body: Unpack[_RestartBody]) -> httpx2.Response:
     return hub.client.post(f"/api/chunks/{chunk_id}/restart", json=body)
 
 

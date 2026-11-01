@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, Unpack, cast
 
 import httpx2
 import pytest
@@ -1043,8 +1043,13 @@ def _post(client: TestClient, path: str, body: bytes, encoding: str = "protobuf"
     return client.post(path, content=body, headers={"Content-Type": _ENCODED[encoding], **(_TOKEN if token else {})})
 
 
-def _body_for(path: str, **kwargs: object) -> bytes:
-    return _metrics_body(**kwargs) if path == "/v1/metrics" else _logs_body(**kwargs)  # type: ignore[arg-type]
+class _BodyFields(TypedDict, total=False):
+    scope: str | None
+    repeat: int
+
+
+def _body_for(path: str, **kwargs: Unpack[_BodyFields]) -> bytes:
+    return _metrics_body(**kwargs) if path == "/v1/metrics" else _logs_body(**kwargs)
 
 
 @pytest.mark.parametrize("encoding", ["json", "protobuf"])

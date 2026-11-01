@@ -7,6 +7,7 @@ in ``tests/test_foundation_events.py``."""
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
@@ -62,15 +63,17 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
     """``events_stream`` constructs ``Stream`` with no ``keepalive_seconds`` override — it inherits
     ``DEFAULT_KEEPALIVE_SECONDS``, the one keepalive cadence the hub and runner routes share.
     A route that started passing its own override would flip this assertion false."""
-    real_stream = Stream
     bound: dict[str, float] = {}
 
-    def _capturing_stream(*args: object, **kwargs: object) -> Stream:
-        instance = real_stream(*args, **kwargs)  # type: ignore[arg-type]
-        bound["keepalive_seconds"] = instance.keepalive_seconds
-        return instance
+    def _capturing[**P](real_stream: Callable[P, Stream]) -> Callable[P, Stream]:
+        def _capturing_stream(*args: P.args, **kwargs: P.kwargs) -> Stream:
+            instance = real_stream(*args, **kwargs)
+            bound["keepalive_seconds"] = instance.keepalive_seconds
+            return instance
 
-    monkeypatch.setattr("blizzard.runner.api.events.Stream", _capturing_stream)
+        return _capturing_stream
+
+    monkeypatch.setattr("blizzard.runner.api.events.Stream", _capturing(Stream))
     await events_stream(_FakeRequest(EventBroker()))  # type: ignore[arg-type]
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 

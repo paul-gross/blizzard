@@ -426,12 +426,6 @@ def test_gen_ai_input_includes_cached_tokens_and_blizzard_input_stays_uncached()
     assert a[shared.HARNESS_VERSION] == "2.0"
 
 
-def _chain(first_close: dict[str, tuple[object, ...]], **extra: object) -> StepFacts:
-    return fx.make_facts(
-        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50), first_close, extra),
-    )
-
-
 @pytest.mark.parametrize(
     ("facts", "reason"),
     [

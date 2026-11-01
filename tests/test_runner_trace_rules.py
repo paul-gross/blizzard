@@ -73,22 +73,20 @@ def _lease() -> Lease:
     )
 
 
-def _span(scope: str, **changes: object) -> ReceivedSpan:
-    fields: dict[str, object] = {
-        "trace_id": chunk_trace_id("ch_1"),
-        "span_id": 0x00F067AA0BA902B7,
-        "parent_span_id": None,
-        "name": "work",
-        "kind": 1,
-        "start_time_ns": 1_000,
-        "end_time_ns": 2_000,
-        "status_code": 1,
-        "scope_name": scope,
-        "scope_version": "1",
-        "attributes": {},
-    }
-    fields.update(changes)
-    return ReceivedSpan(**fields)  # type: ignore[arg-type]
+def _span(scope: str) -> ReceivedSpan:
+    return ReceivedSpan(
+        trace_id=chunk_trace_id("ch_1"),
+        span_id=0x00F067AA0BA902B7,
+        parent_span_id=None,
+        name="work",
+        kind=1,
+        start_time_ns=1_000,
+        end_time_ns=2_000,
+        status_code=1,
+        scope_name=scope,
+        scope_version="1",
+        attributes={},
+    )
 
 
 # --- replay ---------------------------------------------------------------------------

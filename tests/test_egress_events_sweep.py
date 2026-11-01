@@ -8,6 +8,7 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+from typing import Literal, TypedDict, Unpack
 
 import duckdb
 import pytest
@@ -39,20 +40,28 @@ _PLANTED = "PLANTED-PROMPT-TEXT"
 _PROVENANCE = SegmentProvenance("claude_code", "1.0", "claude-sonnet-5", "high")
 
 
-def _config(tmp_path: Path, **extra: object) -> EgressConfig:
+class _EgressFields(TypedDict, total=False):
+    batch_limit: int
+    extractor_versions: Literal["current", "all"]
+    file_paths: Literal["relative", "hashed", "absolute", "omit"]
+
+
+def _config(tmp_path: Path, **extra: Unpack[_EgressFields]) -> EgressConfig:
+    fields: _EgressFields = {"file_paths": "absolute"}
+    fields.update(extra)
     (tmp_path / "out").mkdir(parents=True, exist_ok=True)
     return EgressConfig(
         directory=tmp_path / "out",
         settle_seconds=0,
         min_free_bytes=0,
-        **{"file_paths": "absolute", **extra},
+        **fields,
     )
 
 
 class _Events:
     """A hub with the export on, a closed runner step, and that step's transcript segments, derived by hand."""
 
-    def __init__(self, tmp_path: Path, *, path_key: bytes | None = None, **extra: object) -> None:
+    def __init__(self, tmp_path: Path, *, path_key: bytes | None = None, **extra: Unpack[_EgressFields]) -> None:
         self.directory = tmp_path / "out"
         self.hub, self.graph = trace_hub(tmp_path, egress=_config(tmp_path, **extra), egress_path_key=path_key)
         self.sweep()  # anchors every dataset
@@ -211,7 +220,11 @@ def test_a_batch_limit_inside_a_derivation_still_writes_it_whole(tmp_path: Path)
 
 
 def test_current_writes_only_the_hubs_extractor_version_and_all_writes_every_one(tmp_path: Path) -> None:
-    for setting, expected in (("current", [EXTRACTOR_VERSION]), ("all", [_OLD_VERSION, EXTRACTOR_VERSION])):
+    settings: tuple[tuple[Literal["current", "all"], list[str]], ...] = (
+        ("current", [EXTRACTOR_VERSION]),
+        ("all", [_OLD_VERSION, EXTRACTOR_VERSION]),
+    )
+    for setting, expected in settings:
         world = _Events(tmp_path / setting, extractor_versions=setting)
         world.segment("sg_a")
         world.derive("sg_a", 1, version=_OLD_VERSION)
@@ -303,7 +316,7 @@ def test_status_reports_the_events_cursor_and_its_lag_and_reset_moves_it(tmp_pat
 
 @pytest.mark.parametrize("file_paths", ["relative", "hashed"])
 def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
-    tmp_path: Path, file_paths: str
+    tmp_path: Path, file_paths: Literal["relative", "hashed"]
 ) -> None:
     world = _Events(tmp_path, file_paths=file_paths)
     hub = world.hub

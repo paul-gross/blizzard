@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
 import pytest
 
@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
-from blizzard.hub.forge.landing import Mergeability
+from blizzard.hub.forge.landing import Check, Mergeability
 from blizzard.hub.graphs import PACKAGED
 from tests.github_double import RED, GitHubDouble, change, forge_holding
 from tests.support import (
@@ -42,7 +42,12 @@ pytestmark = pytest.mark.component
 _COMMIT = "c" * 40
 
 
-def _forge(*repos: str, **state: object) -> GitHubDouble:
+class _RepoState(TypedDict, total=False):
+    mergeability: Mergeability
+    checks: dict[str, tuple[Check, ...] | None]
+
+
+def _forge(*repos: str, **state: Unpack[_RepoState]) -> GitHubDouble:
     return forge_holding(*(repos or ("acme/widget",)), branch="feat/thing", commit=_COMMIT, **state)
 
 

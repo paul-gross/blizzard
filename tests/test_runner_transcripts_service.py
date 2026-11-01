@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -18,6 +19,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.factory_fields import NewLeaseFields
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     FakeProvider,
@@ -65,8 +67,8 @@ def _service(
     )
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
-    fields: dict[str, object] = {
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -77,7 +79,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
+    store.record_lease(NewLease(**fields))
 
 
 def _local_turn(text: str) -> Turn:
@@ -159,8 +161,24 @@ def test_an_open_lease_reads_local_and_is_never_asked_of_the_hub(tmp_path: Path)
     assert archived.calls == []  # An open lease is never asked of the hub at all
 
 
-def _close(store: SqlAlchemyRunnerStore) -> None:
-    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+class _ClosureFields(TypedDict, total=False):
+    lease_id: str
+    chunk_id: str
+    node_id: str
+    reason: str
+    closed_at: datetime
+
+
+def _close(store: SqlAlchemyRunnerStore, **overrides: Unpack[_ClosureFields]) -> None:
+    fields: _ClosureFields = {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "reason": "transitioned",
+        "closed_at": _NOW,
+    }
+    fields.update(overrides)
+    store.record_closure(**fields)
 
 
 def _closed_lease(store: SqlAlchemyRunnerStore, *, unshipped_turn: bool = False) -> None:

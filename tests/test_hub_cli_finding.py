@@ -5,6 +5,8 @@ shape."""
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import httpx2
 import pytest
 from click.testing import CliRunner
@@ -252,7 +254,21 @@ def test_finding_show_unknown_id_reports_404() -> None:
     assert "unknown finding fin_ghost" in result.output
 
 
-def _finding_view(**overrides: object) -> dict[str, object]:
+class _FindingViewFields(TypedDict, total=False):
+    finding_id: str
+    routine_name: str
+    scope_slug: str
+    locus: str
+    summary: str
+    introduced: str | None
+    live: bool
+    state: str
+    note: str | None
+    last_seen_at: str
+    observed_count: int
+
+
+def _finding_view(**overrides: Unpack[_FindingViewFields]) -> dict[str, object]:
     body: dict[str, object] = {
         "finding_id": "fin_1",
         "routine_name": "nightly",

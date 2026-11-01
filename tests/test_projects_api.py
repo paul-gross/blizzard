@@ -6,7 +6,7 @@ are linked, unlinked by retiring and relinked, each change carrying the project'
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +28,12 @@ def _ok(response, status: int = 200) -> dict[str, Any]:
     return response.json()
 
 
-def _create(client: TestClient, slug: str, name: str | None = None, **extra: object) -> dict[str, Any]:
+class _ProjectExtras(TypedDict, total=False):
+    description: str
+    color: str
+
+
+def _create(client: TestClient, slug: str, name: str | None = None, **extra: Unpack[_ProjectExtras]) -> dict:
     return _ok(client.post("/api/projects", json={"slug": slug, "name": name or slug.title(), **extra}), 201)
 
 

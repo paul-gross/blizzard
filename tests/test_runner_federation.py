@@ -8,6 +8,7 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 from urllib.parse import parse_qs, urlparse
 
 import httpx2
@@ -52,14 +53,24 @@ _TAILNET = "https://tailnet.example:8431"
 _LOOPBACK = "http://127.0.0.1:8431"
 
 
-def _keypair() -> tuple[object, dict[str, str]]:
+def _keypair() -> tuple[rsa.RSAPrivateKey, dict[str, str]]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
     jwk["kid"] = _KID
     return private_key, jwk
 
 
-def _sign(private_key: object, **claim_overrides: object) -> str:
+class _ClientOptions(TypedDict, total=False):
+    base_url: str
+    client: tuple[str, int]
+
+
+class _ClaimOverrides(TypedDict, total=False):
+    aud: str
+    jti: str
+
+
+def _sign(private_key: rsa.RSAPrivateKey, **claim_overrides: Unpack[_ClaimOverrides]) -> str:
     now = datetime.now(UTC)
     claims: dict[str, object] = {
         "sub": "usr_1",
@@ -72,7 +83,7 @@ def _sign(private_key: object, **claim_overrides: object) -> str:
         "exp": int((now + timedelta(seconds=60)).timestamp()),
     }
     claims.update(claim_overrides)
-    return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
+    return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})
 
 
 def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> httpx2.Client:
@@ -148,12 +159,12 @@ def _build_app(
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
         jti_cache=JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), SystemClock()),
     )
-    kwargs: dict[str, object] = {}
+    kwargs: _ClientOptions = {}
     if client_host is not None:
         kwargs["client"] = (client_host, 41000)
     # The canonical Host, so login bounces rather than rehoming; plain http, so no cookie is Secure.
     kwargs["base_url"] = base_url or "http://runner-a.example"
-    return TestClient(app, **kwargs)  # type: ignore[arg-type]
+    return TestClient(app, **kwargs)
 
 
 def test_the_web_surface_is_reachable_with_no_session_when_the_hub_runs_no_idp_surface(tmp_path: Path) -> None:
@@ -288,7 +299,7 @@ def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     claims = jwt.decode(_sign(private_key, jti="jti-no-exp"), options={"verify_signature": False})
     del claims["exp"]
-    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})
 
     client.cookies.set(_NAMES.bounce_state, "s1")
     resp = client.post(
@@ -301,7 +312,7 @@ def test_a_token_without_exp_is_refused_at_the_callback(tmp_path: Path) -> None:
     assert _NAMES.session not in resp.cookies
 
 
-def _bounce_in(client: TestClient, private_key: object, *, jti: str, runner_id: str = _RUNNER_ID) -> None:
+def _bounce_in(client: TestClient, private_key: rsa.RSAPrivateKey, *, jti: str, runner_id: str = _RUNNER_ID) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
     names = CookieNames(runner_id)
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
@@ -389,7 +400,7 @@ _PROXY_IP = "10.0.0.4"
 _DIRECT_IP = "203.0.113.9"
 
 
-def _bounce_callback(client: TestClient, private_key: object, *, headers: dict[str, str]):
+def _bounce_callback(client: TestClient, private_key: rsa.RSAPrivateKey, *, headers: dict[str, str]):
     """Run the SSO callback leg with a valid round-tripped state and token, returning
     the response so a test can inspect the minted session cookie's attributes."""
     client.cookies.set(_NAMES.bounce_state, "s-fwd")

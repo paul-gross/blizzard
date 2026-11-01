@@ -66,12 +66,15 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
     real_stream = Stream
     bound: dict[str, float] = {}
 
-    def _capturing_stream(*args: object, **kwargs: object) -> Stream:
-        instance = real_stream(*args, **kwargs)  # type: ignore[arg-type]
-        bound["keepalive_seconds"] = instance.keepalive_seconds
-        return instance
+    def _capturing[**P](make: Callable[P, Stream]) -> Callable[P, Stream]:
+        def _capturing_stream(*args: P.args, **kwargs: P.kwargs) -> Stream:
+            instance = make(*args, **kwargs)
+            bound["keepalive_seconds"] = instance.keepalive_seconds
+            return instance
 
-    monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing_stream)
+        return _capturing_stream
+
+    monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing(real_stream))
     await events_stream(_FakeRequest(), _services(EventBroker()))  # type: ignore[arg-type]
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 

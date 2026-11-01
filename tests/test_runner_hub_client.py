@@ -7,6 +7,8 @@ the idempotent envelope re-read, the chunk poll, and a transport failure surfaci
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from typing import TypedDict, Unpack
 
 import httpx2
 import pytest
@@ -603,9 +605,14 @@ def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
 # --- the chunk-ended 409 decode ------------------------------------ #
 
 
-def _refusing(status_code: int, **kwargs: object):
+class _ResponseBody(TypedDict, total=False):
+    json: object
+    text: str
+
+
+def _refusing(status_code: int, **body: Unpack[_ResponseBody]) -> Callable[[httpx2.Request], httpx2.Response]:
     def handler(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(status_code, **kwargs)  # type: ignore[arg-type]
+        return httpx2.Response(status_code, **body)
 
     return handler
 
@@ -737,7 +744,7 @@ def test_an_incompatible_claim_carries_a_denial_reason_it_does_not_know_raw() ->
         (200, {"json": {"unexpected": True}}),
     ],
 )
-def test_identity_raises_on_any_other_answer(status_code: int, kwargs: dict[str, object]) -> None:
+def test_identity_raises_on_any_other_answer(status_code: int, kwargs: _ResponseBody) -> None:
     with pytest.raises(HubClientError):
         _client(_refusing(status_code, **kwargs)).identity()
 

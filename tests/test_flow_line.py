@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -56,15 +57,30 @@ _MAIN = Flow("flw_main", "repo_a", "main", _AT)
 _OTHER = Flow("flw_other", "repo_b", "master", _AT)
 
 
-def _at_node(node_id: str = _DELIVER, *, epoch: int = 1, at: datetime = _AT, **overrides: object) -> ChunkFacts:
+class _ChunkFactsFields(TypedDict, total=False):
+    stopped: bool
+    stopped_at: datetime | None
+    operator_completed: bool
+    operator_completed_at: datetime | None
+    leases: list[LeaseFact]
+    escalations: list[EscalationFact]
+    pauses: list[PauseFact]
+    restarts: list[RestartFact]
+    hub_node_polls: list[HubNodePollFact]
+
+
+def _at_node(
+    node_id: str = _DELIVER, *, epoch: int = 1, at: datetime = _AT, **overrides: Unpack[_ChunkFactsFields]
+) -> ChunkFacts:
     """A promoted chunk whose newest movement entered hub node ``node_id`` at ``epoch``."""
-    facts = ChunkFacts(
+    values: _ChunkFactsFields = {"leases": [LeaseFact(epoch=epoch, minted_at=at)]}
+    values.update(overrides)
+    return ChunkFacts(
         minted=True,
         promoted=True,
-        leases=[LeaseFact(epoch=epoch, minted_at=at)],
         transitions=[TransitionFact(node_id, Executor.HUB, epoch, at, from_node_id="nd_build", choice_name="pass")],
+        **values,
     )
-    return replace(facts, **overrides)
 
 
 def _submission(

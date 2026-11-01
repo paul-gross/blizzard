@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import httpx2
 import pytest
@@ -55,11 +56,17 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=httpx2.Request("GET", "http://hub"), response=None)  # type: ignore[arg-type]
 
 
-def _run_row(**overrides: object) -> dict[str, object]:
-    row: dict[str, object] = {
+class _RunDeltaOverrides(TypedDict, total=False):
+    outcome: str
+    escalation: dict[str, str] | None
+    sets: list[dict[str, object]]
+
+
+def _run_row() -> dict[str, object]:
+    return {
         "chunk_id": "ch_1",
         "routine_name": "nightly",
         "scope_slug": "blizzard",
@@ -69,11 +76,9 @@ def _run_row(**overrides: object) -> dict[str, object]:
         "escalation": None,
         "delivered": [],
     }
-    row.update(overrides)
-    return row
 
 
-def _run_delta(**overrides: object) -> dict[str, object]:
+def _run_delta(**overrides: Unpack[_RunDeltaOverrides]) -> dict[str, object]:
     body: dict[str, object] = {
         "chunk_id": "ch_1",
         "routine_name": "nightly",

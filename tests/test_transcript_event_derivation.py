@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import json
 import zlib
-from collections.abc import Sequence
+from collections.abc import Buffer, Sequence
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Unpack
 
 import pytest
 from structlog.testing import capture_logs
@@ -38,6 +38,7 @@ from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedConnections
+from tests.factory_fields import TranscriptSliceFields
 from tests.support import (
     chunk_stores,
     count_queries,
@@ -79,8 +80,8 @@ def _turns_json(*, path: str = "a.py") -> str:
     )
 
 
-def _segment_record(**overrides: object) -> TranscriptSlice:
-    values: dict[str, object] = {
+def _segment_record(**overrides: Unpack[TranscriptSliceFields]) -> TranscriptSlice:
+    values: TranscriptSliceFields = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -96,7 +97,7 @@ def _segment_record(**overrides: object) -> TranscriptSlice:
         "turns_json": _turns_json(),
     }
     values.update(overrides)
-    return TranscriptSlice(**values)  # type: ignore[arg-type]
+    return TranscriptSlice(**values)
 
 
 class _Fixture:
@@ -674,10 +675,10 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
     decompress_calls = 0
     real_decompress = zlib.decompress
 
-    def _counting(*args: object, **kwargs: object) -> bytes:
+    def _counting(data: Buffer, /, wbits: int = zlib.MAX_WBITS, bufsize: int = zlib.DEF_BUF_SIZE) -> bytes:
         nonlocal decompress_calls
         decompress_calls += 1
-        return real_decompress(*args, **kwargs)  # type: ignore[arg-type]
+        return real_decompress(data, wbits, bufsize)
 
     monkeypatch.setattr(zlib, "decompress", _counting)
 

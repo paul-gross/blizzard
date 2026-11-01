@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO
 
 import httpx2
 import pytest
@@ -74,10 +75,17 @@ def _guard_against_writes(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
     """Fail the test if anything opens ``path`` in a write-capable mode."""
     original_open = Path.open
 
-    def guarded_open(self: Path, mode: str = "r", *args: object, **kwargs: object) -> object:
+    def guarded_open(
+        self: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> IO[str] | IO[bytes]:
         if self == path and any(flag in mode for flag in "wax+"):
             raise AssertionError(f"credentials file opened in a write-capable mode: {mode!r}")
-        return original_open(self, mode, *args, **kwargs)  # type: ignore[arg-type]
+        return original_open(self, mode, buffering, encoding, errors, newline)
 
     monkeypatch.setattr(Path, "open", guarded_open)
 

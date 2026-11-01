@@ -3,8 +3,8 @@ hub-advance verb is legal from — pinned by value on loaded facts."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -42,9 +42,19 @@ _SHIP = _node("nd_ship", Executor.HUB, "land")
 _GRAPH = make_graph("gr_a", "work", entry_node_id="nd_build", nodes=[_BUILD, _SHIP])
 
 
-def _at(node: Node, **facts: object) -> ChunkFacts:
+class _ChunkFactsFields(TypedDict, total=False):
+    promoted: bool
+    stopped: bool
+    stopped_at: datetime | None
+    operator_completed: bool
+    operator_completed_at: datetime | None
+
+
+def _at(node: Node, **facts: Unpack[_ChunkFactsFields]) -> ChunkFacts:
     moved = TransitionFact(to_node_id=node.node_id, to_node_executor=node.executor, epoch=1, recorded_at=_T0)
-    return replace(ChunkFacts(minted=True, promoted=True, transitions=[moved]), **facts)
+    values: _ChunkFactsFields = {"promoted": True}
+    values.update(facts)
+    return ChunkFacts(minted=True, transitions=[moved], **values)
 
 
 def test_hub_advance_is_legal_from_every_live_status_but_not_ready() -> None:

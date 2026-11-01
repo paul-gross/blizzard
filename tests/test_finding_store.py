@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 import sqlalchemy as sa
@@ -45,8 +46,20 @@ def _store(tmp_path: Path) -> FindingStore:
     return store
 
 
-def _add(store: FindingStore, project_id: str, finding_id: str = "fin_1", **overrides: object) -> Finding:
-    fields: dict[str, object] = {
+class _FindingFields(TypedDict, total=False):
+    routine_name: str
+    scope_slug: str
+    class_: str
+    locus: str
+    summary: str
+    introduced: str | None
+    at: datetime
+
+
+def _add(
+    store: FindingStore, project_id: str, finding_id: str = "fin_1", **overrides: Unpack[_FindingFields]
+) -> Finding:
+    fields: _FindingFields = {
         "routine_name": "nightly",
         "scope_slug": "blizzard",
         "class_": "stale-docstring",
@@ -56,7 +69,7 @@ def _add(store: FindingStore, project_id: str, finding_id: str = "fin_1", **over
         "at": _NOW,
     }
     fields.update(overrides)
-    return store.add(finding_id, project_id=project_id, **fields)  # type: ignore[arg-type]
+    return store.add(finding_id, project_id=project_id, **fields)
 
 
 def test_add_then_get_round_trips(tmp_path: Path) -> None:

@@ -4,8 +4,9 @@ specs, never the real committed one."""
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable, Iterable, Mapping
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Final
 
 import pytest
 from fastapi import FastAPI
@@ -13,7 +14,8 @@ from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.api import classify_api
-from blizzard.tools.compat.surfaces.wire import classify_spec_diff
+from blizzard.tools.compat.surfaces.wire import Document, Operation, Parameter, Schema, classify_spec_diff
+from blizzard.tools.compat.violation import Violation
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
 
@@ -23,28 +25,26 @@ pytestmark = pytest.mark.unit
 # --- fixture-spec helpers -----------------------------------------------------------
 
 
-def _spec(paths: dict[str, Any], schemas: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {"openapi": "3.1.0", "paths": paths, "components": {"schemas": schemas or {}}}
+def _spec(paths: dict[str, dict[str, Operation]], schemas: dict[str, Schema] | None = None) -> Document:
+    return {"paths": paths, "components": {"schemas": schemas or {}}}
 
 
-def _ref(name: str) -> dict[str, Any]:
+def _ref(name: str) -> Schema:
     return {"$ref": f"#/components/schemas/{name}"}
 
 
-def _op(
-    *, response_schema: dict[str, Any] | None = None, request_schema: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    op: dict[str, Any] = {"responses": {}}
+def _op(*, response_schema: Schema | None = None, request_schema: Schema | None = None) -> Operation:
+    op: Operation = {"responses": {}}
     if response_schema is not None:
         op["responses"]["200"] = {"content": {"application/json": {"schema": response_schema}}}
     else:
-        op["responses"]["204"] = {"description": "no content"}
+        op["responses"]["204"] = {}
     if request_schema is not None:
         op["requestBody"] = {"content": {"application/json": {"schema": request_schema}}}
     return op
 
 
-def _violation_texts(violations) -> list[str]:
+def _violation_texts(violations: Iterable[Violation]) -> list[str]:
     return [str(v) for v in violations]
 
 
@@ -76,8 +76,8 @@ def test_kept_counterpart_beside_its_replacement_is_additive() -> None:
 
 
 def test_non_surface_path_is_ignored() -> None:
-    schemas_base = {"Thing": {"type": "object", "properties": {"a": {"type": "string"}}}}
-    schemas_head = {"Thing": {"type": "object", "properties": {}}}
+    schemas_base: dict[str, Schema] = {"Thing": {"type": "object", "properties": {"a": {"type": "string"}}}}
+    schemas_head: dict[str, Schema] = {"Thing": {"type": "object", "properties": {}}}
     base = _spec({"/api/chunks/{id}": {"get": _op(response_schema=_ref("Thing"))}}, schemas_base)
     head = _spec({}, schemas_head)
     assert classify_spec_diff(base, head) == []
@@ -96,21 +96,21 @@ def test_the_runner_add_call_is_on_the_surface() -> None:
 
 
 def test_the_runner_add_call_s_response_is_held_to_the_surface_rules() -> None:
-    added = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
+    added: Schema = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
     base = _spec({"/api/runners": {"post": _op(response_schema=_ref("Added"))}}, {"Added": added})
     head = _spec({"/api/runners": {"post": _op(response_schema=_ref("Added"))}}, {"Added": {"type": "object"}})
     assert any("Added.token" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
 def test_the_operator_runner_list_beside_the_add_call_stays_off_the_surface() -> None:
-    listed = {"type": "object", "properties": {"runners": {"type": "array"}}, "required": ["runners"]}
+    listed: Schema = {"type": "object", "properties": {"runners": {"type": "array"}}, "required": ["runners"]}
     base = _spec({"/api/runners": {"get": _op(response_schema=_ref("Listed")), "post": _op()}}, {"Listed": listed})
     head = _spec({"/api/runners": {"post": _op()}}, {"Listed": {"type": "object"}})
     assert classify_spec_diff(base, head) == []
 
 
 def test_the_host_add_call_is_on_the_surface() -> None:
-    added = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
+    added: Schema = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
     base = _spec({"/api/hosts": {"get": _op(), "post": _op(response_schema=_ref("Added"))}}, {"Added": added})
     head = _spec(
         {"/api/hosts": {"get": _op(), "post": _op(response_schema=_ref("Added"))}}, {"Added": {"type": "object"}}
@@ -134,10 +134,20 @@ def test_the_operator_host_list_beside_the_add_call_stays_off_the_surface() -> N
 
 
 def _response_widget_specs(
-    base_schema: dict[str, Any], head_schema: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    base = _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, {"Widget": base_schema})
-    head = _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, {"Widget": head_schema})
+    base_schema: Schema,
+    head_schema: Schema,
+    *,
+    base_extra: dict[str, Schema] | None = None,
+    head_extra: dict[str, Schema] | None = None,
+) -> tuple[Document, Document]:
+    base = _spec(
+        {"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}},
+        {"Widget": base_schema, **(base_extra or {})},
+    )
+    head = _spec(
+        {"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}},
+        {"Widget": head_schema, **(head_extra or {})},
+    )
     return base, head
 
 
@@ -166,13 +176,15 @@ def test_response_property_type_changed_is_breaking() -> None:
 
 
 def _enum_narrowing_specs(
-    *, request: bool, nullable: bool, base_enum: list[str] | None = None
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    base_member: dict[str, Any] = {"type": "string"} if base_enum is None else {"type": "string", "enum": base_enum}
-    base_prop: dict[str, Any] = {"anyOf": [base_member, {"type": "null"}]} if nullable else base_member
-    head_prop: dict[str, Any] = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
-    op = (lambda s: _op(request_schema=s)) if request else (lambda s: _op(response_schema=s))
-    color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
+    *, request: bool, nullable: bool, base_enum: list[str] | None = None, head_color: Schema | None = None
+) -> tuple[Document, Document]:
+    base_member: Schema = {"type": "string"} if base_enum is None else {"type": "string", "enum": base_enum}
+    base_prop: Schema = {"anyOf": [base_member, {"type": "null"}]} if nullable else base_member
+    head_prop: Schema = {"anyOf": [_ref("Color"), {"type": "null"}]} if nullable else _ref("Color")
+    op: Callable[[Schema], Operation] = (
+        (lambda s: _op(request_schema=s)) if request else (lambda s: _op(response_schema=s))
+    )
+    color: Schema = head_color or {"type": "string", "enum": ["red", "blue"]}
     base = _spec(
         {"/api/fleet/widgets": {"post": op(_ref("Widget"))}},
         {"Widget": {"type": "object", "properties": {"color": base_prop}}},
@@ -209,8 +221,7 @@ def test_request_string_narrowed_to_enum_component_is_breaking() -> None:
 
 
 def test_response_string_retyped_to_object_component_is_breaking() -> None:
-    base, head = _enum_narrowing_specs(request=False, nullable=False)
-    head["components"]["schemas"]["Color"] = {"type": "object", "properties": {}}
+    base, head = _enum_narrowing_specs(request=False, nullable=False, head_color={"type": "object", "properties": {}})
     assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
 
 
@@ -277,12 +288,12 @@ def test_response_enum_loses_value_is_additive() -> None:
 
 
 def test_response_union_gains_member_is_breaking() -> None:
-    extra_schemas = {
+    extra_schemas: dict[str, Schema] = {
         "A": {"type": "object", "properties": {}},
         "B": {"type": "object", "properties": {}},
     }
-    base_schema = {"type": "object", "properties": {"payload": {"anyOf": [_ref("A")]}}}
-    head_schema = {"type": "object", "properties": {"payload": {"anyOf": [_ref("A"), _ref("B")]}}}
+    base_schema: Schema = {"type": "object", "properties": {"payload": {"anyOf": [_ref("A")]}}}
+    head_schema: Schema = {"type": "object", "properties": {"payload": {"anyOf": [_ref("A"), _ref("B")]}}}
     base = _spec(
         {"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, {"Widget": base_schema, **extra_schemas}
     )
@@ -310,9 +321,7 @@ def test_property_added_to_forbid_schema_reached_by_response_is_breaking() -> No
 # --- request-reached schema classes -----------------------------------------------------
 
 
-def _request_widget_specs(
-    base_schema: dict[str, Any], head_schema: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def _request_widget_specs(base_schema: Schema, head_schema: Schema) -> tuple[Document, Document]:
     base = _spec({"/api/fleet/widgets": {"post": _op(request_schema=_ref("Widget"))}}, {"Widget": base_schema})
     head = _spec({"/api/fleet/widgets": {"post": _op(request_schema=_ref("Widget"))}}, {"Widget": head_schema})
     return base, head
@@ -415,10 +424,10 @@ def test_property_added_to_request_only_forbid_schema_is_additive() -> None:
 def test_nested_schema_reachable_by_both_roles_keeps_both_roles() -> None:
     # "Priority" nests inside "Proposal", reached as a response by one op and a request by
     # another — the walk must give "Priority" both roles, not just whichever reaches it first.
-    priority_base = {"type": "string", "enum": ["low", "high"]}
-    priority_head = {"type": "string", "enum": ["low"]}
-    proposal = {"type": "object", "properties": {"priority": _ref("Priority")}}
-    paths = {
+    priority_base: Schema = {"type": "string", "enum": ["low", "high"]}
+    priority_head: Schema = {"type": "string", "enum": ["low"]}
+    proposal: Schema = {"type": "object", "properties": {"priority": _ref("Priority")}}
+    paths: dict[str, dict[str, Operation]] = {
         "/api/fleet/proposals": {"get": _op(response_schema=_ref("Proposal"))},
         "/api/fleet/proposals/draft": {"post": _op(request_schema=_ref("Proposal"))},
     }
@@ -439,14 +448,14 @@ def test_component_schema_deleted_while_still_referenced_is_breaking() -> None:
 # --- parameters, array items, map values ------------------------------------------------
 
 
-def _param(name: str, schema: dict[str, Any], *, where: str = "query", required: bool = False) -> dict[str, Any]:
+def _param(name: str, schema: Schema, *, where: str = "query", required: bool = False) -> Parameter:
     return {"name": name, "in": where, "required": required, "schema": schema}
 
 
 def _params_specs(
-    base_params: list[dict[str, Any]], head_params: list[dict[str, Any]], schemas: dict[str, Any] | None = None
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    def build(params: list[dict[str, Any]]) -> dict[str, Any]:
+    base_params: list[Parameter], head_params: list[Parameter], schemas: dict[str, Schema] | None = None
+) -> tuple[Document, Document]:
+    def build(params: list[Parameter]) -> Document:
         return _spec({"/api/fleet/widgets": {"get": {**_op(), "parameters": params}}}, schemas)
 
     return build(base_params), build(head_params)
@@ -488,7 +497,7 @@ def test_removed_parameter_is_additive() -> None:
 
 
 def test_parameter_referencing_an_enum_component_holds_the_request_rules() -> None:
-    def schemas(values: list[str]) -> dict[str, Any]:
+    def schemas(values: list[str]) -> dict[str, Schema]:
         return {"State": {"type": "string", "enum": values}}
 
     param = [_param("state", _ref("State"))]
@@ -499,11 +508,9 @@ def test_parameter_referencing_an_enum_component_holds_the_request_rules() -> No
     assert classify_spec_diff(base, gained) == []
 
 
-def _widget_property_specs(
-    base_prop: dict[str, Any], head_prop: dict[str, Any], *, request: bool
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    def build(prop: dict[str, Any]) -> dict[str, Any]:
-        schemas = {"Widget": {"type": "object", "properties": {"p": prop}}}
+def _widget_property_specs(base_prop: Schema, head_prop: Schema, *, request: bool) -> tuple[Document, Document]:
+    def build(prop: Schema) -> Document:
+        schemas: dict[str, Schema] = {"Widget": {"type": "object", "properties": {"p": prop}}}
         op = _op(request_schema=_ref("Widget")) if request else _op(response_schema=_ref("Widget"))
         return _spec({"/api/fleet/widgets": {"post": op}}, schemas)
 
@@ -512,8 +519,8 @@ def _widget_property_specs(
 
 @pytest.mark.parametrize("wrap", [False, True])
 def test_array_item_type_change_is_breaking(wrap: bool) -> None:
-    def arr(item: str) -> dict[str, Any]:
-        body = {"type": "array", "items": {"type": item}}
+    def arr(item: str) -> Schema:
+        body: Schema = {"type": "array", "items": {"type": item}}
         return {"anyOf": [body, {"type": "null"}]} if wrap else body
 
     for request in (False, True):
@@ -525,8 +532,8 @@ def test_array_item_type_change_is_breaking(wrap: bool) -> None:
 
 @pytest.mark.parametrize("wrap", [False, True])
 def test_map_value_type_change_is_breaking(wrap: bool) -> None:
-    def mapping(value: str) -> dict[str, Any]:
-        body = {"type": "object", "additionalProperties": {"type": value}}
+    def mapping(value: str) -> Schema:
+        body: Schema = {"type": "object", "additionalProperties": {"type": value}}
         return {"anyOf": [body, {"type": "null"}]} if wrap else body
 
     base, head = _widget_property_specs(mapping("string"), mapping("integer"), request=False)
@@ -552,8 +559,8 @@ def test_request_array_item_enum_losing_a_value_is_breaking() -> None:
 
 
 def test_component_reached_only_through_a_map_value_is_checked() -> None:
-    def build(props: dict[str, Any]) -> dict[str, Any]:
-        schemas = {
+    def build(props: dict[str, Schema]) -> Document:
+        schemas: dict[str, Schema] = {
             "Holder": {"type": "object", "additionalProperties": _ref("Leaf")},
             "Leaf": {"type": "object", "properties": props},
         }
@@ -603,11 +610,11 @@ def test_an_enum_schema_the_baseline_deprecated_marks_its_finding() -> None:
 
 
 def test_a_deprecated_parameter_marks_its_finding() -> None:
-    def build(params: list[dict[str, Any]]) -> dict[str, Any]:
+    def build(params: list[Parameter]) -> Document:
         return _spec({"/api/fleet/widgets": {"get": {**_op(), "parameters": params}}})
 
-    old = {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "deprecated": True}
-    new = {"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}
+    old: Parameter = {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "deprecated": True}
+    new: Parameter = {"name": "q", "in": "query", "required": True, "schema": {"type": "string"}}
     (finding,) = classify_spec_diff(build([old]), build([new]))
     assert finding.deprecated is True
 
@@ -630,44 +637,53 @@ def test_a_wire_finding_is_reported_once_under_the_wire() -> None:
 
 # --- open-marked response enums (bzh:open-response-vocabulary) ----------------------------------
 
-_OPEN = "x-blizzard-open"
+_OPEN: Final = "x-blizzard-open"
 
 
-def _open_ref(name: str, *, marked: bool = True) -> dict[str, Any]:
-    return {**_ref(name), **({_OPEN: True} if marked else {})}
+def _open_ref(name: str, *, marked: bool = True) -> Schema:
+    ref = _ref(name)
+    if marked:
+        ref[_OPEN] = True
+    return ref
 
 
-def _state_specs(*positions: dict[str, Any], gained: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
+def _state_specs(
+    *positions: Schema, gained: bool = True, request_schema: Schema | None = None
+) -> tuple[Document, Document]:
     """A response ``Widget`` holding each of ``positions`` as a property, the ``State`` enum gaining a value at head.
 
     The baseline carries ``positions`` as given; the head marks every one, so only the baseline's marks decide."""
 
-    def spec(values: list[str], properties: dict[str, Any]) -> dict[str, Any]:
-        schemas = {
+    def spec(values: list[str], properties: dict[str, Schema]) -> Document:
+        schemas: dict[str, Schema] = {
             "Widget": {"type": "object", "properties": properties},
             "State": {"type": "string", "enum": values},
         }
-        return _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, schemas)
+        op = _op(response_schema=_ref("Widget"), request_schema=request_schema)
+        return _spec({"/api/fleet/widgets": {"get": op}}, schemas)
 
     base_props = {f"p{i}": position for i, position in enumerate(positions)}
     head_props = {f"p{i}": _marked_everywhere(position) for i, position in enumerate(positions)}
     return spec(["ready"], base_props), spec(["ready", "paused"] if gained else ["ready"], head_props)
 
 
-def _marked_everywhere(node: dict[str, Any]) -> dict[str, Any]:
+def _marked_everywhere(node: Schema) -> Schema:
     """``node`` with the open mark on every ``$ref`` it holds, however nested."""
+    marked = node.copy()
     if "$ref" in node:
-        return {**node, _OPEN: True}
-    marked = dict(node)
+        marked[_OPEN] = True
+        return marked
     if "anyOf" in node:
         marked["anyOf"] = [_marked_everywhere(member) for member in node["anyOf"]]
-    for key in ("items", "additionalProperties"):
-        if isinstance(node.get(key), dict):
-            marked[key] = _marked_everywhere(node[key])
+    if "items" in node:
+        marked["items"] = _marked_everywhere(node["items"])
+    additional = node.get("additionalProperties")
+    if isinstance(additional, dict):
+        marked["additionalProperties"] = _marked_everywhere(additional)
     return marked
 
 
-def _gains(base: dict[str, Any], head: dict[str, Any]) -> list[str]:
+def _gains(base: Mapping[str, object], head: Mapping[str, object]) -> list[str]:
     return [t for t in _violation_texts(classify_spec_diff(base, head)) if "response enum gained value" in t]
 
 
@@ -692,17 +708,13 @@ def test_the_head_documents_marks_do_not_open_a_baseline_position() -> None:
 
 
 def test_an_unmarked_request_position_does_not_stop_marked_response_positions_opening_the_enum() -> None:
-    base, head = _state_specs(_open_ref("State"))
-    for spec in (base, head):
-        spec["paths"]["/api/fleet/widgets"]["get"] = _op(
-            response_schema=_ref("Widget"), request_schema={"type": "object", "properties": {"s": _ref("State")}}
-        )
+    base, head = _state_specs(_open_ref("State"), request_schema={"type": "object", "properties": {"s": _ref("State")}})
     assert classify_spec_diff(base, head) == []
 
 
 def test_a_marked_inline_enum_gaining_a_value_is_additive_and_an_unmarked_one_is_not() -> None:
-    def specs(marked: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-        mark = {_OPEN: True} if marked else {}
+    def specs(marked: bool) -> tuple[Document, Document]:
+        mark: Schema = {_OPEN: True} if marked else {}
         return _response_widget_specs(
             {"type": "object", "properties": {"status": {"type": "string", "enum": ["ready"], **mark}}},
             {"type": "object", "properties": {"status": {"type": "string", "enum": ["ready", "paused"], **mark}}},
@@ -713,8 +725,8 @@ def test_a_marked_inline_enum_gaining_a_value_is_additive_and_an_unmarked_one_is
 
 
 def test_an_unmarked_inline_enum_widened_to_a_plain_string_is_breaking_and_a_marked_one_is_not() -> None:
-    def specs(marked: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-        mark = {_OPEN: True} if marked else {}
+    def specs(marked: bool) -> tuple[Document, Document]:
+        mark: Schema = {_OPEN: True} if marked else {}
         return _response_widget_specs(
             {"type": "object", "properties": {"kind": {"type": "string", "enum": ["bounce"], **mark}}},
             {"type": "object", "properties": {"kind": {"type": "string"}}},
@@ -728,25 +740,25 @@ def test_an_unmarked_inline_enum_widened_to_a_plain_string_is_breaking_and_a_mar
 
 
 def test_a_marked_literal_moved_onto_an_enum_component_gaining_a_value_is_additive() -> None:
-    color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
-    base_prop = {"anyOf": [{"type": "string", "enum": ["red"], _OPEN: True}, {"type": "null"}]}
-    head_prop = {"anyOf": [_open_ref("Color"), {"type": "null"}]}
+    color: Schema = {"type": "string", "enum": ["red", "blue"]}
+    base_prop: Schema = {"anyOf": [{"type": "string", "enum": ["red"], _OPEN: True}, {"type": "null"}]}
+    head_prop: Schema = {"anyOf": [_open_ref("Color"), {"type": "null"}]}
     base, head = _response_widget_specs(
         {"type": "object", "properties": {"color": base_prop}},
         {"type": "object", "properties": {"color": head_prop}},
+        head_extra={"Color": color},
     )
-    head["components"]["schemas"]["Color"] = color
     assert classify_spec_diff(base, head) == []
 
 
 def test_a_union_gaining_a_member_stays_a_finding_whatever_its_members_carry() -> None:
-    extra = {"A": {"type": "object", "properties": {}}, "B": {"type": "object", "properties": {}}}
+    extra: dict[str, Schema] = {"A": {"type": "object", "properties": {}}, "B": {"type": "object", "properties": {}}}
     base, head = _response_widget_specs(
         {"type": "object", "properties": {"payload": {"anyOf": [_open_ref("A")], _OPEN: True}}},
         {"type": "object", "properties": {"payload": {"anyOf": [_open_ref("A"), _open_ref("B")], _OPEN: True}}},
+        base_extra=extra,
+        head_extra=extra,
     )
-    base["components"]["schemas"].update(extra)
-    head["components"]["schemas"].update(extra)
     assert any("response union gained member" in t for t in _violation_texts(classify_spec_diff(base, head)))
 
 
@@ -762,7 +774,7 @@ class _ClosedToneView(BaseModel):
     tone: _Tone
 
 
-def _generated_gain(view: type[BaseModel]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _generated_gain(view: type[BaseModel]) -> tuple[Mapping[str, object], Mapping[str, object]]:
     app = FastAPI()
     app.get("/api/fleet/tone", response_model=view)(lambda: None)
     base = app.openapi()

@@ -35,7 +35,7 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, object]:
+def _create_routine(hub: HubHarness) -> dict[str, object]:
     body: dict[str, object] = {
         "name": "gardening",
         "graph_name": "alpha",
@@ -43,7 +43,6 @@ def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, object]:
         "default_model": [],
         "default_effort": None,
     }
-    body.update(overrides)
     resp = hub.client.post("/api/routines", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()

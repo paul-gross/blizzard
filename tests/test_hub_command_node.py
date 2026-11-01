@@ -11,7 +11,7 @@ import json
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, Unpack, cast
 
 import pytest
 import yaml
@@ -20,6 +20,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError, Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -222,8 +223,13 @@ _BUILD_TO_MERGE = {
 }
 
 
-def _merge_with(**overrides: object) -> dict[str, object]:
-    node = {
+class _MergeNodeFields(TypedDict, total=False):
+    poll_interval: int
+    poll_timeout: int
+
+
+def _merge_with(**overrides: Unpack[_MergeNodeFields]) -> dict[str, object]:
+    node: dict[str, object] = {
         "executor": "hub",
         "action": "test.sequence",
         "with": {"choices": ["pending", "success"]},
@@ -697,9 +703,14 @@ class _Recorded:
         return Pass(choice="pending" if len(self.visits) == 1 else "success")
 
 
-def _hub_with(tmp_path: Path, *extra: object, **kwargs: object) -> HubHarness:
-    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), *extra])  # type: ignore[list-item]
-    return build_hub(tmp_path, actions=actions, **kwargs)  # type: ignore[arg-type]
+def _hub_with(
+    tmp_path: Path,
+    *extra: IHubAction,
+    work_sources: dict[str, FakeWorkSource] | None = None,
+    public_url: str | None = None,
+) -> HubHarness:
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), *extra])
+    return build_hub(tmp_path, actions=actions, work_sources=work_sources, public_url=public_url)
 
 
 def _gated(choice_action: str = "test.gate") -> str:

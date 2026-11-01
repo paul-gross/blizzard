@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, Unpack, cast
 
 import pytest
 import sqlalchemy as sa
@@ -33,7 +33,14 @@ _LAND_CHOICES = {
 }
 
 
-def _deliver(**overrides: object) -> dict[str, object]:
+class _DeliverKeys(TypedDict, total=False):
+    action: str
+    judgement: dict[str, object]
+    poll_interval: int
+    poll_timeout: int
+
+
+def _deliver(**overrides: Unpack[_DeliverKeys]) -> dict[str, object]:
     node: dict[str, object] = {"executor": "hub", "action": "land", "judgement": {"choices": dict(_LAND_CHOICES)}}
     node.update(overrides)
     return node

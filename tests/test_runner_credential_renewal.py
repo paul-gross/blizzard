@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
+from blizzard.runner.usage.repository import CredentialRenewalSummary, IWriteCredentialRenewalRepository
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeCredentialRenewer,
@@ -45,11 +47,11 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 
 def _pass(
-    store: object, renewer: FakeCredentialRenewer, clock: FixedClock, *, slug: str = _SLUG
+    store: IWriteCredentialRenewalRepository, renewer: FakeCredentialRenewer, clock: FixedClock, *, slug: str = _SLUG
 ) -> CredentialRenewalPass:
     return CredentialRenewalPass(
         subscriptions=(RenewableSubscription(slug=slug, sample_interval_seconds=_INTERVAL, renewer=renewer),),
-        renewals=store,  # type: ignore[arg-type]
+        renewals=store,
         clock=clock,
     )
 
@@ -61,14 +63,29 @@ class _FailingWrites:
         self._store = store
         self._failing = failing
 
-    def __getattr__(self, name: str) -> object:
+    def _refuse(self, name: str) -> None:
         if name == self._failing:
+            raise RuntimeError(f"{name} failed")
 
-            def _raise(**_: object) -> None:
-                raise RuntimeError(f"{name} failed")
+    def last_credential_renewal_claim_at(self, slug: str) -> datetime | None:
+        return self._store.last_credential_renewal_claim_at(slug)
 
-            return _raise
-        return getattr(self._store, name)
+    def latest_credential_renewals_by_slug(self, slugs: Sequence[str]) -> dict[str, CredentialRenewalSummary]:
+        return self._store.latest_credential_renewals_by_slug(slugs)
+
+    def claim_credential_renewal(self, *, slug: str, claimed_at: datetime) -> int:
+        self._refuse("claim_credential_renewal")
+        return self._store.claim_credential_renewal(slug=slug, claimed_at=claimed_at)
+
+    def record_credential_renewal_outcome(
+        self, *, claim_id: int, outcome: RenewalOutcome, recorded_at: datetime
+    ) -> None:
+        self._refuse("record_credential_renewal_outcome")
+        self._store.record_credential_renewal_outcome(claim_id=claim_id, outcome=outcome, recorded_at=recorded_at)
+
+    def prune_credential_renewals(self, *, now: datetime) -> int:
+        self._refuse("prune_credential_renewals")
+        return self._store.prune_credential_renewals(now=now)
 
 
 def test_a_due_renewal_is_claimed_then_renewed_and_its_outcome_recorded(tmp_path: Path) -> None:

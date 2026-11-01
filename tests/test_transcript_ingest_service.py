@@ -42,25 +42,34 @@ def _seed_chunk(hub: HubHarness, chunk_id: str = "ch_1") -> None:
 
 
 def _record(
-    seq: int, *, turn_range_start: int, turn_range_end: int, final: bool = False, **overrides: object
+    seq: int,
+    *,
+    turn_range_start: int,
+    turn_range_end: int,
+    final: bool = False,
+    segment_id: str = "sg_1",
+    epoch: int = 1,
+    turns_json: str | None = None,
 ) -> tuple[int, TranscriptSlice]:
-    values: dict[str, object] = {
-        "segment_id": "sg_1",
-        "chunk_id": "ch_1",
-        "node_id": "nd_build",
-        "epoch": 1,
-        "spawn_generation": 1,
-        "runner_id": "r1",
-        "turn_range_start": turn_range_start,
-        "turn_range_end": turn_range_end,
-        "final": final,
-        "normalizer_version": "v1",
-        "harness_version": "claude-code-1.0",
-        "record_truncated": False,
-        "turns_json": f'[{{"index": {turn_range_start}, "kind": "asst", "text": "turn"}}]',
-    }
-    values.update(overrides)
-    return seq, TranscriptSlice(**values)  # type: ignore[arg-type]
+    return seq, TranscriptSlice(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=epoch,
+        spawn_generation=1,
+        runner_id="r1",
+        turn_range_start=turn_range_start,
+        turn_range_end=turn_range_end,
+        final=final,
+        normalizer_version="v1",
+        harness_version="claude-code-1.0",
+        record_truncated=False,
+        turns_json=(
+            turns_json
+            if turns_json is not None
+            else f'[{{"index": {turn_range_start}, "kind": "asst", "text": "turn"}}]'
+        ),
+    )
 
 
 # --- lane idempotence and ordering -------------------------------------------

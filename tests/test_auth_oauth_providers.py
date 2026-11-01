@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
 import httpx2
@@ -34,7 +35,7 @@ _CLIENT_ID = "cid-123"
 _KID = "test-kid-1"
 
 
-def _rsa_keypair() -> tuple[object, dict[str, object]]:
+def _rsa_keypair() -> tuple[rsa.RSAPrivateKey, dict[str, object]]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
     jwk["kid"] = _KID
@@ -43,17 +44,17 @@ def _rsa_keypair() -> tuple[object, dict[str, object]]:
     return private_key, jwk
 
 
-def _id_token(private_key: object, *, claims: dict[str, object]) -> str:
+def _id_token(private_key: rsa.RSAPrivateKey, *, claims: Mapping[str, object]) -> str:
     payload = {
         "iss": _ISSUER,
         "aud": _CLIENT_ID,
         "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
         **claims,
     }
-    return jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
+    return jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": _KID})
 
 
-def _oidc_transport(id_token_claims: dict[str, object] | None, *, token_status: int = 200):
+def _oidc_transport(id_token_claims: Mapping[str, object] | None, *, token_status: int = 200):  # type: ignore[no-untyped-def]
     private_key, jwk = _rsa_keypair()
     token = _id_token(private_key, claims=id_token_claims) if id_token_claims is not None else None
 
@@ -275,7 +276,7 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
 
 def test_oidc_exchange_refuses_a_jwks_entry_that_parses_to_a_private_key() -> None:
     private_key, _ = _rsa_keypair()
-    private_jwk = json.loads(RSAAlgorithm.to_jwk(private_key))  # type: ignore[arg-type]
+    private_jwk = json.loads(RSAAlgorithm.to_jwk(private_key))
     private_jwk.update(kid=_KID, alg="RS256", use="sig")
     token = _id_token(private_key, claims={"sub": "u1"})
 

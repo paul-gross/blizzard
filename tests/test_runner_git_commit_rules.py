@@ -7,8 +7,10 @@ record a declaration writes, and confirming and converging declared pointers.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from types import MappingProxyType
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -55,10 +57,16 @@ _LEASE = Lease(
 _DECLARATION = GitCommitDeclaration(environment_id="e1", repo="toy-api", branch="feat/x", commit="abc123")
 
 
-def _declared(*, active: bool = True, **overrides: object) -> GitCommitDeclarationRecord:
-    fields: dict[str, object] = {"known_repos": ["toy-api"], "outcome_pending": False, "at": _AT}
+class _DeclaredFields(TypedDict, total=False):
+    known_repos: Sequence[str]
+    outcome_pending: bool
+    at: datetime
+
+
+def _declared(*, active: bool = True, **overrides: Unpack[_DeclaredFields]) -> GitCommitDeclarationRecord:
+    fields: _DeclaredFields = {"known_repos": ["toy-api"], "outcome_pending": False, "at": _AT}
     fields.update(overrides)
-    return _DECLARATION.declared_by(WorkerLease(lease=_LEASE, active=active), **fields)  # type: ignore[arg-type]
+    return _DECLARATION.declared_by(WorkerLease(lease=_LEASE, active=active), **fields)
 
 
 # --- authorization ------------------------------------------------------------------------

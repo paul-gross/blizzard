@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -93,10 +94,25 @@ def test_a_dry_replay_needs_no_exporter() -> None:
 # --- egress backfill ---------------------------------------------------------------------------
 
 
-def _backfillable(since: datetime, until: datetime, dataset: str | None = None, **over: object) -> None:
-    args: dict[str, object] = {"datasets": ("steps", "invocations"), "max_window_seconds": 3600, "now": _NOW}
-    args |= {"dry_run": False, "writers_wired": True} | over
-    require_backfillable(since, until, dataset, **args)  # type: ignore[arg-type]
+class _BackfillFields(TypedDict, total=False):
+    dry_run: bool
+    writers_wired: bool
+    missing_path_key: str | None
+
+
+def _backfillable(
+    since: datetime, until: datetime, dataset: str | None = None, **over: Unpack[_BackfillFields]
+) -> None:
+    switches: _BackfillFields = {"dry_run": False, "writers_wired": True}
+    require_backfillable(
+        since,
+        until,
+        dataset,
+        datasets=("steps", "invocations"),
+        max_window_seconds=3600,
+        now=_NOW,
+        **(switches | over),
+    )
 
 
 def test_a_wet_backfill_with_the_export_off_is_unavailable_before_any_window_check() -> None:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from typing import TypedDict
 
 import pytest
 
@@ -71,9 +72,16 @@ def _artifact(name: str, data: str) -> StoredArtifact:
     )
 
 
-def _candidate(**overrides: object) -> ProposalCandidate:
-    payload: dict[str, object] = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
-    payload.update(overrides)
+_CandidateFields = TypedDict(
+    "_CandidateFields",
+    {"ref": str, "class": str, "title": str, "body": str, "findings": list[str]},
+    total=False,
+)
+
+
+def _candidate(overrides: _CandidateFields | None = None) -> ProposalCandidate:
+    payload: _CandidateFields = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
+    payload.update(overrides or {})
     return candidate(payload)
 
 
@@ -114,17 +122,20 @@ def test_a_missing_proposals_artifact_is_skipped() -> None:
 # -- a routine-run proposal's text ---------------------------------------------------
 
 
-@pytest.mark.parametrize("field", ["title", "class", "body"])
-def test_a_blank_proposal_field_refuses(field: str) -> None:
+@pytest.mark.parametrize(
+    ("field", "overrides"),
+    [("title", {"title": " \t"}), ("class", {"class": " \t"}), ("body", {"body": " \t"})],
+)
+def test_a_blank_proposal_field_refuses(field: str, overrides: _CandidateFields) -> None:
     with pytest.raises(GardenDeliveryRejected) as exc:
-        check_proposal(_candidate(**{field: " \t"}), run=_RUN, live_findings={})
+        check_proposal(_candidate(overrides), run=_RUN, live_findings={})
     assert str(exc.value) == f"proposal 'p1' has a blank {field}"
     assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
 
 def test_a_blank_title_is_refused_before_a_bad_citation() -> None:
     with pytest.raises(GardenDeliveryRejected, match="blank title"):
-        check_proposal(_candidate(title="", findings=["unknown-ref"]), run=_RUN, live_findings={})
+        check_proposal(_candidate({"title": "", "findings": ["unknown-ref"]}), run=_RUN, live_findings={})
 
 
 def test_a_proposal_with_text_and_no_citations_passes() -> None:
@@ -223,7 +234,7 @@ def test_a_proposal_citing_a_ref_carries_the_id_its_add_minted() -> None:
     validated = ValidatedDelivery(
         run=_RUN,
         deltas=[_delta([{"op": "add", "class": "c", "locus": "a.py:1", "summary": "s", "ref": "r1"}])],
-        proposals=[_candidate(findings=["r1", live])],
+        proposals=[_candidate({"findings": ["r1", live]})],
     )
 
     plan = build_delivery_plan(

@@ -4,7 +4,9 @@ response encoders, the export handle's switches, and the paths that make no span
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import TypedDict, Unpack
 
 import pytest
 from google.protobuf.json_format import MessageToDict
@@ -13,9 +15,11 @@ from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
     PROTOBUF_CONTENT_TYPE,
     ExponentialBuckets,
+    MetricKind,
     OtlpDecodeError,
     ReceivedDataPoint,
     ReceivedLogRecord,
+    Scalar,
     decode_logs,
     decode_metrics,
     rejected_data_points,
@@ -67,39 +71,57 @@ def _lease() -> Lease:
     )
 
 
-def _point(**changes: object) -> ReceivedDataPoint:
-    fields: dict[str, object] = {
+class _PointFields(TypedDict, total=False):
+    metric_name: str
+    kind: MetricKind
+    temporality: int
+    scope_name: str
+    value: int | float
+    count: int
+    total: float
+    bucket_counts: Sequence[int]
+    bounds: Sequence[float]
+    minimum: float | None
+    maximum: float | None
+    exponential: ExponentialBuckets | None
+    attributes: dict[str, Scalar]
+
+
+def _point(**changes: Unpack[_PointFields]) -> ReceivedDataPoint:
+    fields: _PointFields = {
         "metric_name": "m",
-        "description": "d",
-        "unit": "s",
         "kind": "sum",
         "temporality": 1,
-        "monotonic": True,
         "scope_name": _METRICS_SCOPE,
-        "scope_version": "1",
-        "start_time_ns": 1,
-        "time_ns": 2,
         "value": 3,
     }
     fields.update(changes)
-    return ReceivedDataPoint(**fields)  # type: ignore[arg-type]
+    return ReceivedDataPoint(
+        description="d", unit="s", monotonic=True, scope_version="1", start_time_ns=1, time_ns=2, **fields
+    )
 
 
-def _record(**changes: object) -> ReceivedLogRecord:
-    fields: dict[str, object] = {
-        "time_ns": 1,
-        "observed_time_ns": 2,
-        "severity_number": 9,
-        "severity_text": "INFO",
+class _RecordFields(TypedDict, total=False):
+    body: Scalar | None
+    trace_id: int | None
+    span_id: int | None
+    trace_flags: int
+    scope_name: str
+    attributes: dict[str, Scalar]
+
+
+def _record(**changes: Unpack[_RecordFields]) -> ReceivedLogRecord:
+    fields: _RecordFields = {
         "body": "event",
         "trace_id": None,
         "span_id": None,
         "trace_flags": 0,
         "scope_name": _LOGS_SCOPE,
-        "scope_version": "1",
     }
     fields.update(changes)
-    return ReceivedLogRecord(**fields)  # type: ignore[arg-type]
+    return ReceivedLogRecord(
+        time_ns=1, observed_time_ns=2, severity_number=9, severity_text="INFO", scope_version="1", **fields
+    )
 
 
 @pytest.mark.parametrize("signal", list(TelemetrySignal))
@@ -268,7 +290,12 @@ def test_rejected_counts_are_named_only_when_some_were() -> None:
 
 
 def test_admitted_data_points_are_stamped_and_replace_the_senders_stamps() -> None:
-    forged = {"blizzard.lease.id": "other", "blizzard.caller": "operator", "blizzard.runner.id": "x", "user.id": "u"}
+    forged: dict[str, Scalar] = {
+        "blizzard.lease.id": "other",
+        "blizzard.caller": "operator",
+        "blizzard.runner.id": "x",
+        "user.id": "u",
+    }
     admission = admit_data_points([_point(attributes=forged)], _lease(), frozenset({_METRICS_SCOPE}), runner=_RUNNER)
     (kept,) = admission.kept
     assert admission.dropped == 0
@@ -290,7 +317,7 @@ def test_data_points_under_another_scope_are_dropped_and_counted() -> None:
 
 
 def test_admission_caps_attributes_and_strings() -> None:
-    sent = {f"k{i}": "v" * (MAX_STRING_CHARS + 5) for i in range(MAX_ATTRIBUTES + 10)}
+    sent: dict[str, Scalar] = {f"k{i}": "v" * (MAX_STRING_CHARS + 5) for i in range(MAX_ATTRIBUTES + 10)}
     (kept,) = admit_data_points(
         [_point(attributes=sent, metric_name="n" * (MAX_STRING_CHARS + 1))],
         _lease(),

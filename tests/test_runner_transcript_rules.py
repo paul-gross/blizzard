@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -36,15 +37,49 @@ from blizzard.runner.transcripts.ledger import (
     TruncationReason,
 )
 from blizzard.runner.transcripts.repository import MAX_TURNS, Transcript, Turn, recent_window
-from blizzard.runner.transcripts.shipping import after_window, plan_window, pre_read
+from blizzard.runner.transcripts.shipping import WindowPlan, after_window, plan_window, pre_read
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _segment(**overrides: object) -> TranscriptSegmentState:
-    fields: dict[str, object] = {
+class _SegmentFields(TypedDict, total=False):
+    segment_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    generation: int
+    lease_id: str
+    session_id: str
+    cursor: str | None
+    shipped_bytes: int
+    shipped_turns: int
+    normalizer_version: str
+    harness_version: str | None
+    truncated_reason: str | None
+    shipping_stopped_reason: str | None
+    supersedes: str | None
+    finalized_at: datetime | None
+    stamped_at: datetime
+    harness_id: str
+    model: str | None
+    effort: str | None
+    spawn_cwd: str | None
+
+
+class _PlanFields(TypedDict, total=False):
+    cursor: str | None
+    new_cursor: str | None
+    has_content: bool
+    total_bytes: int
+    chunk_shipped_bytes: int
+    chunk_max_bytes: int
+    complete: bool
+
+
+def _segment(**overrides: Unpack[_SegmentFields]) -> TranscriptSegmentState:
+    fields: _SegmentFields = {
         "segment_id": "seg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -68,7 +103,7 @@ def _segment(**overrides: object) -> TranscriptSegmentState:
         "spawn_cwd": "/ws/e1",
     }
     fields.update(overrides)
-    return TranscriptSegmentState(**fields)  # type: ignore[arg-type]
+    return TranscriptSegmentState(**fields)
 
 
 def _turn(text: str) -> Turn:
@@ -214,8 +249,8 @@ def test_pre_read_backpressure_skips() -> None:
     assert _pre_read(_segment(), shipped=99, outstanding=49).action == "read"
 
 
-def _plan(**overrides: object):
-    fields: dict[str, object] = {
+def _plan(**overrides: Unpack[_PlanFields]) -> WindowPlan:
+    fields: _PlanFields = {
         "cursor": "c1",
         "new_cursor": "c2",
         "has_content": True,
@@ -225,7 +260,7 @@ def _plan(**overrides: object):
         "complete": True,
     }
     fields.update(overrides)
-    return plan_window(**fields)  # type: ignore[arg-type]
+    return plan_window(**fields)
 
 
 def test_plan_window_without_content() -> None:

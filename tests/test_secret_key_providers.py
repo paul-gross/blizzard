@@ -68,9 +68,9 @@ def test_a_reader_at_the_moment_meta_is_replaced_sees_the_previous_whole_file(
     seen: list[dict[str, str | None]] = []
     replace = os.replace
 
-    def spying_replace(src: object, dst: object) -> None:
+    def spying_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
         seen.append(json.loads((keys_dir / "meta.json").read_text()))
-        replace(src, dst)  # type: ignore[arg-type]
+        replace(src, dst)
 
     monkeypatch.setattr(os, "replace", spying_replace)
     provider.promote(second.key_id)
@@ -87,9 +87,9 @@ def test_the_meta_temp_file_is_created_in_the_keys_dir_so_the_rename_stays_on_on
     sources: list[Path] = []
     replace = os.replace
 
-    def spying_replace(src: object, dst: object) -> None:
+    def spying_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
         sources.append(Path(str(src)))
-        replace(src, dst)  # type: ignore[arg-type]
+        replace(src, dst)
 
     monkeypatch.setattr(os, "replace", spying_replace)
     provider.promote(second.key_id)
@@ -195,8 +195,8 @@ def test_an_interrupt_landing_after_the_meta_rename_propagates_unmasked(
     second = provider.mint()
     replace = os.replace
 
-    def replace_then_interrupt(src: object, dst: object) -> None:
-        replace(src, dst)  # type: ignore[arg-type]
+    def replace_then_interrupt(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        replace(src, dst)
         raise KeyboardInterrupt
 
     monkeypatch.setattr(os, "replace", replace_then_interrupt)

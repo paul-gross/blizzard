@@ -7,6 +7,7 @@ unauthenticated re-registration is, once #86 is enforced."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,9 +18,15 @@ from tests.support import HubHarness, build_hub, seed_runner
 pytestmark = pytest.mark.component
 
 
-def _register(hub: HubHarness, **kwargs: object) -> Response:
+class _RegistrationFields(TypedDict, total=False):
+    url: str
+    redirect_uris: list[str]
+    capabilities: list[dict[str, str | list[str] | bool]]
+
+
+def _register(hub: HubHarness, **kwargs: Unpack[_RegistrationFields]) -> Response:
     client: TestClient = hub.client
-    body = {"runner_id": "runner-a", "workspace_id": "ws-a", **kwargs}
+    body: dict[str, object] = {"runner_id": "runner-a", "workspace_id": "ws-a", **kwargs}
     return client.post("/api/fleet/runners", json=body)
 
 

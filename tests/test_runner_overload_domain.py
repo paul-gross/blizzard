@@ -105,20 +105,18 @@ class _FakeElicitations:
         raise NotImplementedError  # unused by backing_off_facts
 
 
-def _worker_fact(**overrides: object) -> OverloadExit:
-    fields: dict[str, object] = {
-        "lease_id": "lease_1",
-        "chunk_id": "ch_1",
-        "epoch": 1,
-        "generation": 2,
-        "invocation_kind": "worker",
-        "invocation_identity": "2",
-        "streak_ordinal": 1,
-        "observed_at": _NOW,
-        "resume_after": _NOW + timedelta(seconds=60),
-    }
-    fields.update(overrides)
-    return OverloadExit(**fields)  # type: ignore[arg-type]
+def _worker_fact(*, lease_id: str = "lease_1", generation: int = 2, invocation_identity: str = "2") -> OverloadExit:
+    return OverloadExit(
+        lease_id=lease_id,
+        chunk_id="ch_1",
+        epoch=1,
+        generation=generation,
+        invocation_kind="worker",
+        invocation_identity=invocation_identity,
+        streak_ordinal=1,
+        observed_at=_NOW,
+        resume_after=_NOW + timedelta(seconds=60),
+    )
 
 
 @pytest.mark.unit
@@ -135,20 +133,18 @@ def test_a_worker_fact_closes_once_the_generation_moves_past_it() -> None:
     )
 
 
-def _judge_fact(**overrides: object) -> OverloadExit:
-    fields: dict[str, object] = {
-        "lease_id": "lease_1",
-        "chunk_id": "ch_1",
-        "epoch": 1,
-        "generation": 1,
-        "invocation_kind": "judge",
-        "invocation_identity": iso_utc(_NOW),
-        "streak_ordinal": 1,
-        "observed_at": _NOW,
-        "resume_after": _NOW + timedelta(seconds=60),
-    }
-    fields.update(overrides)
-    return OverloadExit(**fields)  # type: ignore[arg-type]
+def _judge_fact(*, lease_id: str = "lease_1") -> OverloadExit:
+    return OverloadExit(
+        lease_id=lease_id,
+        chunk_id="ch_1",
+        epoch=1,
+        generation=1,
+        invocation_kind="judge",
+        invocation_identity=iso_utc(_NOW),
+        streak_ordinal=1,
+        observed_at=_NOW,
+        resume_after=_NOW + timedelta(seconds=60),
+    )
 
 
 def _elicitation(*, first_launched_at: datetime) -> PendingElicitation:

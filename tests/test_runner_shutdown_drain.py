@@ -5,19 +5,21 @@ entirely off a virtual clock, a scripted probe, and a recording sleep. No real p
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Unpack
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE, ShutdownDrain
+from tests.factory_fields import LeaseFields
 from tests.runner_fakes import FakeProbe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _lease_record(**overrides: object) -> Lease:
-    fields: dict[str, object] = {
+def _lease_record(**overrides: Unpack[LeaseFields]) -> Lease:
+    fields: LeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -32,7 +34,7 @@ def _lease_record(**overrides: object) -> Lease:
         "pgid": 100,
     }
     fields.update(overrides)
-    return Lease(**fields)  # type: ignore[arg-type]
+    return Lease(**fields)
 
 
 @pytest.mark.unit

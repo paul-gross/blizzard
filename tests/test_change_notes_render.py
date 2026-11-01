@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import pytest
 from click.testing import CliRunner
@@ -23,24 +23,29 @@ pytestmark = pytest.mark.unit
 _COMMITS = "## Fixes\n\n- a thing (abc1234)"
 
 
-def _note(note_id: str, body: str, **fields: object) -> Note:
+_FrontMatter = TypedDict(
+    "_FrontMatter",
+    {"kind": str, "breaking": bool, "upgrade-guide": str, "removes-in": str},
+    total=False,
+)
+
+
+def _note(note_id: str, body: str, fields: _FrontMatter) -> Note:
     return Note(path=f"changes/0.3.0/{note_id}.md", directory="0.3.0", id=note_id, fields=fields, body=body)
 
 
 def test_render_orders_sections_omits_empty_ones_and_ends_in_the_commit_block() -> None:
     notes = [
-        _note("z-fix", "Fixes z.\n", kind="fixed"),
-        _note("a-fix", "Fixes a.\n", kind="fixed"),
+        _note("z-fix", "Fixes z.\n", {"kind": "fixed"}),
+        _note("a-fix", "Fixes a.\n", {"kind": "fixed"}),
         _note(
             "brk",
             "Drops it. Really.\n\n## Upgrade\n\nSwitch over.\n",
-            kind="changed",
-            breaking=True,
-            **{"upgrade-guide": "drop"},
+            {"kind": "changed", "breaking": True, "upgrade-guide": "drop"},
         ),
-        _note("old", "Old thing is deprecated.\n", kind="deprecated", **{"removes-in": "2"}),
-        _note("gone", "Removes gone.\n\n## Upgrade\n\nMove.\n", kind="removed"),
-        _note("new", "Adds new.\n\nSecond paragraph.\n", kind="added"),
+        _note("old", "Old thing is deprecated.\n", {"kind": "deprecated", "removes-in": "2"}),
+        _note("gone", "Removes gone.\n\n## Upgrade\n\nMove.\n", {"kind": "removed"}),
+        _note("new", "Adds new.\n\nSecond paragraph.\n", {"kind": "added"}),
     ]
     expected = """\
 ## Upgrade notes
@@ -93,8 +98,8 @@ Move.
 
 def test_render_lists_each_recorded_break_beside_its_note_at_the_end_of_upgrade_notes() -> None:
     notes = [
-        _note("brk", "Drops it. Really.\n\n## Upgrade\n\nSwitch.\n", kind="changed", breaking=True),
-        _note("route", "Drops the route. Yes.\n", kind="changed", breaking=True, **{"upgrade-guide": "route"}),
+        _note("brk", "Drops it. Really.\n\n## Upgrade\n\nSwitch.\n", {"kind": "changed", "breaking": True}),
+        _note("route", "Drops the route. Yes.\n", {"kind": "changed", "breaking": True, "upgrade-guide": "route"}),
     ]
     named = (NamedBreak(BreakEntry("v0.2.0", "http-api", "GET /old"), notes[1]),)
     text = render("v0.3.0", notes, {}, _COMMITS, breaks=named)
@@ -106,7 +111,7 @@ def test_render_lists_each_recorded_break_beside_its_note_at_the_end_of_upgrade_
 
 
 def test_render_of_only_a_recorded_break_still_has_an_upgrade_notes_section() -> None:
-    note = _note("brk", "Drops it.\n", kind="changed", breaking=True)
+    note = _note("brk", "Drops it.\n", {"kind": "changed", "breaking": True})
     named = (NamedBreak(BreakEntry("v0.2.0", "http-api", "GET /old"), note),)
     assert render("v0.3.0", [note], {}, _COMMITS, breaks=named).startswith("## Upgrade notes\n\n### Drops it.")
 

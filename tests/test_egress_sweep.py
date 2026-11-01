@@ -366,7 +366,7 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
 
     copies = [r for r in _rows(writer, "steps") if r["chunk_id"] == chunk_id]
     assert [c["invocations"] for c in copies] == [1, 2]
-    newest = max(copies, key=lambda c: c["exported_at"])  # type: ignore[arg-type,return-value]
+    newest = max(copies, key=lambda c: str(c["exported_at"]))
     invoked = [r for r in _rows(writer, "invocations") if r["chunk_id"] == chunk_id]
     assert newest["invocations"] == len(invoked)
     for column in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens"):

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from sqlalchemy import Engine, select
@@ -45,9 +46,19 @@ def _store(tmp_path: Path) -> tuple[RoutineStore, str]:
     return store, default_project(engine)
 
 
-def _routine(project: str, **overrides: object) -> Routine:
-    fields: dict[str, object] = {
-        "project_id": project,
+class _RoutineFields(TypedDict, total=False):
+    routine_id: str
+    name: str
+    graph_name: str
+    default_scope_slug: str
+    created_at: datetime
+    default_model: list[str]
+    default_effort: str | None
+    default_harnesses: list[str]
+
+
+def _routine(project: str, **overrides: Unpack[_RoutineFields]) -> Routine:
+    fields: _RoutineFields = {
         "routine_id": "rtn_1",
         "name": "nightly",
         "graph_name": "alpha",
@@ -57,7 +68,7 @@ def _routine(project: str, **overrides: object) -> Routine:
         "default_effort": "high",
     }
     fields.update(overrides)
-    return Routine(**fields)  # type: ignore[arg-type]
+    return Routine(project_id=project, **fields)
 
 
 _CTX = ChangeContext(actor="usr_1", door=Door.CLI)

@@ -5,8 +5,10 @@ no clock."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -29,6 +31,7 @@ from blizzard.runner.hub.outbound_buffer import (
 )
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.model import Lease
+from tests.factory_fields import LeaseFields
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
@@ -36,8 +39,8 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _lease(**overrides: object) -> Lease:
-    fields: dict[str, object] = {
+def _lease(**overrides: Unpack[LeaseFields]) -> Lease:
+    fields: LeaseFields = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -52,7 +55,7 @@ def _lease(**overrides: object) -> Lease:
         "harness_id": "claude-code",
     }
     fields.update(overrides)
-    return Lease(**fields)  # type: ignore[arg-type]
+    return Lease(**fields)
 
 
 def _fact(kind: str) -> BufferedFact:
@@ -180,7 +183,15 @@ def test_route_claim_outcome_requires_exactly_one() -> None:
     assert RouteClaimOutcome(conflict=ClaimConflict(chunk_id="ch_1", held_by_runner_id="r2")).won is False
 
 
-_EVENT_FIELDS: dict[str, object] = {
+class _EventFields(TypedDict):
+    chunk_id: str | None
+    lease_id: str | None
+    node_name: str | None
+    message: str
+    detail: Mapping[str, object] | None
+
+
+_EVENT_FIELDS: _EventFields = {
     "chunk_id": "ch_1",
     "lease_id": "lease_1",
     "node_name": "build",
@@ -190,7 +201,7 @@ _EVENT_FIELDS: dict[str, object] = {
 
 
 def test_event_payload_carries_every_field() -> None:
-    assert event_payload(kind="command-failed", **_EVENT_FIELDS) == {  # type: ignore[arg-type]
+    assert event_payload(kind="command-failed", **_EVENT_FIELDS) == {
         "severity": "warning",
         "kind": "command-failed",
         "chunk_id": "ch_1",
@@ -233,4 +244,4 @@ def test_outbound_event_enqueues_the_event_payload_under_its_chunk_and_lease() -
         "lease_1",
         _T0,
     )
-    assert json.loads(str(row["payload"])) == event_payload(kind="command-failed", **_EVENT_FIELDS)  # type: ignore[arg-type]
+    assert json.loads(str(row["payload"])) == event_payload(kind="command-failed", **_EVENT_FIELDS)

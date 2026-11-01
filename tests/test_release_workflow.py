@@ -8,12 +8,12 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
-import yaml
 
+from tests.ci_workflows import Job, Step, Workflow, load_workflow
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -22,33 +22,31 @@ _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
-def _job(name: str) -> dict[str, Any]:
-    # YAML parses the bare `on:` key as the boolean `True` under PyYAML's default
-    # (YAML 1.1) resolver — irrelevant here since only `jobs` is read.
-    return yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"][name]
+def _job(name: str) -> Job:
+    return load_workflow(_WORKFLOW_PATH)["jobs"][name]
 
 
-def _build_job() -> dict[str, Any]:
+def _build_job() -> Job:
     return _job("build")
 
 
-def _publish_job() -> dict[str, Any]:
+def _publish_job() -> Job:
     return _job("publish")
 
 
-def _verify_job() -> dict[str, Any]:
+def _verify_job() -> Job:
     return _job("verify")
 
 
-def _wheel_job() -> dict[str, Any]:
+def _wheel_job() -> Job:
     return _job("wheel")
 
 
-def _uses(step: dict[str, Any], action: str) -> bool:
+def _uses(step: Step, action: str) -> bool:
     return step.get("uses", "").startswith(f"{action}@")
 
 
-def _step_index(steps: list[dict[str, Any]], predicate) -> int:
+def _step_index(steps: list[Step], predicate: Callable[[Step], bool]) -> int:
     for i, step in enumerate(steps):
         if predicate(step):
             return i
@@ -130,7 +128,7 @@ def test_wheel_hands_the_wheel_and_its_requirements_to_rehearsal_and_build() -> 
     steps = _wheel_job()["steps"]
     upload = steps[_step_index(steps, lambda s: _uses(s, "actions/upload-artifact"))]
     assert upload["with"]["name"] == "release-wheel"
-    assert upload["with"]["path"].split() == ["dist/*.whl", "dist/*-requirements*.txt"]
+    assert str(upload["with"]["path"]).split() == ["dist/*.whl", "dist/*-requirements*.txt"]
     assert _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", ""))) < steps.index(upload)
 
 
@@ -224,7 +222,7 @@ def test_the_release_is_published_once_and_never_edited() -> None:
     mutating = re.compile(
         r"gh release (edit|upload)|gh api\b[^\n]*(-X|--method)\s+(PATCH|PUT|POST|DELETE)[^\n]*releases"
     )
-    for job in yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"].values():
+    for job in load_workflow(_WORKFLOW_PATH)["jobs"].values():
         for step in job.get("steps", []):
             assert not mutating.search(str(step.get("run", ""))), step
 
@@ -256,8 +254,8 @@ def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     assert "image_meta" in tags_input, "the build-push step must consume the derived tag list, not a literal"
 
 
-def _workflow() -> dict[str, Any]:
-    return yaml.safe_load(_WORKFLOW_PATH.read_text())
+def _workflow() -> Workflow:
+    return load_workflow(_WORKFLOW_PATH)
 
 
 def test_workflow_level_permissions_are_read_only() -> None:
@@ -307,12 +305,12 @@ def test_the_bills_of_materials_are_made_and_attested_after_the_push_before_the_
     for i in scans:
         with_ = steps[i]["with"]
         assert with_["format"] == "spdx-json"
-        assert with_["output-file"].startswith("inventory/")
+        assert str(with_["output-file"]).startswith("inventory/")
         assert with_["upload-release-assets"] is False, "only `publish` writes the Release"
     for arch in ("amd64", "arm64"):
         digest = f"${{{{ steps.platform_digests.outputs.{arch} }}}}"
         scan = next(steps[i] for i in scans if str(steps[i]["with"].get("image", "")).endswith(f"@{digest}"))
-        assert scan["with"]["image"].startswith("ghcr.io/paul-gross/blizzard-hub@"), (
+        assert str(scan["with"]["image"]).startswith("ghcr.io/paul-gross/blizzard-hub@"), (
             "a bare reference: given registry credentials, the action prefixes `registry:` itself"
         )
         attest = next(steps[i]["with"] for i in attests if steps[i]["with"].get("subject-digest") == digest)
@@ -365,7 +363,7 @@ def test_the_upload_preserves_the_inventory_directory_for_the_publish_glob() -> 
     `inventory/` prefix, so the download into `.` yields what `inventory/*` globs."""
     steps = _build_job()["steps"]
     upload = steps[_step_index(steps, lambda s: _uses(s, "actions/upload-artifact"))]["with"]
-    assert upload["path"].split() == ["inventory/", "release-notes.md"]
+    assert str(upload["path"]).split() == ["inventory/", "release-notes.md"]
     download_steps = _publish_job()["steps"]
     download = download_steps[_step_index(download_steps, lambda s: _uses(s, "actions/download-artifact"))]["with"]
     assert download["name"] == upload["name"]
@@ -435,11 +433,11 @@ _TIER_JOBS = {
 }
 
 
-def _tier_job(workflow: str, name: str) -> dict[str, Any]:
-    return yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text())["jobs"][name]
+def _tier_job(workflow: str, name: str) -> Job:
+    return load_workflow(_WORKFLOWS_DIR / workflow)["jobs"][name]
 
 
-def _tier_jobs():
+def _tier_jobs() -> list[tuple[str, str]]:
     return [(workflow, job) for workflow, jobs in _TIER_JOBS.items() for job in jobs]
 
 
@@ -453,7 +451,7 @@ def test_a_tier_job_resolves_the_mock_through_the_action_after_checking_blizzard
 
 @pytest.mark.parametrize("workflow", sorted(p.name for p in _WORKFLOWS_DIR.glob("*.yml")))
 def test_no_step_checks_the_mock_out_directly(workflow: str) -> None:
-    for job in yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text())["jobs"].values():
+    for job in load_workflow(_WORKFLOWS_DIR / workflow)["jobs"].values():
         for step in job.get("steps") or []:
             assert (step.get("with") or {}).get("repository") != "paul-gross/blizzard-mock", step
 
@@ -467,8 +465,8 @@ def test_the_upper_tier_jobs_check_out_the_commit_mock_ref_resolved(job: str) ->
 
 
 def test_upper_tiers_exposes_the_resolved_mock_commit() -> None:
-    workflow = yaml.safe_load((_WORKFLOWS_DIR / "upper-tiers.yml").read_text())
-    assert workflow[True]["workflow_call"]["outputs"]["mock_sha"]["value"] == "${{ jobs.mock-ref.outputs.sha }}"
+    workflow = load_workflow(_WORKFLOWS_DIR / "upper-tiers.yml")
+    assert workflow["on"]["workflow_call"]["outputs"]["mock_sha"]["value"] == "${{ jobs.mock-ref.outputs.sha }}"
     assert workflow["jobs"]["mock-ref"]["outputs"]["sha"] == "${{ steps.mock.outputs.sha }}"
 
 
@@ -481,8 +479,8 @@ def test_a_tag_run_resolves_the_tag_itself() -> None:
 def test_the_isolation_cross_check_gates_the_build_and_never_runs_on_a_pull_request_or_push() -> None:
     job = _job("isolation-cross-check")
     assert job["uses"] == "./.github/workflows/isolation-cross-check.yml"
-    workflow = yaml.safe_load((_WORKFLOWS_DIR / "isolation-cross-check.yml").read_text())
-    assert set(workflow[True]) == {"schedule", "workflow_dispatch", "workflow_call"}
+    workflow = load_workflow(_WORKFLOWS_DIR / "isolation-cross-check.yml")
+    assert set(workflow["on"]) == {"schedule", "workflow_dispatch", "workflow_call"}
     assert workflow["jobs"]["compare"]["if"] == "${{ !cancelled() }}"
     assert set(workflow["jobs"]["compare"]["needs"]) == {"declared", "raised"}
 

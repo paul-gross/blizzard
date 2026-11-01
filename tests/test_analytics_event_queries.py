@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypedDict, Unpack
 
 import pytest
 from sqlalchemy import Engine, insert
@@ -31,8 +31,41 @@ _PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0",
 _OTHER_PROVENANCE = SegmentProvenance(harness_id="opencode", harness_version="2.0", model="gpt-5.6-luna", effort="max")
 
 
-def _event(**overrides: object) -> TranscriptEvent:
-    values: dict[str, object] = {
+class _EventFields(TypedDict, total=False):
+    kind: str
+    turn_path: str
+    occurrence: int
+    payload: str
+    subject: str | None
+    tool: str | None
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    graph_id: str
+    depth: int
+    agent_type: str | None
+    occurred_at: datetime | None
+
+
+class _CriteriaFields(TypedDict, total=False):
+    extractor_version: str
+    kind: str | None
+    tool: str | None
+    subject_prefix: str | None
+    node_id: str | None
+    graph_id: str | None
+    source: str | None
+    since: datetime | None
+    until: datetime | None
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
+
+
+def _event(**overrides: Unpack[_EventFields]) -> TranscriptEvent:
+    values: _EventFields = {
         "kind": "file_read",
         "turn_path": "0",
         "occurrence": 0,
@@ -49,13 +82,13 @@ def _event(**overrides: object) -> TranscriptEvent:
         "occurred_at": _NOW,
     }
     values.update(overrides)
-    return TranscriptEvent(**values)  # type: ignore[arg-type]
+    return TranscriptEvent(**values)
 
 
-def _criteria(**overrides: object) -> EventQueryCriteria:
-    values: dict[str, object] = {"extractor_version": _VERSION}
+def _criteria(**overrides: Unpack[_CriteriaFields]) -> EventQueryCriteria:
+    values: _CriteriaFields = {"extractor_version": _VERSION}
     values.update(overrides)
-    return EventQueryCriteria(**values)  # type: ignore[arg-type]
+    return EventQueryCriteria(**values)
 
 
 class _Fixture(NamedTuple):

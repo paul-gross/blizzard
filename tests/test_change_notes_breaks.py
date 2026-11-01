@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack
+
 import pytest
 
 from blizzard.tools.change_notes.breaks import BreakEntry, cross_check
@@ -10,7 +12,13 @@ from blizzard.tools.change_notes.contract import Note
 pytestmark = pytest.mark.unit
 
 
-def _note(note_id: str, **fields: object) -> Note:
+class _NoteFields(TypedDict, total=False):
+    breaking: bool
+    surfaces: list[str]
+    breaks: list[str]
+
+
+def _note(note_id: str, **fields: Unpack[_NoteFields]) -> Note:
     return Note(path=f"changes/0.3.0/{note_id}.md", directory="0.3.0", id=note_id, fields=fields, body="Body.\n")
 
 
@@ -32,8 +40,6 @@ def test_a_breaking_note_naming_the_surface_and_where_names_the_entry() -> None:
         {"breaking": True, "surfaces": ["http-api"], "breaks": ["GET /other"]},
     ],
 )
-def test_a_non_breaking_note_a_wrong_surface_or_a_wrong_name_leaves_the_entry_unnamed(
-    fields: dict[str, object],
-) -> None:
+def test_a_non_breaking_note_a_wrong_surface_or_a_wrong_name_leaves_the_entry_unnamed(fields: _NoteFields) -> None:
     check = cross_check([_ROUTE], [_note("a", **fields)])
     assert check.named == () and check.unnamed == (_ROUTE,)

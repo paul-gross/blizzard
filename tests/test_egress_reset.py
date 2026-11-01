@@ -4,7 +4,7 @@ instant, the moved window recorded, and the sweep's pass serialized with it."""
 from __future__ import annotations
 
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +27,8 @@ pytestmark = pytest.mark.component
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 
 
-def _reset(hub: HubHarness, dataset: str, to: object) -> httpx2.Response:
-    return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})  # type: ignore[arg-type]
+def _reset(hub: HubHarness, dataset: str, to: datetime) -> httpx2.Response:
+    return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})
 
 
 def _events(hub: HubHarness) -> list[sa.Row[Any]]:

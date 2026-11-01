@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
 import httpx2
 import pytest
@@ -145,7 +145,11 @@ def _hub(
     return hub, exporter
 
 
-def _window(hub: HubHarness, **extra: object) -> dict[str, object]:
+class _WindowFields(TypedDict, total=False):
+    dry_run: bool
+
+
+def _window(hub: HubHarness, **extra: Unpack[_WindowFields]) -> dict[str, object]:
     """The window from ``_T0`` through just past now, with the clock then moved past its end."""
     until = hub.clock.now() + timedelta(seconds=1)
     hub.clock.advance(timedelta(seconds=1))
