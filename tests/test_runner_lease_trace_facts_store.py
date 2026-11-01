@@ -95,8 +95,16 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
         session=_session(lease_id, 1),
         harness_version="2.1",
     )
-    boundary = {**keys, "node_id": _NODE_ID, "epoch": fx.EPOCH, "start_position": None}
-    store.record_boundary_open(**boundary, generation=1, kind="spawn", opened_at=fx.at(1))
+    store.record_boundary_open(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        node_id=_NODE_ID,
+        epoch=fx.EPOCH,
+        start_position=None,
+        generation=1,
+        kind="spawn",
+        opened_at=fx.at(1),
+    )
     store.record_context_sample(**keys, context_tokens=5000, sampled_at=fx.at(10), session=_session(lease_id, 1))
     store.record_usage(
         **keys,
@@ -125,7 +133,16 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
         session=_session(lease_id, 2),
         harness_version="2.1",
     )
-    store.record_boundary_open(**boundary, generation=2, kind="resume", opened_at=fx.at(40))
+    store.record_boundary_open(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        node_id=_NODE_ID,
+        epoch=fx.EPOCH,
+        start_position=None,
+        generation=2,
+        kind="resume",
+        opened_at=fx.at(40),
+    )
     store.record_pause_park(lease_id=lease_id, chunk_id=chunk_id, parked_at=fx.at(50))
     store.record_pause_park_resume(lease_id=lease_id, resumed_at=fx.at(55))
     store.record_overload(

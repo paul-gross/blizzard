@@ -69,7 +69,7 @@ from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
-from blizzard.runner.node_steps.envelope import ProducesSpec
+from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply, CompletionArtifact
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
@@ -101,23 +101,27 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
+def _two_environments_wanted(self: ReadyQueue, entry: QueueEntry) -> int:
+    return 2
+
+
 def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):
+def _build_envelope(chunk: str = "ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
 ):
     """A build lease already spawned into env e1, plus its binding."""
     store.record_lease(
@@ -143,14 +147,14 @@ def _seed_running_lease(
 
 
 def _chunk_with_cost(
-    chunk_id="ch_1",
+    chunk_id: str = "ch_1",
     *,
-    cost_usd,
-    cost_partial=False,
-    estimated_cost_usd=None,
-    status=ChunkStatus.RUNNING,
-    route_runner_id="r1",
-    epoch=1,
+    cost_usd: float,
+    cost_partial: bool = False,
+    estimated_cost_usd: float | None = None,
+    status: ChunkStatus = ChunkStatus.RUNNING,
+    route_runner_id: str | None = "r1",
+    epoch: int = 1,
 ):
     """A hub-derived ``ChunkState`` carrying a scripted usage/cost total."""
     return ChunkState(
@@ -682,7 +686,9 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
 
 @pytest.mark.unit
 @pytest.mark.parametrize("platform_tracing", [True, False])
-def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(tmp_path: Path, platform_tracing):
+def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(
+    tmp_path: Path, platform_tracing: bool
+):
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     config = LoopConfig(
@@ -798,7 +804,7 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
     ],
 )
 def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set(
-    tmp_path: Path, harnesses, head_model, resumed
+    tmp_path: Path, harnesses: list[str] | None, head_model: str, resumed: bool
 ):
     store = _store(tmp_path)
     store.record_lease(
@@ -989,7 +995,7 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
     ],
 )
 def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(
-    tmp_path: Path, workspace_root, environments, expected_cwd
+    tmp_path: Path, workspace_root: str, environments: list[AcquiredEnvironment], expected_cwd: str | None
 ):
     """The segment carries the cwd the worker was spawned into: the workspace root when one is
     configured, else the first environment's workdir, else nothing."""
@@ -1060,7 +1066,15 @@ def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_laun
         probe=probe,
     )
 
-    def _raise(*args, **kwargs):
+    def _raise(
+        lease_id: str,
+        *,
+        pid: int,
+        process_start_time: str,
+        pgid: int | None,
+        spawned_at: datetime,
+        harness_id: str,
+    ) -> None:
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_provisional_spawn", _raise)
@@ -1503,7 +1517,7 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path: Path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("strict", [False, True])
-def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path: Path, strict):
+def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path: Path, strict: bool):
     """The whole-list scan's exhaustion boundary: every entry marked yields
     nothing under both the default reach-ahead and strict — pinned explicitly rather than
     left to converge with the strict case by accident."""
@@ -1595,7 +1609,7 @@ def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path: P
             super().run()
 
     monkeypatch.setattr(tick_module, "Advance", _RecordingAdvance)
-    monkeypatch.setattr(ReadyQueue, "_environments_wanted", lambda self, entry: 2)
+    monkeypatch.setattr(ReadyQueue, "_environments_wanted", _two_environments_wanted)
     ctx = make_context(
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
@@ -1620,7 +1634,7 @@ def test_a_refused_bind_gives_back_the_refusing_chunks_own_binding(tmp_path: Pat
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     # A third environment keeps the pool looking free to the hint, so acquisition runs and the provider misbehaves.
     provider = _HeldIgnoringProvider({"e1": "/ws/e1", "e2": "/ws/e2", "e3": "/ws/e3"})
-    monkeypatch.setattr(ReadyQueue, "_environments_wanted", lambda self, entry: 2)
+    monkeypatch.setattr(ReadyQueue, "_environments_wanted", _two_environments_wanted)
     ctx = make_context(
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
@@ -2223,7 +2237,16 @@ def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):
     )
 
 
-def _first_build_spawn(store: SqlAlchemyRunnerStore, hub: FakeHub, provider, env, *, session, at, config=None):
+def _first_build_spawn(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub,
+    provider: FakeProvider,
+    env: Envelope,
+    *,
+    session: str,
+    at: datetime,
+    config: LoopConfig | None = None,
+):
     """FILL's first arrival at `build` — a fresh session, nothing to resume."""
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -2245,7 +2268,17 @@ def _first_build_spawn(store: SqlAlchemyRunnerStore, hub: FakeHub, provider, env
     return harness
 
 
-def _reenter_node(store: SqlAlchemyRunnerStore, hub: FakeHub, provider, env, *, session, pid, at, config=None):
+def _reenter_node(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub,
+    provider: FakeProvider,
+    env: Envelope,
+    *,
+    session: str,
+    pid: int,
+    at: datetime,
+    config: LoopConfig | None = None,
+):
     """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=env)]
@@ -2288,19 +2321,18 @@ def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path: 
 
     assert harness.resume_froms == [None]
     prefix = harness.spawns[0][1].prompt_prefix
-    assert (
-        prefix
-        == (
-            "BLIZZARD-FRAMING\n\n"
-            "WORKSPACE-POLICY\n\n"
-            "| Field | Value |\n"
-            "|-------|-------|\n"
-            "| runner id | `r1` |\n"
-            "| chunk id | `ch_1` |\n"
-            "| lease id | " + f"`{store.active_lease_for_chunk('ch_1').lease_id}` |\n"  # type: ignore[union-attr]
-            "| environment name | `e1` |\n"
-            "| environment workdir | `/ws/e1` |"
-        )
+    spawned = store.active_lease_for_chunk("ch_1")
+    assert spawned is not None
+    assert prefix == (
+        "BLIZZARD-FRAMING\n\n"
+        "WORKSPACE-POLICY\n\n"
+        "| Field | Value |\n"
+        "|-------|-------|\n"
+        "| runner id | `r1` |\n"
+        "| chunk id | `ch_1` |\n"
+        "| lease id | " + f"`{spawned.lease_id}` |\n"
+        "| environment name | `e1` |\n"
+        "| environment workdir | `/ws/e1` |"
     )
     assert store.session_preamble_fingerprint(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-build-1")) is not None
 
@@ -2779,7 +2811,9 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path: Path):
     [(2, 4, 2, False), (4, 4, 2, True), (2, 2, 2, True), (2, 2, 5, False)],
     ids=["historical", "newer-current", "level-current", "stale-current"],
 )
-def test_fill_only_adopts_the_current_restart_epoch(tmp_path: Path, restart_epoch, hub_epoch, prior_epoch, adopts):
+def test_fill_only_adopts_the_current_restart_epoch(
+    tmp_path: Path, restart_epoch: int, hub_epoch: int, prior_epoch: int, adopts: bool
+):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_lease(
@@ -2900,7 +2934,7 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path: Path, monkey
     epochs: list[int | None] = []
     original = InterruptedClaims.adopt
 
-    def traced_adopt(self, chunk_id, view):
+    def traced_adopt(self: InterruptedClaims, chunk_id: str, view: ChunkState) -> None:
         epochs.append(view.latest_epoch)
         return original(self, chunk_id, view)
 
@@ -2914,7 +2948,7 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path: Path, monkey
 
 @pytest.mark.unit
 @pytest.mark.parametrize("token_held", [True, False], ids=["envelope-read", "token-rekey"])
-def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(tmp_path: Path, token_held):
+def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(tmp_path: Path, token_held: bool):
     """An ended chunk is terminal like an unknown one: the binding is released and the next
     tick has nothing left to retry, rather than the generic hub-error retry."""
     store = _store(tmp_path)
@@ -3362,7 +3396,7 @@ def test_reap_leaves_exited_worker_for_advance(tmp_path: Path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_retries_exhausted_escalates_and_holds_envs(tmp_path: Path, workspace_root, expected_cwd):
+def test_retries_exhausted_escalates_and_holds_envs(tmp_path: Path, workspace_root: str, expected_cwd: str):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
@@ -3519,7 +3553,7 @@ def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a
     [(True, False, False), (False, True, True), (None, True, False), (None, False, True)],
 )
 def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(
-    tmp_path: Path, passed, locally_paused, escalated
+    tmp_path: Path, passed: bool | None, locally_paused: bool, escalated: bool
 ):
     """A brake handed to the attempt decides alone; only without one does the store's fresh
     local brake decide whether the exhausted escalation waits."""
@@ -3724,7 +3758,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path: P
 # Per-chunk spend cap
 
 
-def _cap_config(cap, runner_dir="/tmp/runner-dir"):
+def _cap_config(cap: float | None, runner_dir: str = "/tmp/runner-dir"):
     return LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
@@ -4319,7 +4353,7 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path: Pat
     assert "'e1'" in failed[0]["detail"]["stderr_tail"] and "'e2'" in failed[0]["detail"]["stderr_tail"]
 
 
-def _two_env_commit_submission(tmp_path: Path, *, origins, commits):
+def _two_env_commit_submission(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str]):
     """Drive the harvest for a chunk holding ``e1`` and ``e2``, each declaring ``toy-api`` at
     ``commits[env]`` against ``origins[env]``; returns the submitted pointers and the hub."""
     store = _store(tmp_path)
@@ -4548,7 +4582,7 @@ def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_pat
 
 @pytest.mark.component
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path: Path, workspace_root, expected_cwd):
+def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path: Path, workspace_root: str, expected_cwd: str):
     """A judgement resumes the held session from its spawn cwd — the workspace root when one
     is configured, never the environment's own workdir beneath it."""
     store = _store(tmp_path)

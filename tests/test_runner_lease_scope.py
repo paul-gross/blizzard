@@ -33,10 +33,17 @@ _LEASE = Lease(
 def _request(*, token: str | None, active: Lease | None) -> Request:
     """A request carrying ``token`` against stores that know ``secret`` as ``lease_1``'s token,
     with ``active`` as that lease's active record and no open takeover."""
+
+    def active_lease(lease_id: str) -> Lease | None:
+        return active if lease_id == "lease_1" else None
+
+    def lease_for_open_takeover(_lease_id: str) -> None:
+        return None
+
     stores = SimpleNamespace(
         tokens=SimpleNamespace(lease_for_token_hash={TokenHash("secret").hex: "lease_1"}.get),
-        lease_record=SimpleNamespace(active_lease=lambda lease_id: active if lease_id == "lease_1" else None),
-        takeover=SimpleNamespace(lease_for_open_takeover=lambda _lease_id: None),
+        lease_record=SimpleNamespace(active_lease=active_lease),
+        takeover=SimpleNamespace(lease_for_open_takeover=lease_for_open_takeover),
     )
     state = State()
     state.runner_read_stores = stores

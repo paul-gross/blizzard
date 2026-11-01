@@ -82,7 +82,9 @@ def _frames(events: EventBroker, kind: str, *, runner_id: str = FIXTURE_RUNNER_I
     return frames
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_lease(
+    store: SqlAlchemyRunnerStore, *, retries_max: int, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1
+):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -868,6 +870,6 @@ def test_no_broker_wired_publishes_nothing_and_raises_nothing(tmp_path: Path) ->
     assert store.list_active_leases()  # the mutation itself still happened
 
 
-def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: set[str]) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

@@ -42,15 +42,15 @@ def _store(tmp_path: Path):
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
-    created=_NOW,
-    spawned=None,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
+    created: datetime = _NOW,
+    spawned: datetime | None = None,
+) -> None:
     """A build lease spawned into env e1, plus its binding — the worker in flight at crash time."""
     store.record_lease(
         NewLease(
@@ -74,7 +74,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=created)
 
 
-def _crashed_at(store: SqlAlchemyRunnerStore, when):
+def _crashed_at(store: SqlAlchemyRunnerStore, when: datetime) -> None:
     """Stamp the daemon's last liveness beat — the crash-time reference the scan reads back."""
     store.record_daemon_liveness(alive_at=when)
 

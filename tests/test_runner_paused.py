@@ -8,6 +8,7 @@ real (tmp sqlite) runner store with fakes standing in only at the seams."""
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -42,7 +43,7 @@ from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.usage_limit import mark_and_park_worker
-from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
@@ -88,14 +89,14 @@ class _BlipOnceHub(FakeHub):
         super().__init__()
         self.get_chunk_calls = 0
 
-    def chunk_statuses(self, chunk_ids):
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         self.get_chunk_calls += 1
         if self.get_chunk_calls == 1:
             raise HubClientError("transient blip during the ownership check")
         return super().chunk_statuses(chunk_ids)
 
 
-def _pause_locally(store: SqlAlchemyRunnerStore, ctx, *, paused: bool):
+def _pause_locally(store: SqlAlchemyRunnerStore, ctx: LoopContext, *, paused: bool):
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write."""
     store.record_local_pause(
         paused=paused,
@@ -266,12 +267,12 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path: Path):
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
 ):
     """A build lease spawned into env e1 with a live worker, plus its binding."""
     store.record_lease(
@@ -297,7 +298,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):
+def _running_chunk(chunk: str = "ch_1", *, runner_id: str = "r1") -> ChunkState:
     return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
@@ -330,7 +331,7 @@ def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _answered_question(question_id="qn_1") -> HubQuestion:
+def _answered_question(question_id: str = "qn_1") -> HubQuestion:
     return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
@@ -616,7 +617,9 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path: Path):
 # the orphan case (no process to kill) self-defers both branches.
 
 
-def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", retries_max=2, epoch=1):
+def _seed_orphan_lease(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", retries_max: int = 2, epoch: int = 1
+):
     """A lease minted at FILL but never spawned (no pid/session) — REAP's orphan case."""
     store.record_lease(
         NewLease(
@@ -1072,7 +1075,9 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path: Path):
     ],
     ids=["unregistered", "not-ready", "ended"],
 )
-def test_fill_denial_logs_what_the_hub_refused(tmp_path: Path, outcome, event, fields):
+def test_fill_denial_logs_what_the_hub_refused(
+    tmp_path: Path, outcome: RouteClaimOutcome, event: str, fields: dict[str, str]
+):
     """Each refusal logs the hub's own status and detail, so an unregistered runner or a not-ready
     chunk never reads as a paused runner or an ended chunk."""
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
@@ -1091,7 +1096,7 @@ def test_fill_denial_logs_what_the_hub_refused(tmp_path: Path, outcome, event, f
 # --------------------------------------------------------------------------- #
 
 
-def _ceiling_config(cap, *, window_hours=24.0, agents=1):
+def _ceiling_config(cap: float | None, *, window_hours: float = 24.0, agents: int = 1) -> LoopConfig:
     return LoopConfig(
         runner_name="r1",
         runner_id="rn_1",
@@ -1102,7 +1107,7 @@ def _ceiling_config(cap, *, window_hours=24.0, agents=1):
     )
 
 
-def _sample(*, cost, kind: UsageKind = "spawn"):
+def _sample(*, cost: float | None, kind: UsageKind = "spawn") -> UsageSample:
     return UsageSample(
         kind=kind,
         model="claude-x",
@@ -1114,7 +1119,14 @@ def _sample(*, cost, kind: UsageKind = "spawn"):
     )
 
 
-def _record_usage(store: SqlAlchemyRunnerStore, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_at):
+def _record_usage(
+    store: SqlAlchemyRunnerStore,
+    *,
+    lease_id: str = "lease_1",
+    chunk_id: str = "ch_1",
+    cost: float | None,
+    recorded_at: datetime,
+) -> None:
     record_usage(
         store,
         lease_id=lease_id,
@@ -1371,7 +1383,13 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
 # --- Usage-limit mark ----------------------------------------
 
 
-def _limited_ctx(store: SqlAlchemyRunnerStore, harness, *, clock=None, subscription=None):
+def _limited_ctx(
+    store: SqlAlchemyRunnerStore,
+    harness: FakeHarness,
+    *,
+    clock: FixedClock | None = None,
+    subscription: str | None = None,
+) -> LoopContext:
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     subscriptions = (
@@ -1391,11 +1409,13 @@ def _limited_ctx(store: SqlAlchemyRunnerStore, harness, *, clock=None, subscript
     )
 
 
-def _clear_runner_floor(store: SqlAlchemyRunnerStore, at):
+def _clear_runner_floor(store: SqlAlchemyRunnerStore, at: datetime) -> None:
     store.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
 
 
-def _exhausted_sample(store: SqlAlchemyRunnerStore, *, sampled_at, resets_at, payload=True):
+def _exhausted_sample(
+    store: SqlAlchemyRunnerStore, *, sampled_at: datetime, resets_at: datetime, payload: bool = True
+) -> None:
     window = {"window": "5h", "utilization_pct": 100.0, "resets_at": resets_at.isoformat(), "window_seconds": 18000}
     store.record_external_usage_attempt(
         slug="anthropic",

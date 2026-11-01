@@ -24,16 +24,19 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill
+from blizzard.runner.transcripts.repository import Transcript
 from blizzard.runner.transcripts.service import TranscriptService
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
+    FakeArchivedTranscriptRepository,
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
+    StaticTranscriptRepositoryResolver,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -43,6 +46,15 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+class _UnreadTranscriptRepository:
+    """An :class:`IReadTranscriptRepository` the spawn-cwd read never reaches."""
+
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
+        raise AssertionError("the spawn-cwd read reaches no repository")
+
+
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _WORKDIR_B = "/root-b/e1"
@@ -285,8 +297,8 @@ def test_a_closed_leases_transcript_is_looked_up_in_its_own_workspace(tmp_path: 
         leases=store,
         transcript_ledger=store,
         environments=store,
-        transcripts=None,  # type: ignore[arg-type]  # the spawn-cwd read reaches no repository
-        archived=None,  # type: ignore[arg-type]
+        transcripts=StaticTranscriptRepositoryResolver(_UnreadTranscriptRepository()),
+        archived=FakeArchivedTranscriptRepository(),
         workspaces=host.workspaces,
     )
 

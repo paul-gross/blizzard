@@ -17,6 +17,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.hub.node_steps import completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
@@ -39,11 +40,13 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1
+) -> None:
     """A build lease with a live worker and its env binding — the shape a restart preempts."""
     store.record_lease(
         NewLease(
@@ -68,7 +71,7 @@ def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="le
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):
+def _moved_chunk(*, node_id: str = "nd_build", epoch: int = 2, chunk: str = "ch_1") -> ChunkState:
     """The hub's view after a restart: still routed here, at a strictly higher epoch."""
     del node_id  # no runner-loop-visible field carries the node id on ChunkState
     return ChunkState(
@@ -79,7 +82,14 @@ def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):
     )
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=None, harness=None):
+def _ctx(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub,
+    *,
+    provider: FakeProvider | None = None,
+    probe: FakeProbe | None = None,
+    harness: FakeHarness | None = None,
+) -> LoopContext:
     return make_context(
         store,
         hub=hub,
@@ -89,7 +99,9 @@ def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=Non
     )
 
 
-def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode.FRESH):
+def _restarted_hub(
+    *, node_id: str = "nd_build", node_name: str = "build", session: SessionMode = SessionMode.FRESH
+) -> FakeHub:
     hub = FakeHub()
     hub.chunks["ch_1"] = _moved_chunk(node_id=node_id)
     hub.envelopes["ch_1"] = make_envelope(
@@ -98,7 +110,7 @@ def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode
     return hub
 
 
-def _brake(store: SqlAlchemyRunnerStore, *, paused):
+def _brake(store: SqlAlchemyRunnerStore, *, paused: bool) -> None:
     """Set the runner's own local brake, the way ``PATCH /runner`` does — fact + report."""
     store.record_local_pause(
         paused=paused,

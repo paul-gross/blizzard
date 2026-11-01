@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus
+from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.activity import (
@@ -127,7 +127,7 @@ def test_closed_activity_derives_closed() -> None:
 @pytest.mark.parametrize("fact", ["alive", "parked", "stale", "backing_off"])
 def test_closed_activity_cannot_carry_liveness_facts(fact: str) -> None:
     with pytest.raises(TypeError):
-        ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="reaped", **{fact: True})  # type: ignore[arg-type]
+        ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="reaped", **{fact: True})  # pyright: ignore[reportArgumentType]  # a liveness fact must raise TypeError
 
 
 @pytest.mark.unit
@@ -158,11 +158,13 @@ def test_state_parked_wins_over_backing_off() -> None:
 # Liveness.stale — the staleness-boundary pin
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> None:
+def _seed_lease(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", created_at: datetime = _NOW
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -177,7 +179,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", 
     )
 
 
-def _liveness(store: SqlAlchemyRunnerStore, lease):
+def _liveness(store: SqlAlchemyRunnerStore, lease: Lease) -> Liveness:
     """``lease``'s baseline from the facts the store holds for it."""
     return Liveness.of(
         lease, heartbeat=store.latest_heartbeat(lease.lease_id), spawn=store.latest_spawn(lease.lease_id)
@@ -650,8 +652,8 @@ def test_display_status_precedence_is_takeover_then_escalation_then_ask_then_sta
 
 @pytest.mark.unit
 def test_display_status_falls_through_to_every_lease_state() -> None:
-    states = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
-    assert [lease_display_status(s, takeover=False, escalated=False, asking=False).value for s in states] == states  # type: ignore[arg-type]
+    states: list[LeaseState] = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
+    assert [lease_display_status(s, takeover=False, escalated=False, asking=False).value for s in states] == states
 
 
 @pytest.mark.unit

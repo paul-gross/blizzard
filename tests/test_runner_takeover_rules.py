@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerHandle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.model import TakeoverHolds
@@ -36,6 +36,7 @@ from blizzard.runner.lifecycle.takeover import (
     takeover_closing,
 )
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from tests.runner_fakes import FakeHarness
 
 pytestmark = pytest.mark.unit
 
@@ -220,11 +221,22 @@ def test_takeover_skip_scoped_to_reference_epoch() -> None:
     assert not holds.holds_lease(_lease(epoch=4))
 
 
-class _ResumeHarness:
+class _ResumeHarness(FakeHarness):
     """Stands in for the resolved owner: echoes what it was asked to resume."""
 
+    def __init__(self) -> None:
+        super().__init__(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+        )
+
     def resume_command(
-        self, session_cwd: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        session_cwd: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
         return f"resume {session_id} in {session_cwd} ({model}/{effort})"
 
@@ -242,7 +254,7 @@ def _resolve(**overrides: Unpack[_ResolveFields]) -> str:
     fields: _ResolveFields = {
         "session": _SESSION,
         "bindings": [_BINDING],
-        "harness": _ResumeHarness(),  # type: ignore[typeddict-item]
+        "harness": _ResumeHarness(),
     }
     fields.update(overrides)
     return resolve_resume_command(model="opus", effort="high", workspace_root="/ws", **fields)

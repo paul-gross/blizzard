@@ -69,7 +69,7 @@ def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store: SqlAlchemyRunnerStore, harness, *, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, harness: FakeHarness, *, clock: FixedClock | None = None):
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     return hub, make_context(

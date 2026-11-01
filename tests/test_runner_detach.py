@@ -8,6 +8,7 @@ longer holds. The predicate is **route-only**, not status-based, except ``stoppe
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -19,8 +20,9 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, 
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.hub.client import QueueEntry
+from blizzard.runner.hub.client import FactPushAck, PushedFact, QueueEntry
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -47,13 +49,13 @@ def _store(tmp_path: Path):
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
+) -> None:
     """A build lease spawned into env e1 with a live worker, plus its binding — no resume
     intent (a live tick's lease, not a restart-marked one)."""
     store.record_lease(
@@ -78,7 +80,9 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", retries_max=0):
+def _seed_orphan_lease(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", retries_max: int = 0
+) -> None:
     """A lease minted but never spawned (a crash in FILL's mint->spawn window) — REAP's own
     orphan case, with no retry budget left so the very first reap attempt exhausts it."""
     store.record_lease(
@@ -96,7 +100,7 @@ def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lea
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):
+def _detached_chunk(chunk: str = "ch_1", *, status: ChunkStatus = ChunkStatus.READY) -> ChunkState:
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -105,7 +109,7 @@ def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):
     )
 
 
-def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):
+def _routed_chunk(chunk: str = "ch_1", *, status: ChunkStatus, runner_id: str = "r1") -> ChunkState:
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -114,7 +118,9 @@ def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):
     )
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=None):
+def _ctx(
+    store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider: FakeProvider | None = None, probe: FakeProbe | None = None
+) -> LoopContext:
     return make_context(
         store,
         hub=hub,
@@ -241,7 +247,7 @@ def test_pull_leaves_a_still_running_lease_untouched(tmp_path: Path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("status", [ChunkStatus.DELIVERING, ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.NEEDS_HUMAN])
-def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path: Path, status):
+def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path: Path, status: ChunkStatus) -> None:
     """The regression test for the route-only predicate: copying restart-resume's
     ``status == RUNNING and ours`` here would wrongly abandon a live runner's lease
     while its chunk derives ``delivering``, ``waiting_on_human``, or ``needs_human``."""
@@ -300,11 +306,11 @@ class _OrderTrackingHub(FakeHub):
         super().__init__()
         self.calls: list[str] = []
 
-    def chunk_statuses(self, chunk_ids):
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkState]:
         self.calls.append("chunk_statuses")
         return super().chunk_statuses(chunk_ids)
 
-    def push_facts(self, facts):
+    def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         self.calls.append("push_facts")
         return super().push_facts(facts)
 

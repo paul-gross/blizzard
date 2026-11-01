@@ -6,9 +6,11 @@ per (lease, epoch)" holds."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -17,6 +19,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
@@ -42,6 +47,29 @@ _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
+class _FakeHarnessFields(TypedDict, total=False):
+    handle: WorkerHandle
+    verdict: str | None
+    assessment: str
+    usage: UsageSample | None
+    usage_by_kind: dict[str, UsageSample | None] | None
+    transcript_usage: UsageSample | None
+    observed_model: str | None
+    transcript_source: IHarnessTranscriptSource | None
+    judge_side_effect: Callable[[], None] | None
+    judge_pid: int
+    judge_pgid: int | None
+    judge_process_start_time: str
+    judge_output: str
+    judge_output_usable: bool
+    identity_failures: int
+    resume_process_start_time: str
+    usage_limit: UsageLimit | None
+    usage_limit_from_call: int
+    overload: ProviderOverload | None
+    overload_from_call: int
+
+
 class _AttachingOnResumeHarness(FakeHarness):
     """A :class:`FakeHarness` whose ``resume_with_message`` attaches on the worker's
     behalf, standing in for a worker that runs ``blizzard runner attach`` in response to
@@ -51,14 +79,14 @@ class _AttachingOnResumeHarness(FakeHarness):
         self,
         *,
         store: SqlAlchemyRunnerStore,
-        clock,
+        clock: FixedClock,
         lease_id: str,
         chunk_id: str,
         node_id: str,
         epoch: int,
         name: str,
         content: str,
-        **kwargs,
+        **kwargs: Unpack[_FakeHarnessFields],
     ) -> None:
         super().__init__(**kwargs)
         self._store = store
@@ -115,7 +143,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         self,
         *,
         store: SqlAlchemyRunnerStore,
-        clock,
+        clock: FixedClock,
         lease_id: str,
         chunk_id: str,
         node_id: str,
@@ -124,7 +152,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         environment_id: str,
         branch: str,
         commit: str,
-        **kwargs,
+        **kwargs: Unpack[_FakeHarnessFields],
     ) -> None:
         super().__init__(**kwargs)
         self._store = store
@@ -569,7 +597,9 @@ def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_
         clock=FixedClock(_NOW),
     )
     service = AttachmentService(store, FixedClock(_NOW), store)
-    worker = WorkerLease(lease=store.lease("lease_r"), active=True)  # type: ignore[arg-type]
+    lease = store.lease("lease_r")
+    assert lease is not None
+    worker = WorkerLease(lease=lease, active=True)
 
     service.attach(worker, name="note", content="first")  # covers `produces`, so the exit is judged
     Advance(ctx).run()  # the worker has exited; the elicitation is launched

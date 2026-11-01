@@ -93,7 +93,7 @@ def test_a_failed_report_insert_leaves_no_latch_row(tmp_path: Path) -> None:
         store.record_trace_latch(
             "trace-export-failed",
             at=fx.at(1),
-            report_kind=None,  # type: ignore[arg-type]
+            report_kind=None,  # pyright: ignore[reportArgumentType]  # a NULL report kind forces the NOT NULL IntegrityError
             report_payload="{}",
         )
 
