@@ -44,8 +44,24 @@ class _StoreSink:
     def __init__(self, store: SqlAlchemyRunnerStore) -> None:
         self._store = store
 
-    def record(self, **attempt) -> None:
-        self._store.record_external_usage_attempt(**attempt)
+    def record(
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None,
+    ) -> None:
+        self._store.record_external_usage_attempt(
+            slug=slug,
+            sampled_at=sampled_at,
+            payload=payload,
+            report_kind=report_kind,
+            report_payload=report_payload,
+            miss_reason=miss_reason,
+        )
 
 
 def _store(tmp_path: Path):

@@ -20,7 +20,7 @@ import shutil
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -141,7 +141,7 @@ def _rows_of(engine: sa.Engine, runner_id: str) -> dict[str, list[tuple[Any, ...
 
 def _answer(result: object) -> str:
     if isinstance(result, Iterator):
-        result = list(result)
+        return repr(list(cast(Iterator[object], result)))
     return repr(result)
 
 

@@ -20,7 +20,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.retention_floor import RETENTION_FLOOR, RetentionPasses
 from blizzard.runner.loop.steps import Retention
 from blizzard.runner.store.schema import (
@@ -108,7 +108,7 @@ def _seed_a_superseded_and_a_newest_usage_sample(store: SqlAlchemyRunnerStore, *
     )
 
 
-def _seed_superseded_and_newest_floor_facts(ctx, *, old: datetime) -> None:
+def _seed_superseded_and_newest_floor_facts(ctx: LoopContext, *, old: datetime) -> None:
     """An aged mark and clear per key, each superseded by a newer one that is itself aged past the window."""
     for generation, at in ((1, old), (2, old + timedelta(minutes=1))):
         mark = UsageLimitMark(
@@ -253,7 +253,7 @@ def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path: P
 class _CountingLanes:
     """Every lane's prune, counted — ``ctx`` rebuilt over stores and files that record a call."""
 
-    def __init__(self, ctx):
+    def __init__(self, ctx: LoopContext) -> None:
         self.calls: list[str] = []
         outer = self
 

@@ -63,20 +63,20 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):
+def _build_envelope(chunk: str = "ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    session="sess-a",
-    epoch=1,
-    harness_id=CLAUDE_CODE_HARNESS_ID,
-    resolved_model=None,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    session: str = "sess-a",
+    epoch: int = 1,
+    harness_id: str = CLAUDE_CODE_HARNESS_ID,
+    resolved_model: str | None = None,
+) -> None:
     """A build lease already spawned into env e1, plus its binding."""
     store.record_lease(
         NewLease(
@@ -113,7 +113,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _write_stdout(stdout_dir, lease_id, generation, content="<envelope>") -> None:
+def _write_stdout(stdout_dir: Path, lease_id: str, generation: int, content: str = "<envelope>") -> None:
     (stdout_dir / f"{lease_id}.{generation}.stdout").write_text(content)
 
 

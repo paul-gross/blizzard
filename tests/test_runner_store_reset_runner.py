@@ -18,6 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import store as store_cli
+from blizzard.runner.cli.daemon import Door
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import sqlite_url
 from blizzard.runner.store import MIGRATIONS_DIR
@@ -97,11 +98,11 @@ def test_reset_of_one_runner_is_refused_while_the_host_runs_and_changes_nothing(
     layout = HostLayout(root)
     before = layout.store_path.read_bytes()
     if held_by == "socket":
-        monkeypatch.setattr(
-            store_cli,
-            "daemon_holding",
-            lambda sock, _trace: f"a runner answers at {sock}" if sock == layout.legacy_socket_path else None,
-        )
+
+        def _holding(sock: Path, _door: Door) -> str | None:
+            return f"a runner answers at {sock}" if sock == layout.legacy_socket_path else None
+
+        monkeypatch.setattr(store_cli, "daemon_holding", _holding)
         result = run(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
     else:
         with HostLock.acquire(layout):
