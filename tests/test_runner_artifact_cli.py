@@ -910,8 +910,10 @@ def test_artifact_validators_load_no_wire_model_until_a_registered_asset_is_subm
 
     probe = (
         "import sys; import blizzard.runner.cli.artifact_validators as v; "
+        "assert 'pydantic' not in sys.modules; "
         "assert 'blizzard.wire.finding' not in sys.modules; "
         "assert v.validate_artifact_content('other-asset', 'prose') is None; "
+        "assert 'pydantic' not in sys.modules; "
         "assert 'blizzard.wire.finding' not in sys.modules; "
         "assert v.validate_artifact_content('review-finding-delta', 'none') is not None; "
         "assert 'blizzard.wire.finding' in sys.modules"

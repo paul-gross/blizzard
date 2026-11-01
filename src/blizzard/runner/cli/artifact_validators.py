@@ -5,8 +5,10 @@ An asset with no registered validator is stored as given."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ValidationError
+if TYPE_CHECKING:
+    from pydantic import BaseModel, ValidationError
 
 
 def _review_finding_delta() -> type[BaseModel]:
@@ -27,6 +29,8 @@ def validate_artifact_content(name: str, content: str) -> str | None:
     registered = _FORMATS.get(name)
     if registered is None:
         return None
+    from pydantic import ValidationError
+
     load_model, system_artifact = registered
     try:
         load_model().model_validate_json(content)
