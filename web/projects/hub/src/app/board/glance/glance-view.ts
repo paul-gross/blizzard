@@ -16,10 +16,10 @@ import {
   hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
+  type WorkLine,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
-import type { WorkLine } from '../board-card/board-card.model';
 import { LaneIcon } from '../lane-icon/lane-icon';
 import type { GlanceListGroups } from './glance-board.model';
 

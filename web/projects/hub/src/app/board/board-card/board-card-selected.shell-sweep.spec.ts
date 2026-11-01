@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
-import type { BoardCard } from './board-card';
-import { BoardCardComponent } from './board-card';
+import { ChunkCard } from 'fleet';
+import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**
  * A selected board card draws one selection edge — the outer `.card`'s — and none inside
@@ -58,11 +58,11 @@ describe('board card selected state shell sweep (web:shell-sweep)', () => {
       await loadDesignTokens();
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
-        imports: [BoardCardComponent],
+        imports: [ChunkCard],
         providers: [provideZonelessChangeDetection()],
       }).compileComponents();
-      const fixture = TestBed.createComponent(BoardCardComponent);
-      fixture.componentRef.setInput('card', CARD);
+      const fixture = TestBed.createComponent(ChunkCard);
+      fixture.componentRef.setInput('card', boardCardView(CARD));
       fixture.componentRef.setInput('selected', true);
       await fixture.whenStable();
       const root = fixture.nativeElement as HTMLElement;

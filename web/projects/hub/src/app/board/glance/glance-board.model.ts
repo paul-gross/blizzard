@@ -1,6 +1,5 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, ageMs, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, ageMs, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 
-import { workLines } from '../board-card/board-card.model';
 import type { RowWork, Vitals } from './glance-view';
 
 /** How far back "Done today" reaches — a rolling window, not a calendar day. */

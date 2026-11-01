@@ -153,8 +153,8 @@ async function render(initialQuery: Record<string, string> = {}): Promise<HTMLEl
   return fixture.nativeElement as HTMLElement;
 }
 
-const chunkIds = (root: ParentNode | null, testid = 'chunk-row'): (string | null)[] =>
-  Array.from(root?.querySelectorAll(`[data-testid="${testid}"]`) ?? []).map((row) => row.getAttribute('data-chunk-id'));
+const chunkIds = (root: ParentNode | null, testid = 'chunk-card'): (string | null)[] =>
+  Array.from(root?.querySelectorAll(`[data-testid="${testid}"]`) ?? []).map((row) => row.getAttribute('data-chunk'));
 
 const ESCALATION = {
   chunk_id: CHUNK,
@@ -232,7 +232,7 @@ describe('LocalPanel', () => {
       const progress = el.querySelector('[data-testid="lane-progress"]');
       expect(new Set(chunkIds(progress))).toEqual(new Set([CHUNK, R2_CHUNK]));
       const runnerOf = (chunkId: string) =>
-        progress?.querySelector(`[data-chunk-id="${chunkId}"] [data-testid="chunk-row-runner"]`)?.textContent?.trim();
+        progress?.querySelector(`[data-chunk="${chunkId}"] [data-testid="card-runner"]`)?.textContent?.trim();
       expect(runnerOf(CHUNK)).toBe('r1');
       expect(runnerOf(R2_CHUNK)).toBe('r2');
     });
@@ -319,7 +319,7 @@ describe('LocalPanel', () => {
       stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render();
 
-      expect(el.querySelector('[data-testid="chunk-row"] [data-testid="chunk-row-worker"] [data-testid="worker-env"]')?.textContent?.trim()).toBe(
+      expect(el.querySelector('[data-testid="chunk-card"] [data-testid="chunk-row-worker"] [data-testid="worker-env"]')?.textContent?.trim()).toBe(
         'beta',
       );
       expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
@@ -340,7 +340,7 @@ describe('LocalPanel', () => {
 
       expect(chunkIds(el.querySelector('[data-testid="lane-progress"]'))).toEqual([CHUNK]);
       expect(chunkIds(el.querySelector('[data-testid="lane-done"]'))).toEqual([OTHER_CHUNK]);
-      expect(el.querySelector('[data-testid="lane-done"] [data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('COMPLETED');
+      expect(el.querySelector('[data-testid="lane-done"] [data-testid="chunk-status"]')?.textContent?.trim()).toBe('COMPLETED');
       expect(el.querySelector('[data-testid="chunk-filter-show-all"]')).toBeNull();
     });
 
@@ -355,7 +355,7 @@ describe('LocalPanel', () => {
       const el = await render();
 
       expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'))).toEqual([CHUNK]);
-      expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('NEEDS HUMAN');
+      expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('NEEDS HUMAN');
     });
   });
 
@@ -395,7 +395,7 @@ describe('LocalPanel', () => {
       stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
       const el = await mount();
 
-      await click(el.querySelector<HTMLElement>('[data-testid="chunk-row"]'));
+      await click(el.querySelector<HTMLElement>('[data-testid="chunk-card"]'));
 
       expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: CHUNK }, queryParamsHandling: 'merge' }));
       expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
@@ -403,7 +403,7 @@ describe('LocalPanel', () => {
       expect(facts).toContain('4821');
       expect(facts).toContain('/ws/beta');
       expect(facts).toContain('sess-77');
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).toContain('selected');
+      expect(el.querySelector('[data-testid="chunk-card"]')?.classList).toContain('selected');
     });
 
     it('shows facts for the newest attempt of a multi-attempt chunk', async () => {
@@ -447,7 +447,7 @@ describe('LocalPanel', () => {
       const el = await render({ chunk: CHUNK });
 
       expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).toContain('selected');
+      expect(el.querySelector('[data-testid="chunk-card"]')?.classList).toContain('selected');
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 
@@ -456,7 +456,7 @@ describe('LocalPanel', () => {
       stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), other] } }));
       const el = await mount({ chunk: CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB' });
 
-      await click(el.querySelector<HTMLElement>(`[data-testid="chunk-row"][data-chunk-id="${OTHER_CHUNK}"]`));
+      await click(el.querySelector<HTMLElement>(`[data-testid="chunk-card"][data-chunk="${OTHER_CHUNK}"]`));
 
       expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: OTHER_CHUNK } }));
     });
@@ -466,7 +466,7 @@ describe('LocalPanel', () => {
       const el = await render({ chunk: 'ch_GONE00000000000000000000' });
 
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).not.toContain('selected');
+      expect(el.querySelector('[data-testid="chunk-card"]')?.classList).not.toContain('selected');
       expect(navigateSpy).not.toHaveBeenCalled();
     });
   });
@@ -483,7 +483,7 @@ describe('LocalPanel', () => {
       const el = await render();
 
       expect(chunkIds(el)).toEqual([CHUNK]);
-      expect(el.querySelector('[data-testid="chunk-row"]')?.textContent).toContain('C-3YJ9');
+      expect(el.querySelector('[data-testid="chunk-card"]')?.textContent).toContain('C-3YJ9');
     });
 
     it("renders each linked item's label and title on the card", async () => {
@@ -510,7 +510,7 @@ describe('LocalPanel', () => {
       );
       const el = await render();
 
-      const title = el.querySelector('[data-testid="chunk-row-title"]')?.textContent;
+      const title = el.querySelector('[data-testid="chunk-card"] .items')?.textContent;
       expect(title).toContain('blizzard#61');
       expect(title).toContain('runner machine panel');
     });

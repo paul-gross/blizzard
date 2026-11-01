@@ -1,17 +1,13 @@
 @if (layout() === 'list') {
-  <app-chunk-list-row-view
-    [row]="row()"
-    [projectTint]="projectTint()"
-    [selected]="selected()"
-    [linkedItems]="linkedItems()"
-    (selectChunk)="selectChunk.emit($event)"
-  />
+  <fleet-chunk-list-row [card]="view()" [selected]="selected()" (selectChunk)="selectChunk.emit($event)">
+    @if (row().live; as live) {
+      <app-worker-line chunkRowWorker data-testid="list-row-worker" [lease]="live" [showNode]="false" />
+    }
+  </fleet-chunk-list-row>
 } @else {
-  <app-chunk-row-view
-    [row]="row()"
-    [projectTint]="projectTint()"
-    [selected]="selected()"
-    [linkedItems]="linkedItems()"
-    (selectChunk)="selectChunk.emit($event)"
-  />
+  <fleet-chunk-card [showHolder]="true" [card]="view()" [selected]="selected()" (selectChunk)="selectChunk.emit($event)">
+    @if (row().live; as live) {
+      <app-worker-line chunkCardWorker data-testid="chunk-row-worker" [lease]="live" [showNode]="false" />
+    }
+  </fleet-chunk-card>
 }

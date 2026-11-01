@@ -5,8 +5,8 @@ import { commands, page, userEvent } from 'vitest/browser';
 
 import { type ChunkDetail, ChunkTimeline } from 'fleet';
 import { assetArtifactView, chunkDetail, commitArtifactView, transitionView } from 'fleet/testing';
-import type { BoardCard } from './board-card/board-card';
-import { BoardCardComponent } from './board-card/board-card';
+import { ChunkCard } from 'fleet';
+import { type BoardCard, boardCardView } from './board-card/board-card-view.model';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
 
 /**
@@ -60,11 +60,11 @@ async function loadDesignTokens(): Promise<void> {
 async function renderCard(card: BoardCard, selected: boolean): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [BoardCardComponent],
+    imports: [ChunkCard],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
+  const fixture = TestBed.createComponent(ChunkCard);
+  fixture.componentRef.setInput('card', boardCardView(card));
   fixture.componentRef.setInput('selected', selected);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

@@ -105,7 +105,7 @@ describe('LocalPanelMobile', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    const cards = el.querySelectorAll('[data-testid="chunk-row"]');
+    const cards = el.querySelectorAll('[data-testid="chunk-card"]');
     expect(cards).toHaveLength(1);
     expect(cards[0].querySelector('[data-testid="chunk-row-worker"] [data-testid="hb-freshness"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
@@ -116,7 +116,7 @@ describe('LocalPanelMobile', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelectorAll('[data-testid="list-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="chunk-row"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-card"]')).toBeNull();
   });
 
   it('renders the chunks triad state it is handed, without a query of its own', async () => {
@@ -155,7 +155,7 @@ describe('LocalPanelMobile', () => {
     const picked: string[] = [];
     fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
 
-    el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-card"]')?.click();
 
     expect(picked).toEqual([LEASE().chunk_id]);
   });
