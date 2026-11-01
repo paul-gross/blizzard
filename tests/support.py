@@ -151,6 +151,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -506,7 +507,7 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
     store = hub_store_connections(engine)
-    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store))
+    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store), transactions=HubTransactions(store))
 
 
 def make_graph(

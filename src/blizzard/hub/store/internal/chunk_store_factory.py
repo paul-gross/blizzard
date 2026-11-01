@@ -25,7 +25,6 @@ from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions
 
 
 def build_chunk_stores(
@@ -33,7 +32,7 @@ def build_chunk_stores(
     clock: IClock,
     *,
     registry: RunnerRegistryStore,
-    transactions: IHubTransactions | None = None,
+    transactions: IHubTransactions,
 ) -> ChunkStores:
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
     first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
@@ -61,7 +60,7 @@ def build_chunk_stores(
         dependencies=dependencies,
         exclusive=ChunkExclusiveWrites(
             store,
-            transactions=transactions if transactions is not None else HubTransactions(store),
+            transactions=transactions,
             facts=facts,
             record=record,
             dependencies=dependencies,

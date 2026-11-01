@@ -239,7 +239,7 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
         return self is other or (
             type(self) is ScopedConnections
             and type(other) is ScopedConnections
-            and self._engine is other._engine
+            and self.same_store(other)
             and self.scope == other.scope
         )
 

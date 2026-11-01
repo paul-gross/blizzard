@@ -42,6 +42,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
 from tests.pass_isolation import (
     HEALTHY,
@@ -325,7 +326,9 @@ def test_an_annotation_pass_skips_a_tenant_closed_since_the_open_set_was_read() 
 
 def _stores_of(hub: HubHarness, tenant: TenantId) -> ChunkStores:
     connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
-    return build_chunk_stores(connections, hub.clock, registry=RunnerRegistryStore(connections))
+    return build_chunk_stores(
+        connections, hub.clock, registry=RunnerRegistryStore(connections), transactions=HubTransactions(connections)
+    )
 
 
 def _landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkStores:
