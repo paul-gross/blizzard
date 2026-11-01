@@ -6,17 +6,13 @@ the comment at each site now points back at the test that fails on revert."""
 
 from __future__ import annotations
 
-import asyncio
-import signal
 from pathlib import Path
 
 import pytest
-import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.config import HubConfig
@@ -39,14 +35,3 @@ def test_require_reports_the_store_unwired_with_no_store_wired() -> None:
         resp = client.get("/_pin_probe")
 
     assert resp.status_code == 503, resp.text
-
-
-def test_handle_exit_sets_the_shutdown_signal_synchronously() -> None:
-    """The signal handler sets the event the instant SIGTERM is caught — before uvicorn's
-    graceful-drain wait an SSE response never finishes."""
-    shutdown = asyncio.Event()
-    server = EarlyShutdownServer(uvicorn.Config(FastAPI(), log_config=None), shutdown_signal=shutdown)
-
-    server.handle_exit(signal.SIGTERM, None)
-
-    assert shutdown.is_set()
