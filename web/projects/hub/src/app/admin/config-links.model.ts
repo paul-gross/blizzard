@@ -1,18 +1,24 @@
-import { RecordKind, type RecordRefView } from 'fleet';
+import { openLookup, RecordKind, type RecordRefView } from 'fleet';
 
 import type { ConfigLinkVm } from './config-record-panel';
 
 /** The route each record kind's surface lives at — the fleet's records under admin, the
- * gardening records under gardening. A kind the board has no surface for has no entry. */
-const SURFACE_SEGMENT: Partial<Record<RecordKind, readonly string[]>> = {
-  [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
-  [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
-  [RecordKind.FORGE]: ['/admin', 'forges'],
-  [RecordKind.SECRET]: ['/admin', 'secrets'],
-  [RecordKind.PROJECT]: ['/admin', 'projects'],
-  [RecordKind.SCOPE]: ['/gardening', 'scopes'],
-  [RecordKind.ROUTINE]: ['/gardening', 'routines'],
-};
+ * gardening records under gardening. A kind the board has no surface for — a link kind, or one
+ * the client does not know — reads `null`. */
+const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
+  {
+    [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
+    [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
+    [RecordKind.FORGE]: ['/admin', 'forges'],
+    [RecordKind.SECRET]: ['/admin', 'secrets'],
+    [RecordKind.PROJECT]: ['/admin', 'projects'],
+    [RecordKind.SCOPE]: ['/gardening', 'scopes'],
+    [RecordKind.ROUTINE]: ['/gardening', 'routines'],
+    [RecordKind.PROJECT_SOURCE_LINK]: null,
+    [RecordKind.PROJECT_REPOSITORY_LINK]: null,
+  },
+  () => null,
+);
 
 /** A record kind as text — the wire value with its underscores spaced. */
 export function recordKindLabel(kind: string): string {
@@ -22,8 +28,8 @@ export function recordKindLabel(kind: string): string {
 /** The router commands that open `key` of `kind`, or `null` for a kind the board has
  * no surface for. */
 export function recordRoute(kind: string, key: string): readonly string[] | null {
-  const surface = (SURFACE_SEGMENT as Record<string, readonly string[] | undefined>)[kind];
-  return surface === undefined ? null : [...surface, key];
+  const surface = SURFACE_SEGMENT(kind);
+  return surface === null ? null : [...surface, key];
 }
 
 /** A link to the record `ref` names, shown by its label — a repository's or work source's current slug — when it has one. */

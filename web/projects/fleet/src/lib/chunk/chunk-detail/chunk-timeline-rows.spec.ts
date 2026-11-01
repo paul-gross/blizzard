@@ -1,6 +1,6 @@
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, transitionView } from 'fleet/testing';
-import { deriveHistoryRows, deriveMultiGraph, rowChoice, rowMark, usageForStep } from './chunk-timeline-rows';
+import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, rowChoice, rowMark, usageForStep } from './chunk-timeline-rows';
 
 const BASE: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01rows00000000000000000000000',
@@ -131,5 +131,22 @@ describe('deriveHistoryRows', () => {
   it('renders unchanged when bounces and restarts are absent', () => {
     const rest = { ...BASE, bounces: [], restarts: [] };
     expect(deriveHistoryRows(rest, NOW).map((r) => r.kind)).toEqual(['transition', 'migration', 'transition']);
+  });
+});
+
+describe('deriveActiveRow', () => {
+  it('renders the in-flight verb for a status with a node mid-flight', () => {
+    expect(deriveActiveRow({ ...BASE, status: 'running', history: [] })).toMatchObject({ nodeId: 'nd_build', choice: 'run', label: 'run' });
+    expect(deriveActiveRow({ ...BASE, status: 'needs_human', history: [] })).toMatchObject({ choice: 'needs-human', label: 'needs human' });
+  });
+
+  it('renders no row for a status with no node mid-flight', () => {
+    for (const status of ['not_ready', 'ready', 'stopped', 'done'] as const) {
+      expect(deriveActiveRow({ ...BASE, status })).toBeNull();
+    }
+  });
+
+  it('renders no row for a status the client does not know', () => {
+    expect(deriveActiveRow({ ...BASE, status: 'archived' as ChunkDetail['status'] })).toBeNull();
   });
 });

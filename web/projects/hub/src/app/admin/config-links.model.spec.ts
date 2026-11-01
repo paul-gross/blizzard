@@ -25,6 +25,8 @@ describe('recordRoute', () => {
 
   it('answers null for a kind the board has no surface for', () => {
     expect(recordRoute('graph', 'x')).toBeNull();
+    expect(recordRoute(RecordKind.PROJECT_SOURCE_LINK, 'x')).toBeNull();
+    expect(recordRoute(RecordKind.PROJECT_REPOSITORY_LINK, 'x')).toBeNull();
   });
 });
 
