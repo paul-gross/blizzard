@@ -170,7 +170,7 @@ class FastForward:
             return await failed_checks(
                 repo,
                 candidate,
-                verdict.failing,
+                verdict,
                 verdict.failure_rows(base_verdict),
                 {"repo": repo.repo, "number": "-", "url": repo.branch},
             )

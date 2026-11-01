@@ -51,6 +51,8 @@ from blizzard.hub.forge.landing import (
     Mergeability,
     MergeMethod,
     RepositoryForge,
+    Rerun,
+    RerunOutcome,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -444,7 +446,13 @@ def test_an_inherited_only_failure_is_re_run_once_and_waits() -> None:
 
 
 @pytest.mark.parametrize(
-    "refusal", [False, ForgeNotFound(ForgeObject.CHECK), ForgeRejected("Resource not accessible")], ids=repr
+    "refusal",
+    [
+        Rerun(RerunOutcome.REFUSED, "HTTP 403: Resource not accessible by personal access token"),
+        ForgeNotFound(ForgeObject.CHECK),
+        ForgeRejected("Resource not accessible"),
+    ],
+    ids=repr,
 )
 def test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure(refusal: object) -> None:
     double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)}, replies={"rerun_check": [refusal]})
@@ -452,6 +460,52 @@ def test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure(refusal: obj
     assert answer.choice == "failure"
     assert not any(name.startswith("ci-rerun/") for name in sink.markers())
     assert "base branch: also failing build — not this change" in sink.markers()["delivery-findings"]
+    assert any("re-run of build was refused" in line for line in answer.log)
+
+
+def test_a_refused_re_run_logs_the_forges_status_and_message() -> None:
+    refusal = Rerun(RerunOutcome.REFUSED, "HTTP 403: Resource not accessible by personal access token")
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)}, replies={"rerun_check": [refusal]})
+    answer, _ = _land(double)
+    assert any("HTTP 403: Resource not accessible by personal access token" in line for line in answer.log)
+
+
+def test_a_re_run_refused_because_the_run_is_going_waits_without_a_marker_and_asks_again() -> None:
+    going = Rerun(RerunOutcome.RUN_IN_PROGRESS, "HTTP 403: The workflow run containing this job is already running")
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)}, replies={"rerun_check": [going]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert not any(name.startswith("ci-rerun/") for name in sink.markers())
+    assert any("already running" in line for line in answer.log)
+
+    again, _ = _land(double)
+    assert again.choice == "pending"
+    assert double.named("rerun_check") == [(_WIDGET, {"id": "1"})] * 2
+
+
+def _pending(name: str = "e2e", check_id: str = "2") -> Check:
+    return check(name, CheckOutcome.PENDING, "in_progress", id=check_id)
+
+
+def test_an_inherited_failure_waits_while_another_check_is_pending_and_asks_no_re_run() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(), _pending()), "main": (_failing(),)})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert double.named("rerun_check") == []
+    assert not any(name.startswith("ci-rerun/") for name in sink.markers())
+
+
+def test_a_re_run_check_red_again_waits_while_another_check_is_pending() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(), _pending()), "main": (_failing(),)})
+    visit = _visit(markers=(f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}",))
+    answer, _ = _land(double, visit)
+    assert answer.choice == "pending"
+
+
+def test_an_owned_failure_routes_failure_even_while_another_check_is_pending() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(), _pending()), "main": GREEN})
+    answer, _ = _land(double)
+    assert answer.choice == "failure"
 
 
 def test_a_re_run_the_forge_did_not_answer_writes_no_marker_and_is_asked_again_next_pass() -> None:

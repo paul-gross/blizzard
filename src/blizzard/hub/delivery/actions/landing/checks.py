@@ -17,6 +17,7 @@ from blizzard.hub.forge.landing import (
     ForgeRejected,
     ForgeUnavailable,
     Mergeability,
+    RerunOutcome,
 )
 
 # Pure routing decisions (what to do with one repo after reading its live change).
@@ -46,6 +47,11 @@ class Verdict:
     @property
     def failing(self) -> list[Check]:  # ast-grep-ignore: bzh:property-delegates
         return [check for check in self.checks or () if check.outcome is CheckOutcome.FAILED]
+
+    @property
+    def pending(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        """Whether some check on this ref has not concluded."""
+        return any(check.outcome is CheckOutcome.PENDING for check in self.checks or ())
 
     @property
     def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -138,34 +144,42 @@ async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
         return Verdict(None)
 
 
-async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> bool | None:
-    """Ask the forge once to re-run ``check``, then record its signature marker. Whether the forge accepted;
-    ``None`` when it did not answer (pinned by
-    ``tests/test_land_action.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``)."""
+async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> RerunOutcome | None:
+    """Ask the forge once to re-run ``check``, then record its signature marker when it accepted. The forge's
+    outcome; ``None`` when it did not answer (pinned by
+    ``tests/test_land_action.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``). A refusal is
+    logged with the forge's own status and message."""
     try:
-        accepted = await repo.ask(repo.forge.checks.rerun_check(check.id))
-    except (ForgeRejected, ForgeNotFound):
-        return False
+        rerun = await repo.ask(repo.forge.checks.rerun_check(check.id))
+    except (ForgeRejected, ForgeNotFound) as exc:
+        repo.run.say(f"{repo.repo}'s re-run of {check.name} was refused: {exc}")
+        return RerunOutcome.REFUSED
     except ForgeUnavailable as exc:
         repo.run.hold(exc)
         return None
-    if not accepted:
-        return False
+    if rerun.outcome is not RerunOutcome.ACCEPTED:
+        repo.run.say(f"{repo.repo}'s re-run of {check.name} was {rerun.outcome}: {rerun.detail}")
+        return rerun.outcome
     try:
         await repo.run.post(rerun_marker(repo.repo, check.name, head_sha), head_sha)
     except NotRecorded as exc:
         repo.run.say(f"re-run signature marker write failed (non-fatal): {exc}")
-    return True
+    return RerunOutcome.ACCEPTED
 
 
 async def failed_checks(
-    repo: RepoLanding, head: str, failing: list[Check], checks: list[dict[str, Any]], identity: dict[str, Any]
+    repo: RepoLanding, head: str, verdict: Verdict, checks: list[dict[str, Any]], identity: dict[str, Any]
 ) -> RepoState:
-    """Route owned failures and rerun inherited failures once, independent of how the revision lands."""
+    """Route owned failures and rerun inherited failures once, independent of how the revision lands. An inherited
+    failure waits for every check on the head to conclude before it is re-run or charged."""
     run = repo.run
     if not all(inherited(check["base_red"]) for check in checks):
         run.say(f"{repo.repo} has a terminal CI check failure — will not re-poll")
         return Failure(({**identity, "decision": FAILED, "checks": checks},))
+    if verdict.pending:
+        run.say(f"{repo.repo}'s failing checks are inherited from the base — a check is still running; re-polling")
+        return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish")
+    failing = verdict.failing
     unsigned = [
         check
         for check in failing
@@ -173,10 +187,13 @@ async def failed_checks(
         and rerun_marker(repo.repo, check.name, head) not in run.visit.marker_names()
     ]
     if unsigned:
-        accepted = [await rerun_once(repo, check, head) for check in unsigned]
-        if False in accepted:
+        outcomes = [await rerun_once(repo, check, head) for check in unsigned]
+        if RerunOutcome.REFUSED in outcomes:
             run.say(f"{repo.repo}'s failing checks could not be re-run — will not re-poll")
             return Failure(({**identity, "decision": FAILED, "checks": checks},))
+        if RerunOutcome.RUN_IN_PROGRESS in outcomes:
+            run.say(f"{repo.repo}'s run is still going — the re-run waits; re-polling")
+            return Waiting(f"{repo.repo}'s inherited failures wait for the run to finish")
         run.say(f"{repo.repo}'s failing checks are inherited from the base — re-requested once; re-polling")
         return Waiting(f"{repo.repo}'s inherited failures re-run")
     rows = [

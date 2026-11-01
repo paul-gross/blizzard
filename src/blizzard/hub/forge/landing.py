@@ -57,6 +57,15 @@ class UpdateOutcome(StrEnum):
     REFUSED = "refused"
 
 
+class RerunOutcome(StrEnum):
+    """``run-in-progress`` when the forge refused because the run is still going; ``refused`` for any other refusal
+    (permissions, not an Actions job, a stale attempt)."""
+
+    ACCEPTED = "accepted"
+    RUN_IN_PROGRESS = "run-in-progress"
+    REFUSED = "refused"
+
+
 class UpdateMethod(StrEnum):
     MERGE = "merge"
     REBASE = "rebase"
@@ -154,6 +163,16 @@ class Change:
 class Update:
     outcome: UpdateOutcome
     method: UpdateMethod
+
+
+@domain_model
+@dataclass(frozen=True)
+class Rerun:
+    """The forge's answer to one re-run request. ``detail`` is the forge's own status and message, carried for
+    display only."""
+
+    outcome: RerunOutcome
+    detail: str = ""
 
 
 @domain_model
@@ -304,8 +323,8 @@ class IForgeChecks(Protocol):
         """The checks that decide whether change ``number`` may merge, read where the forge ran them."""
         ...
 
-    async def rerun_check(self, id: str) -> bool:
-        """Whether the forge accepted the re-run."""
+    async def rerun_check(self, id: str) -> Rerun:
+        """Whether the forge accepted the re-run, and if not, whether it refused because the run is still going."""
         ...
 
 

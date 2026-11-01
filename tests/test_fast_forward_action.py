@@ -7,8 +7,8 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.domain.config.landing_policies import LandingPolicy
-from blizzard.hub.forge.landing import CommitSummary, ComparisonStatus, FileChange, ForgeRejected
-from tests.github_double import RED, comparison
+from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
+from tests.github_double import RED, check, comparison
 from tests.test_land_action import _SUBMITTED, _WIDGET, _forge, _land, _row, _Sink, _visit
 
 pytestmark = pytest.mark.component
@@ -54,6 +54,17 @@ def test_inherited_failure_uses_shared_rerun_rule():
     assert answer.choice == "pending"
     assert forge.writes() == ["rerun_check"]
     assert f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}" in sink.markers()
+
+
+def test_inherited_failure_waits_without_a_rerun_while_a_check_is_pending():
+    forge = _ahead()
+    state = forge.repo(_WIDGET)
+    state.checks[_SUBMITTED] = (*RED, check("e2e", CheckOutcome.PENDING, "in_progress", id="2"))
+    state.checks["base-tip"] = RED
+    answer, sink = _land(forge, _fast_visit())
+    assert answer.choice == "pending"
+    assert not forge.writes()
+    assert not any(name.startswith("ci-rerun/") for name in sink.markers())
 
 
 @pytest.mark.parametrize(
