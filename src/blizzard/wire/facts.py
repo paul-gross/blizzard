@@ -7,24 +7,11 @@ Completions ride neither, since they carry the next-node envelope in their reply
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
-
-
-class ExternalSubscriptionUsageWindowFact(BaseModel):
-    """One complete subscription-usage window accepted from a runner fact.
-
-    The numeric fields are strict: a ``bool`` is refused where a number belongs.
-    ``resets_at`` stays lax and accepts an ISO-8601 string."""
-
-    window: str = Field(strict=True)
-    utilization_pct: float = Field(ge=0, le=100, allow_inf_nan=False, strict=True)
-    resets_at: datetime
-    window_seconds: int = Field(gt=0, strict=True)
 
 
 class RunnerFact(BaseModel):
