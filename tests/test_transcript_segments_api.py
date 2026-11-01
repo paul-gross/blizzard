@@ -20,7 +20,10 @@ from blizzard.hub.domain.observability.transcripts import (
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
 from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
-from tests.test_fleet_auth import enroll_runner, register_runner
+from tests.test_fleet_auth import (
+    enroll_runner,
+    register_runner,
+)
 
 pytestmark = pytest.mark.component
 
@@ -81,7 +84,7 @@ def _seed_enrolled(hub: HubHarness, runner_id: str = "runner-a", workspace_id: s
     return enroll_runner(hub, runner_id)
 
 
-def ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
+def ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])

@@ -207,7 +207,9 @@ def _ctx_for_unit(store: SqlAlchemyRunnerStore, *, check_runner: FakeCheckRunner
     )
 
 
-def _lease_and_bindings(store: SqlAlchemyRunnerStore, *, checks_cwd=None, checks_timeout=None):
+def _lease_and_bindings(
+    store: SqlAlchemyRunnerStore, *, checks_cwd: str | None = None, checks_timeout: int | None = None
+):
     _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1, workdir="/ws/e1")
     lease = store.lease("lease_b")
     assert lease is not None

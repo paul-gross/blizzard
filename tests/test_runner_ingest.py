@@ -5,7 +5,6 @@ reset archive ingests back."""
 
 from __future__ import annotations
 
-import hashlib
 import tomllib
 from collections.abc import Callable
 from datetime import timedelta
@@ -21,6 +20,7 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import runners as runners_cli
+from blizzard.runner.cli.daemon import Door
 from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.composition import (
     DotenvTokenFiles,
@@ -78,10 +78,6 @@ def _engine(root: Path) -> sa.Engine:
 
 def _ingest(hub: FakeInitHub, hosts: TwoHosts, *extra: str, source: Path | None = None):
     return run(hub, "ingest", str(source or hosts.there), "--runner", MOVING, "--dir", str(hosts.here), *extra)
-
-
-def _hashes(directory: Path) -> dict[str, str]:
-    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(directory.iterdir()) if p.is_file()}
 
 
 def _source_store_bytes(hosts: TwoHosts) -> dict[str, bytes]:
@@ -234,9 +230,11 @@ def test_ingest_is_refused_while_anything_answers_on_a_socket_of_the_source(
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     answering = hosts.there.resolve() / socket
-    monkeypatch.setattr(
-        runners_cli, "daemon_holding", lambda sock, _trace: f"a host answers at {sock}" if sock == answering else None
-    )
+
+    def holding(sock: Path, _door: Door) -> str | None:
+        return f"a host answers at {sock}" if sock == answering else None
+
+    monkeypatch.setattr(runners_cli, "daemon_holding", holding)
     _refuse(fake_init_hub, hosts, f"the source is running (a host answers at {answering})")
 
 
@@ -585,7 +583,11 @@ def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves
     _pre_host_directory(legacy)
     store = HostLayout(legacy).legacy_store_path
     probed: list[Path] = []
-    monkeypatch.setattr(runners_cli, "daemon_holding", lambda sock, _trace: probed.append(sock))
+
+    def holding(sock: Path, _door: Door) -> None:
+        probed.append(sock)
+
+    monkeypatch.setattr(runners_cli, "daemon_holding", holding)
     untouched = store.read_bytes()
 
     result = _ingest(fake_init_hub, hosts, source=legacy)
@@ -627,9 +629,11 @@ def test_ingest_is_refused_while_a_runner_answers_in_a_directory_that_has_not_gr
     legacy = tmp_path / "pre-host"
     _pre_host_directory(legacy)
     answering = legacy.resolve() / "runner.sock"
-    monkeypatch.setattr(
-        runners_cli, "daemon_holding", lambda sock, _trace: f"a runner answers at {sock}" if sock == answering else None
-    )
+
+    def holding(sock: Path, _door: Door) -> str | None:
+        return f"a runner answers at {sock}" if sock == answering else None
+
+    monkeypatch.setattr(runners_cli, "daemon_holding", holding)
     _refuse(fake_init_hub, hosts, f"the source is running (a runner answers at {answering})", source=legacy)
 
 

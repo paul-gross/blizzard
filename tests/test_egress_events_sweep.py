@@ -8,7 +8,7 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
-from typing import Literal, TypedDict, Unpack
+from typing import Literal, TypedDict, Unpack, cast
 
 import duckdb
 import pytest
@@ -256,7 +256,7 @@ def test_an_events_manifest_names_the_extractor_version_and_a_steps_manifest_doe
     world.derive("sg_a", 1)
     world.sweep()
 
-    by_dataset = {m["files"][0]["dataset"]: m for m in world.manifests()}  # type: ignore[index]
+    by_dataset = {cast("list[dict[str, object]]", m["files"])[0]["dataset"]: m for m in world.manifests()}
     assert by_dataset["events"]["extractor_version"] == EXTRACTOR_VERSION
     assert "extractor_version" not in by_dataset["steps"]
     assert "extractor_version" not in by_dataset["invocations"]

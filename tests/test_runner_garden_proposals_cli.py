@@ -6,6 +6,8 @@ route itself (authorization, hub forward, 403/404/503) is the component tier's
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 import httpx2
 import pytest
 from click.testing import CliRunner
@@ -37,18 +39,19 @@ class _FakeResponse:
         return self._payload
 
 
-class _RejectingResponse:
+class _RejectingResponse(httpx2.Response):
     def __init__(self, detail: dict[str, object] | None = None) -> None:
+        super().__init__(403)
         self._detail = detail or {}
 
-    def raise_for_status(self) -> None:
+    def raise_for_status(self) -> NoReturn:
         raise httpx2.HTTPStatusError(
             "403 forbidden",
             request=httpx2.Request("GET", "http://hub.test"),
-            response=self,  # type: ignore[arg-type]
+            response=self,
         )
 
-    def json(self) -> object:
+    def json(self, **kwargs: object) -> object:
         return self._detail
 
 

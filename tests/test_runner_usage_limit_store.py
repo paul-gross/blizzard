@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.runner.leases.overload import InvocationKind
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitStore
 from blizzard.runner.store.runner_guard import UnscopedRunnerStatement
@@ -24,7 +25,9 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
-def _mark(at: datetime, *, generation: int = 1, kind: str = "worker", detail: str = "limit reached") -> UsageLimitMark:
+def _mark(
+    at: datetime, *, generation: int = 1, kind: InvocationKind = "worker", detail: str = "limit reached"
+) -> UsageLimitMark:
     return UsageLimitMark(
         marked_at=at,
         resets_at=at + timedelta(hours=5),
@@ -35,7 +38,7 @@ def _mark(at: datetime, *, generation: int = 1, kind: str = "worker", detail: st
         lease_id="lease_1",
         epoch=1,
         generation=generation,
-        invocation_kind=kind,  # type: ignore[arg-type]
+        invocation_kind=kind,
     )
 
 

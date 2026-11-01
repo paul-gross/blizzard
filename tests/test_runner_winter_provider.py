@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -28,13 +29,13 @@ class FakeWinter:
     def ensure_ready(self, workspace_root: Path) -> None:
         self.ready += 1
 
-    def run(self, workspace_root: Path, args) -> None:
+    def run(self, workspace_root: Path, args: Sequence[str]) -> None:
         args = list(args)
         if self.fail_on is not None and args[: len(self.fail_on)] == self.fail_on:
             raise RuntimeError("scripted winter failure")
         self.runs.append(args)
 
-    def capture(self, workspace_root: Path, args) -> str:
+    def capture(self, workspace_root: Path, args: Sequence[str]) -> str:
         self.captures.append(list(args))
         if list(args)[:2] == ["ws", "worktrees"]:
             return json.dumps(self.worktrees)
@@ -56,8 +57,8 @@ class FakeGit:
         return self._origins.get(str(repo_workdir), f"file:///origins/{Path(repo_workdir).name}.git")
 
 
-def _provider(root: str, pool, **kw):
-    return WinterWorkspaceProvider(root, env_pool=pool, winter=FakeWinter(), git=FakeGit(), **kw)
+def _provider(root: str, pool: Sequence[str]) -> WinterWorkspaceProvider:
+    return WinterWorkspaceProvider(root, env_pool=pool, winter=FakeWinter(), git=FakeGit())
 
 
 @pytest.mark.unit
@@ -193,7 +194,7 @@ def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
     resume = threading.Event()
 
     class BlockingWinter(FakeWinter):
-        def run(self, workspace_root: Path, args) -> None:
+        def run(self, workspace_root: Path, args: Sequence[str]) -> None:
             if list(args) == ["ws", "init", "e1"]:
                 entered.set()
                 assert resume.wait(timeout=5)

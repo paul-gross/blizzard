@@ -93,7 +93,7 @@ def _seed(tmp_path: Path):
     return hub, token, nodes, {"a": a, "b": b, "c": c, "d": d}
 
 
-def _get(hub, token: str, path: str, **params: str):
+def _get(hub: HubHarness, token: str, path: str, **params: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/analytics/{path}", params=params, headers=cookie(token))
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -173,7 +173,8 @@ def test_outcomes_count_only_attempts_with_a_matching_usage_fact(tmp_path: Path)
 
     def outcome(**params: str) -> dict[str, Any]:
         rows = _get(hub, token, "outcomes/nodes", **params)["outcomes"]
-        return next((r for r in rows if r["node_id"] == build), {"choice_counts": {}, "attempt_failures": 0})
+        absent: dict[str, Any] = {"choice_counts": {}, "attempt_failures": 0}
+        return next((r for r in rows if r["node_id"] == build), absent)
 
     assert outcome() == {"node_id": build, "choice_counts": {"pass": 3, "fail": 1}, "attempt_failures": 1}
     assert outcome(model="m-a") == {"node_id": build, "choice_counts": {"pass": 1, "fail": 1}, "attempt_failures": 1}

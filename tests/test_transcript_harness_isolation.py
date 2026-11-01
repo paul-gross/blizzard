@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
@@ -103,7 +103,7 @@ def _two_harness_ctx():
     return replace(ctx, harnesses=registry, transcripts_wired=True), source_a, source_b
 
 
-def _seed_open_segment(ctx, *, chunk_id: str, lease_id: str, env_id: str, harness_id: str) -> None:
+def _seed_open_segment(ctx: LoopContext, *, chunk_id: str, lease_id: str, env_id: str, harness_id: str) -> None:
     ctx.stores.environments.record_binding(
         chunk_id=chunk_id, environment_id=env_id, workdir=f"/ws/{env_id}", bound_at=_NOW
     )

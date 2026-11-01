@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -69,7 +69,7 @@ def _live_credentials(path: Path, clock: FixedClock) -> Path:
 
 def _sampler(
     credentials_path: Path,
-    handler,
+    handler: Callable[[httpx2.Request], httpx2.Response],
     *,
     clock: FixedClock | None = None,
 ) -> OpenAISubscriptionSampler:

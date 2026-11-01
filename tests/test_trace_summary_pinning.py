@@ -36,7 +36,9 @@ def test_a_runner_step_on_a_runner_node_is_executed_by_the_runner() -> None:
 def test_a_hub_step_on_a_hub_node_is_executed_by_the_hub() -> None:
     facts = fx.scenarios()["hub-step"]
     step = _first(facts, StepKind.HUB)
-    assert facts.graphs["g1"].node_by_id(step.position.node_id).executor is Executor.HUB  # type: ignore[union-attr]
+    node = facts.graphs["g1"].node_by_id(step.position.node_id)
+    assert node is not None
+    assert node.executor is Executor.HUB
     assert node_executor(facts, step) == "hub"
 
 

@@ -1,5 +1,8 @@
 """The NDJSON and Parquet bindings on a real directory."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
+# pyarrow ships no type information, so every read-back through it is unknown to the checker.
+
 from __future__ import annotations
 
 import gzip
@@ -10,7 +13,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 import duckdb
 import pyarrow as pa
@@ -40,12 +43,15 @@ from tests.test_egress_writer import PASS, SCHEMA, batch, row
 pytestmark = pytest.mark.component
 
 SETTINGS = EgressWriterSettings(max_rows_per_file=2, min_free_bytes=0)
-FORMATS = ["ndjson", "parquet"]
-EXTENSIONS = {"ndjson": "ndjson.gz", "parquet": "parquet"}
+type EgressFormat = Literal["ndjson", "parquet"]
+FORMATS: list[EgressFormat] = ["ndjson", "parquet"]
+EXTENSIONS: dict[EgressFormat, str] = {"ndjson": "ndjson.gz", "parquet": "parquet"}
 
 
-def make(fmt: str, directory: Path, token: str = "k7q2", settings: EgressWriterSettings = SETTINGS) -> IEgressWriter:
-    writer = build_egress_writer(fmt, directory, settings, token)  # type: ignore[arg-type]
+def make(
+    fmt: EgressFormat, directory: Path, token: str = "k7q2", settings: EgressWriterSettings = SETTINGS
+) -> IEgressWriter:
+    writer = build_egress_writer(fmt, directory, settings, token)
     assert not isinstance(writer, EgressUnavailable)
     return writer
 
@@ -58,7 +64,7 @@ def files_outside_staging(directory: Path) -> set[str]:
     }
 
 
-def read_back(fmt: str, path: Path) -> list[dict[str, object]]:
+def read_back(fmt: EgressFormat, path: Path) -> list[dict[str, object]]:
     if fmt == "ndjson":
         with gzip.open(path, "rt") as handle:
             return [json.loads(line) for line in handle]
@@ -71,7 +77,7 @@ def written(result: object) -> tuple[PlacedFile, ...]:
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_rows_round_trip_with_nulls_money_lists_and_times(fmt: str, tmp_path: Path) -> None:
+def test_rows_round_trip_with_nulls_money_lists_and_times(fmt: EgressFormat, tmp_path: Path) -> None:
     when = datetime(2026, 10, 1, 1, 2, 3, 456789, tzinfo=UTC)
     rows = (
         row("p1", at=when, cost=Decimal("12.5"), tags=["a", "b"]),
@@ -121,7 +127,7 @@ def test_ndjson_negative_zero_money_and_identical_rows_give_identical_bytes(tmp_
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_a_partition_splits_across_files_with_distinct_names_and_backfill_names_sort_by_pass(
-    fmt: str, tmp_path: Path
+    fmt: EgressFormat, tmp_path: Path
 ) -> None:
     writer = make(fmt, tmp_path)
     rows = tuple(row(f"p{i}") for i in range(5))
@@ -138,7 +144,7 @@ def test_a_partition_splits_across_files_with_distinct_names_and_backfill_names_
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_two_writers_with_different_tokens_never_collide(fmt: str, tmp_path: Path) -> None:
+def test_two_writers_with_different_tokens_never_collide(fmt: EgressFormat, tmp_path: Path) -> None:
     one, two = make(fmt, tmp_path, "aaaa"), make(fmt, tmp_path, "bbbb")
     paths = {f.path for w in (one, two) for f in written(w.write(batch(*(row(f"p{i}") for i in range(3)))))}
     assert len(paths) == 4
@@ -219,7 +225,9 @@ def test_a_missing_directory_fails_the_write_without_creating_it(tmp_path: Path)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_commit_pass_writes_the_manifest_last_listing_exactly_the_files_passed(fmt: str, tmp_path: Path) -> None:
+def test_commit_pass_writes_the_manifest_last_listing_exactly_the_files_passed(
+    fmt: EgressFormat, tmp_path: Path
+) -> None:
     writer = make(fmt, tmp_path)
     files = written(writer.write(batch(*(row(f"p{i}") for i in range(3)))))
     committed = writer.commit_pass(PASS, files[:2])
@@ -235,7 +243,7 @@ def test_commit_pass_writes_the_manifest_last_listing_exactly_the_files_passed(f
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_live_and_backfill_manifests_account_for_every_file_once(fmt: str, tmp_path: Path) -> None:
+def test_live_and_backfill_manifests_account_for_every_file_once(fmt: EgressFormat, tmp_path: Path) -> None:
     writer = make(fmt, tmp_path)
     for egress_pass in (PASS, EgressPass(PASS.started_at, True)):
         files = written(
@@ -291,7 +299,9 @@ def _plant_schema(directory: Path, schema: DatasetSchema) -> bytes:
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_an_existing_schema_the_current_one_only_adds_nullable_columns_to_is_replaced(fmt: str, tmp_path: Path) -> None:
+def test_an_existing_schema_the_current_one_only_adds_nullable_columns_to_is_replaced(
+    fmt: EgressFormat, tmp_path: Path
+) -> None:
     _plant_schema(tmp_path, _with_columns(_ID, _OK, _AT, _COST))
     written = make(fmt, tmp_path).write(batch(row()))
     assert isinstance(written, FilesWritten) and len(written.files) == 1
@@ -323,7 +333,7 @@ def test_an_existing_schema_differing_by_more_than_added_nullable_columns_is_a_c
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_below_min_free_bytes_nothing_is_written(fmt: str, tmp_path: Path) -> None:
+def test_below_min_free_bytes_nothing_is_written(fmt: EgressFormat, tmp_path: Path) -> None:
     settings = EgressWriterSettings(max_rows_per_file=2, min_free_bytes=2**62)
     writer = make(fmt, tmp_path, settings=settings)
     for result in (writer.write(batch(row())), writer.commit_pass(PASS, ())):
@@ -333,7 +343,7 @@ def test_below_min_free_bytes_nothing_is_written(fmt: str, tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_an_invalid_row_writes_nothing(fmt: str, tmp_path: Path) -> None:
+def test_an_invalid_row_writes_nothing(fmt: EgressFormat, tmp_path: Path) -> None:
     result = make(fmt, tmp_path).write(batch(row("p1"), row("p2", cost=1.5)))
     assert isinstance(result, EgressFailure) and result.cause is EgressFailureCause.INVALID_ROW
     assert list(tmp_path.iterdir()) == []
@@ -341,16 +351,18 @@ def test_an_invalid_row_writes_nothing(fmt: str, tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("fmt", FORMATS)
 @pytest.mark.parametrize("poison", ["a\ud800", ["ok", "b\udfff"]])
-def test_a_lone_surrogate_is_an_invalid_row_in_both_formats(fmt: str, poison: object, tmp_path: Path) -> None:
+def test_a_lone_surrogate_is_an_invalid_row_in_both_formats(
+    fmt: EgressFormat, poison: str | list[str], tmp_path: Path
+) -> None:
     column = "tags" if isinstance(poison, list) else "id"
-    result = make(fmt, tmp_path).write(batch(row("p1", **{column: poison})))
+    result = make(fmt, tmp_path).write(batch(row("p1", tags=poison) if column == "tags" else row("p1", id=poison)))
     assert isinstance(result, EgressFailure) and result.cause is EgressFailureCause.INVALID_ROW
     assert result.message == f"row 0, column {column}: not encodable as UTF-8"
     assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_the_docs_load_recipe_reads_only_the_files_a_manifest_names(fmt: str, tmp_path: Path) -> None:
+def test_the_docs_load_recipe_reads_only_the_files_a_manifest_names(fmt: EgressFormat, tmp_path: Path) -> None:
     writer = make(fmt, tmp_path)
     written = writer.write(batch(row("p1", id="named-1"), row("p2", id="named-2")))
     assert isinstance(written, FilesWritten)
@@ -381,7 +393,7 @@ def test_parquet_is_unavailable_without_pyarrow_and_never_raises(
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_the_docs_load_recipe_reads_files_from_before_a_nullable_column_was_added_as_null_in_it(
-    fmt: str, tmp_path: Path
+    fmt: EgressFormat, tmp_path: Path
 ) -> None:
     older = _with_columns(_ID, _N, _OK, _AT, _COST)
     for token, schema, minute, id_ in (("aaaa", older, 15, "before"), ("bbbb", SCHEMA, 16, "after")):

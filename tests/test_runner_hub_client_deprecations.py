@@ -16,7 +16,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import pytest
@@ -93,7 +93,7 @@ def _deprecated_keys(schema: dict[str, Any] | None, body: Any, trail: str = "") 
     found: list[str] = []
     if isinstance(body, dict):
         properties = schema.get("properties", {})
-        for key, value in body.items():
+        for key, value in cast("dict[str, object]", body).items():
             prop = properties.get(key)
             if prop is None:
                 continue
@@ -102,7 +102,7 @@ def _deprecated_keys(schema: dict[str, Any] | None, body: Any, trail: str = "") 
             found += _deprecated_keys(_member(prop), value, f"{trail}{key}.")
     elif isinstance(body, list) and body:
         items = schema.get("items") or _member(schema)
-        for element in body:
+        for element in cast("list[object]", body):
             found += _deprecated_keys(items, element, trail)
     return found
 
@@ -143,7 +143,7 @@ def _recording() -> tuple[httpx2.Client, list[Call]]:
     return httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)), calls
 
 
-_TRANSCRIPT = {
+_TRANSCRIPT: dict[str, Any] = {
     "segment_id": "s",
     "chunk_id": "ch_1",
     "node_id": "n",

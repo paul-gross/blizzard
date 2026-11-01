@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -26,17 +27,28 @@ _CORPUS_DIRS: dict[str, Path] = {
 }
 
 
+def _json_object(node: object) -> dict[str, object] | None:
+    """``node`` as a decoded JSON object — whose keys are always strings — or ``None``."""
+    return cast("dict[str, object]", node) if isinstance(node, dict) else None
+
+
+def _json_array(node: object) -> list[object] | None:
+    """``node`` as a decoded JSON array, or ``None``."""
+    return cast("list[object]", node) if isinstance(node, list) else None
+
+
 def _synthetic_fixtures(version_dir: Path) -> set[str]:
     """File names its version's manifest marks ``source: synthetic``; none without a manifest."""
     manifest = version_dir / "manifest.json"
     if not manifest.is_file():
         return set()
-    fixtures = json.loads(manifest.read_text()).get("fixtures", [])
-    return {
-        str(Path(fixture["path"]).name)
-        for fixture in fixtures
-        if isinstance(fixture, dict) and fixture.get("source") == "synthetic" and "path" in fixture
-    }
+    decoded = _json_object(json.loads(manifest.read_text())) or {}
+    names: set[str] = set()
+    for fixture in _json_array(decoded.get("fixtures", [])) or []:
+        entry = _json_object(fixture)
+        if entry is not None and entry.get("source") == "synthetic" and "path" in entry:
+            names.add(Path(str(entry["path"])).name)
+    return names
 
 
 def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
@@ -45,19 +57,17 @@ def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
     inputs: dict[str, set[str]] = {}
 
     def _walk(node: object) -> None:
-        if isinstance(node, dict):
-            tool = node.get("tool")
+        obj = _json_object(node)
+        if obj is not None:
+            tool = obj.get("tool")
             if isinstance(tool, str):
-                state = node.get("state")
-                keys = (
-                    set(state["input"]) if isinstance(state, dict) and isinstance(state.get("input"), dict) else set()
-                )
-                inputs.setdefault(tool, set()).update(keys)
-            for value in node.values():
+                state = _json_object(obj.get("state"))
+                tool_input = _json_object(state.get("input")) if state is not None else None
+                inputs.setdefault(tool, set()).update(tool_input or set())
+            for value in obj.values():
                 _walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item)
+        for item in _json_array(node) or []:
+            _walk(item)
 
     for version_dir in sorted(p for p in corpus_dir.iterdir() if p.is_dir()):
         synthetic = _synthetic_fixtures(version_dir)

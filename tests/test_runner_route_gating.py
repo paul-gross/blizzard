@@ -7,13 +7,14 @@ status the gate produces; an unclassified route or a stale lane entry fails the 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
 import httpx2
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from starlette.datastructures import State
 
@@ -158,7 +159,9 @@ def test_every_live_route_is_classified() -> None:
     """No route is unclassified: every live ``(method, path)`` appears in exactly one
     lane — a newly added, unnamed route fails here."""
     client = _oauth_app()
-    live = {(m, path) for path, r in live_api_routes(client.app) for m in (r.methods or set()) if m != "HEAD"}  # type: ignore[arg-type]
+    app = client.app
+    assert isinstance(app, FastAPI)
+    live = {(m, path) for path, r in live_api_routes(app) for m in (r.methods or set[str]()) if m != "HEAD"}
     classified = _HUMAN | _OPEN
     assert not (live - classified), f"unclassified route(s): {sorted(live - classified)}"
     assert not (classified - live), f"lane entry naming a route no longer mounted: {sorted(classified - live)}"
@@ -266,13 +269,13 @@ def test_an_absent_expired_or_foreign_session_cookie_is_refused_401(cookie: str 
     ],
 )
 def test_each_auth_seam_resolves_when_wired_and_refuses_503_naming_itself_when_not(
-    accessor: object, seam: str, named: str
+    accessor: Callable[[RunnerWiring], object], seam: str, named: str
 ) -> None:
     wired = State()
     setattr(wired, seam, sentinel := object())
-    assert accessor(RunnerWiring(wired)) is sentinel  # type: ignore[operator]
+    assert accessor(RunnerWiring(wired)) is sentinel
     with pytest.raises(HTTPException) as refused:
-        accessor(RunnerWiring(State()))  # type: ignore[operator]
+        accessor(RunnerWiring(State()))
     assert (refused.value.status_code, refused.value.detail) == (
         503,
         f"{named} not wired — start via `blizzard runner host`",

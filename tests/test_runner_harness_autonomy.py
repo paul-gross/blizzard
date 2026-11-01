@@ -501,7 +501,7 @@ def test_takeover_command_carries_no_bundle_flags(tmp_path: Path) -> None:
 def test_argv_and_env_ignore_the_bundle_key(tmp_path: Path, make: Callable[..., Any]) -> None:
     plain = _load(tmp_path, "")
     keyed = _load(tmp_path, f'[runner.harness]\nconfig_dir = "{tmp_path}"\n')
-    launches = []
+    launches: list[tuple[list[list[str]], list[dict[str, str]]]] = []
     for config in (plain, keyed):
         launcher = _RecordingLauncher()
         _unattended(make(launcher, autonomy=config.autonomy), tmp_path, launcher)

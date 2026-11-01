@@ -68,7 +68,8 @@ class _CapturingMetricExporter(MetricExporter):
             for resource_metrics in data.resource_metrics
             for scope_metrics in resource_metrics.scope_metrics
             for metric in scope_metrics.metrics
-            for point in metric.data.data_points  # type: ignore[union-attr]
+            for point in metric.data.data_points
+            if isinstance(point, NumberDataPoint)
         ]
 
 

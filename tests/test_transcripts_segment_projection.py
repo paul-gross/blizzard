@@ -10,6 +10,7 @@ from dataclasses import fields
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import BaseModel
 
 from blizzard.foundation.transcripts import TurnKind
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
@@ -210,7 +211,7 @@ _FOLDED_TOOL_FIELDS = {"input_truncated": "folds into Turn.truncated"}
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("view", "domain"), [(ToolCallSegmentView, ToolCall), (SidechainSegmentView, Sidechain)])
-def test_every_wire_field_has_a_domain_counterpart(view: type, domain: type) -> None:
+def test_every_wire_field_has_a_domain_counterpart(view: type[BaseModel], domain: type) -> None:
     """A field-set guard: the projection is hand-written per field, so a new wire field is
     silently dropped until mapped — how ``output_patch`` and ``parent_tool_use_id`` reached a
     schema the runner could never populate."""

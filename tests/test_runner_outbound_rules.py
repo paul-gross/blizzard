@@ -12,6 +12,7 @@ from typing import TypedDict, Unpack
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.runner.hub.client import ClaimConflict, ClaimedRoute, RouteClaimOutcome
 from blizzard.runner.hub.outbound import OutboundFacts
@@ -20,6 +21,7 @@ from blizzard.runner.hub.outbound_buffer import (
     DECISION_KIND,
     OUTBOUND_TRANSITIONS,
     BufferedFact,
+    OutboundFactEntry,
     answer_delivered_payload,
     command_failed_event,
     escalation_payload,
@@ -214,29 +216,69 @@ def test_event_payload_carries_every_field() -> None:
 
 @dataclass
 class _RecordingOutbound:
-    rows: list[dict[str, object]] = field(default_factory=list)
+    """An :class:`IWriteOutboundRepository` that records each enqueued row; nothing else is exercised."""
 
-    def enqueue_outbound(self, **row: object) -> int:
-        self.rows.append(row)
+    rows: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
+
+    def enqueue_outbound(
+        self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
+    ) -> int:
+        self.rows.append(
+            {"kind": kind, "chunk_id": chunk_id, "lease_id": lease_id, "payload": payload, "created_at": created_at}
+        )
         return len(self.rows)
+
+    def pending_submission_lease_ids(self) -> set[str]:
+        raise NotImplementedError
+
+    def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
+        raise NotImplementedError
+
+    def pending_outbound_count(self) -> int:
+        raise NotImplementedError
+
+    def recent_outbound(self, limit: int) -> list[OutboundFactEntry]:
+        raise NotImplementedError
+
+    def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
+        raise NotImplementedError
+
+    def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
+        raise NotImplementedError
+
+    def prune_outbound(self, *, now: datetime) -> int:
+        raise NotImplementedError
+
+
+class _NoTokens:
+    """An :class:`IReadTokenRepository` an event never consults."""
+
+    def route_token(self, chunk_id: str) -> str | None:
+        raise NotImplementedError
+
+    def lease_token_hash(self, lease_id: str) -> str | None:
+        raise NotImplementedError
+
+    def lease_for_token_hash(self, token_hash: str) -> str | None:
+        raise NotImplementedError
 
 
 @dataclass
 class _OutboundOnlyStores:
     outbound: _RecordingOutbound = field(default_factory=_RecordingOutbound)
-    tokens: object = None
+    tokens: _NoTokens = field(default_factory=_NoTokens)
 
 
 @dataclass
 class _OutboundOnlyContext:
     stores: _OutboundOnlyStores = field(default_factory=_OutboundOnlyStores)
-    clock: object = None
+    clock: FixedClock = field(default_factory=lambda: FixedClock(_T0))
     events: None = None
 
 
 def test_outbound_event_enqueues_the_event_payload_under_its_chunk_and_lease() -> None:
     ctx = _OutboundOnlyContext()
-    OutboundFacts(ctx).event(kind="command-failed", at=_T0, **_EVENT_FIELDS)  # type: ignore[arg-type]
+    OutboundFacts(ctx).event(kind="command-failed", at=_T0, **_EVENT_FIELDS)
     [row] = ctx.stores.outbound.rows
     assert (row["kind"], row["chunk_id"], row["lease_id"], row["created_at"]) == (
         "event.recorded",

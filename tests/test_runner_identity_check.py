@@ -25,6 +25,7 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import (
     HubVersionWindow,
@@ -99,7 +100,9 @@ def _ctx(
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+        ),
         probe=FakeProbe(alive=set()),
         clock=FixedClock(_NOW),
         registered=registered,

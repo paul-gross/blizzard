@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Unpack
 
 import pytest
+from sqlalchemy import Engine
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import ClauseElement, visitors
@@ -636,7 +637,7 @@ def _derive(store: TranscriptEventStore, segment_id: str) -> None:
     )
 
 
-def _drop_rows(engine) -> list[Any]:
+def _drop_rows(engine: Engine) -> list[Any]:
     with engine.connect() as conn:
         return list(
             conn.execute(

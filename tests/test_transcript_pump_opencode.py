@@ -20,7 +20,7 @@ from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportErr
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.repo_files import repo_root
 from tests.runner_fakes import (
@@ -50,7 +50,7 @@ def _registry(harness: FakeHarness, source: OpenCodeTranscriptSource) -> Harness
     return HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
 
 
-def _open_segment(ctx) -> str:
+def _open_segment(ctx: LoopContext) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -74,7 +74,7 @@ def _open_segment(ctx) -> str:
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
-def _shipped_turns(ctx) -> list[dict[str, Any]]:
+def _shipped_turns(ctx: LoopContext) -> list[dict[str, Any]]:
     return [
         turn
         for delta in ctx.stores.transcript_ledger.pending_transcript_outbound(limit=50)

@@ -451,8 +451,7 @@ class _FakeTranscriptStore:
         self.runner_bytes += byte_count
 
 
-def _conforms_fake_transcript_store(x: _FakeTranscriptStore) -> IWriteTranscriptSegments:
-    return x
+_conforms_fake_transcript_store: type[IWriteTranscriptSegments] = _FakeTranscriptStore
 
 
 class _NoRunners:

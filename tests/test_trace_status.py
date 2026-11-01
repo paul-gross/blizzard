@@ -7,7 +7,9 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx2
 import pytest
+from httpx2._types import QueryParamTypes
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -69,7 +71,10 @@ def test_status_shows_only_the_origin_in_the_api_and_the_cli(tmp_path: Path) -> 
     assert _status(hub)["endpoint"] == "http://collector:4318"
     assert not any(secret in hub.client.get("/api/traces/status").text for secret in _CREDENTIALS)
 
-    bound = bind_stubs(get=lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
+    def _get(url: str, *, params: QueryParamTypes | None = None, timeout: object, **_: object) -> httpx2.Response:
+        return hub.client.get(url, params=params)
+
+    bound = bind_stubs(get=_get)
     for args in (["traces", "status"], ["traces", "status", "--json"]):
         result = bound.runner.invoke(hub_group, args, env={"BZ_HUB_URL": "http://hub.local:8421"})
         assert result.exit_code == 0, result.output

@@ -14,7 +14,7 @@ import pytest
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
+from blizzard.hub.domain.observability.egress.backfill import BackfillResult, EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
@@ -288,7 +288,11 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     assert sweep is not None
     sweep.sweep()
     closed_step(hub, graph, 1)
-    bound = bind_stubs(post=lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json))
+
+    def _post(url: str, *, json: object = None, params: object = None, timeout: object, **_: object) -> httpx2.Response:
+        return hub.client.post(url, json=json)
+
+    bound = bind_stubs(post=_post)
 
     dry = bound.runner.invoke(
         hub_group,
@@ -307,7 +311,9 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     assert "backfill_max_window" in wide.output
 
 
-def _events_backfill(world: Events, since: datetime, until: datetime, *, dry_run: bool = False) -> tuple:
+def _events_backfill(
+    world: Events, since: datetime, until: datetime, *, dry_run: bool = False
+) -> tuple[BackfillResult, InMemoryEgressWriter]:
     written = InMemoryEgressWriter()
     config = EgressConfig(directory=Path("unused"), settle_seconds=0)
     result = _service(world.hub, config, written).backfill(since, until, dataset="events", dry_run=dry_run)

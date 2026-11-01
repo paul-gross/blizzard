@@ -7,6 +7,7 @@ Driven with an injected ``httpx2.Client`` (an ``httpx2.MockTransport``-backed fa
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
@@ -54,7 +55,7 @@ def _past_expiry_ms(clock: FixedClock, hours: float = 1) -> float:
 
 def _sampler(
     credentials_path: Path,
-    handler,
+    handler: Callable[[httpx2.Request], httpx2.Response],
     *,
     clock: FixedClock | None = None,
 ) -> AnthropicSubscriptionSampler:

@@ -12,6 +12,7 @@ from dataclasses import fields
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 import pytest
 import sqlalchemy as sa
@@ -23,7 +24,7 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
-from blizzard.hub.domain.observability.egress.repository import EventsPosition, UsagePosition
+from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
@@ -31,6 +32,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
 from blizzard.hub.egress.writer import (
+    DatasetSchema,
     EgressBatch,
     EgressFailure,
     EgressFailureCause,
@@ -359,6 +361,16 @@ def test_batch_limit_bounds_a_pass_and_later_passes_take_the_rest_in_order(tmp_p
     assert len(egress_rows(writer, "steps")) == 2
 
 
+def _int(value: object) -> int:
+    assert isinstance(value, int)
+    return value
+
+
+def _decimal(value: object) -> Decimal:
+    assert isinstance(value, Decimal)
+    return value
+
+
 def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_invocations(tmp_path: Path) -> None:
     hub, graph = egress_hub(tmp_path)
     writer = InMemoryEgressWriter()
@@ -377,8 +389,8 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
     invoked = [r for r in egress_rows(writer, "invocations") if r["chunk_id"] == chunk_id]
     assert newest["invocations"] == len(invoked)
     for column in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens"):
-        assert newest[column] == sum(r[column] for r in invoked)  # type: ignore[misc]
-    assert newest["cost_billed_usd"] == sum((r["cost_billed_usd"] for r in invoked), Decimal(0))  # type: ignore[misc]
+        assert newest[column] == sum(_int(r[column]) for r in invoked)
+    assert newest["cost_billed_usd"] == sum((_decimal(r["cost_billed_usd"]) for r in invoked), Decimal(0))
     assert newest["cost_estimated_usd"] == Decimal("0.125000000")
     assert [newest[c] for c in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens")] == [
         111,
@@ -717,7 +729,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
         pass
 
     class DiesBeforeCursor(EgressStore):
-        def append_cursor(self, record) -> None:
+        def append_cursor(self, record: EgressCheckpoint) -> None:
             raise Killed
 
     with pytest.raises(Killed):
@@ -738,7 +750,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
     egress_sweep(hub, second, store=store).sweep()
 
     def rows(prefix: str) -> list[dict[str, object]]:
-        out = []
+        out: list[dict[str, object]] = []
         for path in sorted(directory.glob(f"{prefix}/v1/*/*.ndjson.gz")):
             out += [json.loads(line) for line in _lines(path)]
         return out
@@ -793,9 +805,12 @@ def test_a_missing_directory_fails_the_first_write_not_startup(tmp_path: Path) -
 def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        "blizzard.hub.composition.build_egress_writer", lambda *_args: EgressUnavailable("parquet needs pyarrow")
-    )
+    def without_pyarrow(
+        format: Literal["ndjson", "parquet"], directory: Path, settings: EgressWriterSettings, token: str
+    ) -> EgressUnavailable:
+        return EgressUnavailable("parquet needs pyarrow")
+
+    monkeypatch.setattr("blizzard.hub.composition.build_egress_writer", without_pyarrow)
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _graph = egress_hub(tmp_path, config)
 
@@ -811,7 +826,9 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
     [(STEPS_SCHEMA, ExportedStep), (INVOCATIONS_SCHEMA, ExportedInvocation)],
     ids=["steps", "invocations"],
 )
-def test_each_dataset_schema_names_exactly_its_row_fields_in_order(schema_, row) -> None:
+def test_each_dataset_schema_names_exactly_its_row_fields_in_order(
+    schema_: DatasetSchema, row: type[ExportedStep] | type[ExportedInvocation]
+) -> None:
     assert [c.name for c in schema_.columns] == [f.name for f in fields(row)]
     assert all(c.meaning for c in schema_.columns)
 

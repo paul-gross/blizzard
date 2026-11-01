@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -48,7 +49,9 @@ def test_a_timed_out_run_kills_its_grandchild(tmp_path: Path) -> None:
 
 def test_a_raise_while_a_run_waits_kills_its_grandchild(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pid_file = tmp_path / "gc.pid"
-    real_communicate = subprocess.Popen.communicate
+    real_communicate: Callable[[subprocess.Popen[str], str | None, float | None], tuple[str, str]] = subprocess.Popen[
+        str
+    ].communicate
     raised: list[bool] = []
 
     def interrupted(

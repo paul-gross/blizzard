@@ -204,7 +204,9 @@ def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_its
             return {"detail": "environment 'e1' has no repo 'blizzrd' — it holds ['blizzard', 'blizzard-mock']"}
 
         def raise_for_status(self) -> None:
-            raise httpx2.HTTPStatusError("400", request=httpx2.Request("POST", "http://hub"), response=self)  # type: ignore[arg-type]
+            request = httpx2.Request("POST", "http://hub")
+            response = httpx2.Response(self.status_code, json=self.json(), request=request)
+            raise httpx2.HTTPStatusError("400", request=request, response=response)
 
     bound = bind_stubs(post=lambda *a, **k: _RejectingResponse())
     result = bound.runner.invoke(

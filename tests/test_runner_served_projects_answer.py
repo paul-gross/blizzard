@@ -9,7 +9,9 @@ race."""
 
 from __future__ import annotations
 
+import dataclasses
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.hub.client import ClaimRequest, RunnerAddRefusalReason, RunnerAddRefused
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
@@ -98,13 +101,15 @@ def _ctx(tmp_path: Path, hub: FakeHub, projects: tuple[str, ...] | None) -> Loop
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+        ),
         probe=FakeProbe(alive=set()),
         config=LoopConfig(
             runner_name="r", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, projects=projects
         ),
     )
-    return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
+    return dataclasses.replace(ctx, identity=RunnerIdentityHolder(store.runner_identity()))
 
 
 @pytest.mark.component
@@ -188,7 +193,7 @@ def test_status_shows_the_hubs_answer_to_a_config_naming_none_and_nothing_before
 # --- the wire ---------------------------------------------------------------------------------------
 
 
-def _client(handler) -> HttpHubClient:
+def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpHubClient:
     return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)))
 
 
@@ -240,7 +245,11 @@ def test_an_incompatible_claim_denial_with_or_without_a_reason_is_never_a_lost_r
     extra: dict[str, str], reason: ClaimDenialReason
 ) -> None:
     body = {"chunk_id": "ch_1", "incompatible_runner_id": "rn_1", "detail": "runner does not serve blizzard", **extra}
-    outcome = _client(lambda _request: httpx2.Response(409, json=body)).claim_route(
+
+    def incompatible(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(409, json=body)
+
+    outcome = _client(incompatible).claim_route(
         ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert outcome.conflict is None

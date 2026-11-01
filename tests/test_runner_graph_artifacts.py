@@ -13,9 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
-from blizzard.runner.node_steps.envelope import GraphArtifact
+from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -37,7 +38,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _fill_ctx(store: SqlAlchemyRunnerStore, env):
+def _fill_ctx(store: SqlAlchemyRunnerStore, env: Envelope):
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id=env.graph_id, position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -167,12 +168,12 @@ def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path: Path, 
     )
     ctx = _fill_ctx(store, env)
 
-    seen_at_lease_write = []
+    seen_at_lease_write: list[list[PinnedGraphArtifact]] = []
     original_record_lease = store.record_lease
 
-    def _spy(lease):
+    def _spy(lease: NewLease) -> None:
         seen_at_lease_write.append(store.graph_artifacts_for_graph(lease.graph_id))
-        return original_record_lease(lease)
+        original_record_lease(lease)
 
     monkeypatch.setattr(store, "record_lease", _spy)
     Fill(ctx).run()

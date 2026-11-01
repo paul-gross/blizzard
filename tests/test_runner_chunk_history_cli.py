@@ -40,16 +40,8 @@ class _FakeResponse:
         return self._payload
 
 
-class _RejectingResponse:
-    def __init__(self, detail: dict[str, object] | None = None) -> None:
-        self._detail = detail or {}
-
-    def raise_for_status(self) -> None:
-        request = httpx2.Request("GET", "http://runner.local")
-        raise httpx2.HTTPStatusError("403 forbidden", request=request, response=self)  # type: ignore[arg-type]
-
-    def json(self) -> object:
-        return self._detail
+def _rejecting(detail: dict[str, object]) -> httpx2.Response:
+    return httpx2.Response(403, json=detail, request=httpx2.Request("GET", "http://runner.local"))
 
 
 @pytest.mark.unit
@@ -109,7 +101,7 @@ def test_history_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.unit
 def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail() -> None:
-    bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"}))
+    bound = bind_stubs(get=lambda *a, **k: _rejecting({"detail": "presented token does not authorize lease"}))
     result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code != 0
@@ -118,9 +110,7 @@ def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail() -> None:
 
 @pytest.mark.unit
 def test_history_surfaces_a_404_as_a_nonzero_exit() -> None:
-    bound = bind_stubs(
-        get=lambda *a, **k: _RejectingResponse({"detail": "no active lease or open takeover for lease_9"})
-    )
+    bound = bind_stubs(get=lambda *a, **k: _rejecting({"detail": "no active lease or open takeover for lease_9"}))
     result = bound.runner.invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code != 0

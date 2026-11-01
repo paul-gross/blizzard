@@ -15,6 +15,7 @@ import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
 from structlog.testing import capture_logs
@@ -98,7 +99,9 @@ def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> ht
 
 def _runner_paths(client: TestClient, *paths: str) -> tuple[str, ...]:
     """``paths`` under the prefix of the one runner ``client``'s app serves."""
-    prefix = runner_base_url(client.app, "")  # type: ignore[arg-type]
+    app = client.app
+    assert isinstance(app, FastAPI)
+    prefix = runner_base_url(app, "")
     return tuple(prefix + path for path in paths)
 
 
@@ -442,7 +445,7 @@ def test_callback_ignores_forwarded_proto_with_no_trusted_proxies_configured(tmp
 # The bounce cookies' SameSite/Secure policy, asserted on the Set-Cookie headers.
 
 
-def _bounce_set_cookie_headers(resp) -> str:
+def _bounce_set_cookie_headers(resp: httpx2.Response) -> str:
     return " | ".join(v for k, v in resp.headers.items() if k.lower() == "set-cookie")
 
 
@@ -672,7 +675,7 @@ def test_two_same_host_runners_sharing_a_name_stay_signed_in_through_one_cookie_
     name replaces the earlier one, so each runner's cookies must be named apart by its id."""
     private_key, jwk = _keypair()
     ids = ("rn_01AAAAAAAAAAAAAAAAAAAAAAAA", "rn_01BBBBBBBBBBBBBBBBBBBBBBBB")
-    clients = []
+    clients: list[TestClient] = []
     for runner_id in ids:
         (tmp_path / runner_id).mkdir()
         client = _build_app(
@@ -684,6 +687,7 @@ def test_two_same_host_runners_sharing_a_name_stay_signed_in_through_one_cookie_
     for client in clients:
         client.cookies.clear()
         for name, value in jar.items():
+            assert value is not None
             client.cookies.set(name, value)
     assert [client.get("/api/host/environments").status_code for client in clients] == [200, 200]
 

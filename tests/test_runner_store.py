@@ -26,19 +26,19 @@ from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_st
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
 def _mint(
     store: SqlAlchemyRunnerStore,
-    chunk="ch_1",
-    node="nd_build",
-    node_name="build",
-    epoch=1,
-    lease="lease_1",
-    retries_max=2,
-):
+    chunk: str = "ch_1",
+    node: str = "nd_build",
+    node_name: str = "build",
+    epoch: int = 1,
+    lease: str = "lease_1",
+    retries_max: int = 2,
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -53,7 +53,7 @@ def _mint(
     )
 
 
-def _session_id(store: SqlAlchemyRunnerStore, chunk_id, node_name):
+def _session_id(store: SqlAlchemyRunnerStore, chunk_id: str, node_name: str | None) -> str | None:
     session = store.latest_session(chunk_id, node_name)
     return session.session_id if session is not None else None
 
@@ -194,8 +194,16 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path: Path
 
 
 def _mint_with_session(
-    store: SqlAlchemyRunnerStore, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None
-):
+    store: SqlAlchemyRunnerStore,
+    *,
+    lease: str,
+    session: str,
+    epoch: int,
+    at: datetime,
+    node: str = "nd_build",
+    node_name: str = "build",
+    session_name: str | None = None,
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -258,7 +266,7 @@ def test_without_a_released_closure_an_earlier_transitioned_session_is_still_ret
     assert head is not None and head.session_id == "sess-1"
 
 
-def _close(store: SqlAlchemyRunnerStore, lease, reason, at, chunk="ch_1"):
+def _close(store: SqlAlchemyRunnerStore, lease: str, reason: str, at: datetime, chunk: str = "ch_1") -> None:
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason=reason, closed_at=at)
 
 
@@ -266,7 +274,7 @@ def _close(store: SqlAlchemyRunnerStore, lease, reason, at, chunk="ch_1"):
 @pytest.mark.parametrize(
     ("node_name", "expected"), [("build", "sess-build"), ("review", "sess-review"), (None, "sess-review")]
 )
-def test_latest_session_filters_by_node_name_after_a_release(tmp_path: Path, node_name, expected):
+def test_latest_session_filters_by_node_name_after_a_release(tmp_path: Path, node_name: str | None, expected: str):
     store = _store(tmp_path)
     _mint_with_session(store, lease="lease_1", session="sess-old", epoch=1, at=_NOW)
     _close(store, "lease_1", "released", _NOW + timedelta(minutes=1))
@@ -295,7 +303,9 @@ def test_latest_session_filters_by_node_name_after_a_release(tmp_path: Path, nod
         ("ch_1", "failed", timedelta(minutes=2), True),
     ],
 )
-def test_latest_session_release_barrier(tmp_path: Path, closure_chunk, reason, closed_offset, visible):
+def test_latest_session_release_barrier(
+    tmp_path: Path, closure_chunk: str, reason: str, closed_offset: timedelta, visible: bool
+):
     store = _store(tmp_path)
     _mint(store, chunk=closure_chunk, lease="lease_0")
     _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW + timedelta(minutes=1))
@@ -437,7 +447,7 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path: Path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("boundary_reason", ["transitioned", "parked"])
-def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path: Path, boundary_reason):
+def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path: Path, boundary_reason: str):
     """A completed node-step (`transitioned`, or `parked` on a gate) ends the visit; a failure inside a
     visit does not, and leases of the new visit spend its budget from zero."""
     store = _store(tmp_path)
@@ -1247,14 +1257,14 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     assert len(finals) == 1
 
 
-def _pin_next_segment_id_suffixes(monkeypatch: pytest.MonkeyPatch, suffixes):
+def _pin_next_segment_id_suffixes(monkeypatch: pytest.MonkeyPatch, suffixes: tuple[str, ...]) -> None:
     """Force the next segment mints' relative id order — a ULID's sub-millisecond half is
     random, so two same-instant ids order as a coin flip and a test reading its expectation
     off that order observes the tie-break only half the time."""
     queued = list(suffixes)
     real = Id.mint_at.__func__
 
-    def fake(cls, prefix, at):
+    def fake(cls: type[Id], prefix: str, at: datetime) -> Id:
         minted = real(cls, prefix, at)
         return Id(prefix, minted.ulid[:-1] + queued.pop(0)) if prefix == IdPrefix.SEGMENT and queued else minted
 
@@ -1263,7 +1273,9 @@ def _pin_next_segment_id_suffixes(monkeypatch: pytest.MonkeyPatch, suffixes):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("suffixes", [("A", "Z"), ("Z", "A")], ids=["newer-id-greater", "older-id-greater"])
-def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffixes):
+def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffixes: tuple[str, ...]
+):
     """`bzh:sql-portable`: two finalized segments sharing an identical
     ``stamped_at`` must resolve deterministically (postgres does not) — run at BOTH id
     orders, so whichever row a tie-break-less scan yields first, one case still fails."""
@@ -1790,7 +1802,7 @@ def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path:
     assert remaining == 2
 
 
-def _record_external_usage_attempt(store: SqlAlchemyRunnerStore, *, slug: str, sampled_at):
+def _record_external_usage_attempt(store: SqlAlchemyRunnerStore, *, slug: str, sampled_at: datetime) -> None:
     store.record_external_usage_attempt(
         slug=slug, sampled_at=sampled_at, payload=None, report_kind="", report_payload=""
     )

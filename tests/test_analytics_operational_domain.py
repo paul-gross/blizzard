@@ -246,22 +246,26 @@ def test_a_same_instant_migration_tie_breaks_deterministically_on_migration_id()
         to_graph_id="gr_c",
         recorded_at=_at(15),  # same instant as later_a
     )
-    common = {
-        "lease_epochs": [
-            LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
-            LeaseEpoch(chunk_id="ch_1", epoch=2, minted_at=_at(20)),
-        ],
-        "transitions": [],
-        "bounced": [],
-        "chunk_graph": {"ch_1": "gr_c"},
-        "chunk_max_lease_epoch": {"ch_1": 2},
-        "graph_entry_node": {"gr_a": "nd_a_entry", "gr_b": "nd_b_entry", "gr_c": "nd_c_entry"},
-        "graph_id_filter": None,
-    }
+
+    def resolve(migrations: list[MigrationMovement]) -> dict[str, int]:
+        return resolve_attempt_failures(
+            lease_epochs=[
+                LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
+                LeaseEpoch(chunk_id="ch_1", epoch=2, minted_at=_at(20)),
+            ],
+            transitions=[],
+            migrations=migrations,
+            bounced=[],
+            chunk_graph={"ch_1": "gr_c"},
+            chunk_max_lease_epoch={"ch_1": 2},
+            graph_entry_node={"gr_a": "nd_a_entry", "gr_b": "nd_b_entry", "gr_c": "nd_c_entry"},
+            graph_id_filter=None,
+        )
+
     # mg_A sorts before mg_B, so the tie always resolves to A's from_graph_id — regardless
     # of which order the two migrations are passed in.
-    assert resolve_attempt_failures(migrations=[later_a, later_b], **common) == {"nd_a_entry": 1}
-    assert resolve_attempt_failures(migrations=[later_b, later_a], **common) == {"nd_a_entry": 1}
+    assert resolve([later_a, later_b]) == {"nd_a_entry": 1}
+    assert resolve([later_b, later_a]) == {"nd_a_entry": 1}
 
 
 def test_a_bounced_epoch_is_excluded_outright() -> None:

@@ -9,7 +9,7 @@ import os
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import pytest
 from click.testing import CliRunner
@@ -462,7 +462,11 @@ def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path) -> No
     (bundle / "claude-code" / "stray").write_text("x")
     runtime = _runtime(tmp_path, bundle)
     started: list[str] = []
-    collaborators = _http_collaborators(build_host_process=lambda *a, **k: started.append("built"))
+
+    def build(*args: object, **kwargs: object) -> None:
+        started.append("built")
+
+    collaborators = _http_collaborators(build_host_process=build)
 
     result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)], obj=collaborators)
 
@@ -564,7 +568,27 @@ def test_status_without_a_bundle_names_the_generated_files(tmp_path: Path) -> No
 # Claude Code composition at publish.
 
 
-def _published_settings(runtime: Path) -> dict[str, object]:
+class _Hook(TypedDict):
+    type: str
+    command: str
+
+
+class _HookGroup(TypedDict):
+    hooks: list[_Hook]
+
+
+class _Permissions(TypedDict):
+    deny: list[str]
+
+
+class _Settings(TypedDict):
+    model: str
+    hooks: dict[str, list[_HookGroup]]
+    permissions: _Permissions
+    disableAllHooks: bool
+
+
+def _published_settings(runtime: Path) -> _Settings:
     snapshot = published_snapshot(runtime)
     assert snapshot is not None
     return json.loads((snapshot / "claude-code" / "settings.json").read_text())
@@ -580,9 +604,9 @@ def test_snapshot_settings_hold_the_operators_keys_and_the_runners_wiring(tmp_pa
 
     settings = _published_settings(runtime)
     assert settings["model"] == "opus"
-    commands = [h["command"] for g in settings["hooks"]["PostToolUse"] for h in g["hooks"]]  # type: ignore[index]
+    commands = [h["command"] for g in settings["hooks"]["PostToolUse"] for h in g["hooks"]]
     assert commands == ["mine", "blizzard runner heartbeat"]
-    assert "Monitor" in settings["permissions"]["deny"]  # type: ignore[index]
+    assert "Monitor" in settings["permissions"]["deny"]
     assert settings["disableAllHooks"] is False
 
 
@@ -594,7 +618,7 @@ def test_snapshot_settings_exist_when_the_operator_supplied_none(tmp_path: Path)
 
     CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
 
-    assert "SessionEnd" in _published_settings(runtime)["hooks"]  # type: ignore[operator]
+    assert "SessionEnd" in _published_settings(runtime)["hooks"]
 
 
 @pytest.mark.parametrize("command", ["tick", "host"])

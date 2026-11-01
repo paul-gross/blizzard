@@ -68,8 +68,13 @@ def _store_with(tmp_path: Path, rows: list[Row], *, at: datetime = _T0):
     ],
 )
 def test_each_window_reads_its_amount_and_partial_by_the_both_null_meaning(
-    tmp_path: Path, rows, cost_usd, estimated_cost_usd, partial, rendered
-):
+    tmp_path: Path,
+    rows: list[Row],
+    cost_usd: float,
+    estimated_cost_usd: float | None,
+    partial: bool,
+    rendered: str,
+) -> None:
     totals = _store_with(tmp_path, rows).usage_since(_T0)
     assert totals.cost_usd == pytest.approx(cost_usd)
     assert totals.estimated_cost_usd == (None if estimated_cost_usd is None else pytest.approx(estimated_cost_usd))

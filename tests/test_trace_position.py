@@ -99,7 +99,9 @@ def test_release_with_a_later_fact_at_its_epoch_is_not_a_release() -> None:
         transitions=(fx.to("g1", "review", 30, 1),),
         **fx.runner_epoch(1, 10),
     )
-    assert identify_steps(facts)[0].close.outcome is StepOutcome.TRANSITIONED  # type: ignore[union-attr]
+    close = identify_steps(facts)[0].close
+    assert close is not None
+    assert close.outcome is StepOutcome.TRANSITIONED
 
 
 def test_earliest_closing_fact_wins_and_table_order_breaks_a_tie() -> None:
@@ -109,13 +111,17 @@ def test_earliest_closing_fact_wins_and_table_order_breaks_a_tie() -> None:
         chunk_stopped=(TracedChunkStop(fx.at(25)),),
         **fx.runner_epoch(1, 10),
     )
-    assert identify_steps(facts)[0].close.outcome is StepOutcome.STOPPED  # type: ignore[union-attr]
+    close = identify_steps(facts)[0].close
+    assert close is not None
+    assert close.outcome is StepOutcome.STOPPED
     tied = fx.make_facts(
         transitions=(fx.to("g1", "review", 30, 1),),
         escalations=(TracedEscalation(1, fx.at(30)),),
         **fx.runner_epoch(1, 10),
     )
-    assert identify_steps(tied)[0].close.outcome is StepOutcome.TRANSITIONED  # type: ignore[union-attr]
+    close = identify_steps(tied)[0].close
+    assert close is not None
+    assert close.outcome is StepOutcome.TRANSITIONED
 
 
 @pytest.mark.parametrize(

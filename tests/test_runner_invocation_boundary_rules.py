@@ -9,6 +9,7 @@ import pytest
 
 from blizzard.runner.transcripts.invocation_boundaries import (
     BOUNDARY_TRANSITIONS,
+    BoundaryTransition,
     InvocationBoundary,
     InvocationBoundaryKind,
     boundary_transition_applies,
@@ -56,8 +57,10 @@ def test_boundary_transition_table() -> None:
         (_boundary(), "close", True),
     ],
 )
-def test_transition_applies_by_state(boundary: InvocationBoundary | None, transition: str, applies: bool) -> None:
-    assert boundary_transition_applies(boundary, transition) is applies  # type: ignore[arg-type]
+def test_transition_applies_by_state(
+    boundary: InvocationBoundary | None, transition: BoundaryTransition, applies: bool
+) -> None:
+    assert boundary_transition_applies(boundary, transition) is applies
 
 
 def test_open_after_close_is_noop() -> None:

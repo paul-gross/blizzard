@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict
 
 import pytest
 
@@ -197,7 +197,25 @@ def _release_facts() -> StepFacts:
     )
 
 
-_RELEASE_STEP = {
+class _StepColumns(TypedDict):
+    step_key: str
+    trace_id: str
+    step_started_at: datetime
+    tenant_id: str
+    tenant_name: str
+    project_id: str
+    project_slug: str
+    project_name: str
+    chunk_id: str
+    epoch: int
+    spawn_generation: int
+    graph_id: str
+    graph_name: str
+    node_id: str
+    node_name: str
+
+
+_RELEASE_STEP: _StepColumns = {
     "step_key": "ch_7/2",
     "trace_id": "f3e010092ca8029cd2d02a1a497f5ece",
     "step_started_at": datetime(2026, 1, 1, 0, 0, 40, tzinfo=UTC),

@@ -52,7 +52,7 @@ def _is_key_like(column: sa.Column[Any]) -> bool:
 
 
 def _undeclared_keys(metadata: sa.MetaData) -> list[str]:
-    faults = []
+    faults: list[str] = []
     for table in metadata.sorted_tables:
         for column in table.columns:
             if _is_key_like(column) and "refers_to" not in column.info and not column.info.get("not_a_key"):
@@ -61,7 +61,7 @@ def _undeclared_keys(metadata: sa.MetaData) -> list[str]:
 
 
 def _dangling_references(metadata: sa.MetaData) -> list[str]:
-    faults = []
+    faults: list[str] = []
     for table in metadata.sorted_tables:
         for column in table.columns:
             target = column.info.get("refers_to")
@@ -76,7 +76,7 @@ def _dangling_references(metadata: sa.MetaData) -> list[str]:
 def _undeclared_transfers(metadata: sa.MetaData) -> list[str]:
     """A host table naming no known treatment, a runner table naming one (its rows always move with their runner), an
     appended table with no surrogate key to issue anew, or a workspace-carried table with no workspace column."""
-    faults = []
+    faults: list[str] = []
     for table in metadata.sorted_tables:
         transfer = table.info.get("transfer")
         if table.info.get("scope") != "host":
@@ -92,7 +92,7 @@ def _undeclared_transfers(metadata: sa.MetaData) -> list[str]:
 
 
 def _cross_kind_references(metadata: sa.MetaData) -> list[str]:
-    faults = []
+    faults: list[str] = []
     for table in metadata.sorted_tables:
         for column in table.columns:
             name = str(column.info.get("refers_to", "")).partition(".")[0]

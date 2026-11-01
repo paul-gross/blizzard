@@ -29,6 +29,7 @@ from blizzard.runner.hub.host_registration import HostRegistration, HostRegistra
 from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.verified import IdentityNotVerified, VerifiedHubClient
 from blizzard.runner.lifecycle.host_lane_drain import HOST_LANE_DRAIN_LIMIT, HostLaneDrain
+from blizzard.runner.stores import HostStores
 from tests.runner_fakes import FakeHub, make_host_stores, make_store
 
 pytestmark = pytest.mark.component
@@ -46,8 +47,8 @@ class _FakeHostHub:
         default_factory=lambda: HostRecord(host_id=_HOST, tenant_id=_TENANT, host_name="host-a")
     )
     push_answer: HostFactPushAck | HostRefused | HubClientError | None = None
-    reports: list[HostReport] = field(default_factory=list)
-    pushes: list[list[PushedFact]] = field(default_factory=list)
+    reports: list[HostReport] = field(default_factory=list[HostReport])
+    pushes: list[list[PushedFact]] = field(default_factory=list[list[PushedFact]])
 
     def report(self, report: HostReport) -> HostRecord | HostRefused:
         self.reports.append(report)
@@ -99,7 +100,7 @@ class _World:
     runners: list[_Runner]
     status: HostRegistrationHolder
     identity: HostIdentityHolder
-    stores: object
+    stores: HostStores
 
 
 def _world(tmp_path: Path, *runners: _Runner) -> _World:
@@ -124,7 +125,7 @@ def _world(tmp_path: Path, *runners: _Runner) -> _World:
 
 def _buffer(world: _World, count: int) -> None:
     for index in range(count):
-        world.stores.host_lane.record_host_external_usage_attempt(  # type: ignore[attr-defined]
+        world.stores.host_lane.record_host_external_usage_attempt(
             slug=f"s{index}",
             sampled_at=_AT,
             payload=None,
@@ -137,7 +138,7 @@ def test_the_first_answer_records_the_host_identity_and_registers(tmp_path: Path
     world = _world(tmp_path, _runner("rn_a"))
     world.hub.report_answer = _held("rn_a")
     world.step.run()
-    assert world.stores.host_identity.host_identity() == HostIdentity(_HOST, _TENANT, _AT)  # type: ignore[attr-defined]
+    assert world.stores.host_identity.host_identity() == HostIdentity(_HOST, _TENANT, _AT)
     assert world.identity.current() == HostIdentity(_HOST, _TENANT, _AT)
     status = world.status.current()
     assert status.state is HostRegistrationState.REGISTERED
@@ -157,7 +158,7 @@ def test_a_later_answer_naming_another_host_is_a_refusal_not_an_update(tmp_path:
     assert status.state is HostRegistrationState.REFUSED
     assert "hs_other" in (status.detail or "")
     assert world.identity.current() == HostIdentity(_HOST, _TENANT, _AT)
-    assert world.stores.host_identity.host_identity() == HostIdentity(_HOST, _TENANT, _AT)  # type: ignore[attr-defined]
+    assert world.stores.host_identity.host_identity() == HostIdentity(_HOST, _TENANT, _AT)
     # The refusing answer's runner list is not applied, and runners keep working.
     assert runner.identity_verdict.standing() is HostStanding.UNKNOWN
     assert runner.identity_verdict.matched()
@@ -167,7 +168,7 @@ def test_a_row_recorded_before_the_holder_was_seeded_is_the_identity_the_answer_
     tmp_path: Path,
 ) -> None:
     world = _world(tmp_path, _runner("rn_a"))
-    world.stores.host_identity.record_host_identity(HostIdentity("hs_row", _TENANT, _AT))  # type: ignore[attr-defined]
+    world.stores.host_identity.record_host_identity(HostIdentity("hs_row", _TENANT, _AT))
     world.hub.report_answer = _held("rn_a")
     world.step.run()
     assert world.identity.current() == HostIdentity("hs_row", _TENANT, _AT)
@@ -273,7 +274,7 @@ def test_a_refused_report_leaves_every_runner_working_and_the_lane_buffered(
     assert world.status.current().state is state
     assert runner.identity_verdict.matched()
     assert world.hub.pushes == []
-    assert world.stores.host_lane.host_buffered_count() == 1  # type: ignore[attr-defined]
+    assert world.stores.host_lane.host_buffered_count() == 1
 
 
 def test_an_unreachable_hub_keeps_the_standings_it_last_judged(tmp_path: Path) -> None:
@@ -296,7 +297,7 @@ def test_the_lane_drains_only_once_registered_and_clears_what_the_hub_answered(t
     world.drain.run()
     assert [[fact.seq for fact in push] for push in world.hub.pushes] == [[1, 2, 3]]
     assert json.loads(world.hub.pushes[0][0].payload_text) == {"slug": "s0"}
-    lane = world.stores.host_lane  # type: ignore[attr-defined]
+    lane = world.stores.host_lane
     assert lane.host_buffered_count() == 0
     assert lane.host_high_water_seen() == 3
 
@@ -307,7 +308,7 @@ def test_a_drain_pass_is_bounded_and_a_failed_push_keeps_the_facts(tmp_path: Pat
     _buffer(world, HOST_LANE_DRAIN_LIMIT + 5)
     world.hub.push_answer = HubClientError("down")
     world.drain.run()
-    lane = world.stores.host_lane  # type: ignore[attr-defined]
+    lane = world.stores.host_lane
     assert len(world.hub.pushes[0]) == HOST_LANE_DRAIN_LIMIT
     assert lane.host_buffered_count() == HOST_LANE_DRAIN_LIMIT + 5
     world.hub.push_answer = None
@@ -321,7 +322,7 @@ def test_the_lane_clears_only_up_to_the_answered_mark_and_never_moves_it_back(tm
     world = _world(tmp_path)
     world.step.run()
     _buffer(world, 3)
-    lane = world.stores.host_lane  # type: ignore[attr-defined]
+    lane = world.stores.host_lane
     world.hub.push_answer = HostFactPushAck(high_water=1, applied=[1], already_applied=[], rejected=[])
     world.drain.run()
     assert (lane.host_high_water_seen(), lane.host_buffered_count()) == (1, 2)

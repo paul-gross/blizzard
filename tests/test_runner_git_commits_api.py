@@ -346,7 +346,11 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     (tmp_path / "e1").mkdir()
     winter = FakeWinter()
     provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=FakeGit())
-    monkeypatch.setattr(composition, "build_workspace_provider", lambda *_args, **_kwargs: provider)
+
+    def _provider(*_args: object, **_kwargs: object) -> WinterWorkspaceProvider:
+        return provider
+
+    monkeypatch.setattr(composition, "build_workspace_provider", _provider)
 
     def membership(repo: str) -> None:
         winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]

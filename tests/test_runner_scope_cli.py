@@ -38,7 +38,9 @@ class _RejectingResponse:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
-        raise httpx2.HTTPStatusError("403 forbidden", request=httpx2.Request("GET", "http://hub"), response=self)  # type: ignore[arg-type]
+        request = httpx2.Request("GET", "http://hub")
+        response = httpx2.Response(403, json=self._detail, request=request)
+        raise httpx2.HTTPStatusError("403 forbidden", request=request, response=response)
 
     def json(self) -> object:
         return self._detail

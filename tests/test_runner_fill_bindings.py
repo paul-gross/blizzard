@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
-from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
+from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -24,7 +24,7 @@ from blizzard.runner.hub.client import BindingDeclaration, ClaimRequest, QueueEn
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.routing import RoutingConflict
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import (
@@ -82,8 +82,8 @@ def _ctx(
     bindings: tuple[BindingDeclaration, ...],
     *,
     agents: int = 2,
-    workspaces=None,
-):
+    workspaces: IWorkspaces | None = None,
+) -> LoopContext:
     return make_context(
         store,
         hub=hub,

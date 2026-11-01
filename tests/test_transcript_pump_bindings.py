@@ -4,14 +4,16 @@ in the directory its binding names (component tier)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPosition
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.runner_fakes import (
     FakeHarness,
@@ -31,7 +33,9 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _ctx(sessions: list[str], *, batches=None):
+def _ctx(
+    sessions: list[str], *, batches: dict[str, TranscriptBatch] | None = None
+) -> tuple[LoopContext, FakeTranscriptSource, SqlAlchemyRunnerStore]:
     store = make_store("sqlite://")
     source = FakeTranscriptSource(
         batches_by_session=batches
@@ -53,7 +57,7 @@ def _ctx(sessions: list[str], *, batches=None):
     return ctx, source, store
 
 
-def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = True) -> str:
+def _open_segment(ctx: LoopContext, chunk_id: str, session: str, *, held: bool, bind: bool = True) -> str:
     n = chunk_id.removeprefix("ch_")
     if bind:
         ctx.stores.environments.record_binding(
@@ -86,13 +90,13 @@ def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = 
     )
 
 
-def _binding_statements(store: SqlAlchemyRunnerStore, fn) -> int:
+def _binding_statements(store: SqlAlchemyRunnerStore, fn: Callable[[], object]) -> int:
     with capture_statements(store.engine) as statements:
         fn()
     return sum(1 for statement, _ in statements if "env_bindings" in statement)
 
 
-def _world(n: int, *, held: bool):
+def _world(n: int, *, held: bool) -> tuple[LoopContext, FakeTranscriptSource, SqlAlchemyRunnerStore, list[str]]:
     sessions = [f"sess-{i}" for i in range(n)]
     ctx, source, store = _ctx(sessions)
     segment_ids = [_open_segment(ctx, f"ch_{i}", sessions[i], held=held) for i in range(n)]
@@ -101,7 +105,7 @@ def _world(n: int, *, held: bool):
 
 @pytest.mark.parametrize("held", [True, False])
 def test_run_binding_statements_are_flat_as_segments_grow(held: bool) -> None:
-    measured = []
+    measured: list[int] = []
     for n in (1, 4):
         ctx, _source, store, _ids = _world(n, held=held)
         measured.append(_binding_statements(store, lambda ctx=ctx: TranscriptPump(ctx).run()))
@@ -110,7 +114,7 @@ def test_run_binding_statements_are_flat_as_segments_grow(held: bool) -> None:
 
 @pytest.mark.parametrize("held", [True, False])
 def test_pump_lease_binding_statements_are_flat_as_other_open_segments_grow(held: bool) -> None:
-    measured = []
+    measured: list[int] = []
     for n in (1, 4):
         ctx, _source, store, _ids = _world(n, held=held)
         measured.append(_binding_statements(store, lambda ctx=ctx: TranscriptPump(ctx).pump_lease("lease_0")))
@@ -118,13 +122,20 @@ def test_pump_lease_binding_statements_are_flat_as_other_open_segments_grow(held
 
 
 def test_drain_segment_resolves_bindings_once_across_read_windows() -> None:
-    measured = []
+    measured: list[int] = []
     for windows in (1, 4):
         ctx, source, store = _ctx(["sess-0"])
         segment_id = _open_segment(ctx, "ch_0", "sess-0", held=False)
         calls = {"n": 0}
 
-        def windowed(session_id, *, spawn_cwd, since, calls=calls, windows=windows):
+        def windowed(
+            session_id: str,
+            *,
+            spawn_cwd: str | None,
+            since: TranscriptPosition | None,
+            calls: dict[str, int] = calls,
+            windows: int = windows,
+        ) -> TranscriptBatch:
             calls["n"] += 1
             token = f"p{calls['n']}"
             if calls["n"] < windows:
@@ -145,7 +156,7 @@ def test_drain_segment_resolves_bindings_once_across_read_windows() -> None:
 
 
 def test_run_rows_read_from_bindings_are_flat_as_unrelated_held_bindings_grow() -> None:
-    measured = []
+    measured: list[int] = []
     for unrelated in (0, 6):
         ctx, _source, store = _ctx(["sess-0"])
         _open_segment(ctx, "ch_0", "sess-0", held=True)

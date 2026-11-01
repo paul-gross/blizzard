@@ -399,9 +399,12 @@ def test_step_cost_sums_to_the_usage_fold_and_measures_stay_on_roots() -> None:
     told = _told(facts)
     roots = [spans[0] for spans in told.values()]
     total = UsageTotal.of(list(rows))
-    assert sum(r.attributes[attr.STEP_COST_USD] for r in roots) == pytest.approx(  # type: ignore[misc]
-        total.cost_usd + (total.estimated_cost_usd or 0)
-    )
+    step_costs: list[float] = []
+    for r in roots:
+        step_cost = r.attributes[attr.STEP_COST_USD]
+        assert isinstance(step_cost, int | float)
+        step_costs.append(step_cost)
+    assert sum(step_costs) == pytest.approx(total.cost_usd + (total.estimated_cost_usd or 0))
     first = roots[0].attributes
     assert first[attr.STEP_COST_ESTIMATED] is True
     assert first[attr.STEP_COST_PARTIAL] is True

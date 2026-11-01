@@ -73,7 +73,7 @@ class _RecordingChunkViews:
     """Reads through to the hub; records every invalidation."""
 
     hub: FakeHub
-    invalidated: list[str] = field(default_factory=list)
+    invalidated: list[str] = field(default_factory=list[str])
 
     def get(self, chunk_id: str) -> ChunkState:
         return ReadThroughChunkViews(hub=self.hub).get(chunk_id)
@@ -105,6 +105,7 @@ def _dependency(chunk_id: str = "ch_1") -> RouteClaimOutcome:
     return RouteClaimOutcome(denied_dependency=DependencyDenial(chunk_id=chunk_id, prerequisite_chunk_id="ch_0"))
 
 
+_NO_FIELDS: dict[str, str] = {}
 _INCOMPATIBLE_FIELDS = {"reason": ClaimDenialReason.CAPABILITY, "detail": IncompatibleDenial("", "").detail}
 
 
@@ -153,7 +154,7 @@ def _records(logs: Sequence[MutableMapping[str, Any]], event: str) -> list[Mutab
     ("make_outcome", "strict", "returns", "next_claimed", "released", "loss_log"),
     [
         pytest.param(_won, False, True, "ch_2", False, None, id="won"),
-        pytest.param(_lost, False, True, "ch_2", True, ("route claim lost the race", {}), id="lost"),
+        pytest.param(_lost, False, True, "ch_2", True, ("route claim lost the race", _NO_FIELDS), id="lost"),
         pytest.param(
             _paused,
             False,
@@ -178,7 +179,7 @@ def _records(logs: Sequence[MutableMapping[str, Any]], event: str) -> list[Mutab
             True,
             "ch_2",
             True,
-            ("route claim denied — unmet prerequisite", {}),
+            ("route claim denied — unmet prerequisite", _NO_FIELDS),
             id="dependency-pass-over",
         ),
         pytest.param(
@@ -187,7 +188,7 @@ def _records(logs: Sequence[MutableMapping[str, Any]], event: str) -> list[Mutab
             False,
             "ch_1",
             True,
-            ("route claim denied — unmet prerequisite", {}),
+            ("route claim denied — unmet prerequisite", _NO_FIELDS),
             id="dependency-strict-holds-head",
         ),
         pytest.param(

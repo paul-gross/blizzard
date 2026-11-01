@@ -10,7 +10,7 @@ import contextlib
 import os
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 
 import httpx2
 import pytest
@@ -21,7 +21,7 @@ from tests.worker_http import bind_stubs
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     """Pins the wall-clock zone ``--since``/``--until`` are read against — the same
     fixture ``tests/test_cli_analytics_events.py`` uses for the operator CLI's own
     conversion, since the conversion is genuinely machine-local otherwise."""
@@ -74,7 +74,9 @@ class _RejectingResponse:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
-        raise httpx2.HTTPStatusError("403 forbidden", request=httpx2.Request("GET", "http://hub"), response=self)  # type: ignore[arg-type]
+        request = httpx2.Request("GET", "http://hub")
+        response = httpx2.Response(403, json=self._detail, request=request)
+        raise httpx2.HTTPStatusError("403 forbidden", request=request, response=response)
 
     def json(self) -> object:
         return self._detail

@@ -13,6 +13,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.control import throttle_view
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -56,7 +57,9 @@ def _ctx(throttle: ThrottleSettings | None) -> LoopContext:
         make_store("sqlite://"),
         hub=FakeHub(),
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+        ),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         config=LoopConfig(
@@ -250,6 +253,7 @@ def test_the_budget_admits_again_as_its_spend_ages_out_of_the_window() -> None:
     _spend(ctx, 12.0, at=_NOW - timedelta(hours=5, minutes=30))
     assert not ThrottleGate(ctx).verdict().admits_claim
 
-    ctx.clock.advance(timedelta(hours=1))  # type: ignore[attr-defined]
+    assert isinstance(ctx.clock, FixedClock)
+    ctx.clock.advance(timedelta(hours=1))
 
     assert ThrottleGate(ctx).verdict().admits_claim

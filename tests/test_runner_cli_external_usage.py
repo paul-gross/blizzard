@@ -6,6 +6,7 @@ still carries, so every pre-existing invocation with no positional argument keep
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx2
@@ -86,15 +87,20 @@ def _unreachable(request: httpx2.Request) -> httpx2.Response:
 def test_a_miss_prints_its_own_distinguishable_reason(tmp_path: Path, reason: SampleMissReason, expected: str) -> None:
     root = _runtime(tmp_path)
     live = _credentials(tmp_path, "live.json", _FAR_FUTURE_MILLIS)
-    credentials, handler = {
-        SampleMissReason.CREDENTIAL_LAPSED: (
-            _credentials(tmp_path, "lapsed.json", 1_000),
-            lambda request: httpx2.Response(200),
-        ),
-        SampleMissReason.CREDENTIAL_UNREADABLE: (tmp_path / "absent.json", lambda request: httpx2.Response(200)),
+
+    def answers(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200)
+
+    def answers_unparseable(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=b"not json")
+
+    cases: dict[SampleMissReason, tuple[Path, Callable[[httpx2.Request], httpx2.Response]]] = {
+        SampleMissReason.CREDENTIAL_LAPSED: (_credentials(tmp_path, "lapsed.json", 1_000), answers),
+        SampleMissReason.CREDENTIAL_UNREADABLE: (tmp_path / "absent.json", answers),
         SampleMissReason.ENDPOINT_UNREACHABLE: (live, _unreachable),
-        SampleMissReason.RESPONSE_UNPARSEABLE: (live, lambda request: httpx2.Response(200, content=b"not json")),
-    }[reason]
+        SampleMissReason.RESPONSE_UNPARSEABLE: (live, answers_unparseable),
+    }
+    credentials, handler = cases[reason]
     _declare_credentials(root, credentials)
 
     result = _probe(root, bound=bind_transport(handler))

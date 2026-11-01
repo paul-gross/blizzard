@@ -21,7 +21,7 @@ from blizzard.runner.throttle.usage_limits import FloorClear
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
-_RUNNERS = [{"runner_id": "rn_a", "name": "alpha", "state": "serving", "halted_reasons": []}]
+_RUNNERS: list[dict[str, object]] = [{"runner_id": "rn_a", "name": "alpha", "state": "serving", "halted_reasons": []}]
 _CLEARED = {"slug": None, "cleared_at": "2026-10-22T12:00:00+00:00", "by": "operator"}
 
 Calls = list[tuple[str, dict[str, object]]]

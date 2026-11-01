@@ -120,7 +120,11 @@ def test_a_match_removed_before_the_mtime_tie_break_reads_as_not_found_not_raise
     kept = _write_main(tmp_path, [fx.user_env("kept")], project_dir="-home-user-a")
     removed = _write_main(tmp_path, [fx.user_env("removed")], project_dir="-home-user-b")
     stale_matches = sorted([kept, removed])
-    monkeypatch.setattr(ClaudeCodeTranscriptSource, "_matches", lambda self, session_id: stale_matches)
+
+    def stale(self: ClaudeCodeTranscriptSource, session_id: str) -> list[Path]:
+        return stale_matches
+
+    monkeypatch.setattr(ClaudeCodeTranscriptSource, "_matches", stale)
     removed.unlink()  # gone by the time the mtime tie-break's own `stat()` runs
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
 
@@ -509,7 +513,7 @@ def test_cold_read_gates_the_sidecar_fanout_on_a_shared_budget_and_flags_truncat
     with sidecar count, unbounded. Flagged on `sidechain_truncated`, not `truncated`."""
     project_dir = "-home-user-workspace"
     n_sidecars = 6
-    main_lines = []
+    main_lines: list[str] = []
     for i in range(n_sidecars):
         main_lines.append(fx.assistant_tool_use(f"t{i}", "Task", {"prompt": f"job {i}"}, uuid=f"a{i}"))
         main_lines.append(fx.tool_result(f"t{i}", "spawned", agent_id=f"agent-{i}"))
@@ -517,7 +521,7 @@ def test_cold_read_gates_the_sidecar_fanout_on_a_shared_budget_and_flags_truncat
 
     subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
     subagents_dir.mkdir(parents=True)
-    sidecar_paths = []
+    sidecar_paths: list[Path] = []
     for i in range(n_sidecars):
         sidecar_path = subagents_dir / f"agent-agent-{i}.jsonl"
         sidecar_path.write_text(fx.sidecar_record("x" * 200, agent_id=f"agent-{i}") + "\n")

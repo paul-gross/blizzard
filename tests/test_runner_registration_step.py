@@ -6,15 +6,17 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
-from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.client import BindingDeclaration, RegistrationReply
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
@@ -38,6 +40,8 @@ from tests.runner_fakes import (
 
 pytestmark = pytest.mark.component
 
+_IDLE_HANDLE = WorkerHandle(session_id="sess-idle", pid=100, process_start_time="start-100", pgid=100)
+
 
 def _ctx(
     db: Path, hub: FakeHub, *, name: str = "r-claude", registered: bool = False, runner_id: str | None = None
@@ -51,12 +55,12 @@ def _ctx(
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=FakeProbe(alive=set()),
         config=LoopConfig(runner_name=name, bindings=serving(1), agents=1, runner_id=configured),
         registered=registered,
     )
-    return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
+    return replace(ctx, identity=RunnerIdentityHolder(store.runner_identity()))
 
 
 def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
@@ -206,7 +210,11 @@ def test_the_identity_holds_the_name_the_hub_answers_over_the_one_declared(
     """A hub that keeps the name it holds answers that one; the runner records the hub's."""
     hub = FakeHub(default_runner_id="rn_minted")
     declare = hub.register_runner
-    monkeypatch.setattr(hub, "register_runner", lambda *a, **kw: replace(declare(*a, **kw), runner_name="r-held"))
+
+    def register_held(*args: Any, **kwargs: Any) -> RegistrationReply:
+        return replace(declare(*args, **kwargs), runner_name="r-held")
+
+    monkeypatch.setattr(hub, "register_runner", register_held)
     ctx = _ctx(tmp_path / "runner.db", hub, name="r-claude")
 
     Registration(ctx).run()
@@ -303,7 +311,7 @@ def test_reap_and_resume_wait_for_the_first_registration_then_proceed(tmp_path: 
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=probe,
         clock=FixedClock(_LATER),
         registered=False,
@@ -339,7 +347,7 @@ def _refused_registration(store: SqlAlchemyRunnerStore) -> LoopContext:
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=FakeProbe(alive=set()),
         clock=FixedClock(_LATER),
         registered=False,

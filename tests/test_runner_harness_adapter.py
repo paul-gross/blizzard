@@ -12,10 +12,11 @@ import os
 import shutil
 import stat
 import subprocess
+from collections.abc import Callable, Sequence
 from concurrent.futures import Executor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import pytest
 from structlog.testing import capture_logs
@@ -27,8 +28,15 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
-from blizzard.runner.process.child_env import AllowlistedEnv
-from blizzard.runner.process.child_processes import ChildRun
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import (
+    ChildRun,
+    IPtyChild,
+    ISpawnedChild,
+    ShellCommand,
+    Stream,
+    StreamTarget,
+)
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -38,13 +46,23 @@ from tests.support_child_launch import CHILDREN, tool_env, version_probe
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
 
+def _which_on_usr_bin(binary: str, path: object = None) -> str:
+    """Stands in for ``shutil.which``, resolving every binary under ``/usr/bin``."""
+    return f"/usr/bin/{binary}"
+
+
+def _which_finds_nothing(binary: str, path: object = None) -> str | None:
+    """Stands in for ``shutil.which`` on a ``PATH`` holding no binary at all."""
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """A unit test's fake spawn must not depend on whether ``claude`` is really installed
     on this machine's ``PATH`` — `ensure_executable`'s `shutil.which` lookup runs
     before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
     absent-from-``PATH`` behavior override this within their own body."""
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
 
 
 def _adapter(spawn_executor: Executor, **kwargs: Any) -> ClaudeCodeAdapter:
@@ -63,14 +81,51 @@ class _ScriptedRuns:
     def __init__(self, reply: ChildRun | BaseException) -> None:
         self._reply = reply
 
-    def run(self, command: Any, **kwargs: Any) -> ChildRun:
+    def run(
+        self,
+        command: Sequence[str] | ShellCommand,
+        *,
+        cwd: Path | str | None,
+        env: ChildEnv,
+        timeout: float,
+        input: str | None = None,
+        input_settle: float = 0.0,
+        stdout: IO[bytes] | None = None,
+    ) -> ChildRun:
         if isinstance(self._reply, BaseException):
             raise self._reply
         return self._reply
 
+    def spawn(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | str | None,
+        env: ChildEnv,
+        stdin: StreamTarget = Stream.DEVNULL,
+        stdout: StreamTarget = Stream.DEVNULL,
+        stderr: StreamTarget = Stream.DEVNULL,
+        child_setup: Callable[[], None] | None = None,
+        pass_fds: tuple[int, ...] = (),
+    ) -> ISpawnedChild:
+        raise NotImplementedError
+
+    def spawn_pty(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | str,
+        env: ChildEnv,
+        child_setup: Callable[[], None] | None = None,
+    ) -> IPtyChild:
+        raise NotImplementedError
+
+    def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
+        raise NotImplementedError
+
 
 def _scripted_versions(reply: ChildRun | BaseException) -> VersionProbe:
-    return VersionProbe(_ScriptedRuns(reply), tool_env())  # type: ignore[arg-type]  # `run` alone is reached
+    return VersionProbe(_ScriptedRuns(reply), tool_env())
 
 
 @pytest.mark.unit
@@ -148,7 +203,7 @@ def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_execu
 def test_observe_version_reads_the_binarys_version_output(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
     versions = _scripted_versions(ChildRun(exit_code=0, stdout="claude-code 1.2.3\n", stderr="", timed_out=False))
     assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() == "claude-code 1.2.3"
 
@@ -158,7 +213,7 @@ def test_observe_version_times_out_to_none_rather_than_raising(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
     # On PATH per `which` — the timeout is the launch's own, not a missing-binary skip.
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
     versions = _scripted_versions(ChildRun(exit_code=None, stdout="", stderr="", timed_out=True))
 
     with capture_logs() as logs:
@@ -174,7 +229,7 @@ def test_observe_version_missing_binary_reads_none_rather_than_raising(
     problem) still reads ``None`` and logs — distinct from never being on ``PATH`` at all
     (below), which skips the subprocess attempt entirely."""
 
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
     versions = _scripted_versions(OSError("no such file or directory: 'claude'"))
 
     with capture_logs() as logs:
@@ -190,7 +245,7 @@ def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn
     """A host that never installed this binding's binary (a runner configured with only
     one of several known harnesses) is an expected shape, not a failure — no subprocess
     attempt, and nothing louder than ``debug``."""
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: None)
+    monkeypatch.setattr(shutil, "which", _which_finds_nothing)
 
     versions = _scripted_versions(AssertionError("no launch may be attempted for a binary absent from PATH"))
 
@@ -1994,7 +2049,11 @@ def test_sum_transcript_usage_takes_a_supplied_observation_without_re_deriving_i
 ) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     lines = [transcript_fixtures.assistant_usage(model="claude-sonnet-5", message_id="m1")]
-    monkeypatch.setattr(adapter, "observed_model", lambda _lines: pytest.fail("re-derived a supplied observation"))
+
+    def _refuse_rederiving(lines: Sequence[str]) -> str | None:
+        pytest.fail("re-derived a supplied observation")
+
+    monkeypatch.setattr(adapter, "observed_model", _refuse_rederiving)
 
     sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet", observed="claude-fable-5-1")
 

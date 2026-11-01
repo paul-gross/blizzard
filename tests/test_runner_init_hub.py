@@ -546,7 +546,7 @@ class _JoinLog:
     """Records, in order, each store and add call a join makes."""
 
     stored: str | None = None
-    calls: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list[str])
 
     def stored_runner_id(self) -> str | None:
         return self.stored

@@ -13,6 +13,7 @@ import io
 import json
 import re
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -346,7 +347,7 @@ def test_permission_denial_ignores_nonterminal_part_updates_but_rejects_two_term
 def test_manifest_shape_evidence_contains_the_shape_each_row_claims() -> None:
     manifest = _manifest()
     fixtures = dict(_fixtures())
-    expected_event_shape = {
+    expected_event_shape: dict[str, Callable[[OpenCodeRunEvent], bool]] = {
         "provider_error": lambda event: event.error is not None,
         "permission_request": lambda event: event.permission is not None,
         "tool_state": lambda event: event.part is not None and event.part.state is not None,
@@ -743,9 +744,10 @@ def test_sanitizer_redacts_known_keys_and_embedded_credentials_without_mutating_
     cleaned = sanitize_value(raw, secrets=("provider-secret", "inline-secret", "inline-key", "query-secret"))
 
     assert cleaned != raw
-    assert cleaned["authorization"] == REDACTED  # type: ignore[index]
-    assert cleaned["accessToken"] == REDACTED  # type: ignore[index]
-    assert cleaned["nested"] != raw["nested"]  # type: ignore[index]
+    assert isinstance(cleaned, dict)
+    assert cleaned["authorization"] == REDACTED
+    assert cleaned["accessToken"] == REDACTED
+    assert cleaned["nested"] != raw["nested"]
     assert "provider-secret" not in sanitize_json(raw)
     assert "access-secret" not in sanitize_json(raw)
     assert "key-secret" not in sanitize_json(raw)
@@ -823,7 +825,7 @@ def test_evidence_redacts_binary_workdir_and_nested_host_paths(tmp_path: Path) -
     nested_path = "/var/lib/opencode/session state.json"
     nested_message_path = "/mnt/host/project/error.log"
 
-    runtime = {
+    runtime: JsonObject = {
         "operations": [
             {"operation": "version", "argv": [binary, "--version"], "cwd": workdir},
             {"operation": "run", "argv": [binary, "run"], "cwd": scratch},
@@ -849,7 +851,7 @@ def test_evidence_replaces_raw_external_ids_with_stable_aliases(tmp_path: Path) 
     report = CompatibilityReport.from_observations(
         PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
-    runtime = {
+    runtime: JsonObject = {
         "operations": [
             {
                 "argv": ["opencode", "export", "ses_liveRaw123"],
@@ -879,7 +881,7 @@ def test_evidence_aliases_observed_identifiers_without_vendor_prefixes(tmp_path:
     report = CompatibilityReport.from_observations(
         PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
-    runtime = {
+    runtime: JsonObject = {
         "operations": [
             {
                 "argv": ["opencode", "export", "opaque-session-42"],
@@ -998,17 +1000,18 @@ def test_attach_proxy_preserves_buffered_response_content_encoding() -> None:
         def close(self) -> None:
             return None
 
-    class Handler:
+    class Handler(BaseHTTPRequestHandler):
         def __init__(self) -> None:
-            self.headers: dict[str, str] = {}
+            self.sent_headers: dict[str, str] = {}
             self.status: int | None = None
-            self.wfile = io.BytesIO()
+            self.written = io.BytesIO()
+            self.wfile = self.written
 
-        def send_response(self, status: int) -> None:
-            self.status = status
+        def send_response(self, code: int, message: str | None = None) -> None:
+            self.status = code
 
-        def send_header(self, name: str, value: str) -> None:
-            self.headers[name.lower()] = value
+        def send_header(self, keyword: str, value: str) -> None:
+            self.sent_headers[keyword.lower()] = value
 
         def end_headers(self) -> None:
             return None
@@ -1022,15 +1025,15 @@ def test_attach_proxy_preserves_buffered_response_content_encoding() -> None:
     request_index = proxy.record_request(OpenCodeAttachRequest("GET", "/config", None))
     handler = Handler()
 
-    proxy.forward_buffered(handler, "/config", LoopbackResponse(Response()), request_index)  # type: ignore[arg-type]
+    proxy.forward_buffered(handler, "/config", LoopbackResponse(Response()), request_index)
 
     assert handler.status == 200
-    assert handler.headers["content-type"] == "application/json"
-    assert handler.headers["content-encoding"] == "gzip"
-    assert handler.headers["x-upstream-header"] == "preserved"
-    assert "transfer-encoding" not in handler.headers
-    assert handler.headers["content-length"] == str(len(body))
-    assert handler.wfile.getvalue() == body
+    assert handler.sent_headers["content-type"] == "application/json"
+    assert handler.sent_headers["content-encoding"] == "gzip"
+    assert handler.sent_headers["x-upstream-header"] == "preserved"
+    assert "transfer-encoding" not in handler.sent_headers
+    assert handler.sent_headers["content-length"] == str(len(body))
+    assert handler.written.getvalue() == body
 
 
 def test_loopback_response_serializes_close_after_interrupting_a_read() -> None:
