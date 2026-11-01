@@ -14,6 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import case, func
 
+from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
@@ -38,6 +39,49 @@ class ChunkDeliveryStore:
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
+
+    def close_intents(self, chunk_id: str, *, after: int, limit: int) -> list[CloseIntent]:
+        table = s.close_intents
+        with self._store.read("close_intents") as conn:
+            rows = conn.execute(
+                self._store.select(
+                    table, table.c.id, table.c.source, table.c.ref, table.c.enqueued_at, table.c.retired_at
+                )
+                .where(table.c.chunk_id == chunk_id, table.c.id > after)
+                .order_by(table.c.id)
+                .limit(limit)
+            ).all()
+        return [CloseIntent(row.id, row.source, row.ref, row.enqueued_at, row.retired_at) for row in rows]
+
+    def close_closures(self, chunk_id: str, *, after: int, limit: int) -> list[CloseClosure]:
+        table = s.work_item_closures
+        with self._store.read("close_closures") as conn:
+            rows = conn.execute(
+                self._store.select(table, table.c.id, table.c.source, table.c.ref, table.c.outcome, table.c.recorded_at)
+                .where(table.c.chunk_id == chunk_id, table.c.id > after)
+                .order_by(table.c.id)
+                .limit(limit)
+            ).all()
+        return [CloseClosure(row.id, row.source, row.ref, row.outcome, row.recorded_at) for row in rows]
+
+    def close_attempts(self, chunk_id: str, intent_id: int, *, after: int, limit: int) -> list[CloseAttempt]:
+        """Read a bounded page in durable attempt order, scoped to this chunk and tenant."""
+        intent, attempt = s.close_intents, s.close_intent_attempts
+        with self._store.read("close_attempts") as conn:
+            rows = conn.execute(
+                self._store.select(
+                    self._store.scope_join(intent, attempt, attempt.c.intent_id == intent.c.id),
+                    attempt.c.id,
+                    attempt.c.intent_id,
+                    attempt.c.attempted_at,
+                    attempt.c.outcome,
+                    attempt.c.resume_at,
+                )
+                .where(intent.c.chunk_id == chunk_id, intent.c.id == intent_id, attempt.c.id > after)
+                .order_by(attempt.c.id)
+                .limit(limit)
+            ).all()
+        return [CloseAttempt(row.id, row.intent_id, row.attempted_at, row.outcome, row.resume_at) for row in rows]
 
     def landing_facts(self, chunk_id: str, *, after: int, limit: int) -> list[LandingFact]:
         table = s.delivery_repo_landed

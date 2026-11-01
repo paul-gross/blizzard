@@ -226,6 +226,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/chunks"): _LIST,
     ("GET", "/api/chunks/{chunk_id}"): _f(),
     ("GET", "/api/chunks/{chunk_id}/landing-facts"): _f(),
+    ("GET", "/api/chunks/{chunk_id}/close-diagnostic"): _f(),
     ("GET", "/api/flows"): _LIST,
     ("GET", "/api/flows/{flow_id}"): _f(),
     ("GET", "/api/flows/{flow_id}/record"): _f(),

@@ -64,6 +64,21 @@ Writes need the `config:edit` permission and reads need `fleet:view`. The record
 schema at `GET /api/config/schema/work-sources`. A body carries `slug` and `name`; `name` defaults to `slug` on create.
 A source whose secret cannot be revealed is an error on every call through it, never an absent source.
 
+## Close diagnostics
+
+`GET /api/chunks/{chunk_id}/close-diagnostic` requires `fleet:view` and reads only the current tenant. It reports
+work-reference close intents, their enqueue and retirement times, closure outcomes, and drain attempts. A deferred
+attempt's `resume_at` is the earliest time the rate budget permits another try; it does not spend close backoff. Failure
+reasons, credentials and outbound payloads are not included.
+
+Each of `intents`, `closures`, and `attempts` is ordered by its stable `sequence`. The common `limit` bounds each list;
+follow `next_intent_cursor`, `next_closure_cursor`, or `next_attempt_cursor` using the corresponding `intent_cursor`,
+`closure_cursor`, or `attempt_cursor` query parameter until that next cursor is null. These are independent histories:
+keep the other cursor values when advancing one. Timestamps are UTC.
+
+Attempts belong to one intent: supply its `sequence` as `attempt_intent_id` to page that intent's attempts. If omitted,
+the diagnostic selects the first intent on the current intent page. Keep the selected intent id when advancing attempts.
+
 The board's Admin page lists work sources, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
 before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
