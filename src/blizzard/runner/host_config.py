@@ -319,6 +319,11 @@ class HostConfig:
     strict: bool = False
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
+    #: The authored ``[tools]`` table, kept so a rewritten file carries it.
+    tools: Table = field(default_factory=lambda: Table.of(None))
+    #: The ``PATH`` prepend and environment passthrough the host's own tool children launch under, resolved at load.
+    tool_path_prepend: tuple[str, ...] = ()
+    tool_env_passthrough: tuple[str, ...] = ()
     #: The host's own credential, resolved from the environment, then the host file, then ``.env``.
     host_token: ResolvedToken = field(default_factory=ResolvedToken)
     #: The host file's ``[hub_tokens]``, by runner name.
@@ -496,7 +501,12 @@ class HostConfig:
         builds before, or without, any runner: its listeners, tracing and workspaces."""
         base = RunnerConfig(root=self.root, db_url=self.db_url)
         view = self._shared(base)
-        return replace(view, subscriptions=self.subscriptions)
+        return replace(
+            view,
+            subscriptions=self.subscriptions,
+            worker_path_prepend=self.tool_path_prepend,
+            worker_env_passthrough=self.tool_env_passthrough,
+        )
 
     def _shared(self, base: RunnerConfig) -> RunnerConfig:
         """``base`` with the host's keys laid over it, its declared workspaces among them."""
@@ -723,6 +733,9 @@ class HostConfig:
         if self.worker_stdout.table.body:
             lines.append("\n[worker_stdout]\n")
             lines.extend(f"{key} = {_toml_scalar(value)}\n" for key, value in self.worker_stdout.table.body.items())
+        if self.tools.body:
+            lines.append("\n[tools]\n")
+            lines.extend(f"{key} = {_toml_scalar(value)}\n" for key, value in self.tools.body.items())
         if self.hub_tokens:
             lines.append("\n[hub_tokens]\n")
             lines.extend(f"{json.dumps(name)} = {json.dumps(token)}\n" for name, token in self.hub_tokens)
@@ -832,6 +845,10 @@ def _parse(
     )
     worker_stdout = WorkerStdout.of(document.table("worker_stdout"))
     errors.attempt("[worker_stdout]", lambda: worker_stdout.retention_days, 0)
+    tools = Table.of(document.table("tools"))
+    tools_declared = "tools" in document
+    tool_path_prepend = errors.attempt("[tools]", lambda: expanded_path_prepend(tools.names("path_prepend")), ())
+    tool_env_passthrough = errors.attempt("[tools]", lambda: tools.names("env_passthrough"), ())
     subscriptions = errors.attempt("[[subscription]]", lambda: SubscriptionDeclaration.declared(document), ())
     workspaces = _workspaces(document, root=root, errors=errors)
     db_url = str(document.get("db_url")) if "db_url" in document else layout.default_db_url
@@ -868,6 +885,8 @@ def _parse(
     )
     entries = _runner_entries(document, root=root, db_url=db_url, path=path, errors=errors)
     _check_runner_uniqueness(entries, has_host_token=bool(host_token.value), errors=errors)
+    if not tools_declared:
+        tool_path_prepend, tool_env_passthrough = _agreed_tool_profile(entries, errors=errors)
     if errors.found:
         raise HostConfigError(tuple(errors.found))
     held = held_keys(registry, raw, resolution.flags) if resolution is not None else ()
@@ -891,6 +910,9 @@ def _parse(
         strict=strict,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
+        tools=tools,
+        tool_path_prepend=tool_path_prepend,
+        tool_env_passthrough=tool_env_passthrough,
         host_token=host_token,
         hub_tokens=hub_tokens,
         subscriptions=subscriptions,
@@ -1195,6 +1217,21 @@ def _check_runner_uniqueness(entries: tuple[RunnerEntry, ...], *, has_host_token
     errors.found.extend(f"two [[runner]] entries share the {kind} {key!r}" for kind, key in _repeats(entries))
     if len(entries) > 1 and not has_host_token:
         errors.add(f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set")
+
+
+def _agreed_tool_profile(
+    entries: tuple[RunnerEntry, ...], *, errors: _Errors
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The tool profile a host with no ``[tools]`` table resolves to: the runners' ``[worker] path_prepend`` and
+    ``env_passthrough`` when every runner that parsed agrees on them, else an error naming ``[tools]``. A host with no
+    runner has an empty profile."""
+    profiles = {(own.worker_path_prepend, own.worker_env_passthrough) for entry in entries if (own := entry.own)}
+    if len(profiles) > 1:
+        errors.add(
+            "the [[runner]] entries disagree on [runner.worker] path_prepend or env_passthrough, which the host's "
+            "own tool children also run under; declare the host's profile in a [tools] table"
+        )
+    return next(iter(profiles)) if len(profiles) == 1 else ((), ())
 
 
 def _repeats(entries: tuple[RunnerEntry, ...]) -> list[tuple[str, str]]:

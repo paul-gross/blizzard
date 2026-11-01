@@ -1074,6 +1074,30 @@
     {
       "default": null,
       "deprecated": false,
+      "path": "tools",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": [],
+      "deprecated": false,
+      "path": "tools.env_passthrough",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": [],
+      "deprecated": false,
+      "path": "tools.path_prepend",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
       "path": "tracing",
       "replaced_by": null,
       "required": false,

@@ -259,6 +259,7 @@ def runner_seams(
     binding: IRunnerBinding | None = None,
     identity: ICurrentRunnerIdentity | None = None,
     stepper: RunnerStepper | None = None,
+    tracing: TracingSettings | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
@@ -310,7 +311,7 @@ def runner_seams(
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     seams.selftests = selftests or SelfTestService(
-        scratch_git=SubprocessScratchGit(children, config.tool_env(TracingSettings.of(os.environ))),
+        scratch_git=SubprocessScratchGit(children, config.tool_env(tracing or TracingSettings.of(os.environ))),
         process=process,
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
@@ -844,6 +845,7 @@ def _wire_runner(
         clock=clock,
         process=process,
         children=graph.children,
+        tracing=graph.trace_settings,
         events=events,
         binding=connections,
         identity_verdict=graph.identity_verdict,

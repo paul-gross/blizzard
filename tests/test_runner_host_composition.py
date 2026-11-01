@@ -416,3 +416,27 @@ def test_a_runner_closes_its_host_only_when_it_was_built_over_a_host_of_one(tmp_
 
     dataclasses.replace(runner, closes_host=True).close()
     assert disposed == [True]
+
+
+def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_runners_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import blizzard.runner.composition as composition
+
+    launched: list[Any] = []
+    real = composition.WorkspaceLaunch
+
+    def recording(**kwargs: Any) -> Any:
+        launched.append(kwargs["env"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(composition, "WorkspaceLaunch", recording)
+    config = _config(tmp_path)
+    first = dataclasses.replace(config, runner_id="rn_a", worker_path_prepend=("/opt/first",))
+    host_config = dataclasses.replace(host_config_of(config), tool_path_prepend=("/opt/host",))
+
+    host = build_host_process(host_config, [BuiltRunner("rn_a", first, ResolvedToken())])
+    host.close()
+
+    path = launched[0].variables["PATH"].split(":")
+    assert "/opt/host" in path and "/opt/first" not in path

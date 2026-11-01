@@ -7,6 +7,7 @@ runner's own stores, stamping its id. Exercised over a real store via TestClient
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -450,3 +451,25 @@ def test_a_workers_runner_url_is_its_runners_base_under_the_host() -> None:
     config = RunnerConfig(root=Path("."), db_url="sqlite://", host="127.0.0.1", port=8431, runner_id="rn_a")
 
     assert config.local_api_url == "http://127.0.0.1:8431/runners/rn_a"
+
+
+def test_the_selftest_canary_env_withholds_otel_passthrough_under_the_graphs_tracing_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blizzard.foundation.trace_export.settings import TracingSettings
+
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.setenv("OTEL_CANARY_PROBE", "1")
+    config, stores = _runner(tmp_path, "rn_a", "r-claude", bindings=())
+    config = dataclasses.replace(config, worker_env_passthrough=("OTEL_CANARY_PROBE",))
+
+    seams = runner_seams(
+        config,
+        clock=FixedClock(_NOW),
+        process=None,  # type: ignore[arg-type]
+        children=CHILDREN,
+        runner_stores=stores,
+        tracing=TracingSettings.of({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}),
+    )
+
+    assert "OTEL_CANARY_PROBE" not in seams.seams.selftests._scratch_git._env.variables  # type: ignore[union-attr]

@@ -72,7 +72,7 @@ class SubprocessOpenCodePermissionResolver:
 
     def _run(self, args: list[str], cwd: str, env: ChildEnv) -> str:
         try:
-            # The launch env is already the allowlisted one (`bzh:worker-env-allowlist`).
+            # The caller passes the tool profile plus the OpenCode config variables (`bzh:worker-env-allowlist`).
             result = self._children.run([self._binary, *args], cwd=cwd, env=env, timeout=self._timeout)
         except OSError as exc:
             raise OpenCodePermissionResolveError(f"failed to run {self._binary} {' '.join(args)}: {exc}") from exc

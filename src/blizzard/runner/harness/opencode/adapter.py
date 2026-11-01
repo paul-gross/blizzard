@@ -66,7 +66,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.probe import IProcessProbe
 
@@ -217,6 +217,9 @@ def _instants_of(decoded: JsonObject) -> list[int]:
             if isinstance(state, dict):
                 take(state.get("time"), "start", "end")
     return found
+
+
+_OPENCODE_CONFIG_VARIABLES = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR")
 
 
 class OpenCodeAdapter:
@@ -588,7 +591,7 @@ class OpenCodeAdapter:
             limits = self._limits_catalog.limits_for(reference.provider, reference.model)
             if limits is None:
                 raise ValueError("model limits unavailable")
-            effective = self._permission_resolver.resolve(cwd=cwd, env=self._worker_env.worker(env)).merged_config
+            effective = self._permission_resolver.resolve(cwd=cwd, env=self._resolver_env(env)).merged_config
             content = env.get("OPENCODE_CONFIG_CONTENT")
             base = decode_json(content) if content else {}
             if not isinstance(base, dict):
@@ -609,6 +612,11 @@ class OpenCodeAdapter:
                 )
             return env
 
+    def _resolver_env(self, env: dict[str, str]) -> ChildEnv:
+        """The tool profile for a permission-resolution child, plus the OpenCode config variables the composed launch
+        env carries: the resolver reads configuration, so it needs no lease identity or runner address."""
+        return self._worker_env.tool().adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
+
     def _deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
@@ -622,7 +630,7 @@ class OpenCodeAdapter:
         if resolver is None:
             raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")
         try:
-            resolved = resolver.resolve(cwd=cwd, env=self._worker_env.worker(env))
+            resolved = resolver.resolve(cwd=cwd, env=self._resolver_env(env))
             overrides = compose_ask_denials(resolved.merged_config, resolved.agent_rulesets)
             if not overrides:
                 return env
@@ -632,7 +640,7 @@ class OpenCodeAdapter:
                 raise json.JSONDecodeError("OPENCODE_CONFIG_CONTENT is not a JSON object", content or "", 0)
             document = merge_overrides(base, overrides)
             composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
-            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._worker_env.worker(composed)).agent_rulesets)
+            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._resolver_env(composed)).agent_rulesets)
         except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
             raise HarnessSpawnError(f"cannot establish that an unattended OpenCode launch never asks: {exc}") from exc
         if remaining:
