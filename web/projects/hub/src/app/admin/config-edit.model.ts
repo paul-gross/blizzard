@@ -104,7 +104,7 @@ export function configEdit(
     const before = shown[field.key];
     const raw = form[field.key];
     const after = typeof raw === 'string' ? raw.trim() : raw;
-    if (after === before) continue;
+    if (after === before || sameNumber(field, before, after)) continue;
     const next = after === '' && field.kind !== 'select' ? null : after;
     body[field.key] = field.kind === 'number' && typeof next === 'string' ? Number(next) : next;
     diff.push({
@@ -116,6 +116,18 @@ export function configEdit(
     });
   }
   return { body, diff };
+}
+
+/** A `number` field's text compares by value, so "05" over a stored "5" is no change. */
+function sameNumber(field: ConfigFieldDef, before: unknown, after: unknown): boolean {
+  return (
+    field.kind === 'number' &&
+    typeof before === 'string' &&
+    typeof after === 'string' &&
+    /^\d+$/.test(before) &&
+    /^\d+$/.test(after) &&
+    Number(before) === Number(after)
+  );
 }
 
 function optionLabel(field: ConfigFieldDef, value: string | boolean | null): string | null {

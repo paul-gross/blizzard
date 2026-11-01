@@ -154,6 +154,12 @@ describe('conditional and number fields', () => {
     expect(configEdit(GATED, parked, { policy: 'park', hours: '' }).body).toEqual({ hours: null });
   });
 
+  it('treats a number written with leading zeros as unchanged', () => {
+    const edit = configEdit(GATED, parked, { policy: 'park', hours: '06' });
+    expect(edit.body).toEqual({});
+    expect(edit.diff).toEqual([]);
+  });
+
   it('names a shown number that is not a whole number', () => {
     expect(invalidNumbers(GATED, { policy: 'park', hours: '1.5' })).toEqual(['Hours']);
     expect(invalidNumbers(GATED, { policy: 'park', hours: 'x' })).toEqual(['Hours']);
