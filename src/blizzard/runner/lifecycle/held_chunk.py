@@ -173,8 +173,9 @@ class HeldChunk:
             return None
 
     def _poll_hub_node(self, latest_epoch: int | None) -> None:
-        """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance`` — the
-        re-drive path a hub node otherwise has no liveness poll for. A no-op or transport failure is swallowed."""
+        """Wake the hub's flow driver for a chunk parked at a hub node via ``POST /chunks/{id}/hub-advance``.
+        The flow driver drives the hub node on its own; the call only prompts its next turn. A no-op or
+        transport failure is swallowed."""
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(self.chunk_id, (latest_epoch or 0) + 1))):
                 self.ctx.hub.hub_advance(self.chunk_id)
