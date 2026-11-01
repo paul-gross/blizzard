@@ -23,6 +23,26 @@ export async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, rea
 }
 
 /**
+ * Steps the host's sole runner until `reached` holds, failing only after `stallPasses` consecutive passes in which the
+ * read state did not change, with the last state it saw. A multi-node chunk advances at its workers' own speed, one
+ * spawned process per node, so the passes it needs grow with how loaded the machine is; counting passes in total makes
+ * the wait race that speed, while counting passes that observed no progress waits on the progress itself.
+ */
+export async function stepUntilStalled<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean, stallPasses = MAX_STEPS): Promise<T> {
+  let state = await read();
+  let seen = JSON.stringify(state);
+  for (let stalled = 0; !reached(state); ) {
+    if (stalled === stallPasses) throw new Error(`no progress within ${stallPasses} passes; last state ${seen}\n${host.logTail()}`);
+    expect((await host.step()).outcome).toBe('completed');
+    state = await read();
+    const now = JSON.stringify(state);
+    stalled = now === seen ? stalled + 1 : 0;
+    seen = now;
+  }
+  return state;
+}
+
+/**
  * Steps until the chunk's lease is running, then waits for its worker to reach `checkpoint`'s `point`, held in its
  * spawn turn; returns the lease. Passes claim and spawn the worker, but no pass moves it from there to the checkpoint:
  * it gets there in its own process, at its own speed, so its arrival is awaited, never counted in passes. A lease reads
