@@ -8,13 +8,19 @@ parked across an ordinary hub exit.
 from __future__ import annotations
 
 import contextlib
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from blizzard.hub.delivery import hub_node
 from tests.support import build_hub
-from tests.test_hub_command_node import _HUB_CMD_GRAPH_YAML, _submit_build_pass, _to_merge_node
+from tests.test_hub_command_node import (
+    _ALWAYS_PENDING_GRAPH_YAML,
+    _HUB_CMD_GRAPH_YAML,
+    _submit_build_pass,
+    _to_merge_node,
+)
 
 pytestmark = pytest.mark.component
 
@@ -124,3 +130,21 @@ def test_the_migration_rolls_back_with_its_turn_when_a_later_write_in_the_transa
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == graph.graph_id, "the migration rolled back with the failed transaction"
+
+
+def test_a_poll_timeout_whose_failure_edge_is_cross_graph_migrates(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML}).status_code == 201
+    graph_yaml = _ALWAYS_PENDING_GRAPH_YAML.replace(
+        "description: Red.\n          to: build", "description: Red.\n          to: graph:triage"
+    )
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=graph_yaml)
+    _submit_build_pass(hub, chunk_id, build_node_id, 1)
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=31))
+        hub.turn_outcome(chunk_id)
+
+    triage_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "triage")
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == triage_id
+    assert detail["pending"] is None
