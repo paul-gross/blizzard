@@ -11,7 +11,7 @@ from typing import NamedTuple, Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 
 @domain_model
@@ -66,6 +66,18 @@ class IReadChunkDependenciesRepository(Protocol):
 
 class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protocol):
     """Read-write chunk-dependencies access."""
+
+    def declare_in_transaction_locked(
+        self,
+        transaction: LockedTransaction,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+    ) -> DependencyEdge:
+        """Declare an edge in a unit locking both endpoints, after the domain's cycle check."""
+        ...
 
     def declare_locked(
         self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime

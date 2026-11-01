@@ -118,3 +118,24 @@ def test_real_repositories_share_commit_and_rollback(tmp_path: Path) -> None:
         assert chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=unit) is not None
         assert chunks.dependencies.release("ch_a", "ch_c", by="test", at=now, transaction=unit) is not None
     assert chunks.dependencies.standing_edges_for("ch_a") == []
+
+
+def test_locked_decision_requires_both_chunk_locks(tmp_path: Path) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    _, engine = migrate_to(tmp_path, "head")
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=now)
+    store = hub_store_connections(engine)
+    chunks = build_chunk_stores(store, FixedClock(now), registry=RunnerRegistryStore(store))
+    for chunk_id in ("ch_a", "ch_b"):
+        seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
+    service = tx.HubTransactions(store)
+    with service.begin() as unit:
+        locked = unit.lock_chunks(["ch_a"])
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.declare_in_transaction_locked(locked, "ch_a", "ch_b", by="test", at=now)
+    with service.begin() as unit:
+        locked = unit.lock_chunks(["ch_b", "ch_a"])
+        chunks.dependencies.declare_in_transaction_locked(locked, "ch_a", "ch_b", by="test", at=now)
+    assert len(chunks.dependencies.standing_edges_for("ch_a")) == 1
+    engine.dispose()
