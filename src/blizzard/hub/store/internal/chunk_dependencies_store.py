@@ -20,7 +20,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
@@ -94,6 +94,19 @@ class ChunkDependenciesStore:
             .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
         ).all()
         return [_edge(row) for row in rows]
+
+    def declare_in_transaction_locked(
+        self,
+        transaction: LockedTransaction,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+    ) -> DependencyEdge:
+        conn = connection_for(self._store, transaction, chunk=dependent_chunk_id)
+        connection_for(self._store, transaction, chunk=prerequisite_chunk_id)
+        return self._declare_conn(conn, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
     def declare_locked(
         self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
