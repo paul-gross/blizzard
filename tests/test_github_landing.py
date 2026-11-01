@@ -496,23 +496,40 @@ def test_a_merge_answer_without_its_revision_reads_the_change_for_it() -> None:
     ("status", "message", "expected"),
     [
         (201, "", Rerun(RerunOutcome.ACCEPTED)),
-        (403, "The workflow run containing this job is already running", None),
-        (422, "This workflow is already running", None),
+        (
+            403,
+            "The workflow run containing this job is already running",
+            Rerun(RerunOutcome.RUN_IN_PROGRESS, "HTTP 403: The workflow run containing this job is already running"),
+        ),
+        (
+            422,
+            "This workflow is already running",
+            Rerun(RerunOutcome.RUN_IN_PROGRESS, "HTTP 422: This workflow is already running"),
+        ),
         (401, "nope", Rerun(RerunOutcome.REFUSED, "HTTP 401: nope")),
-        (403, "Resource not accessible by personal access token", None),
-        (403, "Only jobs from the current attempt can be re-run", None),
+        (
+            403,
+            "Resource not accessible by personal access token",
+            Rerun(RerunOutcome.REFUSED, "HTTP 403: Resource not accessible by personal access token"),
+        ),
+        (
+            403,
+            "Only jobs from the current attempt can be re-run",
+            Rerun(RerunOutcome.REFUSED, "HTTP 403: Only jobs from the current attempt can be re-run"),
+        ),
         (404, "Not Found", Rerun(RerunOutcome.REFUSED, "HTTP 404: Not Found")),
-        (422, "Job is not a GitHub Actions job", None),
+        (
+            422,
+            "Job is not a GitHub Actions job",
+            Rerun(RerunOutcome.REFUSED, "HTTP 422: Job is not a GitHub Actions job"),
+        ),
     ],
 )
 def test_rerun_check_reruns_the_actions_job_and_classifies_the_forges_answer(
-    status: int, message: str, expected: Rerun | None
+    status: int, message: str, expected: Rerun
 ) -> None:
     harness = _Harness({("POST", f"{_REPO}/actions/jobs/11/rerun"): [_reply(status, {"message": message})]})
 
-    if expected is None:
-        outcome = RerunOutcome.RUN_IN_PROGRESS if "already running" in message.lower() else RerunOutcome.REFUSED
-        expected = Rerun(outcome, f"HTTP {status}: {message}")
     assert harness.run(lambda forge: forge.rerun_check("11")) == expected
     assert [(request.method, request.url.path) for request in harness.recorded.requests] == [
         ("POST", f"{_REPO}/actions/jobs/11/rerun")
