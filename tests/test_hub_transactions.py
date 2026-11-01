@@ -19,6 +19,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
@@ -100,7 +101,9 @@ def test_real_repositories_share_commit_and_rollback(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=now)
     store = hub_store_connections(engine)
-    chunks = build_chunk_stores(store, FixedClock(now), registry=RunnerRegistryStore(store))
+    chunks = build_chunk_stores(
+        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
+    )
     for chunk_id in ("ch_a", "ch_b", "ch_c"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
     with chunks.exclusive.locked(["ch_a", "ch_b", "ch_c"]) as locked:
@@ -126,7 +129,9 @@ def test_locked_decision_requires_both_chunk_locks(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=now)
     store = hub_store_connections(engine)
-    chunks = build_chunk_stores(store, FixedClock(now), registry=RunnerRegistryStore(store))
+    chunks = build_chunk_stores(
+        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
+    )
     for chunk_id in ("ch_a", "ch_b"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
     service = tx.HubTransactions(store)

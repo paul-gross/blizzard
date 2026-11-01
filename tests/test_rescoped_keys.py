@@ -44,6 +44,7 @@ from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import is_project_keyed
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
     RecordedEvents,
@@ -239,7 +240,9 @@ def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: 
     pointer = WorkRef(source="hub", ref="7")
     for tenant in (tenants.first, tenants.second):
         store = scoped_connections(tenants.engine, tenant)
-        stores = build_chunk_stores(store, FixedClock(_AT), registry=RunnerRegistryStore(store))
+        stores = build_chunk_stores(
+            store, FixedClock(_AT), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
+        )
         with stores.exclusive.locked_work_refs([pointer]):
             pass
 
