@@ -256,13 +256,13 @@ def test_declare_against_a_dependent_deleted_between_resolution_and_the_write_is
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     before = _rows(hub)
-    real_resolve_prerequisite = chunk_dependencies_module._resolve_prerequisite
+    real_resolve_prerequisite = chunk_dependencies_module.resolve_prerequisite
 
     def _delete_dependent_then_resolve(services, chunk_id):
         assert hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={}).status_code == 202
         return real_resolve_prerequisite(services, chunk_id)
 
-    monkeypatch.setattr(chunk_dependencies_module, "_resolve_prerequisite", _delete_dependent_then_resolve)
+    monkeypatch.setattr(chunk_dependencies_module, "resolve_prerequisite", _delete_dependent_then_resolve)
 
     resp = _declare(hub, dependent_id, prerequisite_id)
 

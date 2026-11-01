@@ -3,7 +3,6 @@ requeue, selftest."""
 
 from __future__ import annotations
 
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +10,7 @@ from typing import NotRequired, TypedDict
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
@@ -78,7 +78,7 @@ class _Lever(TypedDict):
     until: str | None
 
 
-class _Throttle(TypedDict):
+class Throttle(TypedDict):
     floor: _Floor
     state: str
     declining: NotRequired[list[str]]
@@ -137,7 +137,7 @@ class _RunnerView(_Tenant):
     workspace_id: str
     identity: NotRequired[object | None]
     pause: _Pause
-    throttle: NotRequired[_Throttle | None]
+    throttle: NotRequired[Throttle | None]
     capacities: _Capacities
     routing_conflicts: NotRequired[list[_Conflict]]
     hub: _Hub
@@ -276,7 +276,7 @@ def _tenant_part(view: _Tenant) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
-def _throttle_lines(throttle: _Throttle | None) -> list[str]:
+def throttle_lines(throttle: Throttle | None) -> list[str]:
     if throttle is None:
         return []
     declining = ", ".join(throttle.get("declining", [])) or "none"
@@ -369,13 +369,13 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     )
     identity = view.get("identity")
     if identity is not None:
-        _echo_identity(IdentityVerdictView.model_validate(identity))
+        echo_identity(IdentityVerdictView.model_validate(identity))
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
     reason = f" — {pause.get('local_reason')}" if pause.get("local_reason") else ""
     click.echo(f"  {brake_state}{reason}")
-    for line in _throttle_lines(view.get("throttle")):
+    for line in throttle_lines(view.get("throttle")):
         click.echo(line)
     cap = view["capacities"]
     bindings = cap.get("bindings", [])
@@ -728,13 +728,14 @@ def selftest(
             raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
         resp.raise_for_status()
         run = resp.json()
-        deadline = time.monotonic() + _SELFTEST_POLL_TIMEOUT
+        monotonic_clock = CliCollaborators.of(ctx).monotonic_clock
+        deadline = monotonic_clock.monotonic() + _SELFTEST_POLL_TIMEOUT
         while run["status"] == "running":
-            if time.monotonic() > deadline:
+            if monotonic_clock.monotonic() > deadline:
                 raise click.ClickException(
                     f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s — the runner may be wedged"
                 )
-            time.sleep(_SELFTEST_POLL_INTERVAL)
+            monotonic_clock.sleep(_SELFTEST_POLL_INTERVAL)
             run = daemon.get(f"/api/selftests/{run['id']}").json()
 
     for check in run["checks"]:
@@ -775,7 +776,7 @@ def _verdict(view: IdentityVerdictView, state: IdentityState) -> IdentityVerdict
     )
 
 
-def _echo_identity(view: IdentityVerdictView) -> None:
+def echo_identity(view: IdentityVerdictView) -> None:
     if isinstance(view.state, Unrecognized):
         # A state a newer runner reports: show it, and claim no refusal or remedy for it.
         click.echo(f"  identity: unknown identity state {view.state.raw!r}")

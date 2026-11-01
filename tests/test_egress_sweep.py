@@ -6,6 +6,7 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
+import threading
 from collections.abc import Sequence
 from dataclasses import fields
 from datetime import timedelta
@@ -93,7 +94,12 @@ def egress_store(hub: HubHarness) -> EgressStore:
 
 
 def egress_sweep(
-    hub: HubHarness, writer: IEgressWriter, config: EgressConfig = SETTLED, *, store: EgressStore | None = None
+    hub: HubHarness,
+    writer: IEgressWriter,
+    config: EgressConfig = SETTLED,
+    *,
+    store: EgressStore | None = None,
+    pass_lock: threading.Lock | None = None,
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
@@ -106,6 +112,7 @@ def egress_sweep(
         events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=config,
+        pass_lock=pass_lock,
     )
 
 
@@ -794,7 +801,7 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
 
     assert hub.hub_services.egress_export is None
     assert [s for s in Sweep.all(_app(hub)) if "egress" in s.logger_name] == []
-    hub_app._announce_rejected_egress(config, hub.hub_services)
+    hub_app.announce_rejected_egress(config, hub.hub_services)
     assert kinds(hub) == ["egress-config-rejected"]
     assert hub.client.get("/api/health").status_code == 200
 

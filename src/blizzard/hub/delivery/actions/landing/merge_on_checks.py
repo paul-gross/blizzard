@@ -121,7 +121,7 @@ class PullRequest:
         """The change for the target's branch: an already-merged one first, so a re-visit recovers a merge
         even when its record was interrupted — then the open one, opening one first when neither exists, then
         read live. Raises :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a hiccup."""
-        merged = await cls._merged_for_branch(target)
+        merged = await cls.merged_for_branch(target)
         if merged is not None:
             return await cls._record(await cls(target, merged).reread())
         existing = await cls._open_for_branch(target)
@@ -185,7 +185,7 @@ class PullRequest:
         return listed[0] if listed else None
 
     @classmethod
-    async def _merged_for_branch(cls, target: RepoLanding) -> Change | None:
+    async def merged_for_branch(cls, target: RepoLanding) -> Change | None:
         """The already-merged change that landed the submitted commit — else the branch's live tip — into the
         target's own base, or ``None`` when the read confirms there is none: never a same-name change merged
         into a different base, and never a refused read, which raises :class:`PullRequestLookupError`."""

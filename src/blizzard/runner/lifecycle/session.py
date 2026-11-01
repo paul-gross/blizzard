@@ -118,7 +118,7 @@ class SessionResolver:
         head = self.leases.pool_head(chunk_id, pool)
         if head is None:
             return resume_target(node)  # an empty pool — this member mints the head
-        breach, owner_exc = self._rotation_breach(head, node, spawn_cwd)
+        breach, owner_exc = self.pool_head_breach(head, node, spawn_cwd)
         if breach is not None:
             _log.info(
                 "rotating session pool",
@@ -129,7 +129,7 @@ class SessionResolver:
             )
         return resume_target(node, candidate=head.session, breach=breach, owner_exc=owner_exc)
 
-    def _rotation_breach(
+    def pool_head_breach(
         self, head: PoolHead, node: EnvelopeNode, spawn_cwd: str | None
     ) -> tuple[str | None, UnknownHarnessError | UnavailableHarnessError | None]:
         """Why this pool head must not be resumed, or ``None`` when it may be,
@@ -186,7 +186,7 @@ class SessionResolver:
 
     def _unresolvable_owner(self, harness_id: str) -> UnknownHarnessError | UnavailableHarnessError | None:
         """Whether ``harness_id`` resolves right now — ``None`` when it does, else the
-        exception that says why not. :meth:`_plain_resume`'s own check; :meth:`_rotation_breach`
+        exception that says why not. :meth:`_plain_resume`'s own check; :meth:`pool_head_breach`
         keeps its inline resolve since it needs the adapter itself for the checks past it."""
         try:
             self.harnesses.model_resolution(harness_id)

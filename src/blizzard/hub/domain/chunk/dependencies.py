@@ -141,6 +141,10 @@ class DependencyService:
         # names, so the cycle check itself still needs one lock over the tenant's whole dependency graph.
         self._cycle_lock = cycle_lock
 
+    @property
+    def dependencies(self) -> IWriteChunkDependenciesRepository:
+        return self._dependencies
+
     def declare(self, dependent: Chunk, prerequisite: PrerequisiteScope, *, by: str) -> DependencyEdge:
         """Declare that ``dependent`` depends on ``prerequisite``.
 

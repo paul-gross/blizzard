@@ -150,7 +150,7 @@ def runner_view(
         bindings=binding_views(r.bindings, flags),
         subscription=r.subscription,
         subscription_unrostered=flags.subscription_unrostered,
-        declining=_declining_views(r),
+        declining=declining_views(r),
     )
 
 
@@ -190,7 +190,7 @@ def registry_view(
         bindings=binding_views(r.bindings, flags),
         subscription=r.subscription,
         subscription_unrostered=flags.subscription_unrostered,
-        declining=_declining_views(r),
+        declining=declining_views(r),
         version=r.reported_version,
         version_standing=r.version_standing(),
         version_refusal=r.version_refusal,
@@ -292,7 +292,7 @@ def usage_views(views: Iterable[PerSubscriptionUsageView]) -> list[SubscriptionU
     ]
 
 
-def _declining_views(r: RunnerRegistration) -> list[RunnerDecliningView]:
+def declining_views(r: RunnerRegistration) -> list[RunnerDecliningView]:
     return [
         RunnerDecliningView(lever=d.lever, detail=d.detail, subscription=d.subscription, until=_iso_or_none(d.until))
         for d in r.declining

@@ -284,12 +284,12 @@ def test_each_terminal_predicate_reads_only_its_scope_facts(
 
 def test_the_fence_terminal_read_without_a_from_reads_only_its_scope(stand_in_engine: Engine) -> None:
     with _scoped(stand_in_engine, TEN_A).read("test") as conn:
-        assert chunk_rows._is_terminal(conn, "ch_stopped") is True
-        assert chunk_rows._is_terminal(conn, "ch_live") is False
+        assert chunk_rows.is_terminal(conn, "ch_stopped") is True
+        assert chunk_rows.is_terminal(conn, "ch_live") is False
     with _scoped(stand_in_engine, TEN_B).read("test") as conn:
-        assert chunk_rows._is_terminal(conn, "ch_live") is True
-        assert chunk_rows._is_terminal(conn, "ch_done") is False
-        assert chunk_rows._is_terminal(conn, "ch_fresh") is False
+        assert chunk_rows.is_terminal(conn, "ch_live") is True
+        assert chunk_rows.is_terminal(conn, "ch_done") is False
+        assert chunk_rows.is_terminal(conn, "ch_fresh") is False
 
 
 def test_each_ephemeral_union_arm_is_scoped(stand_in_engine: Engine) -> None:

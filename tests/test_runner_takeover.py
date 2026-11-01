@@ -70,7 +70,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=None, workspace_root=""):
+def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=None, workspace_root="", workspaces=None):
     return TakeoverService(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
@@ -79,7 +79,7 @@ def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=No
         tokens=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
-        workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
+        workspaces=workspaces or single_workspace(FakeProvider({}), spawn_root=workspace_root),
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -87,14 +87,15 @@ def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=No
 
 
 def _two_workspace_service(store: SqlAlchemyRunnerStore):
-    service = _service(store)
-    service._workspaces = WorkspaceRegistry(
-        [
-            WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="/root-a"),
-            WorkspaceEntry("ws_b", FakeProvider({}), spawn_root="/root-b"),
-        ]
+    return _service(
+        store,
+        workspaces=WorkspaceRegistry(
+            [
+                WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="/root-a"),
+                WorkspaceEntry("ws_b", FakeProvider({}), spawn_root="/root-b"),
+            ]
+        ),
     )
-    return service
 
 
 def _seed_lease(

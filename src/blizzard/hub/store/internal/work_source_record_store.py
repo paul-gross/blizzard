@@ -45,7 +45,7 @@ _FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 _SLUGS = SlugTables(work_sources, work_source_former_slugs, "work_source_id", WorkSourceSlugTaken)
 
 
-def _retired_ids(conn: Connection, ids: list[WorkSourceId] | None = None) -> set[str]:
+def retired_ids(conn: Connection, ids: list[WorkSourceId] | None = None) -> set[str]:
     facts = work_source_lifecycle_facts
     found: set[str] = set()
     for batch in id_batches(ids) if ids is not None else [None]:
@@ -279,7 +279,7 @@ class WorkSourceRecordStore:
             return {}
         found: dict[WorkSourceId, ConfiguredWorkSource] = {}
         with self._store.read("get_many") as conn:
-            retired = _retired_ids(conn, work_source_ids)
+            retired = retired_ids(conn, work_source_ids)
             for batch in id_batches(work_source_ids):
                 rows = conn.execute(
                     self._store.select(work_sources).where(work_sources.c.work_source_id.in_(batch))
@@ -292,7 +292,7 @@ class WorkSourceRecordStore:
     def list_all(self, *, include_retired: bool) -> list[ConfiguredWorkSource]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(self._store.select(work_sources).order_by(work_sources.c.slug)).all()
-            retired = _retired_ids(conn)
+            retired = retired_ids(conn)
         return [
             _of(row, retired=row.work_source_id in retired)
             for row in rows
@@ -321,7 +321,7 @@ class WorkSourceRecordStore:
 
 
 def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredWorkSource:
-    return _of(row, retired=row.work_source_id in _retired_ids(conn, [WorkSourceId(row.work_source_id)]))
+    return _of(row, retired=row.work_source_id in retired_ids(conn, [WorkSourceId(row.work_source_id)]))
 
 
 def _of(row: Row[Any], *, retired: bool) -> ConfiguredWorkSource:

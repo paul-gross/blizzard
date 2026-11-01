@@ -241,8 +241,9 @@ def _probe(
     provider_refusal: bool = False,
     auth_source: Path | None = None,
     process: IOpenCodeProcess | None = None,
+    scratch: _RecordingScratchGit | None = None,
 ) -> tuple[OpenCodeCompatibilityProbe, _RecordingScratchGit]:
-    scratch = _RecordingScratchGit()
+    scratch = _RecordingScratchGit() if scratch is None else scratch
     transport = UrllibLoopbackTransport()
     return (
         OpenCodeCompatibilityProbe(
@@ -735,8 +736,7 @@ def test_disposable_scratch_repository_is_never_reachable_or_writable_by_another
                     (str(path), path.stat().st_mode & 0o777) for path in (repo.workdir, *repo.workdir.rglob("*"))
                 )
 
-    probe, _ = _probe(mock_opencode, tmp_path)
-    probe._scratch_git = _PermissionRecordingScratchGit()
+    probe, _ = _probe(mock_opencode, tmp_path, scratch=_PermissionRecordingScratchGit())
 
     CompatibilityDiagnostic(probe).run()
 
@@ -755,8 +755,7 @@ def test_a_scratch_repository_fault_is_not_reported_as_an_OpenCode_shape(tmp_pat
             raise OSError("the scratch repository could not be created")
             yield  # pragma: no cover - unreachable, present so this stays a generator
 
-    probe, _ = _probe(mock_opencode, tmp_path)
-    probe._scratch_git = _FailingScratchGit()
+    probe, _ = _probe(mock_opencode, tmp_path, scratch=_FailingScratchGit())
 
     report = CompatibilityDiagnostic(probe).run()
 

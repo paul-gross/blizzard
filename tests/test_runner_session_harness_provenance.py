@@ -118,7 +118,7 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
     pool_head = store.pool_head("chunk_1", "shared-pool")
     assert pool_head is not None and pool_head.session == other
 
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         generations = conn.execute(sa.text("SELECT lease_id, harness_id, harness_version FROM lease_spawns"))
         assert {tuple(row) for row in generations} == {
             ("lease_a", CLAUDE_CODE_HARNESS_ID, "v1"),

@@ -147,7 +147,7 @@ def _chunk_waits(facts: StepFacts, minted: datetime, finish: datetime) -> list[_
     return [_Wait(w.role, w.name, w.start, min(w.end, finish)) for w in waits]
 
 
-def _step_extents(summaries: list[StepSummary], chunk_waits: list[_Wait]) -> list[tuple[datetime, datetime]]:
+def step_extents(summaries: list[StepSummary], chunk_waits: list[_Wait]) -> list[tuple[datetime, datetime]]:
     """What each step's lifetime span covers, in step order. It starts at the earliest of its queue and claim waits,
     else its own start, but never before the end of a chunk wait that ends by its own start, and never after its own
     start. It ends at the later of its end and its close, which takes in a gate's decision pickup. Step spans never
@@ -281,7 +281,7 @@ def assemble_lifetime(facts: StepFacts) -> tuple[FinishedSpan, ...]:
     )
     summaries = _summaries(facts)
     chunk_waits = _chunk_waits(facts, minted, finish)
-    extents = _step_extents(summaries, chunk_waits)
+    extents = step_extents(summaries, chunk_waits)
     steps = [_lifetime_step(facts, summary, root, extent) for summary, extent in zip(summaries, extents, strict=True)]
     waits = [
         FinishedSpan(

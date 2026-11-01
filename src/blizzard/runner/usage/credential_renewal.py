@@ -46,6 +46,18 @@ class CredentialRenewalPass:
         self._renewals = renewals
         self._clock = clock
 
+    @property
+    def subscriptions(self) -> tuple[RenewableSubscription, ...]:
+        return self._subscriptions
+
+    @property
+    def renewals(self) -> IWriteCredentialRenewalRepository:
+        return self._renewals
+
+    @property
+    def clock(self) -> IClock:
+        return self._clock
+
     def run(self) -> None:
         """One pass over every renewable subscription."""
         for subscription in self._subscriptions:

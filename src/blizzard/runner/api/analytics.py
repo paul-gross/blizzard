@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 # can legitimately run the whole per-attempt timeout, and retrying it would open a second
 # pool connection while the first is still draining. A fast failure (a gateway mid-swap)
 # still has budget left over to retry; a genuinely slow scan does not.
-_ANALYTICS_HUB_TIMEOUT = 15.0
+ANALYTICS_HUB_TIMEOUT = 15.0
 
 
 def _window_params(since: str | None, until: str | None, by_name: bool = False) -> dict[str, str]:
@@ -38,7 +38,7 @@ def _counts(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/counts/{suffix}",
         params=_window_params(since, until, by_name),
         chunk_id=lease.chunk_id,
-        timeout=_ANALYTICS_HUB_TIMEOUT,
+        timeout=ANALYTICS_HUB_TIMEOUT,
     )
     return AnalyticsCountsResponse.model_validate(upstream.json())
 
@@ -51,7 +51,7 @@ def _spend(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/spend/{suffix}",
         params=_window_params(since, until, by_name),
         chunk_id=lease.chunk_id,
-        timeout=_ANALYTICS_HUB_TIMEOUT,
+        timeout=ANALYTICS_HUB_TIMEOUT,
     )
     return AnalyticsSpendResponse.model_validate(upstream.json())
 

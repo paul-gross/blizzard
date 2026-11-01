@@ -200,23 +200,23 @@ class ConfigView:
 
     def get(self, key: str, default: object = None) -> Any:
         """The value at ``key``, or ``default`` when the file does not carry it."""
-        self._check(key)
+        self.check(key)
         return default if self._held(key) else self.body.get(key, default)
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, str):
             return False
-        self._check(key)
+        self.check(key)
         return key in self.body and not self._held(key)
 
     def table(self, key: str) -> ConfigView:
         """The sub-table at ``key``; empty when absent or not a table."""
         value = self.get(key)
-        return replace(self, path=self._join(key), body=as_table(value) or {})
+        return replace(self, path=self.join(key), body=as_table(value) or {})
 
     def element(self, key: str, value: object) -> ConfigView:
         """One entry of the array of tables at ``key``, its path marked ``key[]``; empty when not a table."""
-        return replace(self, path=f"{self._join(key)}[]", body=as_table(value) or {})
+        return replace(self, path=f"{self.join(key)}[]", body=as_table(value) or {})
 
     def entries(self, key: str) -> Iterator[ConfigView]:
         """Each table of the array at ``key``; none when absent or not an array."""
@@ -237,7 +237,7 @@ class ConfigView:
     def _held(self, key: str) -> bool:
         """Whether ``key`` is present, guarded, and its flag off — after its value passed the declared type, so a
         malformed value fails whatever the flag says."""
-        declared = self.registry.key(self._join(key)) if self.checked and self.flags is not None else None
+        declared = self.registry.key(self.join(key)) if self.checked and self.flags is not None else None
         if declared is None or declared.flag is None or key not in self.body:
             return False
         assert self.flags is not None
@@ -245,11 +245,11 @@ class ConfigView:
             raise InvalidConfigValue(f"{declared.path} must be a {declared.type}, got {self.body[key]!r}")
         return not self.flags.on(declared.flag)
 
-    def _join(self, key: str) -> str:
+    def join(self, key: str) -> str:
         return f"{self.path}.{key}" if self.path else key
 
-    def _check(self, key: str) -> None:
-        path = self._join(key)
+    def check(self, key: str) -> None:
+        path = self.join(key)
         if self.checked and not self.registry.declares(path):
             self._undeclared(path)
 

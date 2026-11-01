@@ -386,7 +386,7 @@ def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:
             forge_label="example",
         )
         for _ in range(11):
-            assert await _PullRequest._merged_for_branch(target) is None
+            assert await _PullRequest.merged_for_branch(target) is None
 
     harness.run(poll)
     requests = harness.recorded.requests

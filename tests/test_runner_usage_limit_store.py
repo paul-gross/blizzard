@@ -50,7 +50,7 @@ def host(store: SqlAlchemyRunnerStore) -> SubscriptionUsageLimitStore:
 
 
 def _twin(store: SqlAlchemyRunnerStore, runner_id: str | None) -> RunnerUsageLimitStore:
-    return RunnerUsageLimitStore(RunnerStoreConnections(store._engine, runner_store_errors(), runner_id))
+    return RunnerUsageLimitStore(RunnerStoreConnections(store.engine, runner_store_errors(), runner_id))
 
 
 # --- the subscription's marks and clears ----------------------------------------------------------------------------
@@ -191,5 +191,5 @@ def test_an_unbound_twin_refuses_to_write(store: SqlAlchemyRunnerStore) -> None:
 
 
 def test_an_unconfined_read_of_the_runner_table_is_refused(store: SqlAlchemyRunnerStore) -> None:
-    with pytest.raises(UnscopedRunnerStatement), store._engine.connect() as conn:
+    with pytest.raises(UnscopedRunnerStatement), store.engine.connect() as conn:
         conn.execute(sa.select(runner_usage_limits))

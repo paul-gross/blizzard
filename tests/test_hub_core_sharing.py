@@ -22,13 +22,13 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     services = hub.services
 
-    assert services.findings is services.finding_exit._repo
-    assert services.garden_proposals is services.garden_proposal_authoring._proposals
-    assert services.garden_proposal_closures is services.garden_proposal_authoring._closures
-    assert services.delete is services.garden_proposal_closure._items._delete
-    assert services.registry is services.claim._registry
-    assert services.registry is services.fleet._registry
-    assert services.registry is services.claim._exclusive._registry  # type: ignore[attr-defined]
+    assert services.findings is services.finding_exit.repo
+    assert services.garden_proposals is services.garden_proposal_authoring.proposals
+    assert services.garden_proposal_closures is services.garden_proposal_authoring.closures
+    assert services.delete is services.garden_proposal_closure.items.delete
+    assert services.registry is services.claim.registry
+    assert services.registry is services.fleet.registry
+    assert services.registry is services.claim.exclusive.registry  # type: ignore[attr-defined]
 
 
 def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(tmp_path: Path) -> None:
@@ -37,7 +37,7 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     hub_editor = hub.work_sources.editor("hub")
     assert hub_editor is not None
 
-    assert hub_editor._edits is hub.services.garden_proposal_closure._items  # type: ignore[attr-defined]
+    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # type: ignore[attr-defined]
 
 
 def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:

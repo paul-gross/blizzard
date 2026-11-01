@@ -1150,7 +1150,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     )
     forge = hub.services.forge_records.get(target.fields.forge_id)
     assert forge is not None
-    hub.services.turns._router.escalate_capability_missing(
+    hub.services.turns.router.escalate_capability_missing(
         chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, forge=forge, epoch=1
     )
     assert _event_kinds(hub).count("forge-capability-missing") == 1

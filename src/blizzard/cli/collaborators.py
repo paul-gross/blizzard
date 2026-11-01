@@ -1,4 +1,4 @@
-"""The swappable collaborators of one CLI process — its HTTP client factory, span clock, and wall clock.
+"""The swappable collaborators of one CLI process — its HTTP client factory, span clock, and wall and monotonic clocks.
 
 An invoker passes its own as ``obj`` to the root group; with none, the group builds the production ones."""
 
@@ -11,7 +11,7 @@ from typing import Protocol
 import click
 from httpx2 import Client, ConnectError, HTTPError, HTTPStatusError, HTTPTransport, Response
 
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.span_clock import Clock
 
 __all__ = [
@@ -62,10 +62,17 @@ class CliCollaborators:
     clock: Clock
     #: What a verb judges a time the operator typed against — separate from ``clock``, which stamps spans.
     wall_clock: IClock
+    #: What a verb's bounded poll loop reads elapsed time and sleeps through.
+    monotonic_clock: IMonotonicClock
 
     @classmethod
     def production(cls) -> CliCollaborators:
-        return cls(client_factory=_short_lived_client, clock=Clock(), wall_clock=SystemClock())
+        return cls(
+            client_factory=_short_lived_client,
+            clock=Clock(),
+            wall_clock=SystemClock(),
+            monotonic_clock=SystemMonotonicClock(),
+        )
 
     @classmethod
     def of(cls, ctx: click.Context) -> CliCollaborators:

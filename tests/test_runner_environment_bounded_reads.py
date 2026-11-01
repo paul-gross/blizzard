@@ -55,7 +55,7 @@ def test_rows_read_equal_the_chunk_count_at_two_rebind_depths(tmp_path: Path, re
         directory.mkdir()
         store = _store(directory)
         _seed(store, chunks, depth)
-        measured.append(count_rows_read(store._engine, lambda store=store: getattr(store, read)(chunks)))
+        measured.append(count_rows_read(store.engine, lambda store=store: getattr(store, read)(chunks)))
     assert measured == [len(chunks), len(chunks)]
 
 
@@ -63,7 +63,7 @@ def test_rows_read_by_chunk_project_ids_are_exactly_the_chunk_count(tmp_path: Pa
     store = _store(tmp_path)
     chunks = ["ch_1", "ch_2", "ch_3"]
     _seed(store, chunks, 4)
-    assert count_rows_read(store._engine, lambda: store.chunk_project_ids(chunks)) == len(chunks)
+    assert count_rows_read(store.engine, lambda: store.chunk_project_ids(chunks)) == len(chunks)
 
 
 def test_a_newer_null_project_binding_never_hides_an_older_project(tmp_path: Path) -> None:
@@ -87,8 +87,8 @@ def test_another_runners_binding_on_the_same_chunk_is_invisible(tmp_path: Path) 
 def test_empty_and_duplicate_ids(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _bind(store, "ch_1", 0)
-    assert count_queries(store._engine, lambda: store.held_bindings_for([])) == 0
-    assert count_queries(store._engine, lambda: store.newest_bindings_for([])) == 0
+    assert count_queries(store.engine, lambda: store.held_bindings_for([])) == 0
+    assert count_queries(store.engine, lambda: store.newest_bindings_for([])) == 0
     assert store.chunk_project_ids([]) == {}
     assert store.chunk_project_ids(["ch_1", "ch_1"]) == {"ch_1": "p"}
     assert len(store.held_bindings_for(["ch_1", "ch_1"])["ch_1"]) == 1
@@ -120,4 +120,4 @@ def test_statements_equal_the_batch_count(tmp_path: Path, monkeypatch: pytest.Mo
     chunks = [f"ch_{i}" for i in range(5)]
     _seed(store, chunks, 1)
     monkeypatch.setattr(batching, "BATCH_SIZE", 2)
-    assert count_queries(store._engine, lambda store=store: getattr(store, read)(chunks)) == 3
+    assert count_queries(store.engine, lambda store=store: getattr(store, read)(chunks)) == 3

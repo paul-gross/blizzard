@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 import blizzard.runner.harness.internal.process_launcher as process_launch
-from blizzard.runner.harness.internal.process_launcher import ProcessLauncher, _ensure_executable
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher, ensure_executable
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import Stream
@@ -154,11 +154,11 @@ def test_confirm_waits_for_child_disarm_before_a_standalone_tick_retires_its_spa
 ) -> None:
     # Force the scheduler window that a short-lived tick otherwise races: a
     # confirm byte arrives, then the trampoline pauses before clearing PDEATHSIG.
-    trampoline = process_launch._TRAMPOLINE_SOURCE.replace(
+    trampoline = process_launch.TRAMPOLINE_SOURCE.replace(
         "if _libc.prctl(1, 0, 0, 0, 0) != 0:",
         "import time; time.sleep(0.25)\nif _libc.prctl(1, 0, 0, 0, 0) != 0:",
     )
-    monkeypatch.setattr(process_launch, "_TRAMPOLINE_SOURCE", trampoline)
+    monkeypatch.setattr(process_launch, "TRAMPOLINE_SOURCE", trampoline)
     executor = ThreadPoolExecutor(max_workers=1)
     launched = ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN).launch(
         ["sleep", "30"], cwd=None, env=_daemon_env(), stdout=Stream.INHERIT, stderr=Stream.INHERIT, defer_disarm=True
@@ -301,14 +301,14 @@ def test_a_worker_never_inherits_the_daemons_open_stdin(
 
 
 # --------------------------------------------------------------------------- #
-# `_ensure_executable`: a missing path is `ENOENT`; existing-but-not-executable is `EACCES`.
+# `ensure_executable`: a missing path is `ENOENT`; existing-but-not-executable is `EACCES`.
 
 
 @pytest.mark.unit
 def test_ensure_executable_missing_path_raises_file_not_found(tmp_path: Any) -> None:
     missing = str(tmp_path / "does-not-exist")
     with pytest.raises(FileNotFoundError):
-        _ensure_executable(missing, cwd=None, env=ChildEnv(()))
+        ensure_executable(missing, cwd=None, env=ChildEnv(()))
 
 
 @pytest.mark.unit
@@ -320,4 +320,4 @@ def test_ensure_executable_existing_but_not_executable_raises_permission_error(t
     not_executable.chmod(0o644)
 
     with pytest.raises(PermissionError):
-        _ensure_executable(str(not_executable), cwd=None, env=ChildEnv(()))
+        ensure_executable(str(not_executable), cwd=None, env=ChildEnv(()))

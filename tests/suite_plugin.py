@@ -116,7 +116,7 @@ def _contract_names_present() -> list[str]:
 
 @pytest.fixture(autouse=True)
 def _strip_daemon_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset what the contract unsets — worker identity (kept in sync with ``ClaudeCodeAdapter._spawn_env`` by
+    """Unset what the contract unsets — worker identity (kept in sync with ``ClaudeCodeAdapter.spawn_env`` by
     ``tests/test_runner_harness_adapter.py``), hub coordinates, runner tokens, tracing — so a developer's shell or a
     blizzard worker's never leaks into an in-process config load."""
     for name in _contract_names_present():

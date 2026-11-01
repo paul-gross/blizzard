@@ -166,7 +166,7 @@ def _collect_reachable(
             _collect_reachable(doc, sub, role, roles, seen, marks)
 
 
-def _reachable_schemas(doc: Mapping[str, object], select: Selection) -> dict[str, set[str]]:
+def reachable_schemas(doc: Mapping[str, object], select: Selection) -> dict[str, set[str]]:
     """Component schema name -> the surface roles ("request", "response") that reach it."""
     return _walk(cast(Document, doc), select)[0]
 
@@ -481,8 +481,8 @@ def classify_spec_diff(
     violations: list[Violation] = []
     _diff_paths_and_methods(base_doc, head_doc, violations, select)
 
-    base_roles = _reachable_schemas(base_doc, select)
-    head_roles = _reachable_schemas(head_doc, select)
+    base_roles = reachable_schemas(base_doc, select)
+    head_roles = reachable_schemas(head_doc, select)
     base_open = _open_components(base_doc, select)
     base_schemas = _schema_components(base_doc)
     head_schemas = _schema_components(head_doc)

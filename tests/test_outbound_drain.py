@@ -118,7 +118,7 @@ def test_run_bounds_its_own_per_run_slice_and_drains_a_larger_backlog_over_sever
     hub = FakeHub()
     store = make_store("sqlite://")
     ctx = _ctx(hub, store=store)
-    total = drain_module._DRAIN_LIMIT + 5
+    total = drain_module.DRAIN_LIMIT + 5
     seqs = [_enqueue_generic(ctx) for _ in range(total)]
 
     OutboundDrain(ctx).run()

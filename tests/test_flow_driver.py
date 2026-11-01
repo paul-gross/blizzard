@@ -839,14 +839,14 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
     sound, build_sound = world.mint(ref="sound")
     world.complete(broken, build_broken)
     world.complete(sound, build_sound)
-    submit = FlowLineReconciler._submit
+    submit = FlowLineReconciler.submit
 
     def flaky(self: FlowLineReconciler, standing, artifacts):
         if standing.chunk.chunk_id == broken:
             raise RuntimeError("unreadable visit")
         return submit(self, standing, artifacts)
 
-    monkeypatch.setattr(FlowLineReconciler, "_submit", flaky)
+    monkeypatch.setattr(FlowLineReconciler, "submit", flaky)
 
     result = world.tick()
 

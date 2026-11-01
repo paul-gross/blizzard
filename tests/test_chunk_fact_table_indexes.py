@@ -23,33 +23,33 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_operational_store import (
-    _duration_window_groups_stmt,
-    _spend_by_model_stmt,
-    _spend_by_node_stmt,
+    duration_window_groups_stmt,
+    spend_by_model_stmt,
+    spend_by_node_stmt,
 )
 from blizzard.hub.store.internal.chunk_events_store import (
-    _bounded_stmt,
-    _chunk_completed_activity_stmt,
-    _chunk_deleted_activity_stmt,
-    _chunk_grouped_stmt,
-    _chunk_migrations_activity_stmt,
-    _chunk_minted_stmt,
-    _chunk_pause_facts_activity_stmt,
-    _chunk_promoted_stmt,
-    _chunk_restarts_activity_stmt,
-    _chunk_stopped_activity_stmt,
-    _decision_resolutions_activity_stmt,
-    _decisions_activity_stmt,
-    _deleted_chunk_ids_stmt,
-    _escalations_activity_stmt,
-    _question_answers_activity_stmt,
-    _questions_activity_stmt,
-    _requeues_activity_stmt,
-    _route_created_activity_stmt,
-    _route_released_activity_stmt,
-    _transitions_activity_stmt,
+    bounded_stmt,
+    chunk_completed_activity_stmt,
+    chunk_deleted_activity_stmt,
+    chunk_grouped_stmt,
+    chunk_migrations_activity_stmt,
+    chunk_minted_stmt,
+    chunk_pause_facts_activity_stmt,
+    chunk_promoted_stmt,
+    chunk_restarts_activity_stmt,
+    chunk_stopped_activity_stmt,
+    decision_resolutions_activity_stmt,
+    decisions_activity_stmt,
+    deleted_chunk_ids_stmt,
+    escalations_activity_stmt,
+    question_answers_activity_stmt,
+    questions_activity_stmt,
+    requeues_activity_stmt,
+    route_created_activity_stmt,
+    route_released_activity_stmt,
+    transitions_activity_stmt,
 )
-from blizzard.hub.store.internal.transcript_event_store import _visible_segment_ids_stmt
+from blizzard.hub.store.internal.transcript_event_store import visible_segment_ids_stmt
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
 
@@ -244,7 +244,7 @@ def test_spend_by_node_windowed_seeks_the_tenant_range_and_sorts_for_group_by(tm
 def _spend_by_node_plan(tmp_path: Path, criteria: OperationalCriteria) -> Sequence[Row[Any]]:
     engine = _engine(tmp_path)
     compiled = str(
-        _spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
+        spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
         )
     )
@@ -255,13 +255,13 @@ def _spend_by_node_plan(tmp_path: Path, criteria: OperationalCriteria) -> Sequen
 def test_spend_by_model_groups_the_tenants_usage_facts_with_a_sort(tmp_path: Path) -> None:
     """No index leads with `model`, so the tenant's rows are read through a tenant-leading index and the
     `GROUP BY` sorts them — a tenant-wide aggregate, like every unwindowed spend rollup."""
-    plan = _plan_of(tmp_path, _spend_by_model_stmt, OperationalCriteria())
+    plan = _plan_of(tmp_path, spend_by_model_stmt, OperationalCriteria())
     assert any("USING INDEX ix_usage_facts_tenant" in str(row) for row in plan), plan
 
 
 def test_a_provenance_filter_probes_usage_facts_per_attempt_through_the_chunk_index(tmp_path: Path) -> None:
     """The attempt `EXISTS` is a correlated probe of `usage_facts` on `(tenant, chunk)`, never a scan per row."""
-    plan = _plan_of(tmp_path, _duration_window_groups_stmt, OperationalCriteria(model="m-a"))
+    plan = _plan_of(tmp_path, duration_window_groups_stmt, OperationalCriteria(model="m-a"))
     assert any("ix_usage_facts_tenant_chunk_id" in str(row) for row in plan), plan
     assert not any("SCAN usage_facts" in str(row) for row in plan), plan
 
@@ -278,14 +278,14 @@ def _plan_of(tmp_path: Path, builder: Any, criteria: OperationalCriteria) -> Seq
 
 
 def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_path: Path) -> None:
-    """`_visible_segment_ids_stmt`'s correlated `NOT EXISTS` over `supersedes`
+    """`visible_segment_ids_stmt`'s correlated `NOT EXISTS` over `supersedes`
     — the outer read searches the tenant's segments through an index rather than
     scanning the table, and the subquery's own `supersedes` probe plans through
     `ix_transcript_segments_tenant_supersedes`. Compiles the real statement rather than a
     hand-written mirror, so the two can't silently diverge."""
     engine = _engine(tmp_path)
     compiled = str(
-        _visible_segment_ids_stmt(ScopedStatements(StoreScope(TenantId("ten_index")))).compile(
+        visible_segment_ids_stmt(ScopedStatements(StoreScope(TenantId("ten_index")))).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
         )
     )
@@ -302,122 +302,122 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
 # includes the same joins and `chunk_deleted` anti-join production issues, not a
 # hand-written mirror that could diverge.
 _ACTIVITY_FEED_SOURCES = (
-    ("chunks", _chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_tenant_minted_at_chunk_id"),
+    ("chunks", chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_tenant_minted_at_chunk_id"),
     (
         "transitions",
-        _transitions_activity_stmt,
+        transitions_activity_stmt,
         s.transitions.c.recorded_at,
         s.transitions.c.transition_id,
         "ix_transitions_tenant_recorded_at_transition_id",
     ),
     (
         "route_created",
-        _route_created_activity_stmt,
+        route_created_activity_stmt,
         s.route_created.c.created_at,
         s.route_created.c.route_id,
         "ix_route_created_tenant_created_at_route_id",
     ),
     (
         "chunk_migrations",
-        _chunk_migrations_activity_stmt,
+        chunk_migrations_activity_stmt,
         s.chunk_migrations.c.recorded_at,
         s.chunk_migrations.c.migration_id,
         "ix_chunk_migrations_tenant_recorded_at_migration_id",
     ),
     (
         "decisions",
-        _decisions_activity_stmt,
+        decisions_activity_stmt,
         s.decisions.c.submitted_at,
         s.decisions.c.decision_id,
         "ix_decisions_tenant_submitted_at_decision_id",
     ),
     (
         "decision_resolutions",
-        _decision_resolutions_activity_stmt,
+        decision_resolutions_activity_stmt,
         s.decision_resolutions.c.resolved_at,
         s.decision_resolutions.c.decision_id,
         "ix_decision_resolutions_tenant_resolved_at_decision_id",
     ),
     (
         "questions",
-        _questions_activity_stmt,
+        questions_activity_stmt,
         s.questions.c.asked_at,
         s.questions.c.question_id,
         "ix_questions_tenant_asked_at_question_id",
     ),
     (
         "question_answers",
-        _question_answers_activity_stmt,
+        question_answers_activity_stmt,
         s.question_answers.c.answered_at,
         s.question_answers.c.question_id,
         "ix_question_answers_tenant_answered_at_question_id",
     ),
     (
         "chunk_promoted",
-        _chunk_promoted_stmt,
+        chunk_promoted_stmt,
         s.chunk_promoted.c.promoted_at,
         s.chunk_promoted.c.id,
         "ix_chunk_promoted_tenant_promoted_at_id",
     ),
     (
         "chunk_grouped",
-        lambda stmts, d: _chunk_grouped_stmt(stmts),
+        lambda stmts, d: chunk_grouped_stmt(stmts),
         s.chunk_grouped.c.grouped_at,
         s.chunk_grouped.c.id,
         "ix_chunk_grouped_tenant_grouped_at_id",
     ),
     (
         "chunk_restarts",
-        _chunk_restarts_activity_stmt,
+        chunk_restarts_activity_stmt,
         s.chunk_restarts.c.recorded_at,
         s.chunk_restarts.c.id,
         "ix_chunk_restarts_tenant_recorded_at_id",
     ),
     (
         "escalations",
-        _escalations_activity_stmt,
+        escalations_activity_stmt,
         s.escalations.c.recorded_at,
         s.escalations.c.id,
         "ix_escalations_tenant_recorded_at_id",
     ),
     (
         "requeues",
-        _requeues_activity_stmt,
+        requeues_activity_stmt,
         s.requeues.c.requeued_at,
         s.requeues.c.id,
         "ix_requeues_tenant_requeued_at_id",
     ),
     (
         "route_released",
-        _route_released_activity_stmt,
+        route_released_activity_stmt,
         s.route_released.c.released_at,
         s.route_released.c.id,
         "ix_route_released_tenant_released_at_id",
     ),
     (
         "chunk_pause_facts",
-        _chunk_pause_facts_activity_stmt,
+        chunk_pause_facts_activity_stmt,
         s.chunk_pause_facts.c.set_at,
         s.chunk_pause_facts.c.id,
         "ix_chunk_pause_facts_tenant_set_at_id",
     ),
     (
         "chunk_stopped",
-        _chunk_stopped_activity_stmt,
+        chunk_stopped_activity_stmt,
         s.chunk_stopped.c.stopped_at,
         s.chunk_stopped.c.id,
         "ix_chunk_stopped_tenant_stopped_at_id",
     ),
     (
         "chunk_completed",
-        _chunk_completed_activity_stmt,
+        chunk_completed_activity_stmt,
         s.chunk_completed.c.completed_at,
         s.chunk_completed.c.id,
         "ix_chunk_completed_tenant_completed_at_id",
     ),
     (
         "chunk_deleted",
-        lambda stmts, d: _chunk_deleted_activity_stmt(stmts),
+        lambda stmts, d: chunk_deleted_activity_stmt(stmts),
         s.chunk_deleted.c.deleted_at,
         s.chunk_deleted.c.id,
         "ix_chunk_deleted_tenant_deleted_at_id",
@@ -434,8 +434,8 @@ def test_activity_feed_source_bounded_read_plans_as_an_index_search_with_no_sort
     engine = _engine(tmp_path)
     stmts = hub_store_connections(engine)
     since = datetime(2020, 1, 1, tzinfo=UTC)
-    stmt = _bounded_stmt(
-        stmt_fn(stmts, _deleted_chunk_ids_stmt(stmts)), ts_col=ts_col, pk_col=pk_col, since=since, limit=50
+    stmt = bounded_stmt(
+        stmt_fn(stmts, deleted_chunk_ids_stmt(stmts)), ts_col=ts_col, pk_col=pk_col, since=since, limit=50
     )
     compiled = str(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
     with engine.connect() as conn:

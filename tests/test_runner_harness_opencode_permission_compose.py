@@ -8,9 +8,9 @@ import pytest
 
 from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
-    _deny_in,
-    _holds_ask,
     compose_ask_denials,
+    deny_in,
+    holds_ask,
     merge_overrides,
     residual_asks,
 )
@@ -125,7 +125,7 @@ def test_a_malformed_resolved_config_raises_a_shape_error(text: str) -> None:
 def test_a_deny_promotes_an_existing_scalar_to_a_wildcard_map() -> None:
     target: JsonObject = {"read": "allow"}
 
-    _deny_in(target, "read", "*.env", as_map=False)
+    deny_in(target, "read", "*.env", as_map=False)
 
     assert target == {"read": {"*": "allow", "*.env": "deny"}}
 
@@ -143,7 +143,7 @@ def test_a_deny_promotes_an_existing_scalar_to_a_wildcard_map() -> None:
 def test_a_deny_is_written_in_the_shape_the_ask_was(
     target: JsonObject, pattern: str, as_map: bool, expected: JsonObject
 ) -> None:
-    _deny_in(target, "bash", pattern, as_map=as_map)
+    deny_in(target, "bash", pattern, as_map=as_map)
 
     assert target == expected
 
@@ -163,7 +163,7 @@ def test_a_deny_is_written_in_the_shape_the_ask_was(
     ],
 )
 def test_holds_ask_is_true_only_for_the_exact_ask(node: JsonValue, permission: str, pattern: str, held: bool) -> None:
-    assert _holds_ask(node, permission, pattern) is held
+    assert holds_ask(node, permission, pattern) is held
 
 
 def test_an_agent_level_scalar_ask_is_denied_as_a_scalar_and_a_map_ask_as_a_map() -> None:

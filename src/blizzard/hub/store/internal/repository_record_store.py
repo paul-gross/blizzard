@@ -50,7 +50,7 @@ _FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
 
-def _retirements(conn: Connection, ids: list[RepositoryId] | None = None) -> dict[str, datetime]:
+def retirements(conn: Connection, ids: list[RepositoryId] | None = None) -> dict[str, datetime]:
     """When each currently-retired repository's newest retirement fact was set, by repository id."""
     facts = repository_lifecycle_facts
     found: dict[str, datetime] = {}
@@ -278,7 +278,7 @@ class RepositoryRecordStore:
             return {}
         found: dict[RepositoryId, ConfiguredRepository] = {}
         with self._store.read("get_many") as conn:
-            retired = _retirements(conn, repository_ids)
+            retired = retirements(conn, repository_ids)
             for batch in id_batches(repository_ids):
                 rows = conn.execute(
                     self._store.select(repositories).where(repositories.c.repository_id.in_(batch))
@@ -294,7 +294,7 @@ class RepositoryRecordStore:
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(self._store.select(repositories).order_by(repositories.c.slug)).all()
-            retired = _retirements(conn)
+            retired = retirements(conn)
         return [
             _of(row, retired_at=retired.get(row.repository_id))
             for row in rows
@@ -323,7 +323,7 @@ class RepositoryRecordStore:
 
 
 def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredRepository:
-    return _of(row, retired_at=_retirements(conn, [RepositoryId(row.repository_id)]).get(row.repository_id))
+    return _of(row, retired_at=retirements(conn, [RepositoryId(row.repository_id)]).get(row.repository_id))
 
 
 def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:

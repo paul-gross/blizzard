@@ -36,6 +36,6 @@ def test_the_read_bundle_exposes_the_same_dependencies_adapter(tmp_path: Path) -
 
     # Identity, not just isinstance — the very same adapter instance `DependencyService`
     # holds for its own writes, not a second, disconnected object.
-    assert dependencies is hub.services.dependencies._dependencies
+    assert dependencies is hub.services.dependencies.dependencies
     assert isinstance(dependencies, ChunkDependenciesStore)
     assert dependencies.list_standing_edges() == []

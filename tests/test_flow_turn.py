@@ -29,7 +29,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.landing import VisitForges
-from blizzard.hub.forge.registry import ForgeCallRefused, TurnCutOff, _BudgetGate, _RefsHandle
+from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.tools.invariants import hub_invariants
@@ -305,7 +305,7 @@ def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
     world: _World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     chunk_id = world.at_step("test.mark")
-    write = TurnRunner._write_effect
+    write = TurnRunner.write_effect
     seen: list[bool] = []
 
     def slow(self: TurnRunner, *args: Any) -> Any:
@@ -324,7 +324,7 @@ def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
         )
         return end(self, handle, turn_id, **kwargs)
 
-    monkeypatch.setattr(TurnRunner, "_write_effect", slow)
+    monkeypatch.setattr(TurnRunner, "write_effect", slow)
     monkeypatch.setattr(FlowStore, "end_turn_locked", observed)
 
     world.tick()
@@ -342,12 +342,12 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
             return None
 
     flag = TurnCutOff()
-    gate = _BudgetGate(
+    gate = BudgetGate(
         ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))),
         BudgetKey("frg_fixture", None),
         ForgePriority.LANDING,
     )
-    refs = _RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)  # type: ignore[arg-type]
+    refs = RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)  # type: ignore[arg-type]
     flag.set()
 
     with pytest.raises(ForgeCallRefused):
@@ -361,7 +361,7 @@ def test_a_build_that_raises_routes_failure_with_its_traceback(world: _World, mo
     def broken(self: TurnRunner, *args: Any) -> Any:
         raise RuntimeError("a malformed artifact")
 
-    monkeypatch.setattr(TurnRunner, "_resolve", broken)
+    monkeypatch.setattr(TurnRunner, "resolve", broken)
 
     world.tick()
 
@@ -378,7 +378,7 @@ def test_a_build_held_past_its_bound_ends_its_turn_cut_off_and_routes_nothing(
 ) -> None:
     chunk_id = world.at_step("test.answer", " \n    with: {choice: [success]}")
     monkeypatch.setattr(world.turns, "_build_bound", 0.2)
-    resolve = TurnRunner._resolve
+    resolve = TurnRunner.resolve
 
     def slow(self: TurnRunner, *args: Any) -> Any:
         import time
@@ -386,7 +386,7 @@ def test_a_build_held_past_its_bound_ends_its_turn_cut_off_and_routes_nothing(
         time.sleep(0.6)
         return resolve(self, *args)
 
-    monkeypatch.setattr(TurnRunner, "_resolve", slow)
+    monkeypatch.setattr(TurnRunner, "resolve", slow)
 
     world.tick()
     asyncio.run(asyncio.sleep(0.6))  # the build finishes, and finds its turn let go

@@ -6,6 +6,7 @@ Both are in-memory and process-lifetime — observations surfaced through status
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -107,6 +108,12 @@ class SpanRateLimiter:
         self._refill = refill_per_second
         self._lock = threading.Lock()
         self._buckets: dict[str, Bucket] = {}
+
+    @property
+    def buckets(self) -> Mapping[str, Bucket]:
+        """The leases' buckets held now — an idle one is evicted on the next ``take``."""
+        with self._lock:
+            return dict(self._buckets)
 
     def take(self, lease_id: str, spans: int, *, now: datetime | None = None) -> bool:
         """Whether ``spans`` items fit this lease's bucket at ``now`` (the clock's, when omitted),

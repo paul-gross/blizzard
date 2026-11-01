@@ -42,7 +42,7 @@ class _RunnerArm(StrEnum):
 
 #: The runner-scoped fact kinds — carrying no ``chunk_id`` — and the arm each dispatches to. The
 #: chunk arm drops every kind named here, so a kind lands in exactly one place.
-_RUNNER_ARM_BY_FACT_KIND: dict[str, _RunnerArm] = {
+RUNNER_ARM_BY_FACT_KIND: dict[str, _RunnerArm] = {
     RUNNER_LOCALLY_PAUSED: _RunnerArm.PAUSE,
     RUNNER_LOCALLY_RESUMED: _RunnerArm.PAUSE,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED: _RunnerArm.EXTERNAL_USAGE,
@@ -51,7 +51,7 @@ _RUNNER_ARM_BY_FACT_KIND: dict[str, _RunnerArm] = {
 }
 
 #: The chunk-scoped fact kinds — each routed through the chunk arm on its payload's ``chunk_id``.
-_CHUNK_SCOPED_FACT_KINDS = frozenset(
+CHUNK_SCOPED_FACT_KINDS = frozenset(
     {LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED, ANSWER_DELIVERED, USAGE_RECORDED}
 )
 
@@ -89,23 +89,23 @@ class IngestBroadcast:
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.applied)
         applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
-        chunk_ids = [cid for fact in applied_facts if (cid := self._chunk_arm_id(fact)) is not None]
+        chunk_ids = [cid for fact in applied_facts if (cid := self.chunk_arm_id(fact)) is not None]
         states = load_frame_states(self.services, chunk_ids)
         for fact in applied_facts:
             self._publish_one(fact, result.row_id_by_seq.get(fact.seq), states)
 
     @staticmethod
-    def _chunk_arm_id(fact: RunnerFact) -> str | None:
+    def chunk_arm_id(fact: RunnerFact) -> str | None:
         """The chunk id ``_publish_one``'s chunk arm dispatches ``fact`` to, or ``None`` for
         a runner-scoped kind or a chunk-scoped payload missing its id."""
-        if fact.kind in _RUNNER_ARM_BY_FACT_KIND:
+        if fact.kind in RUNNER_ARM_BY_FACT_KIND:
             return None
         chunk_id = fact.payload.get("chunk_id")
         return chunk_id if isinstance(chunk_id, str) else None
 
     def _publish_one(self, fact: RunnerFact, row_id: int | None, states: dict[str, ChunkFrameState]) -> None:
         """The runner-scoped kinds dispatch first: carrying no ``chunk_id``, the chunk arm drops them."""
-        arm = _RUNNER_ARM_BY_FACT_KIND.get(fact.kind)
+        arm = RUNNER_ARM_BY_FACT_KIND.get(fact.kind)
         if arm is _RunnerArm.PAUSE:
             self._runner_pause(fact, row_id)
         elif arm is _RunnerArm.EXTERNAL_USAGE:
@@ -115,7 +115,7 @@ class IngestBroadcast:
         elif arm is _RunnerArm.LOGGED:
             pass  # already published by EventLogService.record
         else:
-            chunk_id = self._chunk_arm_id(fact)
+            chunk_id = self.chunk_arm_id(fact)
             if chunk_id is not None:
                 self._chunk_changed(fact, row_id, chunk_id, states[chunk_id])
 

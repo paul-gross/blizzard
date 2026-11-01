@@ -826,11 +826,11 @@ def test_a_hub_ingest_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: 
 def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) -> None:
     """The resolution seam itself: a configured ceiling must reach the
     service, and an unconfigured one must fall back to the domain default rather than None."""
-    from blizzard.hub.app import _transcript_caps
+    from blizzard.hub.app import transcript_caps
     from blizzard.hub.config import HubConfig, TranscriptCapsConfig
     from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 
-    resolved = _transcript_caps(
+    resolved = transcript_caps(
         HubConfig(
             root=tmp_path,
             db_url=HubConfig.default_db_url(tmp_path),

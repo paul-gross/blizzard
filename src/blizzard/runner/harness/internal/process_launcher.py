@@ -39,7 +39,7 @@ def _die_with_parent() -> None:
 
 
 # The interposed trampoline — its own tiny `ctypes` call, in its own exec'd process.
-_TRAMPOLINE_SOURCE = """
+TRAMPOLINE_SOURCE = """
 import ctypes, os, sys
 _libc = ctypes.CDLL(None, use_errno=True)
 control_fd = int(sys.argv[1])
@@ -85,14 +85,14 @@ class ProcessLauncher:
             return self._launch(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
         # The deferred `exec()` runs inside the trampoline, so the spawn's own exec error never
         # sees a bad `argv[0]` — reproduce that one guarantee synchronously, up front.
-        _ensure_executable(argv[0], cwd=cwd, env=env)
+        ensure_executable(argv[0], cwd=cwd, env=env)
         # `pass_fds` inherits only the trampoline's own read end — `argv` never sees it.
         read_fd, write_fd = os.pipe()
         ack_read_fd, ack_write_fd = os.pipe()
         try:
             try:
                 proc = self._launch_process(
-                    [sys.executable, "-c", _TRAMPOLINE_SOURCE, str(read_fd), str(ack_write_fd), *argv],
+                    [sys.executable, "-c", TRAMPOLINE_SOURCE, str(read_fd), str(ack_write_fd), *argv],
                     cwd=cwd,
                     env=env,
                     stdout=stdout,
@@ -157,7 +157,7 @@ class ProcessLauncher:
         ).result()
 
 
-def _ensure_executable(argv0: str, *, cwd: str | None, env: ChildEnv) -> None:
+def ensure_executable(argv0: str, *, cwd: str | None, env: ChildEnv) -> None:
     """Raise exactly where ``execvp(argv0, ...)`` would later fail inside the trampoline:
     a path-shaped ``argv0`` resolves relative to ``cwd``; a bare name searches the child's
     own ``PATH``, never the launcher's ambient one. Missing raises :class:`FileNotFoundError`

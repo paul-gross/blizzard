@@ -15,7 +15,7 @@ from typing import Any, TextIO, cast
 import pytest
 import structlog
 
-from blizzard.foundation.logging import ENV_LOG_FORMAT, Console, Json, LogFormat, _LiveStderr
+from blizzard.foundation.logging import ENV_LOG_FORMAT, Console, Json, LiveStderr, LogFormat
 
 
 @pytest.mark.unit
@@ -93,10 +93,10 @@ def test_apply_installs_the_formats_exception_processors(monkeypatch: pytest.Mon
 
 @pytest.mark.unit
 def test_a_cached_logger_survives_a_replaced_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A ``PrintLogger`` built from ``_LiveStderr`` must not raise or lose a message when
+    """A ``PrintLogger`` built from ``LiveStderr`` must not raise or lose a message when
     ``sys.stderr`` is replaced after the logger was built — pytest capture does exactly
     this between tests."""
-    logger = structlog.PrintLoggerFactory(file=cast(TextIO, _LiveStderr()))()
+    logger = structlog.PrintLoggerFactory(file=cast(TextIO, LiveStderr()))()
 
     closed = io.StringIO()
     monkeypatch.setattr(sys, "stderr", closed)

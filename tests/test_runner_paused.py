@@ -1564,9 +1564,9 @@ def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_on
     key = iso_utc(standing.first_launched_at)
     harness.usage_limit = None
 
-    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_usage_limit_park(_NOW + timedelta(minutes=1), superseded_invocation=key)
     first = store.current_start("lease_1", 1, "judge")
-    DormantSession(ctx, lease)._resume_judge_usage_limit_park(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    DormantSession(ctx, lease).resume_judge_usage_limit_park(_NOW + timedelta(minutes=2), superseded_invocation=key)
     replayed = store.current_start("lease_1", 1, "judge")
 
     assert first is not None and replayed == first
@@ -1729,7 +1729,7 @@ def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path: 
             seen.append("write")
             return super().record_local_pause_locked(handle, **fact)
 
-    spy = _Spy(store._engine, runner_store_errors(), store.connections.runner_id)
+    spy = _Spy(store.engine, runner_store_errors(), store.connections.runner_id)
     service = PauseService(spy, FixedClock(_NOW))
     service.engage(by="runner-ceiling", reason="spend ceiling")
     service.engage(by="runner-ceiling", reason="spend ceiling")

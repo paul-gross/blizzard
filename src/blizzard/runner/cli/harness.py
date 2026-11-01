@@ -7,6 +7,7 @@ import os
 import click
 
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -20,7 +21,6 @@ from blizzard.runner.harness.wiring import (
     published_harness_snapshot,
     shared_inputs,
 )
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 
 @click.group("harness")
@@ -37,7 +37,8 @@ def harness_group() -> None:
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
 @runner_option
-def harness_status(directory: str, runner: str | None) -> None:
+@click.pass_context
+def harness_status(ctx: click.Context, directory: str, runner: str | None) -> None:
     """Report the bundle sources, the published snapshot, and the autonomy setting.
 
     Prints names and paths only, never file contents. Exits 1 when a bundle is configured
@@ -47,7 +48,7 @@ def harness_status(directory: str, runner: str | None) -> None:
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         tracing = TracingSettings.of(os.environ)
         shared = shared_inputs(config.harness_settings(tracing))
-        launch = WorkspaceLaunch(children=SubprocessChildProcesses(), env=config.tool_env(tracing))
+        launch = WorkspaceLaunch(children=command_children(ctx), env=config.tool_env(tracing))
         spawn_roots = dict.fromkeys(
             build_workspace_provider(workspace.settings(config.root), launch=launch).spawn_root()
             for workspace in config.bound_workspaces

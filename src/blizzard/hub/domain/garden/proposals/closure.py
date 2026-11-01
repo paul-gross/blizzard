@@ -149,12 +149,12 @@ class MintingAccept:
         findings: Sequence[Finding],
     ) -> MintingAccept:
         """Refuses a closed proposal; otherwise the item takes `body` when given, else the
-        proposal's own, wrapped with `findings` (:func:`_compose_minted_body`)."""
+        proposal's own, wrapped with `findings` (:func:`compose_minted_body`)."""
         proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
         return cls(
             proposal_id=proposal.proposal_id,
             title=proposal.title,
-            body=_compose_minted_body(body if body is not None else proposal.body, findings),
+            body=compose_minted_body(body if body is not None else proposal.body, findings),
             reason=accept_reason(reason),
         )
 
@@ -228,7 +228,7 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
         ...
 
 
-def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
+def compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
     """Wrap ``body`` with a "Related findings" section — one snapshot bullet per
     ``findings`` entry plus the two lease-scoped read verbs. Empty
     ``findings`` returns ``body`` unchanged — no section, no preamble."""
@@ -263,6 +263,10 @@ class GardenProposalClosureService:
         self._items = items
         self._default_graph = default_graph
         self._clock = clock
+
+    @property
+    def items(self) -> WorkItemEditService:
+        return self._items
 
     def pass_(self, proposal: GardenProposal, *, reason: str, by: str) -> GardenProposalClosure:
         """Pass ``proposal`` (:meth:`GardenProposalClosure.passing`)."""

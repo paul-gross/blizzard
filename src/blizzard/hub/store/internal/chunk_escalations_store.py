@@ -44,7 +44,7 @@ class ChunkEscalationsStore:
     ) -> list[EscalationOpen]:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
-        candidates = list(self._newest_escalation_per_chunk(project, chunk_id))
+        candidates = list(self.newest_escalation_per_chunk(project, chunk_id))
         facts_by_id = self._facts.load_facts_for(candidates)
         return [
             EscalationOpen(
@@ -196,7 +196,7 @@ class ChunkEscalationsStore:
         )
         return BounceEscalationOutcome.RECORDED
 
-    def _newest_escalation_per_chunk(
+    def newest_escalation_per_chunk(
         self, project: ProjectId | None = None, chunk_id: str | None = None
     ) -> dict[str, Row[Any]]:
         """The newest ``escalations`` row per chunk, over the chunks whose newest escalation *might*
@@ -213,7 +213,7 @@ class ChunkEscalationsStore:
             live_chunk_ids = live_chunk_ids.where(s.chunks.c.project_id == project)
         if chunk_id is not None:
             live_chunk_ids = live_chunk_ids.where(s.chunks.c.chunk_id == chunk_id)
-        with self._store.read("_newest_escalation_per_chunk") as conn:
+        with self._store.read("newest_escalation_per_chunk") as conn:
             newer = s.escalations.alias("newer")
             beaten = newer_row_exists(
                 self._store,

@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.sql.elements import ClauseElement
 
 from blizzard.foundation.store import statement_guard
-from blizzard.foundation.store.statement_guard import KeyedStatementGuard, _Walk
+from blizzard.foundation.store.statement_guard import KeyedStatementGuard, Walk
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.tenant_guard import TenantStatementGuard, UnscopedTenantStatement
 from blizzard.runner.store import schema as runner_schema
@@ -35,14 +35,14 @@ _GUARDS: dict[str, tuple[KeyedStatementGuard, Any, str, type[Exception]]] = {
 @pytest.fixture
 def walks(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     count: list[int] = []
-    visit = _Walk.visit
+    visit = Walk.visit
 
-    def counting(self: _Walk, element: ClauseElement, *args: Any, **kwargs: Any) -> None:
-        if not self._seen:
+    def counting(self: Walk, element: ClauseElement, *args: Any, **kwargs: Any) -> None:
+        if not self.started:
             count.append(1)
         visit(self, element, *args, **kwargs)
 
-    monkeypatch.setattr(statement_guard._Walk, "visit", counting)
+    monkeypatch.setattr(statement_guard.Walk, "visit", counting)
     return count
 
 
@@ -50,9 +50,7 @@ def walks(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 def guard_case(request: pytest.FixtureRequest) -> tuple[KeyedStatementGuard, Any, str, type[Exception]]:
     guard, table, key, error = _GUARDS[request.param]
     return (
-        KeyedStatementGuard(
-            guard._metadata, guard.scoping, exempt_option=guard._exempt_option, unscoped=guard._unscoped
-        ),
+        KeyedStatementGuard(guard.metadata, guard.scoping, exempt_option=guard.exempt_option, unscoped=guard.unscoped),
         table,
         key,
         error,
@@ -117,4 +115,4 @@ def test_the_verdict_cache_is_bounded(
     monkeypatch.setattr(statement_guard, "_VERDICT_CACHE_SIZE", 3)
     for index in range(10):
         guard.check(sa.select(table.c[key], sa.literal_column(f"c{index}")).where(table.c[key] == "a"))
-    assert len(guard._verdicts) == 3
+    assert len(guard.verdicts) == 3

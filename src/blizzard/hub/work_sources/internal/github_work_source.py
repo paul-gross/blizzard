@@ -88,6 +88,14 @@ class GitHubWorkSource:
         self._web_base = web_base.rstrip("/")
         self._labels_bootstrapped = False
 
+    @property
+    def client(self) -> httpx2.Client:
+        return self._client
+
+    @property
+    def web_base(self) -> str:
+        return self._web_base
+
     def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token forms into a pointer, or ``None`` when ``token``
         isn't shaped for it: ``{id}:{number}``, ``{id}#{number}``, or an issue URL

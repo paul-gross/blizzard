@@ -26,11 +26,11 @@ from blizzard.hub.domain.observability.tracing import attributes as attr
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
 from blizzard.hub.domain.observability.tracing.chunk_spans import (
     ChunkOutcome,
-    _step_extents,
     assemble_completion,
     assemble_lifetime,
     assemble_work,
     chunk_end,
+    step_extents,
 )
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import (
@@ -241,7 +241,7 @@ def test_a_step_span_that_would_run_past_the_next_steps_start_ends_there() -> No
     def summary(started: int, ended: int, closed: int) -> Any:
         return SimpleNamespace(started_at=fx.at(started), ended_at=fx.at(ended), closed_at=fx.at(closed), intervals=())
 
-    extents = _step_extents([summary(10, 50, 90), summary(60, 70, 70)], [])
+    extents = step_extents([summary(10, 50, 90), summary(60, 70, 70)], [])
 
     assert extents == [(fx.at(10), fx.at(60)), (fx.at(60), fx.at(70))]
 

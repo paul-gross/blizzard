@@ -37,7 +37,7 @@ _log = get_logger("blizzard.runner.loop")
 
 #: This drain's own per-``run()`` slice bound — a large backlog drains over
 #: several ticks rather than one run holding the whole buffer's payload set in memory.
-_DRAIN_LIMIT = 100
+DRAIN_LIMIT = 100
 
 # Submit -> ack -> apply-response. The after-submit.before-ack window is the lost-ack replay
 # the hub's idempotency must absorb.
@@ -81,7 +81,7 @@ class OutboundDrain:
         run of generic-kind facts into one ``push_facts`` call; a completion or decision
         fact first flushes the run collected so far, then routes to its own arm unchanged."""
         run: list[BufferedFact] = []
-        for fact in self.ctx.stores.outbound.pending_outbound(limit=_DRAIN_LIMIT):
+        for fact in self.ctx.stores.outbound.pending_outbound(limit=DRAIN_LIMIT):
             if not fact.is_submission:
                 run.append(fact)
                 continue

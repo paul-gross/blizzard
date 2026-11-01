@@ -11,16 +11,31 @@ hub-level permission without a membership is named, with that permission, in :da
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
-from fastapi.routing import APIRoute, _IncludedRouter
+from fastapi.routing import APIRoute
 
 from blizzard.auth_core import Permission
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
 from tests.support import build_hub
 
 pytestmark = pytest.mark.unit
+
+
+@runtime_checkable
+class _IncludeContext(Protocol):
+    prefix: str
+
+
+@runtime_checkable
+class _MountedRouter(Protocol):
+    """An included router as FastAPI mounts it, matched on its public ``original_router`` and ``include_context``."""
+
+    original_router: APIRouter
+    include_context: _IncludeContext
+
 
 # --- The three-plane table --------------------------------------------------
 
@@ -405,7 +420,7 @@ def api_routes(app: FastAPI) -> list[APIRoute]:
     """Every mounted :class:`APIRoute`, recursively unwrapped.
 
     This FastAPI version does not flatten an included router's routes onto
-    ``app.routes`` eagerly, so recursing through ``_IncludedRouter.original_router``
+    ``app.routes`` eagerly, so recursing through ``an included router's ``original_router````
     is the stable way to enumerate the live surface regardless of nesting."""
     routes: list[APIRoute] = []
     for route in app.routes:
@@ -415,17 +430,17 @@ def api_routes(app: FastAPI) -> list[APIRoute]:
             if route.path == "/":
                 continue
             routes.append(route)
-        elif isinstance(route, _IncludedRouter):
+        elif isinstance(route, _MountedRouter):
             routes.extend(_api_routes_of(route))
     return routes
 
 
-def _api_routes_of(included: _IncludedRouter) -> list[APIRoute]:
+def _api_routes_of(included: _MountedRouter) -> list[APIRoute]:
     routes: list[APIRoute] = []
     for route in included.original_router.routes:
         if isinstance(route, APIRoute):
             routes.append(route)
-        elif isinstance(route, _IncludedRouter):
+        elif isinstance(route, _MountedRouter):
             routes.extend(_api_routes_of(route))
     return routes
 

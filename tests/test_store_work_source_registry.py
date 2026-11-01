@@ -160,17 +160,17 @@ def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replac
     client, services = hub
     create(client, services, forge[1])
     before = _adapter(services)
-    assert before._client.headers["Authorization"] == "token tok-a"
+    assert before.client.headers["Authorization"] == "token tok-a"
     assert _adapter(services) is before  # a hit reuses the built adapter
 
     assert client.put("/api/secrets/gh/value", json={"value": "tok-b"}).status_code == 200
 
     after = _adapter(services)
-    assert after._client.headers["Authorization"] == "token tok-b"
-    assert not before._client.is_closed  # a caller may still be mid-request on it
+    assert after.client.headers["Authorization"] == "token tok-b"
+    assert not before.client.is_closed  # a caller may still be mid-request on it
     assert client.put("/api/secrets/gh/value", json={"value": "tok-c"}).status_code == 200
     _adapter(services)
-    assert before._client.is_closed
+    assert before.client.is_closed
 
 
 def test_a_forge_edit_rebuilds_the_adapter_of_every_source_naming_it(
@@ -189,7 +189,7 @@ def test_a_forge_edit_rebuilds_the_adapter_of_every_source_naming_it(
 
     after = _adapter(services)
     assert after is not before
-    assert after._web_base == "https://code.acme.example"
+    assert after.web_base == "https://code.acme.example"
 
 
 def test_a_locator_edit_reaches_the_next_resolve(

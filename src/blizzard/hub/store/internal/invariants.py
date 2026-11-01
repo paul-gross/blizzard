@@ -1459,7 +1459,7 @@ class HubInvariants:
         violations: list[Violation] = []
         with self.connections.read_transaction("check hub invariants") as borrowed:
             # The query checks audit every open tenant's rows at once; NoRowOfADeletedTenant alone reads a closed one.
-            with _hub_wide(borrowed) as conn:
+            with hub_wide(borrowed) as conn:
                 checks: tuple[QueryCheck, ...] = (
                     OneTransitionPerNodeEpoch(conn),
                     EpochConsistentTransitions(conn),
@@ -1520,7 +1520,7 @@ class HubInvariants:
 
 
 @contextmanager
-def _hub_wide(connections: HubStoreConnections) -> Generator[Connection, None, None]:
+def hub_wide(connections: HubStoreConnections) -> Generator[Connection, None, None]:
     """The read connection marked hub-scoped by this audit itself, for as long as the ``with`` lasts: every check on
     it is a ``SELECT`` over all tenants' rows. The mark is set in place on the connection, so it is cleared on leaving,
     before the tenants' own stores read through that same connection."""

@@ -16,7 +16,7 @@ import pytest
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
-from blizzard.hub.domain.garden.proposals.closure import _compose_minted_body
+from blizzard.hub.domain.garden.proposals.closure import compose_minted_body
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -129,7 +129,7 @@ def test_accept_with_no_body_override_mints_the_proposals_body_wrapped_in_the_te
     findings: IReadFindingRepository = hub.services.findings
     fin_1 = findings.get("fin_1")
     assert fin_1 is not None
-    assert item["body"] == _compose_minted_body("the proposal's own body", [fin_1])
+    assert item["body"] == compose_minted_body("the proposal's own body", [fin_1])
     assert item["closure"] is None  # the item itself is open
 
     chunk = hub.client.get(f"/api/chunks/{body['chunk_id']}").json()
@@ -177,7 +177,7 @@ def test_accept_with_a_body_override_mints_that_body_wrapped_in_the_template(tmp
     findings: IReadFindingRepository = hub.services.findings
     fin_1 = findings.get("fin_1")
     assert fin_1 is not None
-    assert item["body"] == _compose_minted_body("a hand-drafted body", [fin_1])
+    assert item["body"] == compose_minted_body("a hand-drafted body", [fin_1])
 
 
 def test_accept_declining_to_mint_records_declined_and_no_chunk(tmp_path: Path) -> None:

@@ -192,6 +192,10 @@ class ExternalUsageSamplePass:
         self._sink = sink
         self._clock = clock
 
+    @property
+    def subscriptions(self) -> tuple[SampledSubscription, ...]:
+        return self._subscriptions
+
     def run(self) -> None:
         """One pass over every declared subscription that is due."""
         for subscription in self._subscriptions:

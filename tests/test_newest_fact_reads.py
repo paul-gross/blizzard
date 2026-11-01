@@ -24,13 +24,13 @@ from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
-from blizzard.hub.store.internal.repository_record_store import _retirements
+from blizzard.hub.store.internal.repository_record_store import retirements
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.trace_store import TraceStore
-from blizzard.hub.store.internal.work_source_record_store import _retired_ids
+from blizzard.hub.store.internal.work_source_record_store import retired_ids
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -109,9 +109,9 @@ def _reads(engine: Engine) -> dict[str, Callable[[], object]]:
 
     return {
         "queue_positions": lambda: ChunkQueueStore(store, None).queue_positions(_KEYS),  # type: ignore[arg-type]
-        "paused": registry(RunnerRegistryStore._paused_many),
-        "local_pause": registry(RunnerRegistryStore._local_pause_detail_many),
-        "lifecycle": registry(RunnerRegistryStore._lifecycle_many),
+        "paused": registry(RunnerRegistryStore.paused_many),
+        "local_pause": registry(RunnerRegistryStore.local_pause_detail_many),
+        "lifecycle": registry(RunnerRegistryStore.lifecycle_many),
     }
 
 
@@ -159,13 +159,13 @@ def _retirement_reads(engine: Engine) -> dict[str, Callable[[], Sized]]:
         "routine": lambda: RoutineStore(store).retired_ids(),
         "scope": lambda: ScopeStore(store).retired_slugs(default_project(engine)),
         "graph": lambda: GraphStore(store).retired_graph_ids(),
-        "repository": lambda: _read(store, lambda conn: _retirements(conn)),
+        "repository": lambda: _read(store, lambda conn: retirements(conn)),
         "repository_bounded": lambda: _read(
-            store, lambda conn: _retirements(conn, [RepositoryId("k1"), RepositoryId("k2")])
+            store, lambda conn: retirements(conn, [RepositoryId("k1"), RepositoryId("k2")])
         ),
-        "work_source": lambda: _read(store, lambda conn: _retired_ids(conn)),
+        "work_source": lambda: _read(store, lambda conn: retired_ids(conn)),
         "work_source_bounded": lambda: _read(
-            store, lambda conn: _retired_ids(conn, [WorkSourceId("k1"), WorkSourceId("k2")])
+            store, lambda conn: retired_ids(conn, [WorkSourceId("k1"), WorkSourceId("k2")])
         ),
     }
 

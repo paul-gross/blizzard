@@ -165,12 +165,16 @@ class GraphMintService:
         self._clock = clock
         self._catalogue = catalogue
 
+    @property
+    def graphs(self) -> IWriteGraphRepository:
+        return self._graphs
+
     def mint(self, doc: GraphDoc, *, definition_yaml: str) -> tuple[Graph, list[str]]:
-        graph, warnings = self._prepared(doc)
+        graph, warnings = self.prepared(doc)
         self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph, warnings
 
-    def _prepared(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
+    def prepared(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
         """``doc`` validated and reified, with its warnings. The cross-graph reads resolve other
         graphs' names — a different aggregate — so they never run under a name lock."""
         result = Validator.of(doc, self._catalogue).require_valid()
@@ -198,7 +202,7 @@ class GraphMintService:
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
             return existing  # an enabled graph of the name stands; nothing to decide under the lock
-        graph, _ = self._prepared(doc)
+        graph, _ = self.prepared(doc)
         with self._graphs.locked_name(doc.name) as handle:
             existing = handle.get_enabled_by_name(doc.name)
             any_minted = existing is None and handle.any_minted(doc.name)

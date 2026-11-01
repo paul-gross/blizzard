@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import click
 
 from blizzard.cli.runtime import click_exception_on
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
@@ -24,12 +24,12 @@ from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, res
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 
-def named_runners(config: IStoreLocation) -> tuple[str, ...]:
+def named_runners(config: IStoreLocation, clock: IClock) -> tuple[str, ...]:
     """The ids of the runners the store's identity rows name, oldest first."""
     engine = create_engine_from_url(config.db_url)
     try:
         return build_host_stores(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=SystemClock()
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
         ).runner_audit.named_runners()
     finally:
         engine.dispose()
@@ -50,6 +50,7 @@ def store_write_guard(
     *,
     action: str,
     door: Door,
+    clock: IClock,
     runners: Mapping[str, str],
     configured: tuple[str, ...],
     refuse_foreign: bool,
@@ -66,7 +67,7 @@ def store_write_guard(
     ):
         with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
             ensure_current_revision(config)
-        named = named_runners(config)
+        named = named_runners(config, clock)
         foreign = {
             runner_id: reason
             for runner_id in runners

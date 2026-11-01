@@ -1,4 +1,4 @@
-"""`DormantSession.on_unpause` and `_pause_park_settled` — every argument each hands the seam it calls.
+"""`DormantSession.on_unpause` and `pause_park_settled` — every argument each hands the seam it calls.
 
 Unit tier over a real store, with recording spies at the decision and effect seams the two methods call
 (`unpause_move`, `releases_usage_limited`, the suppression read, `_wake`, the usage recorder, the elicitation
@@ -250,7 +250,7 @@ def test_an_elicitation_the_settle_just_cleared_is_not_a_standing_judge_park(
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     move = _spy(monkeypatch, dormant, "unpause_move", UnpauseMove.WAIT)
-    _spy(monkeypatch, DormantSession, "_pause_park_settled", PauseParkSettle.CLEARED, bound=True)
+    _spy(monkeypatch, DormantSession, "pause_park_settled", PauseParkSettle.CLEARED, bound=True)
 
     _unpause(rig, elicitation=_elicitation(rig))
 
@@ -261,7 +261,7 @@ def test_the_settle_is_asked_about_the_park_the_elicitation_and_the_bindings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _rig(tmp_path)
-    settle = _spy(monkeypatch, DormantSession, "_pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
+    settle = _spy(monkeypatch, DormantSession, "pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
     elicitation = _elicitation(rig)
 
     _unpause(rig, elicitation=elicitation)
@@ -271,7 +271,7 @@ def test_the_settle_is_asked_about_the_park_the_elicitation_and_the_bindings(
 
 def test_an_unsettled_park_reads_nothing_and_moves_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
-    _spy(monkeypatch, DormantSession, "_pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
+    _spy(monkeypatch, DormantSession, "pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
     suppression = _spy(monkeypatch, Spawner, "suppression", None, bound=True)
 
     _unpause(rig)
@@ -377,7 +377,7 @@ def test_relaunching_the_judge_passes_now_and_the_standing_launch_instant(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.RELAUNCH_JUDGE)
-    relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
+    relaunch = _spy(monkeypatch, DormantSession, "resume_judge_usage_limit_park", bound=True)
     elicitation = _elicitation(rig)
 
     _unpause(rig, elicitation=elicitation)
@@ -404,7 +404,7 @@ def test_waking_books_the_paused_generation_then_wakes_with_the_unpause_message_
 
     assert resolved == [((), {"via": "unpause-resume"})]
     assert rig.worker_usage == [((rig.lease, rig.bindings), {})]
-    assert rig.wake == [((dormant._UNPAUSE_MESSAGE, rig.bindings), {"harness": rig.harness, "at": _NOW})]
+    assert rig.wake == [((dormant.UNPAUSE_MESSAGE, rig.bindings), {"harness": rig.harness, "at": _NOW})]
     assert rig.resumes == [((), {"lease_id": "lease_1", "resumed_at": _NOW})]
 
 
@@ -417,11 +417,11 @@ def test_an_unresolvable_owner_wakes_nothing_and_books_nothing(tmp_path: Path, m
     assert (rig.resumes, rig.wake, rig.worker_usage) == ([], [], [])
 
 
-# --- _pause_park_settled -------------------------------------------------------------------------------------
+# --- pause_park_settled -------------------------------------------------------------------------------------
 
 
 def _settle(rig, elicitation=None):
-    return DormantSession(rig.ctx, rig.lease)._pause_park_settled(rig.park, elicitation, rig.bindings)
+    return DormantSession(rig.ctx, rig.lease).pause_park_settled(rig.park, elicitation, rig.bindings)
 
 
 def test_the_workers_group_is_judged_settled_by_its_own_identity_and_the_drain_deadline(
@@ -595,7 +595,7 @@ def test_a_standing_elicitation_does_not_relaunch_the_judge_unless_the_move_says
 ):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
-    relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
+    relaunch = _spy(monkeypatch, DormantSession, "resume_judge_usage_limit_park", bound=True)
 
     _unpause(rig, elicitation=_elicitation(rig))
 
@@ -608,7 +608,7 @@ def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the
 ):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.RELAUNCH_JUDGE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
-    relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
+    relaunch = _spy(monkeypatch, DormantSession, "resume_judge_usage_limit_park", bound=True)
 
     _unpause(rig, elicitation=None)
 

@@ -47,12 +47,12 @@ _SEQ_FIELD_ESTIMATE_BYTES = 24
 
 #: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
 #: REAL worst case is this constant PLUS one in-flight delivery's own push timeout.
-_MAX_RECORDS_PER_RUN = 50
-_MAX_SECONDS_PER_RUN = 5.0
+MAX_RECORDS_PER_RUN = 50
+MAX_SECONDS_PER_RUN = 5.0
 
 #: The pump alone must not be able to consume the WHOLE run budget —
 #: reserves the other half for the flush below, so it cannot starve indefinitely.
-_PUMP_BUDGET_FRACTION = 0.5
+PUMP_BUDGET_FRACTION = 0.5
 
 
 class TranscriptDrainConfig(TranscriptPumpConfig, Protocol):
@@ -85,8 +85,8 @@ class TranscriptDrain:
 
     def _run_unsafe(self) -> None:
         started = self.ctx.clock.now()
-        deadline = started + timedelta(seconds=_MAX_SECONDS_PER_RUN)
-        pump_deadline = started + timedelta(seconds=_MAX_SECONDS_PER_RUN * _PUMP_BUDGET_FRACTION)
+        deadline = started + timedelta(seconds=MAX_SECONDS_PER_RUN)
+        pump_deadline = started + timedelta(seconds=MAX_SECONDS_PER_RUN * PUMP_BUDGET_FRACTION)
         # Defense in depth: `TranscriptPump.run` isolates each segment's own failure, but one
         # raised outside that loop — `open_transcript_segments()` itself — must not skip the flush.
         try:
@@ -97,7 +97,7 @@ class TranscriptDrain:
             )
         if self.ctx.clock.now() >= deadline:
             return  # the pump alone exhausted the shared bound; the flush catches up next tick
-        self.flush(limit=_MAX_RECORDS_PER_RUN, deadline=deadline)
+        self.flush(limit=MAX_RECORDS_PER_RUN, deadline=deadline)
 
     def flush(self, *, limit: int, deadline: datetime | None) -> int:
         """Deliver buffered records FIFO, batched under the configured per-record byte cap
@@ -118,12 +118,12 @@ class TranscriptDrain:
 
     def _batches(self, pending: list[BufferedTranscriptDelta]) -> Iterator[list[BufferedTranscriptDelta]]:
         """Greedily group pending deltas into batches at or below the per-record byte cap
-        (one oversized record still ships alone), sized by :meth:`_estimated_size`."""
+        (one oversized record still ships alone), sized by :meth:`estimated_size`."""
         cap = self._record_max_bytes
         batch: list[BufferedTranscriptDelta] = []
         batch_bytes = 0
         for delta in pending:
-            record_bytes = self._estimated_size(delta)
+            record_bytes = self.estimated_size(delta)
             if batch and batch_bytes + record_bytes > cap:
                 yield batch
                 batch = []
@@ -134,7 +134,7 @@ class TranscriptDrain:
             yield batch
 
     @staticmethod
-    def _estimated_size(delta: BufferedTranscriptDelta) -> int:
+    def estimated_size(delta: BufferedTranscriptDelta) -> int:
         """A delta's estimated wire size, always ``>=`` its actual rendered length: a
         non-final delta's ``payload`` already IS the wire body sans ``seq``, with every
         optional field the wire model can default already written explicit rather than
@@ -154,7 +154,7 @@ class TranscriptDrain:
         final_segments = self.ctx.stores.transcript_ledger.transcript_segments(
             [delta.segment_id for delta in deltas if delta.final]
         )
-        records = [self._render(delta, final_segments) for delta in deltas]
+        records = [self.render(delta, final_segments) for delta in deltas]
         _CP_BEFORE_SUBMIT.reached()
         try:
             ack = self.ctx.hub.push_transcripts(records)
@@ -192,7 +192,7 @@ class TranscriptDrain:
                 chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=reason, at=self.ctx.clock.now()
             )
 
-    def _render(
+    def render(
         self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentState]
     ) -> TranscriptPush:
         """A non-final row's ``payload`` already IS the record's body, built by
