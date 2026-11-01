@@ -112,7 +112,7 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
 
 - **`bzh:store-no-for-update`** (`rules/store-no-for-update.yml`) — a guarded write never takes its lock with
   `.with_for_update()`: it renders nothing on SQLite. The prose home is the `bzh:store-exclusive-write` rule's **Do** in
-  `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` as the first statement).
+  `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` before decision guard reads).
   - Scoped to `src/blizzard/hub/**`; matches any `$X.with_for_update($$$)` call.
 
 - **`bzh:store-newest-read-limited`** (`rules/store-newest-read-limited.yml`) — a newest-per-key store read bounds its
