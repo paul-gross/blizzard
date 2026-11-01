@@ -2057,6 +2057,114 @@ export type CliTokenResponse = {
 };
 
 /**
+ * CloseAttemptView
+ */
+export type CloseAttemptView = {
+    /**
+     * Attempted At
+     */
+    attempted_at: string;
+    /**
+     * Intent Id
+     */
+    intent_id: number;
+    /**
+     * Outcome
+     */
+    outcome: string;
+    /**
+     * Resume At
+     */
+    resume_at: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+};
+
+/**
+ * CloseClosureView
+ */
+export type CloseClosureView = {
+    /**
+     * Outcome
+     */
+    outcome: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
+ * CloseDiagnostic
+ */
+export type CloseDiagnostic = {
+    /**
+     * Attempts
+     */
+    attempts: Array<CloseAttemptView>;
+    /**
+     * Closures
+     */
+    closures: Array<CloseClosureView>;
+    /**
+     * Intents
+     */
+    intents: Array<CloseIntentView>;
+    /**
+     * Next Attempt Cursor
+     */
+    next_attempt_cursor: number | null;
+    /**
+     * Next Closure Cursor
+     */
+    next_closure_cursor: number | null;
+    /**
+     * Next Intent Cursor
+     */
+    next_intent_cursor: number | null;
+};
+
+/**
+ * CloseIntentView
+ */
+export type CloseIntentView = {
+    /**
+     * Enqueued At
+     */
+    enqueued_at: string;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Retired At
+     */
+    retired_at: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
  * CompletionSubmission
  *
  * A node-step's completion — judgement choice + checks + artifacts + epoch.
@@ -12700,6 +12808,57 @@ export type PatchChunkApiChunksChunkIdPatchResponses = {
 };
 
 export type PatchChunkApiChunksChunkIdPatchResponse = PatchChunkApiChunksChunkIdPatchResponses[keyof PatchChunkApiChunksChunkIdPatchResponses];
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        /**
+         * Intent Cursor
+         */
+        intent_cursor?: number;
+        /**
+         * Closure Cursor
+         */
+        closure_cursor?: number;
+        /**
+         * Attempt Cursor
+         */
+        attempt_cursor?: number;
+        /**
+         * Attempt Intent Id
+         */
+        attempt_intent_id?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/close-diagnostic';
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetError = CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors[keyof CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors];
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CloseDiagnostic;
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponse = CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses[keyof CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses];
 
 export type CompleteChunkApiChunksChunkIdCompletePostData = {
     body: ChunkCompleteRequest;

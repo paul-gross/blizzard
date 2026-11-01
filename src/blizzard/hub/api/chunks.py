@@ -428,6 +428,75 @@ class LandingFactsPage(BaseModel):
     next_cursor: int | None
 
 
+class CloseIntentView(BaseModel):
+    sequence: int
+    source: str
+    ref: str
+    enqueued_at: datetime
+    retired_at: datetime | None
+
+
+class CloseClosureView(BaseModel):
+    sequence: int
+    source: str
+    ref: str
+    outcome: str
+    recorded_at: datetime
+
+
+class CloseAttemptView(BaseModel):
+    sequence: int
+    intent_id: int
+    attempted_at: datetime
+    outcome: str
+    resume_at: datetime | None
+
+
+class CloseDiagnostic(BaseModel):
+    intents: list[CloseIntentView]
+    next_intent_cursor: int | None
+    closures: list[CloseClosureView]
+    next_closure_cursor: int | None
+    attempts: list[CloseAttemptView]
+    next_attempt_cursor: int | None
+
+
+@router.get(
+    "/chunks/{chunk_id}/close-diagnostic",
+    response_model=CloseDiagnostic,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
+)
+def close_diagnostic(
+    chunk_id: str,
+    services: Services,
+    intent_cursor: Annotated[int, Query(ge=0)] = 0,
+    closure_cursor: Annotated[int, Query(ge=0)] = 0,
+    attempt_cursor: Annotated[int, Query(ge=0)] = 0,
+    attempt_intent_id: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> CloseDiagnostic:
+    """Page close evidence independently in durable write order; never return failure details."""
+    if services.chunks.record.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    delivery = services.chunks.delivery
+    intents = delivery.close_intents(chunk_id, after=intent_cursor, limit=limit + 1)
+    closures = delivery.close_closures(chunk_id, after=closure_cursor, limit=limit + 1)
+    selected_intent = attempt_intent_id if attempt_intent_id is not None else (intents[0].sequence if intents else None)
+    attempts = (
+        delivery.close_attempts(chunk_id, selected_intent, after=attempt_cursor, limit=limit + 1)
+        if selected_intent is not None
+        else []
+    )
+    return CloseDiagnostic(
+        intents=[CloseIntentView.model_validate(row, from_attributes=True) for row in intents[:limit]],
+        next_intent_cursor=intents[limit - 1].sequence if len(intents) > limit else None,
+        closures=[CloseClosureView.model_validate(row, from_attributes=True) for row in closures[:limit]],
+        next_closure_cursor=closures[limit - 1].sequence if len(closures) > limit else None,
+        attempts=[CloseAttemptView.model_validate(row, from_attributes=True) for row in attempts[:limit]],
+        next_attempt_cursor=attempts[limit - 1].sequence if len(attempts) > limit else None,
+    )
+
+
 @router.get(
     "/chunks/{chunk_id}/landing-facts",
     response_model=LandingFactsPage,

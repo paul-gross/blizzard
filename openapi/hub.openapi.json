@@ -3708,6 +3708,192 @@
         "title": "CliTokenResponse",
         "type": "object"
       },
+      "CloseAttemptView": {
+        "properties": {
+          "attempted_at": {
+            "format": "date-time",
+            "title": "Attempted At",
+            "type": "string"
+          },
+          "intent_id": {
+            "title": "Intent Id",
+            "type": "integer"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "intent_id",
+          "attempted_at",
+          "outcome",
+          "resume_at"
+        ],
+        "title": "CloseAttemptView",
+        "type": "object"
+      },
+      "CloseClosureView": {
+        "properties": {
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "source",
+          "ref",
+          "outcome",
+          "recorded_at"
+        ],
+        "title": "CloseClosureView",
+        "type": "object"
+      },
+      "CloseDiagnostic": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/CloseAttemptView"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "closures": {
+            "items": {
+              "$ref": "#/components/schemas/CloseClosureView"
+            },
+            "title": "Closures",
+            "type": "array"
+          },
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/CloseIntentView"
+            },
+            "title": "Intents",
+            "type": "array"
+          },
+          "next_attempt_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt Cursor"
+          },
+          "next_closure_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Closure Cursor"
+          },
+          "next_intent_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Intent Cursor"
+          }
+        },
+        "required": [
+          "intents",
+          "next_intent_cursor",
+          "closures",
+          "next_closure_cursor",
+          "attempts",
+          "next_attempt_cursor"
+        ],
+        "title": "CloseDiagnostic",
+        "type": "object"
+      },
+      "CloseIntentView": {
+        "properties": {
+          "enqueued_at": {
+            "format": "date-time",
+            "title": "Enqueued At",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "source",
+          "ref",
+          "enqueued_at",
+          "retired_at"
+        ],
+        "title": "CloseIntentView",
+        "type": "object"
+      },
       "CompletionSubmission": {
         "description": "A node-step's completion \u2014 judgement choice + checks + artifacts + epoch.",
         "properties": {
@@ -23247,6 +23433,111 @@
           }
         },
         "summary": "Patch Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/close-diagnostic": {
+      "get": {
+        "description": "Page close evidence independently in durable write order; never return failure details.",
+        "operationId": "close_diagnostic_api_chunks__chunk_id__close_diagnostic_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "intent_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Intent Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "closure_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Closure Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Attempt Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt_intent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt Intent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloseDiagnostic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Diagnostic",
         "tags": [
           "chunks"
         ]

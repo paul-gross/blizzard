@@ -6,12 +6,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 
 
 class IReadChunkDeliveryRepository(Protocol):
     """Read-only chunk-delivery access."""
+
+    def close_intents(self, chunk_id: str, *, after: int, limit: int) -> list[CloseIntent]: ...
+
+    def close_closures(self, chunk_id: str, *, after: int, limit: int) -> list[CloseClosure]: ...
+
+    def close_attempts(self, chunk_id: str, intent_id: int, *, after: int, limit: int) -> list[CloseAttempt]: ...
 
     def landing_facts(self, chunk_id: str, *, after: int, limit: int) -> list[LandingFact]:
         """At most limit landing facts in durable sequence order, strictly after the cursor."""

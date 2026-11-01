@@ -2428,6 +2428,15 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDeliveryRepository, "landing_facts"): lambda w: w.read.delivery.landing_facts(
         w.chunk_delivery_a, after=0, limit=2
     ),
+    (IReadChunkDeliveryRepository, "close_intents"): lambda w: w.read.delivery.close_intents(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "close_closures"): lambda w: w.read.delivery.close_closures(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "close_attempts"): lambda w: w.read.delivery.close_attempts(
+        w.chunk_delivery_a, 1, after=0, limit=2
+    ),
     (IReadChunkDeliveryRepository, "count_landed_since"): lambda w: w.read.delivery.count_landed_since(
         "acme/widget", _HUB_BASE
     ),

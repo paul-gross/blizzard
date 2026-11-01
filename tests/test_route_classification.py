@@ -224,6 +224,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/chunks/{chunk_id}/flow-submissions"): Permission.FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns"): Permission.FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}/landing-facts"): Permission.FLEET_VIEW,
+    ("GET", "/api/chunks/{chunk_id}/close-diagnostic"): Permission.FLEET_VIEW,
     # Transcript-segment discovery/content reads — above
     # Permission.FLEET_VIEW, since a transcript carries everything a worker saw.
     ("GET", "/api/chunks/{chunk_id}/transcripts"): Permission.TRANSCRIPT_READ,
