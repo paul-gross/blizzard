@@ -600,6 +600,7 @@ class ChunkView:
                         node_name=row.node_name,
                         epoch=row.epoch,
                         recorded_at=recorded_at,
+                        produced_at=iso_utc(row.produced_at) if row.produced_at is not None else None,
                         repo=artifact.repo,
                         branch_name=artifact.branch_name,
                         commit_hash=artifact.commit_hash,
@@ -616,6 +617,7 @@ class ChunkView:
                         node_name=row.node_name,
                         epoch=row.epoch,
                         recorded_at=recorded_at,
+                        produced_at=iso_utc(row.produced_at) if row.produced_at is not None else None,
                         content=artifact.content,
                     )
                 )

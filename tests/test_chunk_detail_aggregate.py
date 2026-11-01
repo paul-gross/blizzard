@@ -7,6 +7,7 @@ build->gate scenario and asserts every piece is present."""
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -158,6 +159,34 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     # The open gate decision with its choices.
     assert detail["decision"]["node_name"] == "approve-gate"
     assert {c["name"] for c in detail["decision"]["choices"]} == {"approve", "reject"}
+
+
+def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _pass_build(hub, [_BUILD_ARTIFACT])
+    produced_at = hub.clock.now() - timedelta(hours=2)
+    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    assert writer.record_hub_artifact(
+        chunk_id,
+        node_id=nodes["approve-gate"],
+        node_name="approve-gate",
+        epoch=1,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        name="delivery-pr/acme/widget/1",
+        content='{"repo":"acme/widget","number":1,"url":"http://forge/acme/widget/pull/1"}',
+        at=produced_at,
+        close_decision=decide_close_enqueue([WorkRef(source="default", ref="7")], lambda _: True),
+    )
+
+    response = hub.client.get(f"/api/chunks/{chunk_id}")
+    assert response.status_code == 200, response.text
+    artifacts = {item["name"]: item for item in response.json()["artifacts"]}
+    marker = artifacts["delivery-pr/acme/widget/1"]
+    assert datetime.fromisoformat(marker["produced_at"]) == produced_at.astimezone(UTC)
+    assert datetime.fromisoformat(marker["recorded_at"]) - produced_at > timedelta(hours=1)
+    stored = {item.name: item for item in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    commit = artifacts["acme/widget"]
+    assert datetime.fromisoformat(commit["produced_at"]) == stored["acme/widget"].produced_at
 
 
 def test_a_tracker_sourced_chunk_links_its_branch_through_the_repository_its_commit_lands_in(

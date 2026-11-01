@@ -184,7 +184,8 @@ jobs:
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
         run: cd blizzard && mise run collector-config-check && mise run playwright -- --version
       - name: service tier — the Playwright half, `mise run playwright`
-        timeout-minutes: 30
+        # The two park review-clock cases each wait over an hour of real time.
+        timeout-minutes: 210
         env:
           CI: "1"
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard

@@ -50,3 +50,9 @@ The same reads over HTTP:
 Flows are the tenant's, not a project's: a branch's line is shared by every project landing on it, so the flow routes
 take no `?project=`. Each entry written to a record is announced on the hub's event stream as a `flow-changed` frame,
 which is how the board's band and place lines move live.
+
+The chunk detail's `artifacts` also includes delivery markers such as `delivery-pr/<owner>/<repo>/<number>`. Each
+artifact's nullable `produced_at` is its stored production timestamp; for a parked change this marker timestamp starts
+the repository's review-expiry clock. `recorded_at` is instead decoded from the artifact ID and is not the clock park
+expiry evaluates. Read these fields from `GET /api/chunks/{id}` using a credential authorized to read that tenant's
+chunk.

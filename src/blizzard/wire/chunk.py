@@ -368,7 +368,8 @@ class ArtifactView(WireModel):
     """One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
     append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
     verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
-    the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp."""
+    the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp;
+    ``produced_at`` is the stored production time, including the time used for park expiry."""
 
     key: str
     kind: Annotated[ArtifactKind | Unrecognized, OPEN]
@@ -377,6 +378,7 @@ class ArtifactView(WireModel):
     node_name: str
     epoch: int
     recorded_at: str | None = None
+    produced_at: str | None = None
     content: str | None = None
     repo: str | None = None
     branch_name: str | None = None

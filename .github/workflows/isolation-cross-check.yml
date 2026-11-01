@@ -87,7 +87,7 @@ jobs:
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: cd blizzard/tests && npm ci
       - name: isolation cross-check — the suite as declared
-        timeout-minutes: 60
+        timeout-minutes: 210
         env:
           CI: "1"
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
@@ -163,7 +163,7 @@ jobs:
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: cd blizzard/tests && npm ci
       - name: isolation cross-check — the suite with every test raised a level
-        timeout-minutes: 60
+        timeout-minutes: 210
         env:
           CI: "1"
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
