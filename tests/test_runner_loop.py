@@ -351,7 +351,7 @@ def test_unknown_existing_session_owner_blocks_before_lease_mint(tmp_path: Path)
 def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
@@ -970,7 +970,7 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
 
     Resume(ctx).run()
 
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         generations = conn.execute(
             select(lease_spawns.c.harness_id, lease_spawns.c.harness_version)
             .where(lease_spawns.c.runner_id == FIXTURE_RUNNER_ID)
@@ -1034,7 +1034,7 @@ def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_versi
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.pid == 100  # the spawn itself is entirely unaffected
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         (harness_id, version) = conn.execute(
             select(lease_spawns.c.harness_id, lease_spawns.c.harness_version).where(
                 lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
@@ -1077,7 +1077,7 @@ def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_laun
 def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
     default = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=True)
     owner = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=False)
@@ -3237,7 +3237,7 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.pid == _HANDLE.pid and lease.session_id is None  # open, still provisional
 
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         row = conn.execute(
             select(lease_spawns.c.session_id, lease_spawns.c.identity_failed_at).where(
                 lease_spawns.c.lease_id == lease.lease_id, lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
@@ -3270,7 +3270,7 @@ def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_pa
     Reap(ctx).run()
 
     # The prior generation stays durably closed-unidentified — REAP never leaves it ambiguous.
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         row = conn.execute(
             select(lease_spawns.c.identity_failed_at).where(
                 lease_spawns.c.lease_id == provisional.lease_id, lease_spawns.c.runner_id == FIXTURE_RUNNER_ID

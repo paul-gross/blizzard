@@ -42,7 +42,7 @@ def _unbound_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 def _write_rows(store: SqlAlchemyRunnerStore, runner_id: str, *chunk_ids: str) -> None:
     """Pause-park rows as the named runner wrote them."""
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execution_options(**{RUNNER_UNSCOPED_OPTION: True}).execute(
             sa.insert(schema.pause_parks),
             [{"lease_id": f"lease_{c}", "chunk_id": c, "parked_at": _NOW, "runner_id": runner_id} for c in chunk_ids],

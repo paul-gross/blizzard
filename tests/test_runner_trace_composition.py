@@ -44,7 +44,7 @@ def _config(tmp_path: Path) -> tuple[RunnerConfig, SqlAlchemyRunnerStore]:
 
 
 def _cursor_rows(store: SqlAlchemyRunnerStore) -> int:
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         return conn.exec_driver_sql("SELECT count(*) FROM trace_cursor").scalar_one()
 
 

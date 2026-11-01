@@ -205,7 +205,10 @@ class SqlAlchemyRunnerStore(
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
-    satisfying every one of the nineteen concept Protocols by inheritance."""
+    satisfying every one of the nineteen concept Protocols by inheritance.
+
+    ``engine`` is public on purpose: tests seed and inspect rows, build sibling stores, and
+    instrument tracing over the same engine the store runs on — exposing it is the fixture's point."""
 
     def __init__(
         self, engine: Engine, errors: RunnerStoreErrorFactory, runner_id: str | None = FIXTURE_RUNNER_ID
@@ -243,7 +246,7 @@ class SqlAlchemyRunnerStore(
         SelfTestResultStore.__init__(self, store)
         LeaseTraceFactsStore.__init__(self, store)
         RunnerUsageLimitStore.__init__(self, store)
-        self._engine = engine
+        self.engine = engine
         self._errors = errors
 
     @property

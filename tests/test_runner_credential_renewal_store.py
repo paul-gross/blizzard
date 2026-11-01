@@ -72,7 +72,7 @@ def test_retention_prunes_superseded_claims_with_their_outcomes_but_never_a_slug
     assert store.last_credential_renewal_claim_at("codex") == _NOW - timedelta(days=2)
     renewals = store.latest_credential_renewals_by_slug(["codex", "stale"])
     assert renewals["stale"].result is RenewalResult.FAILED
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT count(*) FROM credential_renewal_outcomes").scalar_one() == 2
 
 
@@ -121,7 +121,7 @@ def test_retention_keeps_a_superseded_claim_still_inside_the_window(tmp_path: Pa
     _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
 
     assert store.prune_credential_renewals(now=_NOW) == 1
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         claimed = conn.exec_driver_sql("SELECT claimed_at FROM credential_renewal_claims ORDER BY id").scalars().all()
         outcomes = conn.exec_driver_sql("SELECT count(*) FROM credential_renewal_outcomes").scalar_one()
     assert len(claimed) == 2
@@ -137,7 +137,7 @@ def test_retention_judges_each_slug_against_its_own_newest_claim(tmp_path: Path)
 
     assert store.prune_credential_renewals(now=_NOW) == 1
     assert store.last_credential_renewal_claim_at("codex") == old
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         assert (
             conn.exec_driver_sql("SELECT count(*) FROM credential_renewal_claims WHERE slug = 'claude'").scalar_one()
             == 1

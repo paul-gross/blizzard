@@ -66,7 +66,7 @@ class _Runner:
         return [e["kind"] for e in self.events()]
 
     def cursor_rows(self) -> int:
-        with self.store._engine.connect() as conn:
+        with self.store.engine.connect() as conn:
             return conn.exec_driver_sql("SELECT count(*) FROM trace_cursor").scalar_one()
 
 

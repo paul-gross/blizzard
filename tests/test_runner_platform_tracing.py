@@ -206,7 +206,7 @@ def _app(
         headers={"Authorization": f"Bearer {_HUB_TOKEN}"},
     )
     _seed_lease(store)
-    handle.instrument_engine(store._engine)
+    handle.instrument_engine(store.engine)
     handle.instrument_client(proxy)
     clock = SystemClock()
     identity = identity or registered_identity(_RUNNER, _NAME)
@@ -384,7 +384,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
     )
-    handle.instrument_engine(store._engine)
+    handle.instrument_engine(store.engine)
     ctx = type(ctx)(**{**ctx.__dict__, "tracer": handle.tracer})
     tick(ctx)
     spans = _finished(handle, exporter)

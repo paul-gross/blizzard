@@ -1062,7 +1062,7 @@ def _rotation_rig(tmp_path: Path, *, owner_model: str = "opus"):
     """A breached `other`-owned head beside the default harness; returns the store, ctx, both harnesses."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="other"))
     default = FakeHarness(
         handle=WorkerHandle(session_id="default", pid=100, process_start_time="default", pgid=100), verdict="pass"
@@ -1150,7 +1150,7 @@ def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path: 
     leaves every check it cannot measure unmeasured, not forced every node entry."""
     store = _store(tmp_path)
     head = _seed_head(store, model="sonnet")
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="other"))
 
     default = FakeHarness(
@@ -1195,7 +1195,7 @@ def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path:
     that loops forever, and never a substituted default harness."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="foreign"))
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
@@ -1257,7 +1257,7 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
     spent any of the node's own retry budget — real attempts still get their full count."""
     store = _store(tmp_path)
     _seed_head(store, model="sonnet")
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execute(update(leases).where(leases.c.runner_id == FIXTURE_RUNNER_ID).values(harness_id="foreign"))
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW

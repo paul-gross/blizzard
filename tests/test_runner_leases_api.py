@@ -477,7 +477,7 @@ def test_a_chunk_s_leases_carry_their_model_effort_harness_version_and_commits(t
 def test_another_runner_s_leases_of_the_same_chunk_are_absent(tmp_path: Path) -> None:
     app, store = _app_with_leases(tmp_path)
     _seed_lease(store, lease_id="lease_mine")
-    other = SqlAlchemyRunnerStore(store._engine, runner_store_errors(), "runner_other")
+    other = SqlAlchemyRunnerStore(store.engine, runner_store_errors(), "runner_other")
     _seed_lease(other, lease_id="lease_theirs", epoch=2)
     other.record_git_commit_declaration(
         lease_id="lease_mine",
@@ -538,6 +538,6 @@ def test_the_lease_read_s_statement_count_is_flat_in_the_lease_count(tmp_path: P
             )
         params = {"chunk_id": "ch_1"} if chunk_filter else {}
         with runner_client(app) as client:
-            return count_queries(store._engine, lambda: client.get("/api/leases", params=params).raise_for_status())
+            return count_queries(store.engine, lambda: client.get("/api/leases", params=params).raise_for_status())
 
     assert statements(3) == statements(15)

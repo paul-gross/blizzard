@@ -1729,7 +1729,7 @@ def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path: 
             seen.append("write")
             return super().record_local_pause_locked(handle, **fact)
 
-    spy = _Spy(store._engine, runner_store_errors(), store.connections.runner_id)
+    spy = _Spy(store.engine, runner_store_errors(), store.connections.runner_id)
     service = PauseService(spy, FixedClock(_NOW))
     service.engage(by="runner-ceiling", reason="spend ceiling")
     service.engage(by="runner-ceiling", reason="spend ceiling")

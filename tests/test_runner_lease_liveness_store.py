@@ -67,7 +67,7 @@ def test_record_identity_failed_is_a_silent_no_op_for_a_lease_with_only_a_legacy
 
     store.record_identity_failed("lease_a", at=_NOW)  # must not raise
 
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         row = conn.execute(
             select(runner.lease_spawns.c.identity_failed_at).where(
                 runner.lease_spawns.c.lease_id == "lease_a", runner.lease_spawns.c.runner_id == FIXTURE_RUNNER_ID
@@ -89,7 +89,7 @@ def test_record_identified_spawn_finds_the_genuine_row_beside_a_legacy_one(tmp_p
 
     store.record_identified_spawn("lease_a", session=SessionReference("opencode", "ses_123"), identified_at=_NOW)
 
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         rows = conn.execute(
             select(runner.lease_spawns.c.pid, runner.lease_spawns.c.session_id)
             .where(runner.lease_spawns.c.lease_id == "lease_a", runner.lease_spawns.c.runner_id == FIXTURE_RUNNER_ID)

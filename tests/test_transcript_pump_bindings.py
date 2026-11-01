@@ -153,7 +153,7 @@ def test_run_rows_read_from_bindings_are_flat_as_unrelated_held_bindings_grow() 
             ctx.stores.environments.record_binding(
                 chunk_id=f"ch_other{i}", environment_id=f"env-o{i}", workdir=f"/ws/o{i}", bound_at=_NOW
             )
-        measured.append(count_rows_read(store._engine, lambda ctx=ctx: TranscriptPump(ctx).run()))
+        measured.append(count_rows_read(store.engine, lambda ctx=ctx: TranscriptPump(ctx).run()))
     assert measured[0] == measured[1]
 
 

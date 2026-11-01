@@ -1451,7 +1451,7 @@ def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfi
     )
     segment_id = store.open_transcript_segments()[0].segment_id
     store.mark_transcript_record_truncated(segment_id, reason="source_read_truncated", severity=0)
-    with store._engine.begin() as conn:  # the pre-column shape: a reason, no severity
+    with store.engine.begin() as conn:  # the pre-column shape: a reason, no severity
         conn.execute(
             sa.text("UPDATE transcript_segments SET truncated_reason_severity = NULL WHERE segment_id = :s"),
             {"s": segment_id},

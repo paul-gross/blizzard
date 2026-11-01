@@ -273,8 +273,8 @@ def test_the_plural_read_issues_the_same_statements_for_one_lease_as_for_many(tm
         _write_lease(store, lease_id, f"ch_{n}")
     reader = _reader(store)
 
-    one = count_queries(store._engine, lambda: reader.lease_trace_facts_for(ids[:1]))
-    many = count_queries(store._engine, lambda: reader.lease_trace_facts_for(ids))
+    one = count_queries(store.engine, lambda: reader.lease_trace_facts_for(ids[:1]))
+    many = count_queries(store.engine, lambda: reader.lease_trace_facts_for(ids))
 
     assert one == many
     assert len(reader.lease_trace_facts_for(ids)) == len(ids)
@@ -289,8 +289,8 @@ def test_the_closure_read_never_scans_lease_closures_whatever_the_unrelated_hist
         _write_lease(store, lease_id, f"ch_{n}")
     reader = _reader(store)
 
-    with capture_statements(store._engine) as statements:
+    with capture_statements(store.engine) as statements:
         read = reader.lease_trace_facts_for(ids)
 
     assert set(read) == set(ids)
-    assert offending_index_scans(store._engine, statements, ["lease_closures"]) == []
+    assert offending_index_scans(store.engine, statements, ["lease_closures"]) == []
