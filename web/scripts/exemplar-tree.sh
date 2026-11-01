@@ -11,7 +11,7 @@ exemplars="$(cd "$web/../exemplars/web" && pwd)"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
-cp -r "$web/projects" "$web/scripts" "$web/angular.json" "$web/tsconfig.json" "$web/package.json" "$web"/vitest-*.ts "$scratch/"
+cp -r "$web/projects" "$web/scripts" "$web/angular.json" "$web/tsconfig.json" "$web/package.json" "$web"/vitest-*.ts "$web"/vitest-*.mts "$scratch/"
 ln -s "$web/node_modules" "$scratch/node_modules"
 (cd "$exemplars" && find . -type f ! -path './fleet/src/lib/api/*') | while read -r file; do
   mkdir -p "$(dirname "$scratch/projects/$file")"
