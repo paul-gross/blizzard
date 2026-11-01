@@ -1,6 +1,6 @@
 """Upgrade old terminal transitions, while continuing to detect new missed enqueues."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -153,3 +153,68 @@ def test_upgrade_does_not_match_terminal_facts_across_tenants(tmp_path: Path) ->
     runner.upgrade(_REVISION)
     with engine.connect() as conn:
         assert conn.execute(sa.text("SELECT ref FROM close_intents")).scalars().all() == ["one"]
+
+
+def test_upgrade_only_backfills_latest_terminal_movement(tmp_path: Path) -> None:
+    runner, engine = migrate_to(tmp_path, _PARENT)
+    with engine.begin() as conn:
+        for chunk in ("transition", "migration", "restart", "tie", "older", "other_tenant", "done_again"):
+            _terminal(conn, chunk)
+            _ref(conn, chunk, chunk)
+
+        def transition(chunk: str, at: datetime, node: str, tenant: str | None = None) -> None:
+            conn.execute(
+                sa.insert(s.transitions).values(
+                    stamp(
+                        s.transitions,
+                        **({"tenant_id": tenant} if tenant is not None else {}),
+                        transition_id=f"later_{chunk}",
+                        chunk_id=chunk,
+                        graph_id="gr_1",
+                        from_node_id="done",
+                        to_node_id=node,
+                        epoch=1,
+                        runner_id="r1",
+                        recorded_at=at,
+                    )
+                )
+            )
+
+        later = _AT + timedelta(seconds=1)
+        transition("transition", later, "build")
+        transition("tie", _AT, "build")
+        transition("older", _AT - timedelta(seconds=1), "build")
+        transition("other_tenant", later, "build", "other")
+        transition("done_again", later, "done")
+        conn.execute(
+            sa.insert(s.chunk_migrations).values(
+                stamp(
+                    s.chunk_migrations,
+                    migration_id="mg_1",
+                    chunk_id="migration",
+                    from_graph_id="gr_1",
+                    to_graph_id="gr_2",
+                    epoch=1,
+                    recorded_at=later,
+                )
+            )
+        )
+        conn.execute(
+            sa.insert(s.chunk_restarts).values(
+                stamp(
+                    s.chunk_restarts,
+                    chunk_id="restart",
+                    graph_id="gr_1",
+                    to_node_id="build",
+                    epoch=1,
+                    restarted_by="op",
+                    recorded_at=_AT,
+                )
+            )
+        )
+
+    runner.upgrade(_REVISION)
+    with engine.connect() as conn:
+        rows = conn.execute(sa.text("SELECT ref, enqueued_at FROM close_intents ORDER BY ref")).all()
+    assert [row.ref for row in rows] == ["done_again", "older", "other_tenant"]
+    assert datetime.fromisoformat(rows[0].enqueued_at).replace(tzinfo=UTC) == later

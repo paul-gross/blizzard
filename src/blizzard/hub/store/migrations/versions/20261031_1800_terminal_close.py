@@ -32,6 +32,19 @@ def upgrade() -> None:
                           WHERE g.tenant_id = r.tenant_id AND g.chunk_id = r.chunk_id)
           AND NOT EXISTS (SELECT 1 FROM chunk_deleted d
                           WHERE d.tenant_id = r.tenant_id AND d.chunk_id = r.chunk_id)
+          AND NOT EXISTS (SELECT 1 FROM transitions newer
+                          WHERE newer.tenant_id = t.tenant_id AND newer.chunk_id = t.chunk_id
+                            AND (newer.recorded_at > t.recorded_at OR
+                                 (newer.recorded_at = t.recorded_at AND newer.epoch >= t.epoch))
+                            AND (newer.to_node_id != 'done' OR newer.recorded_at > t.recorded_at))
+          AND NOT EXISTS (SELECT 1 FROM chunk_migrations newer
+                          WHERE newer.tenant_id = t.tenant_id AND newer.chunk_id = t.chunk_id
+                            AND (newer.recorded_at > t.recorded_at OR
+                                 (newer.recorded_at = t.recorded_at AND newer.epoch >= t.epoch)))
+          AND NOT EXISTS (SELECT 1 FROM chunk_restarts newer
+                          WHERE newer.tenant_id = t.tenant_id AND newer.chunk_id = t.chunk_id
+                            AND (newer.recorded_at > t.recorded_at OR
+                                 (newer.recorded_at = t.recorded_at AND newer.epoch >= t.epoch)))
           AND NOT EXISTS (SELECT 1 FROM close_intents i
                           WHERE i.tenant_id = r.tenant_id AND i.chunk_id = r.chunk_id
                             AND i.source = r.source AND i.ref = r.ref)
