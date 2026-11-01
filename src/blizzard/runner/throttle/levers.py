@@ -98,12 +98,14 @@ def pace_answer(
         if taper.from_pct <= spent:
             step = taper
     lead = settings.lead_pct if step is None else step.lead_pct
-    in_force = f"lead {lead:g}" if step is None else f"lead {lead:g} above {step.from_pct:g}%"
+    in_force = _pace_lead(lead)
+    if step is not None:
+        in_force += f" above {step.from_pct:g}%"
     reading = f"{window.window}: {spent:.0f}% spent, {elapsed:.0f}% elapsed"
     if spent <= elapsed + lead:
         return LeverAnswer(LeverName.PACE, True, reading, setting, in_force)
     started = window.resets_at - timedelta(seconds=window.window_seconds)
-    until = started + timedelta(seconds=window.window_seconds * (spent - lead) / 100.0)
+    until = started + timedelta(seconds=window.window_seconds * min(100.0, spent - lead) / 100.0)
     return LeverAnswer(LeverName.PACE, False, reading, setting, in_force, until)
 
 
@@ -210,9 +212,19 @@ def _paced_window(settings: PaceSettings, sample: ExternalUsageSampleSummary) ->
 
 
 def _pace_setting(settings: PaceSettings) -> str:
-    words = [settings.window if settings.window is not None else "longest window", f"lead {settings.lead_pct:g} points"]
-    words.extend(f"{step.lead_pct:g} above {step.from_pct:g}%" for step in settings.taper)
+    words = [
+        settings.window if settings.window is not None else "longest window",
+        f"{_pace_lead(settings.lead_pct)} points",
+    ]
+    words.extend(
+        f"{_pace_lead(step.lead_pct) if step.lead_pct < 0 else f'{step.lead_pct:g}'} above {step.from_pct:g}%"
+        for step in settings.taper
+    )
     return ", ".join(words)
+
+
+def _pace_lead(lead: float) -> str:
+    return f"lag {-lead:g}" if lead < 0 else f"lead {lead:g}"
 
 
 def _utilization_setting(settings: UtilizationSettings) -> str:

@@ -260,6 +260,17 @@ def _percent(view: ConfigView, key: str, *, path: str, above_zero: bool = False)
     return float(value)
 
 
+def _signed_percent(view: ConfigView, key: str, *, path: str) -> float | None:
+    if key not in view:
+        return None
+    value = view.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(f"{path} must be a number, got {value!r}")
+    if not -100 <= value <= 100:
+        raise ConfigError(f"{path} must be between -100 and 100, got {value!r}")
+    return float(value)
+
+
 def _positive(view: ConfigView, key: str, *, path: str) -> float | None:
     """The number at ``key`` above zero, or ``None`` when absent."""
     if key not in view:
@@ -351,7 +362,7 @@ class Throttle:
             if not isinstance(window, str) or not window.strip():
                 raise ConfigError(f"throttle.pace.window must be a non-blank string, got {window!r}")
             window = window.strip()
-        lead = _percent(table, "lead_pct", path="throttle.pace.lead_pct")
+        lead = _signed_percent(table, "lead_pct", path="throttle.pace.lead_pct")
         steps: list[TaperStep] = []
         declared_taper = table.get("taper", [])
         raw = as_list(declared_taper)
@@ -360,7 +371,7 @@ class Throttle:
         for position, step in enumerate(table.entries("taper"), start=1):
             where = f"throttle.pace.taper[{position}]"
             from_pct = _percent(step, "from_pct", path=f"{where}.from_pct")
-            step_lead = _percent(step, "lead_pct", path=f"{where}.lead_pct")
+            step_lead = _signed_percent(step, "lead_pct", path=f"{where}.lead_pct")
             if from_pct is None or step_lead is None:
                 missing = "from_pct" if from_pct is None else "lead_pct"
                 raise ConfigError(f"{where}.{missing} is required")
