@@ -13,6 +13,7 @@ import {
   KitPanel,
   KitProseBlock,
   KitTextInput,
+  KitErrorLine,
 } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
@@ -145,7 +146,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })

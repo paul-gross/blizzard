@@ -1,6 +1,7 @@
 import type { WorkSourceSummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { builtInTone, lifecycleTone } from '../../core/lifecycle-tone';
 import {
   workSourceBadges,
   workSourceCliName,
@@ -36,8 +37,8 @@ const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: n
 
 describe('workSourceBadges', () => {
   it('badges the built-in source and a retired one', () => {
-    expect(workSourceBadges(HUB).map((b) => b.label)).toEqual(['built-in']);
-    expect(workSourceBadges(OLD).map((b) => b.label)).toEqual(['retired']);
+    expect(workSourceBadges(HUB)).toEqual([{ label: 'built-in', tone: builtInTone }]);
+    expect(workSourceBadges(OLD)).toEqual([{ label: 'retired', tone: lifecycleTone(true) }]);
     expect(workSourceBadges(WINTER)).toEqual([]);
   });
 });

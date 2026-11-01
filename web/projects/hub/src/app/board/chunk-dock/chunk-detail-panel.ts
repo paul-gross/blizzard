@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, hasDelivery, type WorkItemsState } from 'fleet';
+import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, hasDelivery, type WorkItemsState, KitErrorLine } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
@@ -31,6 +31,7 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
     ChunkTimeline,
     ChunkAwaitingHuman,
     ChunkArtifacts,
+    KitErrorLine,
   ],
   templateUrl: './chunk-detail-panel.html',
   styleUrl: './chunk-detail-panel.css',

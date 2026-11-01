@@ -34,9 +34,7 @@
     [count]="detailRef()"
     data-testid="fleet-detail"
   >
-    @if (actionError(); as err) {
-      <p class="notice" data-testid="fleet-action-error" role="alert">{{ err }}</p>
-    }
+    <fleet-kit-error-line class="notice" [message]="actionError()" testid="fleet-action-error" />
     @if (selection(); as sel) {
       @switch (sel.kind) {
         @case ('host') {

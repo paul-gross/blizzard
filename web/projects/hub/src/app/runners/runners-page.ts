@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { errorMessage, injectPendingMutationVariables, KitBackBar } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, KitBackBar, KitErrorLine } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
@@ -30,7 +30,7 @@ import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutat
 @Component({
   selector: 'app-runners-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostDetail, HostlessRunnerDetail, KitBackBar, LensLink, RouterLink, RunnerPanelView],
+  imports: [HostDetail, HostlessRunnerDetail, KitBackBar, LensLink, RouterLink, RunnerPanelView, KitErrorLine],
   templateUrl: './runners-page.html',
   styleUrl: './runners-page.css',
 })

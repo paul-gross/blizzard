@@ -80,9 +80,7 @@
             (lensChoose)="onChooseLens($event)"
           />
         }
-        @if (logoutError(); as error) {
-          <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
-        }
+        <fleet-kit-error-line class="logout-error" [message]="logoutError()" testid="logout-error" />
         @if (lensNotice(); as notice) {
           <div class="lens-notice" role="status" data-testid="lens-notice">
             <span>{{ notice }}</span>

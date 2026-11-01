@@ -66,7 +66,7 @@
   <span class="detail">{{ row.detail }}</span>
   <span class="right">
     @if (row.builtIn) {
-      <fleet-kit-badge tone="idle" variant="soft">built-in</fleet-kit-badge>
+      <fleet-kit-badge [tone]="builtInTone" variant="soft">built-in</fleet-kit-badge>
     } @else {
       @if (row.revision !== null) {
         <span class="rev">r{{ row.revision }}</span>

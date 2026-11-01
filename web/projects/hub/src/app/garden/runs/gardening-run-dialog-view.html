@@ -106,9 +106,7 @@
     @if (confirmedRun()) {
       <fleet-kit-button size="cta" variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
     } @else {
-      @if (submitError(); as error) {
-        <p class="submit-error" data-testid="run-submit-error">{{ error }}</p>
-      }
+      <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="run-submit-error" />
       <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
       <fleet-kit-button
       size="cta"

@@ -20,9 +20,7 @@
       (resumeChunk)="onResume($event)"
     />
   }
-  @if (newestLease() && actionError(); as err) {
-    <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
-  }
+  <fleet-kit-error-line class="action-notice" [message]="newestLease() ? actionError() : null" testid="action-error" />
   <app-machine-detail-view
     [lease]="newestLease()"
     [escalation]="escalation()"

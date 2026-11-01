@@ -1,6 +1,7 @@
 import type { RepositorySummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { createBody, missingRequired, shownFields } from '../config-edit.model';
 import {
   chosenForgeOffered,
@@ -40,7 +41,7 @@ const OLD: RepositorySummary = { ...BLIZZARD, repository_id: 'repo_2', slug: 'ol
 
 describe('repositoryBadges', () => {
   it('badges only a retired repository', () => {
-    expect(repositoryBadges(OLD).map((b) => b.label)).toEqual(['retired']);
+    expect(repositoryBadges(OLD)).toEqual([{ label: 'retired', tone: lifecycleTone(true) }]);
     expect(repositoryBadges(BLIZZARD)).toEqual([]);
   });
 });

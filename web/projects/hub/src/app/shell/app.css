@@ -18,9 +18,7 @@ router-outlet {
   height: 43px;
 }
 .logout-error {
-  margin: 0;
   padding: 6px 12px;
-  color: var(--red);
 }
 /* The project lens's notice: a link that named no project of the tenant opened on All. */
 .lens-notice {

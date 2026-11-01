@@ -36,8 +36,6 @@
 }
 .sp-error {
   margin: 8px 12px 0;
-  color: var(--red);
-  font-size: var(--fs-xs);
 }
 .sp-facts {
   --kv-label-col: max-content;

@@ -8,6 +8,7 @@ import {
   type RepositorySummary,
 } from 'fleet';
 
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, type ConfigFieldOption, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { factText, recordLink, secretLinks } from '../config-links.model';
@@ -121,7 +122,7 @@ function parkTimeoutFacts(repository: RepositorySummary): readonly { label: stri
 
 /** A repository's badges — retired. */
 export function repositoryBadges(repository: RepositorySummary): readonly ConfigBadgeVm[] {
-  return repository.retired ? [{ label: 'retired', tone: 'idle' }] : [];
+  return repository.retired ? [{ label: 'retired', tone: lifecycleTone(true) }] : [];
 }
 
 /** The repository list's rows under `filter`. */

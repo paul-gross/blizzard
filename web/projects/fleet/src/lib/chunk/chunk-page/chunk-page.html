@@ -2,9 +2,7 @@
   <a chunk-page-back class="back-row" [routerLink]="boardLinkBase() | lensLink" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
     <fleet-kit-back-bar label="Board" />
   </a>
-  @if (actionError(); as err) {
-    <p chunk-page-notice class="notice" data-testid="mobile-chunk-action-error" role="alert">{{ err }}</p>
-  }
+  <fleet-kit-error-line chunk-page-notice class="notice" [message]="actionError()" testid="mobile-chunk-action-error" />
   @if (actionOutcome(); as outcome) {
     <p chunk-page-notice class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
   }

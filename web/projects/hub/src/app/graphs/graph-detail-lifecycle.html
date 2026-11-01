@@ -1,6 +1,4 @@
-@if (actionError(); as err) {
-  <p class="lifecycle-error" data-testid="graph-detail-lifecycle-error">{{ err }}</p>
-}
+<fleet-kit-error-line class="lifecycle-error" [message]="actionError()" testid="graph-detail-lifecycle-error" />
 <p class="entry" data-testid="graph-detail-entry">
   Entry node: <strong>{{ entryNodeName() }}</strong>
 </p>

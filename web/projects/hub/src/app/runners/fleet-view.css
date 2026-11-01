@@ -94,11 +94,6 @@
 }
 .notice {
   margin: 8px 16px 0;
-  padding: 4px 6px;
-  border: 1px solid var(--red-dim);
-  border-left-width: 2px;
-  color: var(--red);
-  font-size: var(--fs-xs);
 }
 .not-found {
   padding: 14px 16px;

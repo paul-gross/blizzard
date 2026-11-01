@@ -1,7 +1,5 @@
 <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar" [menu]="shellMenu" />
-@if (logout.error(); as error) {
-  <p class="logout-error" role="alert" data-testid="local-panel-mobile-logout-error">{{ error }}</p>
-}
+<fleet-kit-error-line class="logout-error" [message]="logout.error()" testid="local-panel-mobile-logout-error" />
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="local-panel-mobile-titlebar-menu-panel">
     <!-- The identity block renders label-only in here: a role=menu may own

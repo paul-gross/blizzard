@@ -1,4 +1,5 @@
 import { hubApi, RecordKind, type ForgeCreateRequest, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { factText, recordLink } from '../config-links.model';
@@ -23,7 +24,7 @@ export function forgeCreate(body: Readonly<Record<string, string | boolean>>): F
 }
 
 export function forgeBadges(forge: ForgeSummary): readonly ConfigBadgeVm[] {
-  return forge.retired ? [{ label: 'retired', tone: 'idle' }] : [];
+  return forge.retired ? [{ label: 'retired', tone: lifecycleTone(true) }] : [];
 }
 
 export function forgeRows(forges: readonly ForgeSummary[], filter: LifecycleFilter): readonly ConfigRowVm[] {

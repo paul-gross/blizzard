@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { KitButton } from 'fleet/shell';
+import { KitButton, KitErrorLine } from 'fleet/shell';
 
 import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
 import { RunnerLogout } from './runner-logout';
@@ -35,7 +35,7 @@ import { RunnerLogout } from './runner-logout';
 @Component({
   selector: 'app-identity',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, KitErrorLine],
   host: {
     '[attr.role]': "variant() === 'label' ? 'presentation' : null",
   },

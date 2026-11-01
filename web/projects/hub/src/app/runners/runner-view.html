@@ -23,9 +23,7 @@
         }
       </div>
     }
-    @if (actionError(); as error) {
-      <p class="notice" role="alert" data-testid="runner-action-error">{{ error }}</p>
-    }
+    <fleet-kit-error-line [message]="actionError()" testid="runner-action-error" />
     <ul class="runners" data-testid="runner-list">
       @for (entry of rail().rows; track entry.row.runner_id) {
         <li

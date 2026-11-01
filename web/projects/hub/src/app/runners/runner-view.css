@@ -125,11 +125,3 @@
   margin-top: 6px;
 }
 /* A pause/resume failure reads above the runners. */
-.notice {
-  margin: 0;
-  padding: 4px 8px;
-  border-left: 2px solid var(--red-dim);
-  background: var(--overlay-20);
-  color: var(--red);
-  font-size: var(--fs-xs);
-}

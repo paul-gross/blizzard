@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitTextInput } from 'fleet';
+import { KitButton, KitDialog, KitTextInput, KitErrorLine } from 'fleet';
 
 /**
  * The Pass dialog's presentational view — one required
@@ -14,7 +14,7 @@ import { KitButton, KitDialog, KitTextInput } from 'fleet';
 @Component({
   selector: 'app-gardening-proposal-pass-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitTextInput],
+  imports: [KitButton, KitDialog, KitTextInput, KitErrorLine],
   templateUrl: './gardening-proposal-pass-dialog-view.html',
   styleUrl: './gardening-proposal-pass-dialog-view.css',
 })

@@ -29,9 +29,7 @@
   />
 
   <div fleetKitDialogFooter class="footer">
-    @if (submitError(); as error) {
-      <p class="submit-error" data-testid="finding-triage-submit-error">{{ error }}</p>
-    }
+    <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="finding-triage-submit-error" />
     <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="finding-triage-dialog-cancel">
       Cancel
     </fleet-kit-button>

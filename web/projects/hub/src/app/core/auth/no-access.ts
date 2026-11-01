@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type MeResponse, KitButton } from 'fleet/shell';
+import { type MeResponse, KitButton, KitErrorLine } from 'fleet/shell';
 
 /**
  * The no-access screen — a signed-in person who holds no membership in any tenant sees this, and only this: no
@@ -11,7 +11,7 @@ import { type MeResponse, KitButton } from 'fleet/shell';
 @Component({
   selector: 'app-no-access',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, KitErrorLine],
   templateUrl: './no-access.html',
   styleUrl: './no-access.css',
 })

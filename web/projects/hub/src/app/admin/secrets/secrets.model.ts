@@ -1,5 +1,6 @@
 import type { SecretCreateRequestWritable, SecretReplaceRequest, SecretView } from 'fleet';
 
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { recordLink } from '../config-links.model';
@@ -13,7 +14,7 @@ export function secretCreate(body: Readonly<Record<string, string | boolean>>): 
 
 /** A secret's badges — retired, or unused when nothing live refers to it. */
 export function secretBadges(secret: SecretView): readonly ConfigBadgeVm[] {
-  if (secret.retired) return [{ label: 'retired', tone: 'idle' }];
+  if (secret.retired) return [{ label: 'retired', tone: lifecycleTone(true) }];
   return (secret.references ?? []).length === 0 ? [{ label: 'unused', tone: 'waiting' }] : [];
 }
 

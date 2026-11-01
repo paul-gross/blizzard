@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput } from 'fleet';
+import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine } from 'fleet';
 
 /** What the view asks the container to submit — `mintWorkItem` mirrors the CLI's
  * `--no-work-item` (inverted), `body`/`reason` ride only when they carry something,
@@ -33,7 +33,7 @@ type AcceptMode = 'mint' | 'decline';
 @Component({
   selector: 'app-gardening-proposal-accept-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitOption, KitPanel, KitTextInput],
+  imports: [KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine],
   templateUrl: './gardening-proposal-accept-dialog-view.html',
   styleUrl: './gardening-proposal-accept-dialog-view.css',
 })

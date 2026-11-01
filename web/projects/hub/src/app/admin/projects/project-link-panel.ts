@@ -12,6 +12,7 @@ import {
   type LandingPositionRequest,
 } from 'fleet';
 
+import { builtInTone } from '../../core/lifecycle-tone';
 import { type LandingSection, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -30,6 +31,7 @@ import type { ProjectLinkRowVm } from './projects.model';
   styleUrl: './project-link-panel.css',
 })
 export class ProjectLinkPanel {
+  protected readonly builtInTone = builtInTone;
   readonly heading = input.required<string>();
   readonly explainer = input.required<string>();
   readonly rows = input.required<readonly ProjectLinkRowVm[]>();

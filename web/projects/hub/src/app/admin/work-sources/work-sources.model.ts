@@ -1,5 +1,6 @@
 import { RecordKind, type WorkSourceCreateRequest, type WorkSourceSummary } from 'fleet';
 
+import { builtInTone, lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { factText, recordLink, secretLinks } from '../config-links.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
@@ -26,8 +27,8 @@ export function workSourceCreate(body: Readonly<Record<string, string | boolean>
 /** A work source's badges — built-in, retired. */
 export function workSourceBadges(source: WorkSourceSummary): readonly ConfigBadgeVm[] {
   const badges: ConfigBadgeVm[] = [];
-  if (source.built_in) badges.push({ label: 'built-in', tone: 'spawning' });
-  if (source.retired) badges.push({ label: 'retired', tone: 'idle' });
+  if (source.built_in) badges.push({ label: 'built-in', tone: builtInTone });
+  if (source.retired) badges.push({ label: 'retired', tone: lifecycleTone(true) });
   return badges;
 }
 

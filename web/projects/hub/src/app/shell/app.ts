@@ -19,6 +19,7 @@ import {
   KitButton,
   ViewportService,
   injectNowSignal,
+  KitErrorLine,
 } from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
 import { NoAccess } from '../core/auth/no-access';
@@ -112,6 +113,7 @@ import {
     RouterOutlet,
     NoAccess,
     TenantPicker,
+    KitErrorLine,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',

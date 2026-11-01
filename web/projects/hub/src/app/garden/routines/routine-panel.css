@@ -66,11 +66,6 @@ fleet-kit-panel {
 .rp-dim {
   color: var(--label);
 }
-.rp-error {
-  margin: 0;
-  color: var(--red);
-  font-size: var(--fs-xs);
-}
 /* The kit fact grid's own 74px label column is narrower than `default effort`
    and its two `default …` siblings, which wrap onto a second line against it.
    `max-content` sizes the column to the longest of them instead

@@ -14,6 +14,7 @@ import {
   type RoutineBaselineView,
   type RoutineRunResponse,
   type ScopeView,
+  KitErrorLine,
 } from 'fleet';
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
@@ -50,6 +51,7 @@ export interface RunSubmission {
     KitPanel,
     KitTextInput,
     RouterLink, LensLink,
+    KitErrorLine,
   ],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',

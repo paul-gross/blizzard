@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { KitErrorLine } from 'fleet';
 
 /**
  * The graph detail's **lifecycle status** section — the action-error line
@@ -12,6 +13,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 @Component({
   selector: 'app-graph-detail-lifecycle',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitErrorLine],
   templateUrl: './graph-detail-lifecycle.html',
   styleUrl: './graph-detail-lifecycle.css',
 })

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitTextInput } from 'fleet';
+import { KitButton, KitDialog, KitTextInput, KitErrorLine } from 'fleet';
 import { type FindingTriageVerb } from '../core/finding-list';
 
 /** What the view asks the container to submit — `supersededBy` rides only when
@@ -50,7 +50,7 @@ const VERB_BLURBS: Record<FindingTriageVerb, string> = {
 @Component({
   selector: 'app-gardening-finding-triage-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitTextInput],
+  imports: [KitButton, KitDialog, KitTextInput, KitErrorLine],
   templateUrl: './gardening-finding-triage-dialog-view.html',
   styleUrl: './gardening-finding-triage-dialog-view.css',
 })

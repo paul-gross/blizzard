@@ -8,6 +8,7 @@ import { deriveWorkItemsState, type WorkItemsState } from '../chunk-detail/work-
 import { STATUS_TONE } from '../../core/chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitBackBar } from '../../kit/kit-back-bar';
+import { KitErrorLine } from '../../kit/kit-error-line';
 import { KitTabs, type KitTabOption } from '../../kit/kit-tabs';
 import { ChunkTranscriptsContainer } from '../../transcripts/chunk-transcripts-container';
 import { ViewportService } from '../../core/viewport/viewport-service';
@@ -59,6 +60,7 @@ import { LensLink } from '../../core/lens-link';
     KitBackBar,
     KitTabs,
     RouterLink, LensLink,
+    KitErrorLine,
   ],
   templateUrl: './chunk-page.html',
   styleUrl: './chunk-page.css',
