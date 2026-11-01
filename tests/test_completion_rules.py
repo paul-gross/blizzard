@@ -141,7 +141,9 @@ class _SubmissionFields(TypedDict, total=False):
     lease_id: str | None
 
 
-def completion_submission(choice: str, *, from_node_id: str = "nd_build", **fields: Unpack[_SubmissionFields]) -> Completion:
+def completion_submission(
+    choice: str, *, from_node_id: str = "nd_build", **fields: Unpack[_SubmissionFields]
+) -> Completion:
     return Completion(choice=choice, epoch=1, runner_id="runner-a", from_node_id=from_node_id, **fields)
 
 

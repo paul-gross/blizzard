@@ -246,7 +246,7 @@ def test_a_pass_writes_steps_and_invocations_and_advances_each_cursor_after_its_
     egress_sweep(hub, writer).sweep()
 
     assert [r["chunk_id"] for r in egress_rows(writer, "steps")] == [chunk_id]
-    assert [r["usage_id"] for r in egressegress_rows(writer, "invocations")] == [1, 2]
+    assert [r["usage_id"] for r in egress_rows(writer, "invocations")] == [1, 2]
     step = egress_rows(writer, "steps")[0]
     assert step["invocations"] == 2
     assert step["cost_billed_usd"] == Decimal("1.000000000")
@@ -279,15 +279,15 @@ def test_each_open_tenants_rows_are_exported_hydrated_in_their_own_tenant(tmp_pa
         (chunk_id, graph.graph_id),
         ("ch_other", "gr_ten_other"),
     ]
-    assert [r["chunk_id"] for r in egressegress_rows(writer, "invocations")] == [chunk_id, "ch_other"]
+    assert [r["chunk_id"] for r in egress_rows(writer, "invocations")] == [chunk_id, "ch_other"]
     assert [r["chunk_id"] for r in egress_rows(writer, "events")] == ["ch_other"]
     home = (default_tenant(hub.engine), _tenant_name(hub))
     assert [_tenant_of(r) for r in egress_rows(writer, "steps")] == [home, ("ten_other", "ten_other")]
-    assert [_tenant_of(r) for r in egressegress_rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
+    assert [_tenant_of(r) for r in egress_rows(writer, "invocations")] == [home, ("ten_other", "ten_other")]
     assert [_tenant_of(r) for r in egress_rows(writer, "events")] == [("ten_other", "ten_other")]
     other_project = ("proj_ten_other", "default", "Default")
     assert [project_of(r) for r in egress_rows(writer, "steps")] == [home_project(hub), other_project]
-    assert [project_of(r) for r in egressegress_rows(writer, "invocations")] == [home_project(hub), other_project]
+    assert [project_of(r) for r in egress_rows(writer, "invocations")] == [home_project(hub), other_project]
     assert [(r["record_type"], project_of(r)) for r in egress_rows(writer, "events")] == [("dropped", other_project)]
     steps, invocations, events = (egress_store(hub).newest_cursor(d) for d in ("steps", "invocations", "events"))
     assert steps is not None and steps.step is not None
@@ -330,7 +330,7 @@ def test_a_row_inside_the_settle_window_waits_until_it_has_stood_the_full_window
 
     hub.clock.advance(timedelta(seconds=5))
     egress_sweep(hub, writer, config).sweep()
-    assert (len(egress_rows(writer, "steps")), len(egressegress_rows(writer, "invocations"))) == (0, 1)
+    assert (len(egress_rows(writer, "steps")), len(egress_rows(writer, "invocations"))) == (0, 1)
 
     hub.clock.advance(timedelta(seconds=1))
     egress_sweep(hub, writer, config).sweep()
@@ -348,7 +348,7 @@ def test_batch_limit_bounds_a_pass_and_later_passes_take_the_rest_in_order(tmp_p
     for _ in range(6):
         egress_sweep(hub, writer, config).sweep()
 
-    assert sorted(int(str(r["usage_id"])) for r in egressegress_rows(writer, "invocations")) == [1, 2, 3]
+    assert sorted(int(str(r["usage_id"])) for r in egress_rows(writer, "invocations")) == [1, 2, 3]
     assert len(egress_rows(writer, "steps")) == 2
 
 
@@ -400,7 +400,7 @@ def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a
 
     named = [("r1", "night-runner"), ("r1", "day-runner")]
     assert [(r["runner_id"], r["runner_name"]) for r in egress_rows(writer, "steps")] == named
-    assert [(r["runner_id"], r["runner_name"]) for r in egressegress_rows(writer, "invocations")] == named
+    assert [(r["runner_id"], r["runner_name"]) for r in egress_rows(writer, "invocations")] == named
 
 
 def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:
@@ -420,7 +420,7 @@ def test_rows_name_their_tenant_as_named_when_written_and_a_later_copy_follows_a
 
     named = [(tenant, before), (tenant, "renamed")]
     assert [_tenant_of(r) for r in egress_rows(writer, "steps")] == named
-    assert [_tenant_of(r) for r in egressegress_rows(writer, "invocations")] == named
+    assert [_tenant_of(r) for r in egress_rows(writer, "invocations")] == named
 
 
 def test_rows_name_their_project_as_known_when_written_and_a_later_copy_follows_a_slug_change(tmp_path: Path) -> None:
@@ -439,7 +439,7 @@ def test_rows_name_their_project_as_known_when_written_and_a_later_copy_follows_
 
     named = [(project_id, slug, name), (project_id, "storefront", name)]
     assert [project_of(r) for r in egress_rows(writer, "steps")] == named
-    assert [project_of(r) for r in egressegress_rows(writer, "invocations")] == named
+    assert [project_of(r) for r in egress_rows(writer, "invocations")] == named
 
 
 def test_one_sweep_names_each_chunks_own_project_across_two_projects_of_a_tenant(tmp_path: Path) -> None:
@@ -495,7 +495,7 @@ def test_usage_for_a_step_that_is_still_open_only_moves_the_position(tmp_path: P
     egress_sweep(hub, writer).sweep()
 
     assert egress_rows(writer, "steps") == []
-    assert len(egressegress_rows(writer, "invocations")) == 1
+    assert len(egress_rows(writer, "invocations")) == 1
     pending = egress_store(hub).newest_cursor("steps")
     assert pending is not None
     assert pending.usage.usage_id == 1
@@ -518,7 +518,7 @@ def test_steps_read_usage_even_when_invocations_are_not_exported(tmp_path: Path)
     egress_sweep(hub, writer, config).sweep()
 
     assert [r["invocations"] for r in egress_rows(writer, "steps")] == [1, 2]
-    assert egressegress_rows(writer, "invocations") == []
+    assert egress_rows(writer, "invocations") == []
     assert egress_store(hub).newest_cursor("invocations") is None
 
 
@@ -886,4 +886,4 @@ def test_a_step_open_while_the_cursor_passed_is_written_once_when_it_closes(tmp_
         sweep.sweep()
 
     assert [r["chunk_id"] for r in egress_rows(writer, "steps")] == [chunk_id]
-    assert len(egressegress_rows(writer, "invocations")) == 1
+    assert len(egress_rows(writer, "invocations")) == 1
