@@ -11,6 +11,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from sqlalchemy import update
@@ -28,15 +29,16 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HA
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkState
-from blizzard.runner.node_steps.envelope import RotateBounds
+from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store.schema import leases
 from tests.runner_fakes import (
@@ -58,6 +60,32 @@ _NOW = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
 _CHOICES = [("pass", "ok"), ("fail", "no")]
 
 
+class _EnvelopeFields(TypedDict, total=False):
+    produces: list[str | ProducesSpec] | None
+    epoch: int
+    session_source: str | None
+    session_name: str | None
+    session_model: list[str] | None
+    session_harnesses: list[str] | None
+    session_effort: str | None
+    session_compaction_window: str | None
+    session_rotate: RotateBounds | None
+    checks: list[str] | None
+    checks_cwd: str | None
+    checks_timeout: int | None
+    requires_checks: set[str] | None
+    graph_artifacts: list[GraphArtifact] | None
+    retries_max: int | None
+    graph_name: str | None
+    work_refs: list[dict[str, str]] | None
+
+
+class _RotateFields(TypedDict, total=False):
+    max_context_tokens: int | None
+    max_transcript_bytes: int | None
+    max_invocations: int | None
+
+
 def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
@@ -68,8 +96,8 @@ def _pooled(
     *,
     mode: SessionMode,
     model: list[str] | None = None,
-    effort=None,
-    compaction_window=None,
+    effort: str | None = None,
+    compaction_window: str | None = None,
     pool: str = "code",
 ):
     """An envelope for a node referencing a named pool (`code` by default), in either mode."""
@@ -87,7 +115,7 @@ def _pooled(
     )
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, provider, harness, *, minutes: int = 0):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, provider: FakeProvider, harness: FakeHarness, *, minutes: int = 0):
     return make_context(
         store,
         hub=hub,
@@ -485,7 +513,7 @@ def test_resumed_session_keeps_its_stamp_for_judgement_and_lost_judgement_relaun
 
 @pytest.mark.component
 @pytest.mark.parametrize("mode", ["bare", "named", "rotated", "fresh"])
-def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path: Path, mode):
+def test_hub_advanced_runner_entry_resolves_its_declared_session(tmp_path: Path, mode: str):
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -638,7 +666,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     assert h2.spawn_compaction_windows == [None]
 
 
-def _mint_lease(tmp_path: Path, **envelope_kwargs):
+def _mint_lease(tmp_path: Path, **envelope_kwargs: Unpack[_EnvelopeFields]):
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope(
@@ -731,11 +759,11 @@ def _blank_stamps(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
 # threshold is under bound AND its stamped model matches; an unreadable signal is not a breach.
 
 
-def _rotate(**bounds):
+def _rotate(**bounds: Unpack[_RotateFields]):
     return RotateBounds(**bounds)
 
 
-def _bounded(mode: SessionMode, rotate=None, model=None):
+def _bounded(mode: SessionMode, rotate: RotateBounds | None = None, model: list[str] | None = None):
     return make_envelope(
         "ch_1",
         "verify",
@@ -753,7 +781,7 @@ def _seed_head(
     store: SqlAlchemyRunnerStore,
     *,
     session_id: str = "sess-head",
-    model: str = "sonnet",
+    model: str | None = "sonnet",
     harness_id: str = CLAUDE_CODE_HARNESS_ID,
 ) -> str:
     """A pool head for `code` — a session-bearing lease stamping the pool name."""
@@ -782,7 +810,9 @@ def _seed_head(
     return session_id
 
 
-def _seed_usage(store: SqlAlchemyRunnerStore, *, kind: str = "spawn", generation: int = 1, tokens: int = 0) -> None:
+def _seed_usage(
+    store: SqlAlchemyRunnerStore, *, kind: UsageKind = "spawn", generation: int = 1, tokens: int = 0
+) -> None:
     record_usage(
         store,
         lease_id="lease_head",
@@ -791,7 +821,7 @@ def _seed_usage(store: SqlAlchemyRunnerStore, *, kind: str = "spawn", generation
         epoch=1,
         generation=generation,
         sample=UsageSample(
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             model="sonnet",
             input_tokens=tokens,
             output_tokens=0,
@@ -805,7 +835,7 @@ def _seed_usage(store: SqlAlchemyRunnerStore, *, kind: str = "spawn", generation
 
 def _resolve(
     store: SqlAlchemyRunnerStore,
-    envelope,
+    envelope: Envelope,
     *,
     transcript_source: IHarnessTranscriptSource | None = None,
     resolved_model: str = "sonnet",
@@ -856,7 +886,7 @@ def test_a_declaration_with_no_rotate_block_bounds_nothing(tmp_path: Path):
     [(99, 100, True), (100, 100, True), (101, 100, False)],
     ids=["under", "at", "over"],
 )
-def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path: Path, tokens, bound, resumed):
+def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path: Path, tokens: int, bound: int, resumed: bool):
     """At the bound is still under it — a threshold is a ceiling, not a trigger point."""
     store = _store(tmp_path)
     head = _seed_head(store)
@@ -868,7 +898,7 @@ def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path: Path, tokens
 
 @pytest.mark.component
 @pytest.mark.parametrize(("bound", "resumed"), [(100, False), (102, True)])
-def test_opencode_context_rotates_or_resumes_pool_head(tmp_path: Path, bound, resumed):
+def test_opencode_context_rotates_or_resumes_pool_head(tmp_path: Path, bound: int, resumed: bool):
     store = _store(tmp_path)
     head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
     raw = json.dumps(
@@ -984,7 +1014,9 @@ def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path: Pa
     [(2, 3, True), (3, 3, True), (4, 3, False)],
     ids=["under", "at", "over"],
 )
-def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path: Path, invocations, bound, resumed):
+def test_max_invocations_counts_harness_invocations_not_node_steps(
+    tmp_path: Path, invocations: int, bound: int, resumed: bool
+):
     """Every `usage_facts` row counts toward the bound, whatever its kind — here `spawn`
     and `judge` rows alike."""
     store = _store(tmp_path)
@@ -1002,7 +1034,7 @@ def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path: Pat
     [(99, 100, True), (100, 100, True), (101, 100, False)],
     ids=["under", "at", "over"],
 )
-def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path: Path, size, bound, resumed):
+def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path: Path, size: int, bound: int, resumed: bool):
     store = _store(tmp_path)
     head = _seed_head(store)
     env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=bound))
@@ -1087,7 +1119,7 @@ def _rotation_rig(tmp_path: Path, *, owner_model: str = "opus"):
     return store, ctx, default, other
 
 
-def _enter(ctx, envelope):
+def _enter(ctx: LoopContext, envelope: Envelope) -> None:
     Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
 
 
@@ -1189,7 +1221,7 @@ def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path: 
 
 @pytest.mark.component
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path: Path, unavailable):
+def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path: Path, unavailable: bool):
     """An existing-session operation: the pool's head owner cannot be
     dispatched to, so the chunk escalates in place at node entry — never a blocked mint
     that loops forever, and never a substituted default harness."""
@@ -1330,7 +1362,7 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path: Path):
     """A pre-#144 lease reads NULL — *unknown*. Comparing an unknown against a resolved
     name would rotate every such session once, for no reason anyone could name."""
     store = _store(tmp_path)
-    head = _seed_head(store, model=None)  # type: ignore[arg-type]
+    head = _seed_head(store, model=None)
 
     assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="opus") == head
 

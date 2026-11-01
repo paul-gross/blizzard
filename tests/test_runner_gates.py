@@ -44,7 +44,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store: SqlAlchemyRunnerStore, *, node_id="nd_build", node_name="build"):
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, node_id: str = "nd_build", node_name: str = "build"):
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -337,7 +337,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path: Path):
     assert submission.decision_id == "dec_1" and submission.choice == "approve" and submission.epoch == 1
 
 
-def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):
+def _gate_parked_chunk(*, status: ChunkStatus, route_runner_id: str | None, resolved_choice: str | None) -> ChunkState:
     return ChunkState(
         chunk_id="ch_1",
         status=status,
@@ -359,7 +359,9 @@ def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):
     [(ChunkStatus.WAITING_ON_HUMAN, None), (ChunkStatus.READY, "approve")],
     ids=["open-decision", "resolved-decision"],
 )
-def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path: Path, status, resolved_choice):
+def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(
+    tmp_path: Path, status: ChunkStatus, resolved_choice: str | None
+):
     """A detach keeps the decision but drops the route: the park has nothing left to resolve here."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")

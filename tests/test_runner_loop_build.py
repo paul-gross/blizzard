@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import shlex
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -543,7 +544,11 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     ticked: list[object] = []
     instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
-    monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.append(ctx.tracer))
+
+    def recording_tick(ctx: LoopContext) -> None:
+        ticked.append(ctx.tracer)
+
+    monkeypatch.setattr(loop_wiring, "tick", recording_tick)
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
         LoopWiring.of(config).tick_once(process=graph)
@@ -572,7 +577,11 @@ def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     ticked = threading.Event()
     instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
-    monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.set())
+
+    def signalling_tick(ctx: LoopContext) -> None:
+        ticked.set()
+
+    monkeypatch.setattr(loop_wiring, "tick", signalling_tick)
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
         driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
@@ -614,7 +623,11 @@ def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
         hub_url="http://hub.test:8421",
     )
     hub = FakeHub()
-    monkeypatch.setattr(loop_wiring, "HttpHubClient", lambda _client: hub)
+
+    def fake_hub_client(_client: httpx2.Client) -> FakeHub:
+        return hub
+
+    monkeypatch.setattr(loop_wiring, "HttpHubClient", fake_hub_client)
     monkeypatch.setattr(loop_wiring, "TranscriptBackfill", _HubCallingBackfill)
     wiring = LoopWiring.of(config)
 
@@ -647,6 +660,35 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         graph.close()
 
 
+def _returning[**P, R](_real: Callable[P, R], value: R) -> Callable[P, R]:
+    """A stand-in for ``_real`` that answers every call with ``value``."""
+
+    def returning(*_args: P.args, **_kwargs: P.kwargs) -> R:
+        return value
+
+    return returning
+
+
+def _recording[**P, R](real: Callable[P, R], made: list[R]) -> Callable[P, R]:
+    """``real``, appending each result to ``made``."""
+
+    def recording(*args: P.args, **kwargs: P.kwargs) -> R:
+        result = real(*args, **kwargs)
+        made.append(result)
+        return result
+
+    return recording
+
+
+def _failing[**P, R](_real: Callable[P, R], message: str) -> Callable[P, R]:
+    """A stand-in for ``_real`` that raises ``RuntimeError(message)`` on every call."""
+
+    def failing(*_args: P.args, **_kwargs: P.kwargs) -> R:
+        raise RuntimeError(message)
+
+    return failing
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize("owned_graph", [True, False])
 def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
@@ -662,20 +704,10 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
         real_dispose()
 
     monkeypatch.setattr(graph.engine, "dispose", dispose)
-    monkeypatch.setattr(runner_app, "build_runner_process", lambda *_args, **_kwargs: graph)
-    original_client = httpx2.Client
+    monkeypatch.setattr(runner_app, "build_runner_process", _returning(build_runner_process, graph))
     clients: list[httpx2.Client] = []
-
-    def client(*args, **kwargs):
-        result = original_client(*args, **kwargs)
-        clients.append(result)
-        return result
-
-    def fail(*args, **kwargs):
-        raise RuntimeError("app wiring failed")
-
-    monkeypatch.setattr(runner_app.httpx2, "Client", client)
-    monkeypatch.setattr(runner_app, "create_app", fail)
+    monkeypatch.setattr(runner_app.httpx2, "Client", _recording(httpx2.Client, clients))
+    monkeypatch.setattr(runner_app, "create_app", _failing(runner_app.create_app, "app wiring failed"))
     try:
         with pytest.raises(RuntimeError, match="app wiring failed"):
             if owned_graph:

@@ -10,21 +10,32 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.environments.worktree import WorktreeGitError
-from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
+from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.adapter import HarnessSpawnError, PendingWorkerHandle, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import QueueEntry
+from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
+    FakeCheckRunner,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -44,11 +55,31 @@ _ALIVE = (100, "start-100")
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
+class _ContextFields(TypedDict, total=False):
+    worktree_git: FakeWorktreeGit | None
+    check_runner: FakeCheckRunner | None
+    clock: FixedClock | None
+    config: LoopConfig | None
+    events: EventBroker | None
+    subscriptions: tuple[ResolvedSubscription, ...]
+    chunk_views: IChunkViews | None
+    harness_versions: HarnessVersionCache | None
+    worker_scratch: WorkerScratchDirs | None
+    registered: bool
+    identity_verdict: IdentityVerdictHolder | None
+    hub_token: HubTokenHolder | None
+    workspaces: IWorkspaces | None
+    spawn_root: str | None
+    workspace_prompt: str
+
+
 def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store: SqlAlchemyRunnerStore, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_lease(
+    store: SqlAlchemyRunnerStore, *, retries_max: int, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1
+):
     """A build lease already spawned into env e1, with a configurable retry budget."""
     store.record_lease(
         NewLease(
@@ -76,7 +107,7 @@ def _events(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
 
 
-def _dead_worker_ctx(store: SqlAlchemyRunnerStore, **kwargs):
+def _dead_worker_ctx(store: SqlAlchemyRunnerStore, **kwargs: Unpack[_ContextFields]):
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
     — driving ADVANCE into ``Attempt.fail(via="advance")`` on its collect pass (the second
     ``Advance().run()`` after the launch/collect split)."""
@@ -282,8 +313,16 @@ class _SpawnFailsHarness(FakeHarness):
     """A harness whose spawn fails to launch — the catch site that re-raises."""
 
     def spawn(
-        self, envelope, preamble, session_hint, resume_from=None, *, model=None, effort=None, compaction_window=None
-    ):
+        self,
+        envelope: Envelope,
+        preamble: WorkerPreamble,
+        session_hint: str | None,
+        resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+    ) -> PendingWorkerHandle:
         raise HarnessSpawnError("failed to spawn claude in /ws/e1: [Errno 2] No such file or directory")
 
 
