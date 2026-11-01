@@ -2,7 +2,7 @@ import { afterEach, beforeEach } from 'vitest';
 
 /**
  * Per-test `localStorage` reset, layered into every project through
- * `vitest-runner.config.ts`'s `setupFiles`.
+ * `vitest-runner.config.mts`'s `setupFiles`.
  *
  * `@angular/build:unit-test` runs vitest with `isolate: false` — its own default,
  * chosen to match the Karma/Jasmine experience — so every spec file assigned to a

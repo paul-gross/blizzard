@@ -78,7 +78,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "runnerConfig": "vitest-runner.config.ts",
+            "runnerConfig": "vitest-runner.config.mts",
             "exclude": [
               "**/*.shell-sweep.spec.ts"
             ]
@@ -167,7 +167,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "runnerConfig": "vitest-runner.config.ts",
+            "runnerConfig": "vitest-runner.config.mts",
             "exclude": [
               "**/*.shell-sweep.spec.ts"
             ]
@@ -207,7 +207,7 @@
           "builder": "@angular/build:unit-test",
           "options": {
             "tsConfig": "projects/fleet/tsconfig.spec.json",
-            "runnerConfig": "vitest-runner.config.ts",
+            "runnerConfig": "vitest-runner.config.mts",
             "exclude": [
               "**/*.shell-sweep.spec.ts"
             ]

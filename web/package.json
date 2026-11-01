@@ -21,7 +21,7 @@
   },
   "private": true,
   "packageManager": "npm@10.9.4",
-  "//": "vite is a direct devDependency because @storybook/angular-vite needs Vite 8 as a peer while @angular/build keeps its own Vite 7.3.6 nested beneath it, so ng build and ng serve build as before and only the unit-test builder and the workshop run on the hoisted Vite 8. npm's resolver cannot add this set under strict peer checking, because it walks optional peers (analog -> @angular-devkit/build-angular -> @angular/localize -> exact @angular/compiler-cli 21.2.25), so the next change to it must resolve the lock once with --legacy-peer-deps, never commit that setting, and re-prove that a strict npm install leaves package-lock.json unchanged and a strict npm ci passes. The one npm ci ERESOLVE warning is expected: @vitejs/plugin-basic-ssl, under @angular/build, peers vite ^6 || ^7 and sees the hoisted 8, which only ng serve --ssl loads.",
+  "//": "vite is a direct devDependency because @storybook/angular-vite needs Vite 8 as a peer while @angular/build keeps its own Vite 7.3.6 nested beneath it, so ng build and ng serve build as before and only the unit-test builder and the workshop run on the hoisted Vite 8. npm's resolver cannot add this set under strict peer checking, because it walks optional peers (analog -> @angular-devkit/build-angular -> @angular/localize -> exact @angular/compiler-cli 21.2.25), so the next change to it must resolve the lock once with --legacy-peer-deps, never commit that setting, and re-prove that a strict npm install leaves package-lock.json unchanged and a strict npm ci passes. The one npm ci ERESOLVE warning is expected: @vitejs/plugin-basic-ssl, under @angular/build, peers vite ^6 || ^7 and sees the hoisted 8, which only ng serve --ssl loads. The overrides entry pins js-yaml to 4.3.2, the release that fixes all three of its advisories, because @hey-api/json-schema-ref-parser pins 4.2.0 exactly and npm's only offer is a downgrade of @hey-api/openapi-ts; codegen reads only our own openapi/*.openapi.json, so it is hygiene, and it goes once @hey-api's pin moves past 4.3.1.",
   "dependencies": {
     "@angular/cdk": "^21.2.14",
     "@angular/common": "^21.2.25",
@@ -56,5 +56,8 @@
     "typescript-eslint": "8.59.2",
     "vite": "8.3.4",
     "vitest": "^4.0.8"
+  },
+  "overrides": {
+    "js-yaml": "4.3.2"
   }
 }
