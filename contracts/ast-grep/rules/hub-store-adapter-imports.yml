@@ -1,0 +1,16 @@
+id: bzh:hub-store-adapter-imports
+language: Python
+severity: error
+message: Store adapters must not import another adapter's implementation helpers.
+files:
+  - src/blizzard/hub/store/internal/**
+ignores:
+  - src/blizzard/hub/store/internal/*factory.py
+rule:
+  any:
+    - kind: import_from_statement
+      regex: '^from\s+(?:blizzard\.hub\.store\.internal\.|\.|\.\.internal\.)[a-zA-Z_][\w]*(?:\.[\w.]+)?\s+import\b'
+    - kind: import_statement
+      regex: '\bblizzard\.hub\.store\.internal\.[a-zA-Z_][\w]*\b'
+    - kind: import_from_statement
+      regex: '^from\s+(?:blizzard\.hub\.store\.internal|\.|\.\.internal)\s+import\b'

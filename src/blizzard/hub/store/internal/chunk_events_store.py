@@ -33,6 +33,9 @@ from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRe
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.fact_families import FactTable, entry_of
+
+# Legacy event reads share project-to-chunk reachability.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 

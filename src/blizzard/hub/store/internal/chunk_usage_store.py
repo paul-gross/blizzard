@@ -16,7 +16,13 @@ from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy usage reads share project-to-chunk reachability.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_reach import chunks_of_project
+
+# Legacy usage reads share usage aggregation columns.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 

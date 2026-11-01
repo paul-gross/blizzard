@@ -31,15 +31,30 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
     resolve_repository_reference,
 )
+
+# Legacy config writes append their audit record on the same connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy repository writes share forge resolution and insertion.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.forge_record_store import (
     StandingForge,
     insert_new_forge,
     referred_forge,
     standing_forge,
 )
+
+# Legacy repository writes share former-slug reservation tables.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.former_slugs import SlugTables
+
+# Legacy repository reads share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+
+# Legacy repository writes serialize secret availability with the secret adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

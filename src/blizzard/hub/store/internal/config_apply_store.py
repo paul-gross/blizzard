@@ -32,12 +32,33 @@ from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNa
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectSlugTaken
+
+# Legacy config apply shares forge writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import forge_record_store as forge_writes
+
+# Legacy config apply shares project-link writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_link_store as link_writes
+
+# Legacy config apply shares project writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_store as project_writes
+
+# Legacy config apply shares repository writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import repository_record_store as repository_writes
+
+# Legacy config apply shares routine writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import routine_store as routine_writes
+
+# Legacy config apply shares scope writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import scope_store as scope_writes
+
+# Legacy config apply shares work-source writes within its apply transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.schema import project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

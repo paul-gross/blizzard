@@ -1,11 +1,14 @@
 """Tenant write units, opaque tokens, and validated adapter participation."""
 
+import json
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import Connection, event
 
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.kernel.transactions import (
     GraduationError,
     IHubTransactions,
@@ -61,6 +64,37 @@ class _LockedTransaction(_Transaction):
     @property
     def locked(self) -> bool:
         return True
+
+
+class ChunkHandle:
+    transaction: LockedTransaction
+
+
+class WorkRefHandle:
+    transaction: LockedTransaction
+
+
+def pointer_lock_key(pointer: WorkRef) -> str:
+    """Encode both pointer components without separator collisions."""
+    return json.dumps([pointer.source, pointer.ref])
+
+
+def chunk_handle_connection(handle: ILockedChunkRead, store: ScopedConnections, *chunks: str) -> Connection:
+    if not isinstance(handle, ChunkHandle):
+        raise TransactionMisuse("invalid chunk lock handle")
+    conn = connection_for(store, handle.transaction)
+    for chunk in chunks:
+        connection_for(store, handle.transaction, chunk=chunk)
+    return conn
+
+
+def work_ref_handle_connection(handle: ILockedWorkRefRead, store: ScopedConnections, *pointers: WorkRef) -> Connection:
+    if not isinstance(handle, WorkRefHandle):
+        raise TransactionMisuse("invalid work-ref lock handle")
+    conn = connection_for(store, handle.transaction)
+    for pointer in pointers:
+        connection_for(store, handle.transaction, key=("work_ref", pointer_lock_key(pointer)))
+    return conn
 
 
 class HubTransactions:

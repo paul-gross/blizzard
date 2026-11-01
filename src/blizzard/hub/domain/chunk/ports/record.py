@@ -12,7 +12,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -86,6 +86,8 @@ class IReadChunkRecordRepository(Protocol):
 
 class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
     """Read-write chunk-record access."""
+
+    def record_deleted(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> int: ...
 
     def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
         """Insert a freshly minted chunk's rows, on ``handle``'s already-locked connection

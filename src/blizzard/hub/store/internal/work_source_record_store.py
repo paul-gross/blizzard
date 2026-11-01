@@ -31,10 +31,25 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlugTaken,
     resolve_work_source_reference,
 )
+
+# Legacy work-source writes append config audit records atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy work-source writes resolve or insert their forge on the same connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.forge_record_store import StandingForge, insert_new_forge, referred_forge
+
+# Legacy work-source writes share former-slug reservation tables.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.former_slugs import SlugTables
+
+# Legacy work-source reads share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+
+# Legacy work-source writes serialize secret availability with the secret adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

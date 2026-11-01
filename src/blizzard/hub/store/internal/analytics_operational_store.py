@@ -35,7 +35,13 @@ from blizzard.hub.domain.observability.analytics.operational import (
 )
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy operational analytics share project-to-chunk reachability.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_reach import chunks_of_project
+
+# Legacy operational analytics share usage aggregation columns.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 

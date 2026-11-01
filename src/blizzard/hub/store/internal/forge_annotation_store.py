@@ -9,6 +9,9 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from blizzard.hub.domain.observability.forge_status import IWriteAnnotatedSources
+
+# Legacy annotation reads share the newest-fact selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.schema import forge_annotation_facts
 from blizzard.hub.store.scoped import ScopedConnections

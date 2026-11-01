@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
@@ -24,6 +24,14 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
+
+
+class IWorkItemProjectRead(Protocol):
+    """Batched work-item lookup for ingest project resolution."""
+
+    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, HubWorkItem]:
+        """Return found items keyed by pointer; omit missing items."""
+        ...
 
 
 class IWorkRefLabels(Protocol):
@@ -222,7 +230,7 @@ class IngestService:
         record: IWriteChunkRecordRepository,
         exclusive: IChunkExclusiveWrites,
         links: IReadProjectLinks,
-        items: IReadWorkItemRepository,
+        items: IWorkItemProjectRead,
         labels: IWorkRefLabels,
         clock: IClock,
     ) -> None:

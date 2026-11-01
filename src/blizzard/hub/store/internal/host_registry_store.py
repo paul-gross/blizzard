@@ -29,7 +29,13 @@ from blizzard.hub.domain.runners.host import (
 )
 from blizzard.hub.domain.runners.registration import DeclaredSubscription
 from blizzard.hub.store import schema as s
+
+# Legacy host registry reads share host usage queries.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.host_usage import read_host_usage
+
+# Legacy host registry reads share newest-fact selectors.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 

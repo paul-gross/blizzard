@@ -11,6 +11,9 @@ from sqlalchemy.engine import Connection
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.store import schema as s
+
+# Legacy run-context writes resolve scope IDs on the same connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 

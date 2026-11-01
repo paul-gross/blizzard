@@ -32,7 +32,13 @@ from blizzard.hub.domain.runners.registration import (
     TokenRotation,
 )
 from blizzard.hub.store import schema as s
+
+# Legacy runner registry reads share host roster and usage queries.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.host_usage import read_host_rosters, read_host_usage, stored_usage_windows
+
+# Legacy runner registry reads share the newest-fact selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 

@@ -30,7 +30,13 @@ from blizzard.hub.domain.tenancy.administration import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+
+# Legacy tenant provisioning composes the graph adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.graph_store import GraphStore
+
+# Legacy tenant provisioning composes the project adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId

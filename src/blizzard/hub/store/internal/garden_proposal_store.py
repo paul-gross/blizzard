@@ -33,6 +33,9 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.unset import UnsetType
+
+# Legacy proposal writes validate finding project membership on their connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.finding_store import findings_outside_project
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of

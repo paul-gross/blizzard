@@ -45,8 +45,17 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy facts aggregation reads decision closure IDs from the decisions adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
+
+# Legacy fact aggregation shares chunk row queries.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import currently_promoted_ats, ephemeral_ids_select, graph_id_of_batch
+
+# Legacy fact aggregation shares chunk terminal-state predicates.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import (
     done_completed_at,
     maybe_live,

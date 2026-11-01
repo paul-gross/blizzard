@@ -9,6 +9,9 @@ import json
 from datetime import datetime
 
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository, MeasurementReading, SweepFact
+
+# Legacy sweep reads share the newest-fact predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.schema import artifacts, finding_sets
 from blizzard.hub.store.scoped import ScopedConnections

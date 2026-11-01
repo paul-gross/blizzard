@@ -19,6 +19,9 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy escalation writes share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     ephemeral_ids_select,
@@ -26,7 +29,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     record_hub_lease,
 )
+
+# Legacy escalation reads share the chunk liveness predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
+
+# Legacy escalation reads share the newest-fact predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -104,7 +113,13 @@ class ChunkEscalationsStore:
         at: datetime,
     ) -> bool:
         return self._bounce_conn(
-            conn_of(handle), chunk_id, epoch=epoch, admission=admission, cause=cause, envelope=envelope, at=at
+            conn_of(handle, self._store, chunk_id),
+            chunk_id,
+            epoch=epoch,
+            admission=admission,
+            cause=cause,
+            envelope=envelope,
+            at=at,
         )
 
     def _bounce_conn(
@@ -149,7 +164,7 @@ class ChunkEscalationsStore:
         detail: str,
     ) -> BounceEscalationOutcome:
         return self._bounce_escalation_conn(
-            conn_of(handle),
+            conn_of(handle, self._store, chunk_id),
             chunk_id,
             epoch=epoch,
             admission=admission,
