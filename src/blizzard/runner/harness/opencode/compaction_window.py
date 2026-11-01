@@ -24,7 +24,7 @@ def compose_window(
     if effective.get("compaction") is not None and compaction is None:
         return None
     reserved = compaction.get("reserved") if compaction else None
-    node = effective
+    node: Mapping[str, JsonValue] = effective
     for key in ("provider", provider, "models", model, "limit"):
         value = node.get(key)
         if value is None:
