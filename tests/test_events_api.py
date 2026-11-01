@@ -20,7 +20,7 @@ from tests.support import build_hub, chunk_stores, count_rows_read, seed_chunk, 
 pytestmark = pytest.mark.component
 
 
-def _events(hub, **params) -> list[dict]:  #
+def _events(hub, **params) -> list[dict]:
     resp = hub.client.get("/api/events", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["events"]
@@ -35,7 +35,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         for cid in ("ch_a", "ch_b", "ch_c"):
             seed_chunk(conn, cid, graph_id="gr_1", at=t0)
 
-    def at(sec: int):  #
+    def at(sec: int):
         return t0 + timedelta(seconds=sec)
 
     # event_log rows across two runners and two chunks.
@@ -154,7 +154,7 @@ def test_events_feed_cap_keeps_the_newest_rows(tmp_path: Path) -> None:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=t0)
 
-    def at(sec: int):  #
+    def at(sec: int):
         return t0 + timedelta(seconds=sec)
 
     store.events.record_event(
@@ -313,12 +313,12 @@ def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: 
     hub = build_hub(tmp_path)
 
     class NoEscalations:
-        def list_open_escalations(self, **kwargs):  #
+        def list_open_escalations(self, **kwargs):
             raise AssertionError("escalation read should be skipped")
 
     serve_default_tenant(
         hub,
-        replace(hub.services, chunks=replace(hub.services.chunks, escalations=NoEscalations())),  #
+        replace(hub.services, chunks=replace(hub.services.chunks, escalations=NoEscalations())),
     )
     assert _events(hub, severity="warning") == []
     assert _events(hub, runner_id="r1") == []

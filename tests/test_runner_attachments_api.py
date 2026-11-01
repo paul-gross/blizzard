@@ -26,7 +26,7 @@ _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
 
 
-def _app_with_attachments(tmp_path: Path):  #
+def _app_with_attachments(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = AttachmentService(store, FixedClock(_NOW), store)
@@ -35,7 +35,7 @@ def _app_with_attachments(tmp_path: Path):  #
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  #
+def _seed_lease(store, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

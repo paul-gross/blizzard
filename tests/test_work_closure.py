@@ -419,7 +419,7 @@ def _drainer(
     public_url: str | None = None,
     slugs: dict[str, str] | None = None,
 ) -> CloseDrainSweep:
-    registry = WorkSourceRegistry({}, closers=closers, slugs=slugs)  #
+    registry = WorkSourceRegistry({}, closers=closers, slugs=slugs)
     clock = clock or FixedClock(_NOW)
     return _sweep_over(
         chunks,

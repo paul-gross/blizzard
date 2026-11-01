@@ -4,6 +4,7 @@ as rebinds deepen, statements follow the batch count, and each plural answers wh
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -16,7 +17,7 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  #
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -46,7 +47,7 @@ def _seed(store: SqlAlchemyRunnerStore, chunks: list[str], depth: int) -> None:
 
 
 @pytest.mark.parametrize("read", ["chunk_project_ids", "newest_bindings_for"])
-def test_rows_read_equal_the_chunk_count_at_two_rebind_depths(tmp_path, read: str) -> None:  #
+def test_rows_read_equal_the_chunk_count_at_two_rebind_depths(tmp_path: Path, read: str) -> None:
     chunks = ["ch_1", "ch_2", "ch_3"]
     measured = []
     for depth in (1, 4):
@@ -58,14 +59,14 @@ def test_rows_read_equal_the_chunk_count_at_two_rebind_depths(tmp_path, read: st
     assert measured == [len(chunks), len(chunks)]
 
 
-def test_rows_read_by_chunk_project_ids_are_exactly_the_chunk_count(tmp_path) -> None:  #
+def test_rows_read_by_chunk_project_ids_are_exactly_the_chunk_count(tmp_path: Path) -> None:
     store = _store(tmp_path)
     chunks = ["ch_1", "ch_2", "ch_3"]
     _seed(store, chunks, 4)
     assert count_rows_read(store._engine, lambda: store.chunk_project_ids(chunks)) == len(chunks)
 
 
-def test_a_newer_null_project_binding_never_hides_an_older_project(tmp_path) -> None:  #
+def test_a_newer_null_project_binding_never_hides_an_older_project(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _bind(store, "ch_1", 0, project_id="proj-a")
     _bind(store, "ch_1", 1, project_id=None)
@@ -73,7 +74,7 @@ def test_a_newer_null_project_binding_never_hides_an_older_project(tmp_path) -> 
     assert store.chunk_project_ids(["ch_1", "ch_2", "ch_unknown"]) == {"ch_1": "proj-a"}
 
 
-def test_another_runners_binding_on_the_same_chunk_is_invisible(tmp_path) -> None:  #
+def test_another_runners_binding_on_the_same_chunk_is_invisible(tmp_path: Path) -> None:
     db = f"sqlite:///{tmp_path / 'runner.db'}"
     mine = make_store(db)
     theirs = make_store(db, runner_id="rn_other")
@@ -83,7 +84,7 @@ def test_another_runners_binding_on_the_same_chunk_is_invisible(tmp_path) -> Non
     assert mine.newest_bindings_for(["ch_1"])["ch_1"].environment_id == "env-ch_1-0"
 
 
-def test_empty_and_duplicate_ids(tmp_path) -> None:  #
+def test_empty_and_duplicate_ids(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _bind(store, "ch_1", 0)
     assert count_queries(store._engine, lambda: store.held_bindings_for([])) == 0
@@ -93,7 +94,7 @@ def test_empty_and_duplicate_ids(tmp_path) -> None:  #
     assert len(store.held_bindings_for(["ch_1", "ch_1"])["ch_1"]) == 1
 
 
-def test_plurals_equal_the_singulars_per_chunk(tmp_path) -> None:  #
+def test_plurals_equal_the_singulars_per_chunk(tmp_path: Path) -> None:
     store = _store(tmp_path)
     # ch_1: released then rebound at the same instant; ch_2: released only; ch_3: two held.
     _bind(store, "ch_1", 0, at=0)
@@ -114,7 +115,7 @@ def test_plurals_equal_the_singulars_per_chunk(tmp_path) -> None:  #
 
 
 @pytest.mark.parametrize("read", ["chunk_project_ids", "held_bindings_for", "newest_bindings_for"])
-def test_statements_equal_the_batch_count(tmp_path, monkeypatch, read: str) -> None:  #
+def test_statements_equal_the_batch_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, read: str) -> None:
     store = _store(tmp_path)
     chunks = [f"ch_{i}" for i in range(5)]
     _seed(store, chunks, 1)

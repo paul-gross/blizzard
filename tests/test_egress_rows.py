@@ -200,7 +200,7 @@ def test_row_cost_sums_to_the_span_roots_cost(name: str) -> None:
         row = step_row(summarize_step(facts, step), EXPORTED)
         root = assemble_step(facts, step, identify_steps(facts))[0]
         folded = float((row.cost_billed_usd or 0) + (row.cost_estimated_usd or 0))
-        assert folded == pytest.approx(root.attributes[attr.STEP_COST_USD], abs=1e-9)  #
+        assert folded == pytest.approx(root.attributes[attr.STEP_COST_USD], abs=1e-9)
 
 
 def test_an_open_steps_invocation_matches_its_row_once_it_closes() -> None:

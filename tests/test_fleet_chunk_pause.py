@@ -18,7 +18,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "12"}
 
 
-def _routed_chunk(hub) -> str:  #
+def _routed_chunk(hub) -> str:
     chunk_id = ingest(hub, [_POINTER])
     resp = hub.client.post(
         "/api/fleet/routes",

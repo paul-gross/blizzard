@@ -26,14 +26,14 @@ from tests.worker_http import bind_stubs
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
 
-def _runner_app_with_store(tmp_path: Path):  #
+def _runner_app_with_store(tmp_path: Path):
     """A runner app wired to a real (migrated) store — the ``host`` session-end surface."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     return create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
 
 
-def _seed_lease(store, lease_id: str = "lease_1") -> None:  #
+def _seed_lease(store, lease_id: str = "lease_1") -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,

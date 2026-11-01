@@ -59,7 +59,7 @@ nodes:
 """
 
 
-def _claim(hub) -> str:  #
+def _claim(hub) -> str:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
@@ -71,7 +71,7 @@ def _claim(hub) -> str:  #
     return chunk_id
 
 
-def _ask(hub, chunk_id: str, *, question_id: str = "qn_1", question: str = "Which API?") -> None:  #
+def _ask(hub, chunk_id: str, *, question_id: str = "qn_1", question: str = "Which API?") -> None:
     resp = hub.client.post(
         "/api/questions",
         json={
@@ -265,7 +265,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert poll["answer"] == "rest"
 
 
-def _deliver(hub, chunk_id: str, *, question_id: str = "qn_1", seq: int = 9):  #
+def _deliver(hub, chunk_id: str, *, question_id: str = "qn_1", seq: int = 9):
     """Push the runner's ``answer.delivered`` fact."""
     return hub.client.post(
         "/api/fleet/events",

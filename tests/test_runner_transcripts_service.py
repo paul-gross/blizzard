@@ -50,7 +50,7 @@ class FakeTranscriptRepository:
 
 def _service(
     store, *, local: FakeTranscriptRepository | None = None, archived: FakeArchivedTranscriptRepository | None = None
-):  #
+):
     return TranscriptService(
         leases=store,
         transcript_ledger=store,
@@ -61,7 +61,7 @@ def _service(
     )
 
 
-def _seed_lease(store, **overrides: object) -> None:  #
+def _seed_lease(store, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -155,7 +155,7 @@ def test_an_open_lease_reads_local_and_is_never_asked_of_the_hub(tmp_path: Path)
     assert archived.calls == []  # An open lease is never asked of the hub at all
 
 
-def _close(store, **overrides: object) -> None:  #
+def _close(store, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -164,10 +164,10 @@ def _close(store, **overrides: object) -> None:  #
         "closed_at": _NOW,
     }
     fields.update(overrides)
-    store.record_closure(**fields)  #
+    store.record_closure(**fields)
 
 
-def _closed_lease(store, *, unshipped_turn: bool = False) -> None:  #
+def _closed_lease(store, *, unshipped_turn: bool = False) -> None:
     _seed_lease(store)
     store.record_spawn(
         "lease_1",
@@ -182,7 +182,7 @@ def _closed_lease(store, *, unshipped_turn: bool = False) -> None:  #
     assert store.active_lease("lease_1") is None
 
 
-def _buffer_unshipped_turn(store) -> None:  #
+def _buffer_unshipped_turn(store) -> None:
     """One content row left unacked in the transcript lane's outbound buffer — what a
     closed lease looks like while the bounded drain is still catching up."""
     [segment] = store.open_transcript_segments()

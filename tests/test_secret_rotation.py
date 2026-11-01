@@ -135,7 +135,7 @@ def test_a_concurrent_replace_rolls_the_whole_rotation_back(world: _World, monke
     before = world.key_ids()
     real_list = world.store.list_sealed
 
-    def list_then_race():  #
+    def list_then_race():
         rows = real_list()
         with world.engine.begin() as conn:  # a replace lands after the read, before the commit
             conn.execute(hub_scoped(update(schema.secrets).where(schema.secrets.c.name == "slack").values(revision=2)))

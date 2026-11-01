@@ -27,7 +27,7 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
-def _claim_and_lease(hub, chunk_id: str) -> None:  #
+def _claim_and_lease(hub, chunk_id: str) -> None:
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
     assert resp.status_code == 201, resp.text
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -44,7 +44,7 @@ def test_a_claim_blocks_while_a_stop_holds_the_row_lock_mid_write(tmp_path: Path
     release_write = threading.Event()
     real_route_of_conn = chunk_lifecycle_store_module.route_of_conn
 
-    def _blocking_route_of_conn(conn, chunk_id):  #
+    def _blocking_route_of_conn(conn, chunk_id):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the stop's write"
         return real_route_of_conn(conn, chunk_id)
@@ -103,12 +103,12 @@ def test_a_stop_still_releases_the_route_a_claim_won_the_lock_to_create(tmp_path
     writable_route = cast(IWriteChunkRouteRepository, hub.services.chunks.route)
     real_record_route_locked = writable_route.record_route_locked
 
-    def _blocking_record_route_locked(handle, route, *, token_hash, at):  #
+    def _blocking_record_route_locked(handle, route, *, token_hash, at):
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
         return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
 
-    writable_route.record_route_locked = _blocking_record_route_locked  #
+    writable_route.record_route_locked = _blocking_record_route_locked
 
     claim_result: dict[str, int] = {}
 

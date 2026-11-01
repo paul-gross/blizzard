@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -70,7 +71,7 @@ class _BlockingProvider(FakeProvider):
         return super().acquire(chunk_id, count, held_ids)
 
 
-def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceRegistry, chunk_id: str):  #
+def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceRegistry, chunk_id: str):
     hub = _AmbiguousClaimHub(default_runner_id=runner_id)
     hub.queue = [QueueEntry(chunk_id=chunk_id, graph_id="gr_1", position=0, project_id=FIXTURE_PROJECT_ID)]
     return make_context(
@@ -85,7 +86,7 @@ def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceR
     )
 
 
-def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> None:  #
+def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path: Path) -> None:
     provider = _BlockingProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
     store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
@@ -120,7 +121,7 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> No
     assert [v for v in runner_invariant_violations(store_a) if v.invariant == "runner:unique-env-binding"] == []
 
 
-def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tmp_path) -> None:  #
+def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tmp_path: Path) -> None:
     provider = _BlockingProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
     store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")

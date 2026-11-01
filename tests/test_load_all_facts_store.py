@@ -447,25 +447,25 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
     ingest(hub, [{"source": "default", "ref": "2"}])
 
     class _CountingFactsStore(ChunkFactsStore):
-        def __init__(self, store, clock) -> None:  #
+        def __init__(self, store, clock) -> None:
             super().__init__(store, clock)
             self.load_live_statuses_calls = 0
             self.load_facts_calls = 0
 
-        def load_live_statuses(self):  #
+        def load_live_statuses(self):
             self.load_live_statuses_calls += 1
             return super().load_live_statuses()
 
-        def load_facts(self, chunk_id: str):  #
+        def load_facts(self, chunk_id: str):
             self.load_facts_calls += 1
             return super().load_facts(chunk_id)
 
     class _CountingRecordStore(ChunkRecordStore):
-        def __init__(self, store, clock) -> None:  #
+        def __init__(self, store, clock) -> None:
             super().__init__(store, clock)
             self.list_all_calls = 0
 
-        def list_all(self):  #
+        def list_all(self):
             self.list_all_calls += 1
             return super().list_all()
 

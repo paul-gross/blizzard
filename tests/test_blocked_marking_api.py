@@ -25,7 +25,7 @@ _DEPENDENT = {"source": "default", "ref": "dependent"}
 _PREREQUISITE = {"source": "default", "ref": "prereq"}
 
 
-def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):  #
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):
     resp = hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id})
     assert resp.status_code == 202, resp.text
     return resp.json()
@@ -38,20 +38,20 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
     assert resp.status_code == 202, resp.text
 
 
-def _list_entry(hub: HubHarness, chunk_id: str) -> dict:  #
+def _list_entry(hub: HubHarness, chunk_id: str) -> dict:
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     (entry,) = [c for c in resp.json()["chunks"] if c["chunk_id"] == chunk_id]
     return entry
 
 
-def _detail(hub: HubHarness, chunk_id: str) -> dict:  #
+def _detail(hub: HubHarness, chunk_id: str) -> dict:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _backlog_entry(hub: HubHarness, chunk_id: str) -> dict:  #
+def _backlog_entry(hub: HubHarness, chunk_id: str) -> dict:
     resp = hub.client.get("/api/backlog")
     assert resp.status_code == 200, resp.text
     (entry,) = [e for e in resp.json()["entries"] if e["chunk_id"] == chunk_id]
@@ -211,7 +211,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_calls += 1
         return super().load_facts(chunk_id)
 
-    def load_facts_for(self, chunk_ids):  #
+    def load_facts_for(self, chunk_ids):
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 
@@ -267,7 +267,7 @@ def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(t
     assert small_count == large_count
 
 
-def _queue_entry(hub: HubHarness, chunk_id: str) -> dict:  #
+def _queue_entry(hub: HubHarness, chunk_id: str) -> dict:
     resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     (entry,) = [e for e in resp.json()["entries"] if e["chunk_id"] == chunk_id]

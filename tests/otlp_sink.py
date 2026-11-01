@@ -62,7 +62,7 @@ def otlp_sink() -> Iterator[OtlpSink]:
             message, kept = received[self.path]
             request = message()
             request.ParseFromString(body)
-            kept.append(request)  #
+            kept.append(request)
             self.send_response(200)
             self.send_header("Content-Type", "application/x-protobuf")
             self.send_header("Content-Length", "0")

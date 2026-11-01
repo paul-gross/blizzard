@@ -48,7 +48,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 pytestmark = pytest.mark.component
 
 
-def _seed(hub, n: int) -> None:  #
+def _seed(hub, n: int) -> None:
     for i in range(n):
         ingest(hub, [{"source": "default", "ref": str(i)}])
 
@@ -63,7 +63,7 @@ def test_list_chunks_query_count_is_independent_of_fleet_size(tmp_path: Path) ->
 
     results: dict[str, int] = {}
 
-    def call(hub, key: str) -> None:  #
+    def call(hub, key: str) -> None:
         resp = hub.client.get("/api/chunks")
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json()["chunks"])
@@ -75,7 +75,7 @@ def test_list_chunks_query_count_is_independent_of_fleet_size(tmp_path: Path) ->
     assert small_count == large_count
 
 
-def _seed_in_line(hub, n: int) -> None:  #
+def _seed_in_line(hub, n: int) -> None:
     """``n`` chunks, each submitted to the same two flows."""
     _seed(hub, n)
     flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
@@ -100,7 +100,7 @@ def test_list_chunks_query_count_is_independent_of_fleet_size_with_its_chunks_in
     large = build_hub(tmp_path / "large")
     _seed_in_line(large, 9)
 
-    def call(hub) -> None:  #
+    def call(hub) -> None:
         resp = hub.client.get("/api/chunks")
         assert resp.status_code == 200, resp.text
         assert all(len(row["flow_places"]) == 2 for row in resp.json()["chunks"])
@@ -120,7 +120,7 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
             super().__init__(store)
             self.calls: list[str] = []
 
-        def revisions(self, kind: RecordKind, key: str):  #
+        def revisions(self, kind: RecordKind, key: str):
             self.calls.append(key)
             return super().revisions(kind, key)
 
@@ -178,7 +178,7 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) ->
             super().__init__(store)
             self.calls: list[str] = []
 
-        def revisions(self, kind: RecordKind, key: str):  #
+        def revisions(self, kind: RecordKind, key: str):
             self.calls.append(key)
             return super().revisions(kind, key)
 
@@ -225,7 +225,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_facts_for(self, chunk_ids):  #
+    def load_facts_for(self, chunk_ids):
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 
@@ -248,7 +248,7 @@ class _CountingRouteStore(ChunkRouteStore):
         self.load_all_routes_calls += 1
         return super().load_all_routes()
 
-    def routes_for(self, chunk_ids):  #
+    def routes_for(self, chunk_ids):
         self.routes_for_calls += 1
         return super().routes_for(chunk_ids)
 
@@ -294,7 +294,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         self.find_live_holder_calls += 1
         return super().find_live_holder(pointer)
 
-    def live_holders(self, pointers):  #
+    def live_holders(self, pointers):
         self.live_holders_calls += 1
         return super().live_holders(pointers)
 
@@ -354,7 +354,7 @@ def test_list_chunks_never_calls_graphs_get(tmp_path: Path) -> None:
     assert counting_graphs.get_calls == 0
 
 
-def _seed_chunks_across_graphs(hub, n_chunks: int, n_graphs: int) -> None:  #
+def _seed_chunks_across_graphs(hub, n_chunks: int, n_graphs: int) -> None:
     engine = hub.engine
     with engine.begin() as conn:
         for g in range(n_graphs):
@@ -373,7 +373,7 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
     _seed_chunks_across_graphs(few, n_chunks=6, n_graphs=2)
     _seed_chunks_across_graphs(many, n_chunks=6, n_graphs=6)
 
-    def call(hub) -> int:  #
+    def call(hub) -> int:
         resp = hub.client.get("/api/chunks")
         assert resp.status_code == 200, resp.text
         return len(resp.json()["chunks"])
@@ -387,17 +387,17 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
 # Keyset pagination.
 
 
-def _delete_chunk(hub, chunk_id: str) -> None:  #
+def _delete_chunk(hub, chunk_id: str) -> None:
     """``DELETE /api/chunks/{id}`` — ``httpx2``'s own ``delete()`` refuses ``json``, so
     this goes through ``request`` instead (mirrors ``tests/test_chunk_delete_route.py``'s own)."""
     resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
     assert resp.status_code == 202, resp.text
 
 
-def _all_pages(hub, *, limit: int) -> list[dict]:  #
+def _all_pages(hub, *, limit: int) -> list[dict]:
     """Walks ``GET /api/chunks`` at a fixed ``limit``, following ``next_cursor`` until
     it comes back null, and concatenates every page's own chunks in order."""
-    chunks: list[dict] = []  #
+    chunks: list[dict] = []
     cursor: str | None = None
     while True:
         params: dict[str, object] = {"limit": limit}
@@ -514,7 +514,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     assert full.status_code == 200, full.text
     full_by_id = {c["chunk_id"]: c for c in full.json()["chunks"]}
 
-    def hub_pointer_url(entry: dict) -> str | None:  #
+    def hub_pointer_url(entry: dict) -> str | None:
         (ref,) = [w for w in entry["work_refs"] if w["source"] == "hub"]
         return ref["web_url"]
 
@@ -584,11 +584,11 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path:
     )
 
     class _NoEdges(ChunkDependenciesStore):
-        def list_standing_edges(self):  #
+        def list_standing_edges(self):
             raise AssertionError("list_standing_edges")
 
     class _NoList(ChunkRecordStore):
-        def list_all(self):  #
+        def list_all(self):
             raise AssertionError("list_all")
 
     edges = _NoEdges.__new__(_NoEdges)

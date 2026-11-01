@@ -22,7 +22,7 @@ _POINTER_A = {"source": "default", "ref": "7"}
 _POINTER_B = {"source": "default", "ref": "8"}
 
 
-def _claim(hub, pointer: dict) -> tuple[str, str]:  #
+def _claim(hub, pointer: dict) -> tuple[str, str]:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(
@@ -33,7 +33,7 @@ def _claim(hub, pointer: dict) -> tuple[str, str]:  #
 
 
 def _push_usage(
-    hub,  #
+    hub,
     *,
     chunk_id: str,
     node_id: str,

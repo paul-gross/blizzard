@@ -8,6 +8,7 @@ so a sum over facts is the session's real spend rather than a multiple of it."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
@@ -24,11 +25,11 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _SESSION = "sess-shared"
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _spawned_lease(store, lease: str, *, chunk: str = "ch_1") -> None:  #
+def _spawned_lease(store, lease: str, *, chunk: str = "ch_1") -> None:
     """A lease already spawned onto the one shared session."""
     store.record_lease(
         NewLease(
@@ -64,7 +65,7 @@ def _sample(kind: UsageKind, *, tokens: int, cost: float, scope: int | None) -> 
     )
 
 
-def _record(store, lease: str, *, generation: int, sample: UsageSample) -> None:  #
+def _record(store, lease: str, *, generation: int, sample: UsageSample) -> None:
     record_usage(
         store,
         lease_id=lease,
@@ -77,7 +78,7 @@ def _record(store, lease: str, *, generation: int, sample: UsageSample) -> None:
     )
 
 
-def test_a_judge_resuming_the_worker_session_banks_only_its_own_turn(tmp_path):  #
+def test_a_judge_resuming_the_worker_session_banks_only_its_own_turn(tmp_path: Path):
     store = _store(tmp_path)
     _spawned_lease(store, "lease_1")
     _record(store, "lease_1", generation=1, sample=_sample("spawn", tokens=100_000, cost=2.00, scope=100_000))
@@ -88,7 +89,7 @@ def test_a_judge_resuming_the_worker_session_banks_only_its_own_turn(tmp_path): 
     assert totals.cost_usd == pytest.approx(2.10)  # the session's real spend, not 4.10
 
 
-def test_a_session_resumed_into_a_later_lease_does_not_rebank_the_earlier_one(tmp_path):  #
+def test_a_session_resumed_into_a_later_lease_does_not_rebank_the_earlier_one(tmp_path: Path):
     store = _store(tmp_path)
     _spawned_lease(store, "lease_1")
     _record(store, "lease_1", generation=1, sample=_sample("spawn", tokens=100_000, cost=2.00, scope=100_000))
@@ -102,7 +103,7 @@ def test_a_session_resumed_into_a_later_lease_does_not_rebank_the_earlier_one(tm
     assert totals.cache_read_tokens == 140_000  # tokens were always per-invocation
 
 
-def test_the_harness_figure_is_kept_beside_the_cost_derived_from_it(tmp_path):  #
+def test_the_harness_figure_is_kept_beside_the_cost_derived_from_it(tmp_path: Path):
     store = _store(tmp_path)
     _spawned_lease(store, "lease_1")
     _record(store, "lease_1", generation=1, sample=_sample("spawn", tokens=100_000, cost=2.00, scope=100_000))
@@ -121,7 +122,7 @@ def test_the_harness_figure_is_kept_beside_the_cost_derived_from_it(tmp_path):  
     ]
 
 
-def test_a_lease_with_no_identified_session_banks_its_figure_verbatim(tmp_path):  #
+def test_a_lease_with_no_identified_session_banks_its_figure_verbatim(tmp_path: Path):
     """No session, no basis to read a figure against — and no earlier fact it could
     double-count, since a fact is only reachable through the lease that produced it."""
     store = _store(tmp_path)
@@ -141,7 +142,7 @@ def test_a_lease_with_no_identified_session_banks_its_figure_verbatim(tmp_path):
     assert store.usage_since(_NOW).cost_usd == pytest.approx(2.00)
 
 
-def test_a_session_that_changes_scope_mid_flight_does_not_rebank_its_verbatim_facts(tmp_path):  #
+def test_a_session_that_changes_scope_mid_flight_does_not_rebank_its_verbatim_facts(tmp_path: Path):
     """The harness updates itself underneath the runner, mid-session: earlier envelopes
     carried no scope and rode verbatim, so what the session banked is a sum no single
     figure equals."""
@@ -156,7 +157,7 @@ def test_a_session_that_changes_scope_mid_flight_does_not_rebank_its_verbatim_fa
     assert store.usage_since(_NOW).cost_usd == pytest.approx(4.20)
 
 
-def test_a_session_spanning_the_reading_change_charges_only_what_followed_it(tmp_path):  #
+def test_a_session_spanning_the_reading_change_charges_only_what_followed_it(tmp_path: Path):
     """Facts banked before this reading hold the harness's running total rather than a
     share, so summing them as shares puts the basis above anything it reports next."""
     store = _store(tmp_path)

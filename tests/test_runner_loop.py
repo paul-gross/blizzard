@@ -101,17 +101,15 @@ _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-1
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):  #
+def _build_envelope(chunk="ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
-def _seed_running_lease(
-    store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1
-):  #
+def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1):
     """A build lease already spawned into env e1, plus its binding."""
     store.record_lease(
         NewLease(
@@ -135,7 +133,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _chunk_with_cost(  #
+def _chunk_with_cost(
     chunk_id="ch_1",
     *,
     cost_usd,
@@ -167,7 +165,7 @@ def _chunk_with_cost(  #
 
 
 @pytest.mark.unit
-def test_ambiguous_claim_waits_for_next_fill_to_rekey_before_advance_spawns(tmp_path):  #
+def test_ambiguous_claim_waits_for_next_fill_to_rekey_before_advance_spawns(tmp_path: Path):
     class TimedOutClaimHub(FakeHub):
         def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
             self.claims.append(claim)
@@ -202,7 +200,7 @@ def test_ambiguous_claim_waits_for_next_fill_to_rekey_before_advance_spawns(tmp_
 
 
 @pytest.mark.unit
-def test_fill_claims_acquires_binds_and_spawns(tmp_path):  #
+def test_fill_claims_acquires_binds_and_spawns(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     env = _build_envelope()
@@ -228,7 +226,7 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_default(tmp_path):  #
+def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_default(tmp_path: Path):
     """``nodes.md``: omitting ``retries:`` does not lift the bound — the runner supplies its
     own configured default. Asserted against a non-default ``default_retries_max`` (5, not
     the fixture's usual 2) so a mutant that hardcodes 2 back in cannot pass wearing green."""
@@ -251,7 +249,7 @@ def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_defa
 
 
 @pytest.mark.unit
-def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configured_default(tmp_path):  #
+def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configured_default(tmp_path: Path):
     """An authored `retries:` overrides the runner's configured default — the resolution's
     other branch from the omitted-authorship fallback pinned above, needed since every
     other envelope's authored budget already equals the ordinary default (2)."""
@@ -274,7 +272,7 @@ def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configu
 
 
 @pytest.mark.unit
-def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_path):  #
+def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_path: Path):
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     owner = FakeHarness(
@@ -314,7 +312,7 @@ def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_p
 
 
 @pytest.mark.unit
-def test_unknown_existing_session_owner_blocks_before_lease_mint(tmp_path):  #
+def test_unknown_existing_session_owner_blocks_before_lease_mint(tmp_path: Path):
     """An unresolvable recorded owner blocks this one spawn — logged, never raised, and
     never a fresh lease minted under a substituted harness — so the caller's own sweep
     (FILL's remaining slots, ADVANCE's held-chunk poll) still reaches every other chunk."""
@@ -341,7 +339,7 @@ def test_unknown_existing_session_owner_blocks_before_lease_mint(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp_path):  #
+def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     with store._engine.begin() as conn:
@@ -381,7 +379,7 @@ def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp
 
 
 @pytest.mark.unit
-def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  #
+def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path: Path):
     """A mint under a non-default owner that fails before spawn records no session — its
     retry must still requeue under that same minted owner, never the default harness a
     session-keyed read would fall back to once ``session_id`` stays null."""
@@ -432,7 +430,7 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_harness_selection_prefers_declared_order_over_model_preference_order():  #
+def test_harness_selection_prefers_declared_order_over_model_preference_order():
     """A later member resolving the more-preferred model still loses to an earlier member
     resolving a less-preferred one — declared order is the selection key, never which
     preference matched — and selection over the same envelope is deterministic."""
@@ -465,7 +463,7 @@ def test_harness_selection_prefers_declared_order_over_model_preference_order():
 
 
 @pytest.mark.unit
-def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  #
+def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():
     h_no_tier = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     h_no_tier.resolved_model_strict = None
     h_ok = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2), verdict=None)
@@ -499,7 +497,7 @@ def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  
 
 
 @pytest.mark.unit
-def test_harness_selection_skips_a_member_health_has_withdrawn():  #
+def test_harness_selection_skips_a_member_health_has_withdrawn():
     """A member health has marked unavailable is skipped with its own
     reason, distinct from ``"unavailable"``'s no-binding-at-all meaning — and the check
     reads the cache's last-computed result only, never triggering a probe mid-selection."""
@@ -538,7 +536,7 @@ def test_harness_selection_skips_a_member_health_has_withdrawn():  #
             return ()
 
     class _NoSelftestResults:
-        def latest_selftest_result(self, harness_id: str):  #
+        def latest_selftest_result(self, harness_id: str):
             del harness_id
             return None
 
@@ -559,7 +557,7 @@ def test_harness_selection_skips_a_member_health_has_withdrawn():  #
 
 
 @pytest.mark.unit
-def test_harness_selection_empty_model_preference_selects_first_available_member():  #
+def test_harness_selection_empty_model_preference_selects_first_available_member():
     h1 = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     h1.resolved_model_strict = None  # would fail strict resolution — irrelevant with no preference at all
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=h1, transcript_source=h1.transcript_source())})
@@ -573,7 +571,7 @@ def test_harness_selection_empty_model_preference_selects_first_available_member
 
 
 @pytest.mark.unit
-def test_harness_selection_single_member_selects_regardless_of_model_resolvability(spawn_executor: Executor):  #
+def test_harness_selection_single_member_selects_regardless_of_model_resolvability(spawn_executor: Executor):
     """The single-member exception: with nothing else to select, the model check never
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
@@ -597,7 +595,7 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
 
 
 @pytest.mark.unit
-def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_skipped():  #
+def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_skipped():
     """An authored tier is never a "maybe this wasn't meant for me" preference like a bare
     native name — a single acceptable harness that cannot resolve it must still be skipped,
     never fall back to its own ambient default (worker-spawn.md)."""
@@ -621,7 +619,7 @@ def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_
 @pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness(
     spawn_executor: Executor,
-):  #
+):
     claude = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         binary="claude",
@@ -655,7 +653,7 @@ def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_ot
 
 
 @pytest.mark.unit
-def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_path):  #
+def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_path: Path):
     """Unchanged from today: an envelope authoring no ``session_harnesses`` never reaches
     the selector at all."""
     store = _store(tmp_path)
@@ -675,7 +673,7 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
 
 @pytest.mark.unit
 @pytest.mark.parametrize("platform_tracing", [True, False])
-def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(tmp_path, platform_tracing):  #
+def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(tmp_path: Path, platform_tracing):
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     config = LoopConfig(
@@ -701,7 +699,7 @@ def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_
 
 
 @pytest.mark.unit
-def test_fresh_mint_with_no_acceptable_set_tracks_registry_order_not_a_hardcoded_id(tmp_path):  #
+def test_fresh_mint_with_no_acceptable_set_tracks_registry_order_not_a_hardcoded_id(tmp_path: Path):
     """The no-``session_harnesses`` fallback must agree with ``capability_snapshot``'s own
     default: a registry with a non-Claude-Code binding first spawns under
     that binding, never a hardcoded ``claude_code``."""
@@ -736,7 +734,7 @@ def test_fresh_mint_with_no_acceptable_set_tracks_registry_order_not_a_hardcoded
 
 
 @pytest.mark.unit
-def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tmp_path):  #
+def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tmp_path: Path):
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict=None)
     chosen = FakeHarness(
@@ -790,8 +788,8 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
         (None, "strict-model", False),
     ],
 )
-def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set(  #
-    tmp_path, harnesses, head_model, resumed
+def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set(
+    tmp_path: Path, harnesses, head_model, resumed
 ):
     store = _store(tmp_path)
     store.record_lease(
@@ -839,7 +837,7 @@ def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set
 
 
 @pytest.mark.unit
-def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_set(tmp_path):  #
+def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_set(tmp_path: Path):
     """The retry's missing guard is membership, not resolvability. `fail` always closes the
     failed lease before calling `requeue`, so `requeue` is driven directly here — its own
     membership check needs no closed lease to reach, unlike the still-open-lease guard `fail` uses."""
@@ -888,7 +886,7 @@ def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_s
 
 
 @pytest.mark.unit
-def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escalates(tmp_path):  #
+def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escalates(tmp_path: Path):
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     untiered = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2), verdict=None)
@@ -944,7 +942,7 @@ def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escala
 
 
 @pytest.mark.unit
-def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_path):  #
+def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -981,8 +979,8 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
         ("/ws", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], "/ws"),
     ],
 )
-def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(  #
-    tmp_path, workspace_root, environments, expected_cwd
+def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(
+    tmp_path: Path, workspace_root, environments, expected_cwd
 ):
     """The segment carries the cwd the worker was spawned into: the workspace root when one is
     configured, else the first environment's workdir, else nothing."""
@@ -1010,7 +1008,7 @@ def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(  #
 
 
 @pytest.mark.unit
-def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_version(tmp_path):  #
+def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_version(tmp_path: Path):
     """``observe_version`` is read BEFORE the spawn and is bounded and non-raising at the
     adapter, so a lease still gets its pid recorded with no version at all, never an
     unrecorded worker or a blocked tick."""
@@ -1037,7 +1035,9 @@ def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_versi
 
 
 @pytest.mark.unit
-def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_launch(tmp_path, monkeypatch):  #
+def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """An ordinary exception (never an OS crash) does not disarm the deferred launch on
     its own — `Spawner.spawn` must kill the group itself rather than leave it parked forever
     with no durable record for REAP to ever find."""
@@ -1051,7 +1051,7 @@ def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_laun
         probe=probe,
     )
 
-    def _raise(*args, **kwargs):  #
+    def _raise(*args, **kwargs):
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_provisional_spawn", _raise)
@@ -1065,7 +1065,7 @@ def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_laun
 
 
 @pytest.mark.unit
-def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path):  #
+def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     with store._engine.begin() as conn:
@@ -1104,7 +1104,7 @@ def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path):  
 
 
 @pytest.mark.unit
-def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  #
+def test_spawn_preamble_carries_lease_and_local_api(tmp_path: Path):
     """The worker preamble carries the runner-minted identity the heartbeat hook needs."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1131,7 +1131,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  #
+def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path: Path):
     """Containment: the route token lives only in the runner store and
     stamped outbound payloads — never in ``WorkerPreamble``, so it can never reach the
     worker's environment or its rendered prompt."""
@@ -1159,7 +1159,7 @@ def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_reports_lease_mint_to_hub(tmp_path):  #
+def test_fill_reports_lease_mint_to_hub(tmp_path: Path):
     """Every node-step spawn reports its lease.minted so the hub's fence tracks it."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1191,7 +1191,7 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_stashes_the_claims_route_token(tmp_path):  #
+def test_fill_stashes_the_claims_route_token(tmp_path: Path):
     """A won claim's plaintext route token is stashed locally, keyed by
     chunk — the read the store's own :meth:`route_token` serves back."""
     store = _store(tmp_path)
@@ -1212,7 +1212,7 @@ def test_fill_stashes_the_claims_route_token(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(tmp_path):  #
+def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(tmp_path: Path):
     """A per-lease capability token is minted alongside the
     lease: its sha256 hash lands durably, and its plaintext rides only the spawn
     preamble — never the store — for ``BLIZZARD_LEASE_TOKEN`` to carry into the env."""
@@ -1233,7 +1233,7 @@ def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(
 
 
 @pytest.mark.unit
-def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_path):  #
+def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -1258,7 +1258,7 @@ def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_p
 
 
 @pytest.mark.unit
-def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path):  #
+def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path: Path):
     """A same-runner requeue re-spawns under the route already held — no fresh claim —
     so it must keep presenting the token that claim minted."""
     store = _store(tmp_path)
@@ -1279,7 +1279,7 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
 
 
 @pytest.mark.unit
-def test_fill_conflict_releases_and_does_not_bind(tmp_path):  #
+def test_fill_conflict_releases_and_does_not_bind(tmp_path: Path):
     from blizzard.runner.hub.client import ClaimConflict, RouteClaimOutcome
 
     store = _store(tmp_path)
@@ -1298,7 +1298,7 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  #
+def test_fill_paused_denial_releases_and_stops_filling(tmp_path: Path):
     """A 403 is distinct from a 409 conflict: the claim was refused outright,
     so FILL releases the binding and stops trying further slots this tick rather than
     keep racing claims that will be refused the same way."""
@@ -1322,7 +1322,7 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  #
+def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path: Path):
     """The must-fix-1 claim guard: the chunk was stopped between this
     runner's peek and its claim POST — not a fleet-wide brake, so FILL releases the
     binding and keeps trying its remaining slots, same as a race-loss conflict."""
@@ -1346,7 +1346,7 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  #
+def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path: Path):
     """A distinct refusal: the chunk stands on a prerequisite that has
     not reached ``done`` — not a race loss, so FILL releases the binding and keeps
     trying its remaining slots, same as a terminal denial or a race-loss conflict."""
@@ -1372,7 +1372,7 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  #
+def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path: Path):
     """The runner's stored capabilities no longer cover the chunk — not a race loss or a
     dependency block, so FILL releases the binding, mints no lease, and keeps filling its
     remaining slots, as the terminal/dependency denials do."""
@@ -1398,7 +1398,7 @@ def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path):  #
+def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path: Path):
     """review a dependency block discovered only at claim time — not reflected in the
     peeked snapshot's own ``blocked`` field, unlike ``test_fill_strict_holds_at_a_marked_head``'s
     statically-known one — must still hold strict mode at that head. With two open slots and
@@ -1436,7 +1436,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
 
 
 @pytest.mark.unit
-def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  #
+def test_fill_reaches_past_a_marked_head_by_default(tmp_path: Path):
     """Reach-ahead, the default: a marked head is skipped for the first
     unmarked entry, at whatever depth in the peeked list."""
     from blizzard.runner.hub.client import QueueBlock
@@ -1461,7 +1461,7 @@ def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  #
+def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path: Path):
     """Strict (``[queue] strict``) yields no entry at a marked head rather
     than falling through to a later unmarked one — an idle tick, not a claim attempt."""
     from blizzard.runner.hub.client import QueueBlock
@@ -1494,7 +1494,7 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  #
 
 @pytest.mark.unit
 @pytest.mark.parametrize("strict", [False, True])
-def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict):  #
+def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path: Path, strict):
     """The whole-list scan's exhaustion boundary: every entry marked yields
     nothing under both the default reach-ahead and strict — pinned explicitly rather than
     left to converge with the strict case by accident."""
@@ -1527,7 +1527,7 @@ def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict)
 
 
 @pytest.mark.unit
-def test_fill_env_bound_skips(tmp_path):  #
+def test_fill_env_bound_skips(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -1543,7 +1543,7 @@ def test_fill_env_bound_skips(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_preparation_failure_skips_without_claiming(tmp_path):  #
+def test_fill_preparation_failure_skips_without_claiming(tmp_path: Path):
     """A reset-on-acquire step failure aborts the fill — no bind, no claim, no spawn."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1568,7 +1568,7 @@ class _HeldIgnoringProvider(FakeProvider):
 
 
 @pytest.mark.unit
-def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, monkeypatch):  #
+def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """An environment another chunk holds is refused at bind: no binding, no claim, only the
     environment no one else holds is given back, and the rest of the tick still runs."""
     import blizzard.runner.loop.tick as tick_module
@@ -1601,7 +1601,7 @@ def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, m
 
 
 @pytest.mark.unit
-def test_a_refused_bind_gives_back_the_refusing_chunks_own_binding(tmp_path, monkeypatch):  #
+def test_a_refused_bind_gives_back_the_refusing_chunks_own_binding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The giveback is judged and released as the refusing chunk: an environment it already
     holds itself is no other chunk's, so it goes back to the provider and its binding is released."""
     store = _store(tmp_path)
@@ -1624,7 +1624,7 @@ def test_a_refused_bind_gives_back_the_refusing_chunks_own_binding(tmp_path, mon
 
 
 @pytest.mark.unit
-def test_fill_respects_the_bindings_agents(tmp_path):  #
+def test_fill_respects_the_bindings_agents(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)  # one active lease already occupies the single slot
     hub = FakeHub()
@@ -1645,7 +1645,7 @@ def test_fill_respects_the_bindings_agents(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path):  #
+def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path: Path):
     """FILL's crash reconciler must not fall through silently on a held
     binding whose chunk the hub reports with no live route in a status that is neither
     ``ready`` nor ``running`` — an unmatched shape leaks the binding indefinitely."""
@@ -1676,7 +1676,7 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
 
 
 @pytest.mark.unit
-def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  #
+def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path: Path):
     """A capability-asserting runner peeks fresh before every
     ``claim_one()`` attempt, since the single-entry response leaves no cache behind —
     each successive peek here advances past the chunk the previous attempt claimed."""
@@ -1711,7 +1711,7 @@ def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_policy(tmp_path):  #
+def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_policy(tmp_path: Path):
     """The matched peek's request carries the same capability snapshot the registration
     push does (``capability_snapshot``), translating ``queue_strict`` into the wire
     policy: ``True`` -> ``"hold"``, ``False`` -> ``"pass-over"``."""
@@ -1741,7 +1741,7 @@ def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_p
 
 
 @pytest.mark.unit
-def test_fill_peeks_pass_over_by_default(tmp_path):  #
+def test_fill_peeks_pass_over_by_default(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     ctx = make_context(
@@ -1762,7 +1762,7 @@ def test_fill_peeks_pass_over_by_default(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  #
+def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -1818,7 +1818,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path):  #
+def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path: Path):
     """A declared git commit whose read-only ``verify`` returns ``False`` is treated as
     *not covered*: the completion carries **no** ``git_commit`` artifact (Phase-2
     nudge), and is also reported, since silent non-coverage would let a chunk land done."""
@@ -1863,7 +1863,7 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
 
 
 @pytest.mark.unit
-def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):  #
+def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path: Path):
     """ADVANCE drives ``verify(forge, branch, commit)`` only against the worker's own
     DECLARED branch, never the worktree's ambient HEAD. Pinned structurally
     too: no fake here carries a ``push``/``_current_branch`` method to infer from."""
@@ -1913,7 +1913,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
 
 
 @pytest.mark.unit
-def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path):  #
+def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path: Path):
     """A second ADVANCE before the flush must not re-elicit the buffered completion."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -1932,7 +1932,7 @@ def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_flush_next_spawns_next_node_in_place(tmp_path):  #
+def test_flush_next_spawns_next_node_in_place(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -1961,8 +1961,8 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  #
 
 @pytest.mark.unit
 def test_node_transition_removes_the_prior_leases_scratch_directory_and_creates_a_fresh_one(
-    tmp_path,
-):  #
+    tmp_path: Path,
+):
     """`Attempt.close`'s removal, reached through the ordinary `transitioned` closure a node
     entry drives: the entered lease keeps the claim and route, but gets its own directory."""
     store = _store(tmp_path)
@@ -1996,7 +1996,7 @@ def test_node_transition_removes_the_prior_leases_scratch_directory_and_creates_
 
 
 @pytest.mark.unit
-def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tmp_path):  #
+def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tmp_path: Path):
     """`Spawner.preamble` (the resume/judge path) and `Spawner._worker_preamble` (fresh spawn)
     derive the same directory from the lease id alone — stable across a resumed invocation,
     which inherits none of the original spawn env."""
@@ -2032,7 +2032,7 @@ def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tm
 
 
 @pytest.mark.component
-def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session(tmp_path):  #
+def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session(tmp_path: Path):
     """`build` carries `resume:build` (targeted), `review` is `fresh`. Covers three
     session-mode assertions: fresh-node-always-new-sid, first-arrival-falls-back-fresh,
     and build's re-entry resuming its OWN prior session, not the reviewer's (plan Q4)."""
@@ -2116,7 +2116,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
 
 
 @pytest.mark.component
-def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_path):  #
+def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_path: Path):
     """The contrast case: a node entered with plain `session: resume` (no target)
     resumes the chunk's most-recent session-bearing lease overall — here the reviewer's,
     not build's own prior one, the "wrong inheritance" plan Q4's `resume:build` avoids."""
@@ -2179,7 +2179,7 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
 
 
 @pytest.mark.component
-def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  #
+def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path: Path):
     """Q3: `session:` governs node ENTRY only. A within-node retry after a
     verdict-less exit re-mints fresh, never resolving a resume target, even when the
     node's own mode is `resume` and a prior session exists for it to (wrongly) find."""
@@ -2206,7 +2206,7 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
 # read -> renderer -> adapter prefix) the renderer's own unit tier cannot.
 
 
-def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):  #
+def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):
     return LoopConfig(
         runner_name="r1",
         runner_id="rn_1",
@@ -2214,7 +2214,7 @@ def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):  #
     )
 
 
-def _first_build_spawn(store, hub, provider, env, *, session, at, config=None):  #
+def _first_build_spawn(store, hub, provider, env, *, session, at, config=None):
     """FILL's first arrival at `build` — a fresh session, nothing to resume."""
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -2236,7 +2236,7 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
     return harness
 
 
-def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None):  #
+def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None):
     """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=env)]
@@ -2260,14 +2260,14 @@ def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None): 
     return harness
 
 
-def _resuming_build_env():  #
+def _resuming_build_env():
     return make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
     )
 
 
 @pytest.mark.component
-def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):  #
+def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path: Path):
     """Scenario 1 (AC4): first arrival resumes nothing, so the prefix is exactly today's
     three-layer composition — and the spawn leaves behind the baseline its first resume
     will compare against."""
@@ -2297,7 +2297,7 @@ def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):
 
 
 @pytest.mark.component
-def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  #
+def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path: Path):
     """Scenario 2 (AC2, AC6): two node re-entries on one session with nothing changed.
     The **third** spawn is load-bearing — a fingerprint recorded off the collapse
     banner only misfires on the spawn *after* the first elision."""
@@ -2334,7 +2334,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  #
 
 
 @pytest.mark.component
-def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path):  #
+def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path: Path):
     """Scenario 3 — the correctness half of the issue. `PUT /api/host/workspaces/{id}/prompt` between
     two spawns of one session: the replacement reaches the worker announced, not disguised
     as the block it was handed a spawn ago."""
@@ -2359,7 +2359,7 @@ def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tm
 
 
 @pytest.mark.component
-def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tmp_path):  #
+def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tmp_path: Path):
     """Scenario 4 — layer 1's door. `runner_prompt` is a startup knob, so this is reachable
     only across a runner restart, but a resumed session outlives one."""
     store = _store(tmp_path)
@@ -2383,7 +2383,7 @@ def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tm
 
 
 @pytest.mark.component
-def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerprint(tmp_path):  #
+def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerprint(tmp_path: Path):
     """Scenario 5: a restart-resume re-records the SAME session id via `record_spawn`
     sending no `prompt_prefix`. The fingerprint write is reachable only from
     `Spawner.spawn`, so that path can't touch it and the next entry still elides."""
@@ -2428,7 +2428,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
 
 
 @pytest.mark.component
-def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  #
+def test_an_announced_change_is_announced_once_and_then_elided(tmp_path: Path):
     """Scenario 6 — the fingerprint is re-recorded on a **resumed** spawn, not just a
     fresh one. Three spawns, one workspace-prompt replace between the first and second:
     the third must elide, since the second spawn recorded what it actually sent."""
@@ -2464,7 +2464,7 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  #
 
 
 @pytest.mark.component
-def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_path):  #
+def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_path: Path):
     """Scenario 7 — the wiring the renderer's unit tier cannot pin: the previous
     turn's node reaches `Preamble.of` from the recorded lease rows, so `verify` resuming the
     session `build` minted opens with the role-change line naming both nodes."""
@@ -2488,7 +2488,7 @@ def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_p
 
 
 @pytest.mark.unit
-def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  #
+def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
     """A node that `produces` a name no git commit covers emits the assessment as an asset."""
     from blizzard.foundation.artifacts import ArtifactKind
     from tests.runner_fakes import make_envelope
@@ -2549,7 +2549,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path):  #
+def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path: Path):
     """A node whose `produces:` is `[review-findings]` drives **no** git-commit
     declaration or verify at all — ``verify`` is never invoked and no ``GIT_COMMIT``
     artifact is produced, while findings still ride the asset path."""
@@ -2602,7 +2602,7 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
 
 
 @pytest.mark.unit
-def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():  #
+def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():
     """A `produces` name with a durable attachment wins over the assessment."""
     envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
 
@@ -2618,7 +2618,7 @@ def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():  #
 
 
 @pytest.mark.unit
-def test_collect_asset_artifacts_falls_back_to_the_assessment_when_unattached():  #
+def test_collect_asset_artifacts_falls_back_to_the_assessment_when_unattached():
     """A `produces` name with no attachment still emits the assessment, unattached."""
     envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
 
@@ -2630,7 +2630,7 @@ def test_collect_asset_artifacts_falls_back_to_the_assessment_when_unattached():
 
 
 @pytest.mark.unit
-def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_unattached_names():  #
+def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_unattached_names():
     """The #90 aliasing bug: two `produces` names, only one attached, must now differ."""
     envelope = make_envelope(
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings", "review-diary"]
@@ -2650,7 +2650,7 @@ def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_un
 
 
 @pytest.mark.unit
-def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  #
+def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():
     """A name already covered by a git-commit artifact is never re-emitted as an asset,
     even when an attachment exists for that same name."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, produces=["toy-api"])
@@ -2668,7 +2668,7 @@ def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  #
 
 
 @pytest.mark.unit
-def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():  #
+def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():
     """A `git_commit`-kind `produces` spec is skipped by kind, not name — even when no
     git-commit artifact actually covers it (a build node whose worker declared nothing
     yet), so its name is never aliased to the judgement assessment as a phantom ASSET."""
@@ -2686,7 +2686,7 @@ def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():
 
 
 @pytest.mark.unit
-def test_flush_done_releases_environments(tmp_path):  #
+def test_flush_done_releases_environments(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -2706,7 +2706,7 @@ def test_flush_done_releases_environments(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_skips_running_worker(tmp_path):  #
+def test_advance_skips_running_worker(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -2728,7 +2728,7 @@ def test_advance_skips_running_worker(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_completion_survives_hub_outage_and_applies_once(tmp_path):  #
+def test_completion_survives_hub_outage_and_applies_once(tmp_path: Path):
     """Hub down mid-work -> completion buffered -> hub back -> flush applies exactly once."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -2770,7 +2770,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  #
     [(2, 4, 2, False), (4, 4, 2, True), (2, 2, 2, True), (2, 2, 5, False)],
     ids=["historical", "newer-current", "level-current", "stale-current"],
 )
-def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub_epoch, prior_epoch, adopts):  #
+def test_fill_only_adopts_the_current_restart_epoch(tmp_path: Path, restart_epoch, hub_epoch, prior_epoch, adopts):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_lease(
@@ -2827,7 +2827,7 @@ def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub
         assert store.boundary(lease.lease_id, 1, "spawn") is not None
 
 
-def _restarted_holding_unleased_claim(tmp_path):  #
+def _restarted_holding_unleased_claim(tmp_path: Path):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.set_route_token("ch_1", token="tok", at=_NOW)
@@ -2849,7 +2849,7 @@ def _restarted_holding_unleased_claim(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_restart_adopt_holds_while_a_takeover_is_open(tmp_path):  #
+def test_restart_adopt_holds_while_a_takeover_is_open(tmp_path: Path):
     store, harness, ctx = _restarted_holding_unleased_claim(tmp_path)
 
     with capture_logs() as logs:
@@ -2863,7 +2863,7 @@ def test_restart_adopt_holds_while_a_takeover_is_open(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_restart_adopt_proceeds_once_the_takeover_closes(tmp_path):  #
+def test_restart_adopt_proceeds_once_the_takeover_closes(tmp_path: Path):
     store, harness, ctx = _restarted_holding_unleased_claim(tmp_path)
     store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
 
@@ -2875,7 +2875,7 @@ def test_restart_adopt_proceeds_once_the_takeover_closes(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch):  #
+def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
@@ -2891,7 +2891,7 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch)
     epochs: list[int | None] = []
     original = InterruptedClaims._adopt
 
-    def traced_adopt(self, chunk_id, view):  #
+    def traced_adopt(self, chunk_id, view):
         epochs.append(view.latest_epoch)
         return original(self, chunk_id, view)
 
@@ -2905,7 +2905,7 @@ def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch)
 
 @pytest.mark.unit
 @pytest.mark.parametrize("token_held", [True, False], ids=["envelope-read", "token-rekey"])
-def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(tmp_path, token_held):  #
+def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(tmp_path: Path, token_held):
     """An ended chunk is terminal like an unknown one: the binding is released and the next
     tick has nothing left to retry, rather than the generic hub-error retry."""
     store = _store(tmp_path)
@@ -2929,7 +2929,7 @@ def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(t
 
 
 @pytest.mark.unit
-def test_poll_hub_node_releases_on_done(tmp_path):  #
+def test_poll_hub_node_releases_on_done(tmp_path: Path):
     store = _store(tmp_path)
     # A chunk held at a hub node: a binding but no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -2951,7 +2951,7 @@ def test_poll_hub_node_releases_on_done(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_poll_hub_node_releases_on_stopped(tmp_path):  #
+def test_poll_hub_node_releases_on_stopped(tmp_path: Path):
     store = _store(tmp_path)
     # A chunk stopped while parked at a hub node: a binding but no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -2975,7 +2975,7 @@ def test_poll_hub_node_releases_on_stopped(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_poll_hub_node_waits_while_delivering(tmp_path):  #
+def test_poll_hub_node_waits_while_delivering(tmp_path: Path):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
@@ -2999,7 +2999,7 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  #
+def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path: Path):
     """#63: an authored ``merged -> <node>`` edge lands the chunk into a post-merge
     runner node while the coordinator retains the route. ADVANCE discovers the fresh
     transition and spawns into the already-held, warm environment."""
@@ -3045,7 +3045,7 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
+def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path: Path):
     """The epoch gate: a locally-escalated chunk whose fact is still buffered is NOT
     re-spawned. Until the buffered escalation flushes, the hub still derives ``running``
     at the SAME epoch — only a strictly-higher hub epoch is a genuine advance."""
@@ -3087,7 +3087,7 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_path):  #
+def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_path: Path):
     """A chunk with no binding at all never reaches ``_advance_held_chunk`` — it isn't
     in ``live_tenure_chunk_ids()`` — so a bare ADVANCE tick over an empty store spawns
     nothing (the degenerate case the new branch must not misfire on)."""
@@ -3110,7 +3110,7 @@ def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_pa
 
 
 @pytest.mark.unit
-def test_verdict_less_exit_fails_and_requeues(tmp_path):  #
+def test_verdict_less_exit_fails_and_requeues(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -3130,7 +3130,7 @@ def test_verdict_less_exit_fails_and_requeues(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_reap_orphan_requeues(tmp_path):  #
+def test_reap_orphan_requeues(tmp_path: Path):
     store = _store(tmp_path)
     # A lease minted but never spawned (pid None) with its binding already recorded.
     store.record_lease(
@@ -3162,8 +3162,8 @@ def test_reap_orphan_requeues(tmp_path):  #
 
 @pytest.mark.unit
 def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_creates_a_fresh_one(
-    tmp_path,
-):  #
+    tmp_path: Path,
+):
     """`Attempt.close`'s removal, reached through REAP's own orphan-requeue path: the closed
     lease's scratch directory is gone, and the fresh lease `requeue` spawns gets its own."""
     store = _store(tmp_path)
@@ -3206,8 +3206,8 @@ def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_cre
 
 @pytest.mark.unit
 def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably_provisional_lease(
-    tmp_path,
-):  #
+    tmp_path: Path,
+):
     """`Spawner.spawn`'s `WorkerIdentityError` branch — a real identity-handshake
     failure kills the group and marks the provisional generation failed, while the lease
     itself stays open (REAP's own sweep closes it as a retry)."""
@@ -3239,7 +3239,7 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
 
 
 @pytest.mark.unit
-def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_path):  #
+def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_path: Path):
     """REAP's own provisional-generation branch: a lease with a durable pid but no
     identified session is neither `pid is None` (a plain orphan) nor a live, beating worker —
     it is closed via `Attempt.fail`, consuming a retry, exactly as an orphan is."""
@@ -3278,7 +3278,7 @@ def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_pa
 
 
 @pytest.mark.unit
-def test_reap_stalled_but_alive_worker(tmp_path):  #
+def test_reap_stalled_but_alive_worker(tmp_path: Path):
     """A live worker whose heartbeat has gone stale is reaped as stalled."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # created_at = _NOW, pid 100 alive
@@ -3303,7 +3303,7 @@ def test_reap_stalled_but_alive_worker(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_reap_leaves_fresh_beating_worker(tmp_path):  #
+def test_reap_leaves_fresh_beating_worker(tmp_path: Path):
     """A live worker inside the staleness window is left running."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -3328,7 +3328,7 @@ def test_reap_leaves_fresh_beating_worker(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_reap_leaves_exited_worker_for_advance(tmp_path):  #
+def test_reap_leaves_exited_worker_for_advance(tmp_path: Path):
     """An exited (dead-pid) worker is ADVANCE's exit-is-done, not REAP's."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -3353,7 +3353,7 @@ def test_reap_leaves_exited_worker_for_advance(tmp_path):  #
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, expected_cwd):  #
+def test_retries_exhausted_escalates_and_holds_envs(tmp_path: Path, workspace_root, expected_cwd):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
@@ -3414,7 +3414,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
 
 
 @pytest.mark.component
-def test_a_node_reentered_through_an_edge_starts_its_retry_budget_afresh(tmp_path):  #
+def test_a_node_reentered_through_an_edge_starts_its_retry_budget_afresh(tmp_path: Path):
     """Build spent a retry and then passed; review failed back to build. The second visit's first
     verdict-less exit is its own first attempt — a retry, not an exhaustion of the earlier visit's budget."""
     store = _store(tmp_path)
@@ -3457,7 +3457,7 @@ def test_a_node_reentered_through_an_edge_starts_its_retry_budget_afresh(tmp_pat
 
 
 @pytest.mark.unit
-def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a_runner_dir(tmp_path):  #
+def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a_runner_dir(tmp_path: Path):
     """The raw command resumes in the configuration the lease was minted with, and an unknown
     runner dir leaves the wrapped command empty rather than absent."""
     store = _store(tmp_path)
@@ -3509,8 +3509,8 @@ def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a
     ("passed", "locally_paused", "escalated"),
     [(True, False, False), (False, True, True), (None, True, False), (None, False, True)],
 )
-def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(  #
-    tmp_path, passed, locally_paused, escalated
+def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(
+    tmp_path: Path, passed, locally_paused, escalated
 ):
     """A brake handed to the attempt decides alone; only without one does the store's fresh
     local brake decide whether the exhausted escalation waits."""
@@ -3558,7 +3558,7 @@ def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(
 
 
 @pytest.mark.unit
-def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  #
+def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path: Path):
     """A lease escalated before it ever recorded a session (`session_id` still `None`)
     composes no takeover command at all — with nothing to resume there is no raw command
     to build, so nothing for the wrapped verb to wrap either."""
@@ -3602,7 +3602,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 
 
 @pytest.mark.unit
-def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_command(tmp_path):  #
+def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_command(tmp_path: Path):
     """A lease with a recorded session that was never bound to an environment composes
     neither command and raises nothing: `and bindings` guards the `IndexError`. The
     *released*-binding shape is its own case below."""
@@ -3652,7 +3652,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 
 
 @pytest.mark.unit
-def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path):  #
+def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path: Path):
     """The doubted state built the way the funnel reaches it: a binding recorded
     and then *released*, as `abandon` releases it. It escalates anyway — the chunk still needs a
     human — and warns which of `humans/escalation.md`'s origins produced a command-less escalation."""
@@ -3715,7 +3715,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
 # Per-chunk spend cap
 
 
-def _cap_config(cap, runner_dir="/tmp/runner-dir"):  #
+def _cap_config(cap, runner_dir="/tmp/runner-dir"):
     return LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
@@ -3727,7 +3727,7 @@ def _cap_config(cap, runner_dir="/tmp/runner-dir"):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  #
+def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path: Path):
     """Crossing the cap parks the chunk `needs_human` instead of spawning its next attempt."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -3770,7 +3770,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_escalation_reads_open_locally(tmp_path):  #
+def test_cost_cap_escalation_reads_open_locally(tmp_path: Path):
     """The spend-cap escalation is derivable here like any other: the capped lease closes
     escalated with its cause recorded, so requeue, the panel, and the escalation-mint guard see it."""
     store = _store(tmp_path)
@@ -3798,7 +3798,7 @@ def test_cost_cap_escalation_reads_open_locally(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  #
+def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path: Path):
     """A cap park with no `runner_dir` configured composes the raw fallback normally but
     leaves the wrapped command empty, same as any other `Attempt.escalate` caller — there is no
     runtime dir to fill `--dir` with."""
@@ -3831,7 +3831,7 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  #
+def test_cost_cap_park_does_not_consume_a_retry(tmp_path: Path):
     """A cap park is not a failed attempt: the next node's attempt count stays at zero — a
     later resume mints its first real attempt at that node, not a second one."""
     store = _store(tmp_path)
@@ -3859,7 +3859,7 @@ def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_never_kills_a_live_worker(tmp_path):  #
+def test_cost_cap_never_kills_a_live_worker(tmp_path: Path):
     """The cap is checked between attempts only: a chunk still mid-attempt (worker alive)
     is left running untouched even though the hub already reports it over cap."""
     store = _store(tmp_path)
@@ -3883,7 +3883,7 @@ def test_cost_cap_never_kills_a_live_worker(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_under_cap_continues_normally(tmp_path):  #
+def test_cost_cap_under_cap_continues_normally(tmp_path: Path):
     """Spend below the cap spawns the next node exactly as an uncapped runner would."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -3914,7 +3914,7 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  #
+def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path: Path):
     """`chunk_cap_usd` unset (today's default) never parks a chunk, however much it spent."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -3938,7 +3938,7 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path):  #
+def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path: Path):
     """A row with neither amount makes the total PARTIAL (a lower bound); the cap still trips on
     that lower bound, and the escalation detail marks it ``+`` so an operator reading the
     takeover is never told a partial total is the whole spend."""
@@ -3980,7 +3980,7 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
 
 
 @pytest.mark.unit
-def test_cost_cap_trips_on_the_estimate(tmp_path):  #
+def test_cost_cap_trips_on_the_estimate(tmp_path: Path):
     """A subscription row carries an estimate but no billed cost: the cap reads billed plus
     estimated, so an estimate alone carries the spend past it, and the detail marks the
     figure ``~`` — never ``+``, since every row carries an amount."""
@@ -4014,7 +4014,7 @@ def test_cost_cap_trips_on_the_estimate(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  #
+def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path: Path):
     """A capped-then-requeued chunk resumes normally once the cap is raised — no special
     un-park logic beyond the standard requeue path FILL's interrupted-claim reconciler
     already drives."""
@@ -4065,7 +4065,7 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_full_happy_path_across_ticks(tmp_path):  #
+def test_full_happy_path_across_ticks(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     env = _build_envelope()
@@ -4123,7 +4123,7 @@ def test_full_happy_path_across_ticks(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path):  #
+def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path: Path):
     """The preamble carries the workspace root (spawn cwd) and the static config prompt."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -4156,7 +4156,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
 
 
 @pytest.mark.unit
-def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  #
+def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path: Path):
     """A store override (the PUT /api/host/workspaces/{id}/prompt write) wins over static at the next spawn."""
     store = _store(tmp_path)
     # Simulate the local-API replace landing before this spawn.
@@ -4186,7 +4186,7 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  #
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
 
 
-def _engine_for(tmp_path):  #
+def _engine_for(tmp_path: Path):
     """A migrated engine for the counting store below (mirrors `make_store`)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     runner_metadata.create_all(engine)
@@ -4207,7 +4207,7 @@ class _CountingPreambleStore(SqlAlchemyRunnerStore):
 
 
 @pytest.mark.unit
-def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  #
+def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path: Path):
     """The lookup is resume-**gated**, not merely resume-shaped: hoisting
     the read above the `resume_from` check passes every other test here (a fresh session
     has no prior row *yet*) but silently elides prose once a session id is reused."""
@@ -4255,7 +4255,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
+def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path: Path):
     """A chunk holding two environments has a worktree of the same repo in each. Reading
     only the first binding would drop the second env's work with no error at all, so the
     harvest spans every binding, verified against its own environment's origin."""
@@ -4310,7 +4310,7 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     assert "'e1'" in failed[0]["detail"]["stderr_tail"] and "'e2'" in failed[0]["detail"]["stderr_tail"]
 
 
-def _two_env_commit_submission(tmp_path, *, origins, commits):  #
+def _two_env_commit_submission(tmp_path: Path, *, origins, commits):
     """Drive the harvest for a chunk holding ``e1`` and ``e2``, each declaring ``toy-api`` at
     ``commits[env]`` against ``origins[env]``; returns the submitted pointers and the hub."""
     store = _store(tmp_path)
@@ -4351,7 +4351,7 @@ def _two_env_commit_submission(tmp_path, *, origins, commits):  #
 
 
 @pytest.mark.unit
-def test_agreeing_pointers_from_two_envs_converge_to_one_named_by_identity(tmp_path):  #
+def test_agreeing_pointers_from_two_envs_converge_to_one_named_by_identity(tmp_path: Path):
     pointers, _hub = _two_env_commit_submission(
         tmp_path,
         origins={"e1": "git@github.com:acme/toy-api.git", "e2": "https://github.com/acme/toy-api"},
@@ -4362,7 +4362,7 @@ def test_agreeing_pointers_from_two_envs_converge_to_one_named_by_identity(tmp_p
 
 
 @pytest.mark.unit
-def test_one_name_at_two_owners_submits_two_identities(tmp_path):  #
+def test_one_name_at_two_owners_submits_two_identities(tmp_path: Path):
     pointers, _hub = _two_env_commit_submission(
         tmp_path,
         origins={"e1": "https://github.com/owner-a/toy-api", "e2": "https://github.com/owner-b/toy-api"},
@@ -4373,7 +4373,7 @@ def test_one_name_at_two_owners_submits_two_identities(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_pull_registers_every_declared_redirect_uri(tmp_path):  #
+def test_pull_registers_every_declared_redirect_uri(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     uris = (
@@ -4401,7 +4401,7 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path):  #
+def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path: Path):
     # A registry holding one available binding (today's only shape) always names it the
     # default — no separate runner config key decides this.
     store = _store(tmp_path)
@@ -4432,7 +4432,7 @@ def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path)
 
 
 @pytest.mark.unit
-def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp_path):  #
+def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp_path: Path):
     """The roster the runner pushes carries every declaration in ``ctx.subscriptions``,
     including one whose provider binds no sampler (declared, unsampled)."""
     store = _store(tmp_path)
@@ -4470,7 +4470,7 @@ def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp
 
 
 @pytest.mark.unit
-def test_pull_registers_the_gates_this_runner_imposes(tmp_path):  #
+def test_pull_registers_the_gates_this_runner_imposes(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     ctx = make_context(
@@ -4490,7 +4490,7 @@ def test_pull_registers_the_gates_this_runner_imposes(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_sends(tmp_path):  #
+def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_sends(tmp_path: Path):
     """Building a snapshot spawns each binding's binary for its version, and a tick sends
     one with PULL's registration and again with every FILL claim attempt's peek — so the
     snapshot is memoized per tick and the probe runs once, not once per outbound call."""
@@ -4509,7 +4509,7 @@ def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_
 
 
 @pytest.mark.unit
-def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_path):  #
+def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_path: Path):
     """`TickCapabilities` alone rebuilds every tick; the composition-root `HarnessVersionCache`
     is the actual cross-tick bound, proven here as a staleness policy, not an unlimited cache."""
     store = _store(tmp_path)
@@ -4539,7 +4539,7 @@ def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_pat
 
 @pytest.mark.component
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path, workspace_root, expected_cwd):  #
+def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path: Path, workspace_root, expected_cwd):
     """A judgement resumes the held session from its spawn cwd — the workspace root when one
     is configured, never the environment's own workdir beneath it."""
     store = _store(tmp_path)

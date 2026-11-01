@@ -30,7 +30,7 @@ def _reset(hub: HubHarness, dataset: str, to: object) -> httpx2.Response:
     return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})  # type: ignore[arg-type]
 
 
-def _events(hub: HubHarness) -> list[sa.Row]:  #
+def _events(hub: HubHarness) -> list[sa.Row]:
     return hub_event_rows(hub.engine, "egress-cursor-reset")
 
 

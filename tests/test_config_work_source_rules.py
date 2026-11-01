@@ -115,7 +115,7 @@ def test_an_explicit_none_is_refused_on_the_slug_and_the_name(field: str) -> Non
 )
 def test_invalid_fields_name_the_offender(changes: dict[str, object], field: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        validate_fields(replace(_FIELDS, **changes))  #
+        validate_fields(replace(_FIELDS, **changes))
     assert caught.value.field == field
 
 

@@ -74,7 +74,7 @@ nodes:
 """
 
 
-def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:  #
+def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:
     """Mint ``yaml`` and repin ``chunk_id`` to it, returning the new graph's id."""
     resp = hub.client.post("/api/graphs", json={"definition_yaml": yaml})
     assert resp.status_code == 201, resp.text
@@ -84,7 +84,7 @@ def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:  #
     return graph_id
 
 
-def _envelope(hub, chunk_id: str) -> dict:  #
+def _envelope(hub, chunk_id: str) -> dict:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope")
     assert resp.status_code == 200, resp.text
     return resp.json()

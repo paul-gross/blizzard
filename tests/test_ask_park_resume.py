@@ -8,6 +8,7 @@ lease; the park is not repeated once forwarded.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -42,11 +43,11 @@ _HANDLE_START = "start-100"
 _HANDLE = WorkerHandle(session_id="sess-a", pid=_HANDLE_PID, process_start_time=_HANDLE_START, pgid=_HANDLE_PID)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_exited_lease(store):  #
+def _seed_exited_lease(store):
     """A build lease spawned into env e1; the worker has exited (probe reports it dead)."""
     store.record_lease(
         NewLease(
@@ -70,7 +71,7 @@ def _seed_exited_lease(store):  #
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _ctx(store, *, hub=None, probe=None, clock=None):  #
+def _ctx(store, *, hub=None, probe=None, clock=None):
     return make_context(
         store,
         hub=hub or FakeHub(),
@@ -81,13 +82,13 @@ def _ctx(store, *, hub=None, probe=None, clock=None):  #
     )
 
 
-def _open_question(question_id="qn_1") -> HubQuestion:  #
+def _open_question(question_id="qn_1") -> HubQuestion:
     return HubQuestion(
         question_id=question_id, chunk_id="ch_1", runner_id="r1", epoch=1, question="Which API?", asked_at="t"
     )
 
 
-def _answered_question(question_id="qn_1") -> HubQuestion:  #
+def _answered_question(question_id="qn_1") -> HubQuestion:
     return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
@@ -102,7 +103,7 @@ def _answered_question(question_id="qn_1") -> HubQuestion:  #
     )
 
 
-def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  #
+def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path: Path):
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -132,7 +133,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  #
     assert store.pending_submission_lease_ids() == set()
 
 
-def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  #
+def test_ask_during_judgement_parks_instead_of_failing(tmp_path: Path):
     """No ask is open when the worker exits — the pre-elicitation check in
     `_advance_exited_worker` finds nothing — but the worker asks instead of returning a
     verdict *during* the judgement elicitation itself. `Judgement.run`'s own verdict-less
@@ -171,7 +172,7 @@ def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  #
     assert store.pending_submission_lease_ids() == set()  # no completion buffered
 
 
-def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  #
+def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path: Path):
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -196,7 +197,7 @@ def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  #
     assert harness.judged == []  # never elicited a verdict on the ask
 
 
-def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path):  #
+def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path: Path):
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -223,7 +224,7 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
     assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
-def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  #
+def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path: Path):
     """A pause-park on another lease must not disturb `unforwarded_ask`'s
     predicate — a NULL-poisoned NOT IN would silently stop forwarding fleet-wide if
     pause-parks shared the `park_facts` table; they live in their own table instead."""
@@ -261,7 +262,7 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  #
 
 
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, workspace_root, expected_cwd):  #
+def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path: Path, workspace_root, expected_cwd):
     """The resume runs in the session's own spawn cwd — the workspace root when one is
     configured, never the environment's own workdir beneath it."""
     store = _store(tmp_path)
@@ -311,7 +312,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
-def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  #
+def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path: Path):
     """A worker answered past ``HEARTBEAT_STALENESS_THRESHOLD`` must
     survive the very next REAP tick after resuming."""
     store = _store(tmp_path)
@@ -364,7 +365,7 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
     assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
-def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path):  #
+def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path: Path):
     """The operator stops a chunk instead of answering its ask. The ask
     must not read open forever after the chunk it belonged to is gone.
     """
@@ -400,7 +401,9 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
     assert store.held_environment_ids() == []
 
 
-def test_a_superseded_ask_is_neither_open_nor_forwarded_once_the_newer_ask_is_parked_and_resumed(tmp_path) -> None:  #
+def test_a_superseded_ask_is_neither_open_nor_forwarded_once_the_newer_ask_is_parked_and_resumed(
+    tmp_path: Path,
+) -> None:
     """A newer ask supersedes an older unforwarded one for good: parking and then resuming the newer
     ask never brings the older one back as open or as the lease's next ask to forward."""
     store = _store(tmp_path)

@@ -33,7 +33,7 @@ from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_st
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -115,7 +115,7 @@ def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> 
 
 
 @pytest.mark.unit
-def test_a_rebind_after_a_release_reads_as_held(tmp_path):  #
+def test_a_rebind_after_a_release_reads_as_held(tmp_path: Path):
     """Bind -> release -> bind again on the same ``(chunk, env)``: the second binding
     is held, not read as still-released by a naive set-difference predicate."""
     store = _store(tmp_path)
@@ -129,7 +129,7 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_a_same_instant_rebind_after_a_release_reads_as_held(tmp_path):  #
+def test_a_same_instant_rebind_after_a_release_reads_as_held(tmp_path: Path):
     """Bind -> release -> bind at one instant: the release closes only the bind appended before it, so the rebind is
     held — a comparison of instants would have the release close both."""
     store = _store(tmp_path)
@@ -159,7 +159,7 @@ def test_a_same_instant_rebind_after_a_release_reads_as_held(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_a_same_instant_pause_resume_pause_leaves_the_second_park_open(tmp_path):  #
+def test_a_same_instant_pause_resume_pause_leaves_the_second_park_open(tmp_path: Path):
     """Pause -> resume -> pause under one lease at one instant: the resume closes only the park appended before it."""
     store = _store(tmp_path)
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
@@ -187,7 +187,7 @@ def test_a_same_instant_pause_resume_pause_leaves_the_second_park_open(tmp_path)
 
 
 @pytest.mark.unit
-def test_the_newest_binding_of_a_chunk_reads_through_its_release(tmp_path):  #
+def test_the_newest_binding_of_a_chunk_reads_through_its_release(tmp_path: Path):
     """A lease's workspace is read from its newest binding row, released or not, and never from another chunk's."""
     store = _store(tmp_path)
     assert store.newest_binding_for_chunk("ch_1") is None
@@ -205,7 +205,7 @@ def test_the_newest_binding_of_a_chunk_reads_through_its_release(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_the_newest_binding_of_a_chunk_is_the_latest_recorded_even_at_an_equal_instant(tmp_path):  #
+def test_the_newest_binding_of_a_chunk_is_the_latest_recorded_even_at_an_equal_instant(tmp_path: Path):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/a/e1", bound_at=_NOW, workspace_id="ws_a")
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/b/e2", bound_at=_NOW)
@@ -260,7 +260,7 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
 
 
 @pytest.mark.unit
-def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path):  #
+def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path: Path):
     """``>``, not ``>=``: a mark stamped at the escalation's own instant must not close it
     — the sweep always stamps a later tick, and a tie would mask a fresh escalation."""
     store = _store(tmp_path)
@@ -287,7 +287,7 @@ def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path
 
 
 @pytest.mark.unit
-def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  #
+def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path: Path):
     """A spawn that stamps its lease at the requeue mark's own instant still consumes it, as it is appended after
     the mark — a comparison of instants that left it pending would never see the reattempt happen."""
     store = _store(tmp_path)
@@ -301,7 +301,7 @@ def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  #
 
 
 @pytest.mark.unit
-def test_a_same_instant_mint_appended_before_a_requeue_mark_leaves_it_pending(tmp_path):  #
+def test_a_same_instant_mint_appended_before_a_requeue_mark_leaves_it_pending(tmp_path: Path):
     """A mark appended after a mint is not that mint's to consume, whatever instant both carry: the reattempt it asks
     for is still to come."""
     store = _store(tmp_path)
@@ -317,7 +317,7 @@ def test_a_same_instant_mint_appended_before_a_requeue_mark_leaves_it_pending(tm
 
 
 @pytest.mark.unit
-def test_fact_sequences_are_one_runner_wide_across_the_tables(tmp_path):  #
+def test_fact_sequences_are_one_runner_wide_across_the_tables(tmp_path: Path):
     """One counter numbers every sequenced table's rows, so rows of different tables are ordered by it."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -343,7 +343,7 @@ def test_pause_parks_are_their_own_table_and_park_facts_keeps_a_non_null_questio
 
 
 @pytest.mark.unit
-def test_set_route_token_keeps_one_current_row_per_chunk(tmp_path):  #
+def test_set_route_token_keeps_one_current_row_per_chunk(tmp_path: Path):
     """A re-claim of the same chunk overwrites the stashed plaintext rather than appending:
     the runner only ever presents its *current* token, so there is exactly one row to read
     and no rotation history to disambiguate."""

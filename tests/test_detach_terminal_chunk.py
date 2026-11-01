@@ -29,7 +29,7 @@ nodes:
 """
 
 
-def _claimed_chunk(hub) -> str:  #
+def _claimed_chunk(hub) -> str:
     assert hub.client.post(
         "/api/fleet/runners",
         json={
@@ -51,7 +51,7 @@ def _claimed_chunk(hub) -> str:  #
     return str(chunk_id)
 
 
-def _done_chunk(hub) -> str:  #
+def _done_chunk(hub) -> str:
     chunk_id = _claimed_chunk(hub)
     node_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1, runner_id="runner-a")

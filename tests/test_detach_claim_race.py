@@ -28,7 +28,7 @@ def test_a_claim_blocks_while_a_detach_holds_the_row_lock_mid_write(
     release_write = threading.Event()
     real_refuse_detach = detach_module.refuse_detach
 
-    def _blocking_refuse_detach(chunk_id, route, status):  #
+    def _blocking_refuse_detach(chunk_id, route, status):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the detach's write"
         real_refuse_detach(chunk_id, route, status)

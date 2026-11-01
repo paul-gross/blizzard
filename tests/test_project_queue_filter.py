@@ -190,7 +190,7 @@ def test_matched_peek_reconstitutes_only_served_candidates(tmp_path: Path, polic
             super().__init__(hub_store_connections(hub.engine), hub.clock)
             self.requested: list[list[str]] = []
 
-        def movement_facts_for(self, chunk_ids):  #
+        def movement_facts_for(self, chunk_ids):
             self.requested.append(list(chunk_ids))
             return super().movement_facts_for(chunk_ids)
 

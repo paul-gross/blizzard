@@ -16,7 +16,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "7"}
 
 
-def _ingest(hub, ref: str = "7") -> str:  #
+def _ingest(hub, ref: str = "7") -> str:
     pointer = {"source": "default", "ref": ref}
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
@@ -27,7 +27,7 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a", "env-b"]}
 
 
-def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:  #
+def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:
     resp = hub.client.post(
         "/api/fleet/runners",
         json={

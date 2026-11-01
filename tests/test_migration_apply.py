@@ -130,7 +130,7 @@ nodes:
 _GATE_SRC_GHOST_YAML = _GATE_SRC_YAML.replace("to: graph:triage", "to: graph:ghost")
 
 
-def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML) -> tuple[str, str]:  #
+def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML) -> tuple[str, str]:
     """Mint the source graph (and optionally the target), ingest + promote + claim a
     chunk on the source. Returns (chunk_id, from_node_id)."""
     assert (
@@ -149,7 +149,7 @@ def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARG
     return chunk_id, node_id
 
 
-def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx2.Response:  #
+def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -162,7 +162,7 @@ def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx2.Resp
     )
 
 
-def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[str, str, str]:  #
+def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[str, str, str]:
     """Like ``_setup``, but claims through ``/api/fleet/routes`` and returns the
     plaintext route token too — for driving migration replay under
     ``route_token_mode=enforce``."""
@@ -184,9 +184,7 @@ def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[s
     return chunk_id, node_id, token
 
 
-def _migrate_with_token(  #
-    hub, chunk_id: str, node_id: str, *, epoch: int = 1, route_token: str
-) -> httpx2.Response:
+def _migrate_with_token(hub, chunk_id: str, node_id: str, *, epoch: int = 1, route_token: str) -> httpx2.Response:
     """Like ``_migrate``, but carries a ``route_token`` — for driving the
     completion under ``route_token_mode=enforce``."""
     return hub.client.post(

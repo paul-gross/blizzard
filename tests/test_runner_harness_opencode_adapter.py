@@ -1148,7 +1148,7 @@ _EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None]] = {
     "success": (120, 45 + 18, 30, 15, 0.0123),
     "provider_error": None,  # type: ignore[dict-item]  # no completed step at all
     "permission_denial": (40, 8, 0, 0, None),  # cost 0 reads as unknown, never free
-    "interrupted_tool": None,  #
+    "interrupted_tool": None,
     "compaction": (200, 25 + 10, 90, 5, None),
     "child_session": (80, 20 + 4, 10, 2, None),
     "live_success": (120 + 30, (45 + 18) + (8 + 0), 30 + 20, 15 + 0, None),  # two completed steps, one turn

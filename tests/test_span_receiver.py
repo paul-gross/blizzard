@@ -228,7 +228,7 @@ def test_forward_maps_otlp_kinds_and_statuses(kind: int, name: str) -> None:
     assert ok.instrumentation_scope is not None and ok.instrumentation_scope.version == "1"
 
 
-def _handle(exporter: InMemorySpanExporter):  #
+def _handle(exporter: InMemorySpanExporter):
     return build_platform_tracing(
         TracingConfig(platform=True, platform_sample_ratio=0.0),
         {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},

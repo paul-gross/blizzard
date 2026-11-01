@@ -710,7 +710,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
         pass
 
     class DiesBeforeCursor(EgressStore):
-        def append_cursor(self, record) -> None:  #
+        def append_cursor(self, record) -> None:
             raise Killed
 
     with pytest.raises(Killed):
@@ -804,7 +804,7 @@ def test_parquet_without_its_extra_keeps_the_hub_serving_and_records_one_rejecti
     [(STEPS_SCHEMA, ExportedStep), (INVOCATIONS_SCHEMA, ExportedInvocation)],
     ids=["steps", "invocations"],
 )
-def test_each_dataset_schema_names_exactly_its_row_fields_in_order(schema_, row) -> None:  #
+def test_each_dataset_schema_names_exactly_its_row_fields_in_order(schema_, row) -> None:
     assert [c.name for c in schema_.columns] == [f.name for f in fields(row)]
     assert all(c.meaning for c in schema_.columns)
 

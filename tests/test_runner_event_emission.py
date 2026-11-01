@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -42,11 +43,11 @@ _ALIVE = (100, "start-100")
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):  #
+def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
     """A build lease already spawned into env e1, with a configurable retry budget."""
     store.record_lease(
         NewLease(
@@ -70,11 +71,11 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _events(store):  #
+def _events(store):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
 
 
-def _dead_worker_ctx(store, **kwargs):  #
+def _dead_worker_ctx(store, **kwargs):
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
     — driving ADVANCE into ``Attempt.fail(via="advance")`` on its collect pass (the second
     ``Advance().run()`` after the launch/collect split)."""
@@ -93,7 +94,7 @@ def _dead_worker_ctx(store, **kwargs):  #
 # --- the Attempt.fail funnel ------------------------------------- #
 
 
-def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  #
+def test_retry_branch_emits_a_warning_attempt_failed(tmp_path: Path):
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry
     ctx = _dead_worker_ctx(store)
@@ -111,7 +112,7 @@ def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  #
     assert LEASE_MINTED in {b.kind for b in store.pending_outbound()}
 
 
-def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  #
+def test_escalate_branch_emits_a_critical_worker_lost(tmp_path: Path):
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # retried=0, not < 0 -> escalate
     ctx = _dead_worker_ctx(store)
@@ -125,7 +126,7 @@ def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  #
     assert ESCALATION_RECORDED in {b.kind for b in store.pending_outbound()}
 
 
-def test_locally_paused_defer_emits_nothing(tmp_path):  #
+def test_locally_paused_defer_emits_nothing(tmp_path: Path):
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # would escalate...
     store.record_local_pause(
@@ -138,7 +139,7 @@ def test_locally_paused_defer_emits_nothing(tmp_path):  #
     assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound()}
 
 
-def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  #
+def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path: Path):
     """The other stall path (AC#7): a hung-but-live worker whose heartbeat went stale is
     reaped as a failure via REAP's `is_heartbeat_stale` branch — surfaced within one
     liveness window (the clock is one threshold + a margin past its last beat)."""
@@ -165,7 +166,7 @@ def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  #
     assert events[0]["detail"]["via"] == "reap"
 
 
-def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  #
+def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path: Path):
     """The abandon branch (SF-6): retries exhausted AND the hub now routes the chunk
     elsewhere → `info` `attempt-abandoned`, emitted in `Attempt.fail` itself, not the
     shared `Attempt.abandon` (which RESUME/PULL detach also reach and stays silent)."""
@@ -198,7 +199,7 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  #
     assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound()}
 
 
-def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  #
+def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path: Path):
     """At-most-once is structural: `Attempt.fail` runs once per attempt (it closes the
     lease), so a second ADVANCE over the now-closed lease emits nothing more (AC#7)."""
     store = _store(tmp_path)
@@ -215,7 +216,7 @@ def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  #
 # --- per-adapter command failures --------------------------------- #
 
 
-def test_env_prep_failure_emits_a_command_failed(tmp_path):  #
+def test_env_prep_failure_emits_a_command_failed(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -244,7 +245,7 @@ class _VerifyFailsWorktreeGit(FakeWorktreeGit):
         raise WorktreeGitError("git ls-remote origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
 
 
-def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  #
+def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path: Path):
     """A verify failure is informational only: a read-only re-derivation
     opens no unsafe window, so it is never re-raised — the declaration is simply
     dropped and ADVANCE proceeds into its ordinary verdict-less-exit failure path."""
@@ -281,11 +282,11 @@ class _SpawnFailsHarness(FakeHarness):
 
     def spawn(
         self, envelope, preamble, session_hint, resume_from=None, *, model=None, effort=None, compaction_window=None
-    ):  #
+    ):
         raise HarnessSpawnError("failed to spawn claude in /ws/e1: [Errno 2] No such file or directory")
 
 
-def test_spawn_launch_failure_emits_a_command_failed_and_reraises(tmp_path):  #
+def test_spawn_launch_failure_emits_a_command_failed_and_reraises(tmp_path: Path):
     store = _store(tmp_path)
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])

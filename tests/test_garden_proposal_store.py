@@ -738,7 +738,7 @@ def test_routine_page_cost_is_flat_in_closed_proposal_count(tmp_path: Path) -> N
         project = default_project(engine)
         _seed_routine_docket(store, engine, open_count=3, closed_count=closed)
 
-        def read(store: GardenProposalStore = store, project: str = project):  #
+        def read(store: GardenProposalStore = store, project: str = project):
             return store.list_page(limit=2, project_id=project, routine_name="nightly", state=RoutineProposalState.ALL)
 
         measured.append((count_queries(engine, read), count_rows_read(engine, read)))

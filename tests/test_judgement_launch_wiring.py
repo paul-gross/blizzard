@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -33,7 +34,7 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _rig(tmp_path):  #
+def _rig(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_lease(
         NewLease(
@@ -72,7 +73,7 @@ def _rig(tmp_path):  #
     return SimpleNamespace(store=store, ctx=ctx, lease=lease)
 
 
-def test_a_standing_record_the_caller_read_is_swept_through_its_relaunch_count(tmp_path):  #
+def test_a_standing_record_the_caller_read_is_swept_through_its_relaunch_count(tmp_path: Path):
     rig = _rig(tmp_path)
     files = rig.ctx.elicitation_files
     first, second = files.output_path("lease_1", 1, attempt=0), files.output_path("lease_1", 1, attempt=1)
@@ -91,11 +92,13 @@ def test_a_standing_record_the_caller_read_is_swept_through_its_relaunch_count(t
     assert not os.path.exists(second)  # the relaunched attempt is swept; the fresh launch rewrites attempt 0
 
 
-def test_the_judge_boundary_opens_at_the_tail_read_in_the_binding_workdir_and_workspace(tmp_path, monkeypatch):  #
+def test_the_judge_boundary_opens_at_the_tail_read_in_the_binding_workdir_and_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     asked: list[tuple[object, ...]] = []
 
-    def resolve(self, session, workdir, workspace_id):  #
+    def resolve(self, session, workdir, workspace_id):
         asked.append((session, workdir, workspace_id))
         return "tok-1", True
 
@@ -122,7 +125,9 @@ def test_the_judge_boundary_opens_at_the_tail_read_in_the_binding_workdir_and_wo
     )
 
 
-def test_a_launch_given_no_generation_opens_the_boundary_under_the_leases_current_one(tmp_path, monkeypatch):  #
+def test_a_launch_given_no_generation_opens_the_boundary_under_the_leases_current_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     monkeypatch.setattr(
         type(rig.ctx), "resolve_boundary_start", lambda self, session, workdir, workspace_id: (None, False)

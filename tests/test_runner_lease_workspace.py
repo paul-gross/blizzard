@@ -8,6 +8,7 @@ provider. Driven against a real (tmp sqlite) runner store with fakes only at the
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -70,11 +71,11 @@ def _config() -> LoopConfig:
     )
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  #
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, host: _Host, harness: FakeHarness, hub: FakeHub | None = None):  #
+def _ctx(store, host: _Host, harness: FakeHarness, hub: FakeHub | None = None):
     return make_context(
         store,
         hub=hub or FakeHub(),
@@ -87,11 +88,11 @@ def _ctx(store, host: _Host, harness: FakeHarness, hub: FakeHub | None = None): 
     )
 
 
-def _bind_in_b(store, chunk_id: str = "ch_1") -> None:  #
+def _bind_in_b(store, chunk_id: str = "ch_1") -> None:
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir=_WORKDIR_B, bound_at=_NOW, workspace_id="ws_b")
 
 
-def _seed_lease(store) -> None:  #
+def _seed_lease(store) -> None:
     """A build lease spawned into ``ws_b``'s ``e1``."""
     store.record_lease(
         NewLease(
@@ -115,7 +116,7 @@ def _seed_lease(store) -> None:  #
     _bind_in_b(store)
 
 
-def test_a_lease_bound_in_the_second_workspace_spawns_in_its_root_under_its_prompt(tmp_path) -> None:  #
+def test_a_lease_bound_in_the_second_workspace_spawns_in_its_root_under_its_prompt(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _bind_in_b(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -135,7 +136,7 @@ def test_a_lease_bound_in_the_second_workspace_spawns_in_its_root_under_its_prom
     assert segment.spawn_cwd == "/root-b"
 
 
-def test_a_workspace_prompt_override_applies_only_to_leases_bound_in_that_workspace(tmp_path) -> None:  #
+def test_a_workspace_prompt_override_applies_only_to_leases_bound_in_that_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.set_workspace_prompt("ws_a", prompt="A-OVERRIDE", at=_NOW)
     store.set_workspace_prompt("ws_b", prompt="B-OVERRIDE", at=_NOW)
@@ -153,7 +154,7 @@ def test_a_workspace_prompt_override_applies_only_to_leases_bound_in_that_worksp
     assert "B-OVERRIDE" in preamble.prompt_prefix and "A-OVERRIDE" not in preamble.prompt_prefix
 
 
-def test_a_row_naming_no_workspace_spawns_in_its_workdir_with_no_workspace_prompt(tmp_path) -> None:  #
+def test_a_row_naming_no_workspace_spawns_in_its_workdir_with_no_workspace_prompt(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir=_WORKDIR_B, bound_at=_NOW)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -172,7 +173,7 @@ def test_a_row_naming_no_workspace_spawns_in_its_workdir_with_no_workspace_promp
     assert segment.spawn_cwd == _WORKDIR_B
 
 
-def test_fill_claims_a_projects_chunk_into_its_bindings_workspace(tmp_path) -> None:  #
+def test_fill_claims_a_projects_chunk_into_its_bindings_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     host = _Host()
     hub = FakeHub()
@@ -191,7 +192,7 @@ def test_fill_claims_a_projects_chunk_into_its_bindings_workspace(tmp_path) -> N
     assert preamble.workspace_root == "/root-a" and "A-POLICY" in preamble.prompt_prefix
 
 
-def test_judgement_runs_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path) -> None:  #
+def test_judgement_runs_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     hub = FakeHub()
@@ -203,7 +204,7 @@ def test_judgement_runs_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path) -
     assert [judged[0] for judged in harness.judged] == ["/root-b"]
 
 
-def test_a_dormant_session_resumes_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path) -> None:  #
+def test_a_dormant_session_resumes_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     session = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a")
@@ -238,7 +239,7 @@ def test_a_dormant_session_resumes_in_the_spawn_cwd_of_the_leases_own_workspace(
     assert [resumed[0] for resumed in harness.resumed] == ["/root-b"]
 
 
-def test_a_usage_range_is_read_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path) -> None:  #
+def test_a_usage_range_is_read_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_boundary_open(
@@ -274,7 +275,7 @@ def test_a_usage_range_is_read_in_the_spawn_cwd_of_the_leases_own_workspace(tmp_
     assert source.read_raw_lines_cwds == ["/root-b"]
 
 
-def test_a_closed_leases_transcript_is_looked_up_in_its_own_workspace(tmp_path) -> None:  #
+def test_a_closed_leases_transcript_is_looked_up_in_its_own_workspace(tmp_path: Path) -> None:
     """After release the held set is empty; the newest binding still names the lease's workspace."""
     store = _store(tmp_path)
     host = _Host()
@@ -293,7 +294,7 @@ def test_a_closed_leases_transcript_is_looked_up_in_its_own_workspace(tmp_path) 
     assert service._spawn_cwd("ch_1") == "/root-b"
 
 
-def test_a_release_hands_the_environment_back_to_its_own_workspaces_provider(tmp_path) -> None:  #
+def test_a_release_hands_the_environment_back_to_its_own_workspaces_provider(tmp_path: Path) -> None:
     store = _store(tmp_path)
     host = _Host()
     _bind_in_b(store)

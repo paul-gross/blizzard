@@ -193,7 +193,7 @@ def _rows_each_update_changed() -> Iterator[list[tuple[str, int]]]:
     included — as the table it names and the rows it changed, in issue order."""
     updates: list[tuple[str, int]] = []
 
-    def record(conn, cursor, statement, parameters, context, executemany):  #
+    def record(conn, cursor, statement, parameters, context, executemany):
         words = statement.split()
         if words[0].upper() == "UPDATE":
             updates.append((words[1], cursor.rowcount))

@@ -44,7 +44,7 @@ from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
-def _client(handler) -> HttpHubClient:  #
+def _client(handler) -> HttpHubClient:
     transport = httpx2.MockTransport(handler)
     return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=transport))
 
@@ -603,7 +603,7 @@ def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
 # --- the chunk-ended 409 decode ------------------------------------ #
 
 
-def _refusing(status_code: int, **kwargs: object):  #
+def _refusing(status_code: int, **kwargs: object):
     def handler(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(status_code, **kwargs)  # type: ignore[arg-type]
 

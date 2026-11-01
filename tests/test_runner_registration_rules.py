@@ -287,7 +287,7 @@ _SAME = RunnerReport(
 )
 
 
-def _changes(report: RunnerReport, *, held: RunnerRegistration = _SEEN, served=None, judgement=_JUDGED) -> bool:  #
+def _changes(report: RunnerReport, *, held: RunnerRegistration = _SEEN, served=None, judgement=_JUDGED) -> bool:
     return held.registration_changes(report, served=served, judgement=judgement, now=_AT, threshold=STALE_AFTER)
 
 

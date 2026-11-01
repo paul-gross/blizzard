@@ -37,7 +37,7 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     release_write = threading.Event()
     real_record_deleted_row = work_item_store_module.record_deleted_row
 
-    def _blocking_record_deleted_row(conn, chunk_id, *, by, at):  #
+    def _blocking_record_deleted_row(conn, chunk_id, *, by, at):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the delete's write"
         return real_record_deleted_row(conn, chunk_id, by=by, at=at)

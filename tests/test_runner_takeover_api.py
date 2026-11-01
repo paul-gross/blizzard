@@ -40,7 +40,7 @@ def _app_with_takeover(
     clock: FixedClock | None = None,
     probe: FakeProbe | None = None,
     harnesses: HarnessRegistry | None = None,
-):  #
+):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     harness = FakeHarness(
@@ -67,7 +67,7 @@ def _app_with_takeover(
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:  #
+def _seed_lease(store, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

@@ -21,7 +21,7 @@ from tests.support import HubHarness, build_hub, count_queries, ingest
 pytestmark = pytest.mark.component
 
 
-def _resolve(hub: HubHarness, chunk_id: str):  #
+def _resolve(hub: HubHarness, chunk_id: str):
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     return chunk
@@ -117,12 +117,12 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
     real_declare_locked = dependencies_store.declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  #
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the declaration's write"
         return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    dependencies_store.declare_locked = _blocking_declare_locked  #
+    dependencies_store.declare_locked = _blocking_declare_locked
 
     declare_thread = threading.Thread(
         target=lambda: hub.services.dependencies.declare(

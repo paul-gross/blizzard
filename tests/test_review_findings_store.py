@@ -204,7 +204,7 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._stmts, name)
 
-        def select(self, from_, *cols):  #
+        def select(self, from_, *cols):
             stmt = self._stmts.select(from_, *cols)
             return stmt.where(sa.literal(False)) if from_ is scopes else stmt
 

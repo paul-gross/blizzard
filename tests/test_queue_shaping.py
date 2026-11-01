@@ -17,7 +17,7 @@ from tests.support import HubHarness, build_hub, capture_statements, pointer_tok
 pytestmark = pytest.mark.component
 
 
-def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):  #
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):
     resp = hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id})
     assert resp.status_code == 202, resp.text
     return resp.json()

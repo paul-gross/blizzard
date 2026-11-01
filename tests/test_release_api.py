@@ -45,7 +45,7 @@ nodes:
 """
 
 
-def _claimed(hub) -> tuple[str, str]:  #
+def _claimed(hub) -> tuple[str, str]:
     """Ingest, promote, and claim a chunk for ``r1``; return (chunk_id, route token)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post(
@@ -60,7 +60,7 @@ def _claimed(hub) -> tuple[str, str]:  #
     return chunk_id, str(claim.json()["route_token"])
 
 
-def _release(  #
+def _release(
     hub, chunk_id: str, *, epoch: int = 1, route_token: str | None, runner_id: str = "r1", reason: str = "throttled"
 ) -> httpx2.Response:
     # The harness authenticates as the body's `runner_id`; the hub itself never reads it.
@@ -70,7 +70,7 @@ def _release(  #
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/release", json=body)
 
 
-def _status(hub, chunk_id: str) -> str:  #
+def _status(hub, chunk_id: str) -> str:
     return str(hub.client.get(f"/api/chunks/{chunk_id}").json()["status"])
 
 

@@ -105,7 +105,7 @@ def _stored(
     )
 
 
-def _plan(declaration: ConfigDeclaration, stored: StoredConfig):  #
+def _plan(declaration: ConfigDeclaration, stored: StoredConfig):
     return reconcile(declaration, stored, _CTX, at=_AT)
 
 

@@ -51,7 +51,7 @@ nodes:
 """
 
 
-def _mint_build_deliver_graph(hub) -> None:  #
+def _mint_build_deliver_graph(hub) -> None:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
 
 

@@ -86,7 +86,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):  #
+def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
     hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
     admin = seed_user(hub, username="admin", role=Role.ADMIN)
     admin_token = seed_session(hub, admin)
@@ -100,7 +100,7 @@ def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | Non
     return hub, token, graph_id, nodes
 
 
-def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:  #
+def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:
     resp = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
@@ -108,7 +108,7 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
     return str(resp.json()["chunk_id"])
 
 
-def _push_usage(  #
+def _push_usage(
     hub,
     *,
     chunk_id: str,

@@ -56,7 +56,7 @@ nodes:
 """
 
 
-def _mint(hub, definition_yaml: str = _GRAPH_A) -> str:  #
+def _mint(hub, definition_yaml: str = _GRAPH_A) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]

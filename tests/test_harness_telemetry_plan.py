@@ -53,7 +53,7 @@ def _settings(tmp_path: Path, env: Mapping[str, str]) -> str:
 
 def _plan(
     config: RunnerConfig, *, runner_environ: Mapping[str, str] = RUNNER_ENV, enabled: bool = True, bundle=None
-) -> HarnessTelemetryPlan:  #
+) -> HarnessTelemetryPlan:
     return combined_telemetry_plan(
         config.harness_settings(NO_TRACING),
         bundle=bundle,
@@ -217,7 +217,7 @@ def _adapter(plan: HarnessTelemetryPlan | None) -> ClaudeCodeAdapter:
     return ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=FakeProbe(),
-        launcher=_NeverLaunches(),  #
+        launcher=_NeverLaunches(),
         harness_telemetry=plan,
         versions=version_probe(),
     )
@@ -354,7 +354,7 @@ def test_opencode_answers_no_names_and_an_all_off_plan() -> None:
     assert OPENCODE_DECLARATION.telemetry_plan(OpenCodeSection(), shared) == _all(OFF)
 
 
-def shared_inputs_for_tests():  #
+def shared_inputs_for_tests():
     from blizzard.runner.harness.wiring import shared_inputs
 
     return shared_inputs(

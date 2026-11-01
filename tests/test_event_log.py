@@ -423,7 +423,7 @@ def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_
 ) -> None:
     store, engine, _clock = _store(tmp_path)
 
-    def escalate(conn, chunk_id: str, command: str, *, at: datetime) -> None:  #
+    def escalate(conn, chunk_id: str, command: str, *, at: datetime) -> None:
         conn.execute(
             insert(s.escalations).values(
                 stamp(

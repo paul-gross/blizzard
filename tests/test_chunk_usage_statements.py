@@ -49,7 +49,7 @@ def test_usage_total_stmt_selects_only_ungrouped_aggregates() -> None:
     statement returns exactly one row regardless of how many facts match, and
     ``usage_total_since`` builds no per-row `UsageFact` object."""
     stmt = store_module._usage_total_stmt(_STMTS, _SINCE, None)
-    assert not stmt._group_by_clauses  #
+    assert not stmt._group_by_clauses
     for column in stmt.selected_columns:
         element = column.element if isinstance(column, sa.Label) else column
         assert isinstance(element, Function | BinaryExpression), column

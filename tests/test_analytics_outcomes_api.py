@@ -100,7 +100,7 @@ def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
-def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):  #
+def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
     hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
     admin = seed_user(hub, username="admin", role=Role.ADMIN)
     admin_token = seed_session(hub, admin)
@@ -119,7 +119,7 @@ def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | Non
     return hub, token, graph_id, nodes, other_graph_id, other_nodes
 
 
-def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:  #
+def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:
     resp = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
@@ -129,7 +129,7 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
     return chunk_id
 
 
-def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str) -> None:  #
+def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str) -> None:
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={"choice": choice, "epoch": epoch, "runner_id": "r1", "from_node_id": from_node_id},

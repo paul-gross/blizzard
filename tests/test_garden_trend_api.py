@@ -27,12 +27,12 @@ _SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 
-def _seed_scope(hub, slug: str = "blizzard") -> None:  #
+def _seed_scope(hub, slug: str = "blizzard") -> None:
     with hub.engine.begin() as conn:
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_SINCE)))
 
 
-def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:  #
+def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:
     routine = Routine(
         routine_id=Id.mint_at(IdPrefix.ROUTINE, _SINCE).value,
         name=name,
@@ -46,7 +46,7 @@ def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "bliz
 
 
 def _seed_finding(
-    hub,  #
+    hub,
     finding_id: str,
     *,
     routine_name: str = "nightly",
@@ -71,7 +71,7 @@ def _seed_finding(
         )
 
 
-def _seed_fact(hub, finding_id: str, *, kind: str, recorded_at: datetime) -> None:  #
+def _seed_fact(hub, finding_id: str, *, kind: str, recorded_at: datetime) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.finding_facts).values(

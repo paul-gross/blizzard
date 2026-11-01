@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -47,17 +48,15 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):  #
+def _build_envelope(chunk="ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
-def _seed_running_lease(
-    store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1
-):  #
+def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -80,7 +79,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store, *, harness, probe, clock=None):  #
+def _ctx(store, *, harness, probe, clock=None):
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
@@ -94,7 +93,7 @@ def _ctx(store, *, harness, probe, clock=None):  #
     )
 
 
-def test_advance_launches_then_collects_across_two_passes(tmp_path):  #
+def test_advance_launches_then_collects_across_two_passes(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -115,7 +114,9 @@ def test_advance_launches_then_collects_across_two_passes(tmp_path):  #
     assert "completion.submitted" in kinds
 
 
-def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitation(tmp_path, monkeypatch):  #
+def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """The mirror for a judge launch: a plain exception writing the durable
     ``record_elicitation_started`` row must not leave the trampoline parked forever with
     nothing durable for `collect` to find — `Judgement._elicit` kills the group itself."""
@@ -125,7 +126,7 @@ def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitat
     probe = FakeProbe()
     ctx = _ctx(store, harness=harness, probe=probe)
 
-    def _raise(*args, **kwargs):  #
+    def _raise(*args, **kwargs):
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_elicitation_started", _raise)
@@ -140,7 +141,7 @@ def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitat
     assert elicitation is not None and elicitation.pid is None
 
 
-def test_collect_passes_over_a_still_running_elicitation(tmp_path):  #
+def test_collect_passes_over_a_still_running_elicitation(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -165,7 +166,7 @@ def test_collect_passes_over_a_still_running_elicitation(tmp_path):  #
     assert len(hub.get_envelope_calls) == envelope_calls_before
 
 
-def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path):  #
+def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_output="")  # writes nothing readable
@@ -183,7 +184,7 @@ def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path):  #
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_elicitation_past_staleness_bound_fails_the_attempt(tmp_path):  #
+def test_elicitation_past_staleness_bound_fails_the_attempt(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_output="")
@@ -201,7 +202,7 @@ def test_elicitation_past_staleness_bound_fails_the_attempt(tmp_path):  #
     assert fresh is not None and fresh.epoch == 2
 
 
-def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  #
+def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path: Path):
     """Staleness is checked before liveness, so a process that never exits is
     still bounded, not just a lost-and-empty one — a genuine hang cannot pin the lease
     forever."""
@@ -225,7 +226,7 @@ def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  #
     assert store.active_lease("lease_1") is None  # closed
 
 
-def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_not_fails(tmp_path):  #
+def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_not_fails(tmp_path: Path):
     """An exited elicitation is classified for a usage limit AHEAD
     of the staleness bound — a delayed tick or a runner outage that only gets around to
     observing the exit after the 15-minute bound must still pause, never fail the attempt,
@@ -251,7 +252,7 @@ def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_no
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_path):  #
+def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_path: Path):
     """A judge launch's own process group is durable the moment it starts, and a lease
     closing on top of it group-kills rather than merely killing the bare pid — the same
     ownership a fresh spawn or resume gets, reaching an elicitation's own descendants too."""
@@ -274,7 +275,7 @@ def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_pa
     assert 200 not in probe.killed  # group-killed, never also plain-pid-killed
 
 
-def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path):  #
+def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path: Path):
     """A process killed mid-write (an OOM, a `kill -9`) can leave a non-empty but
     malformed reply — no result envelope at all — which is a lost elicitation exactly like
     an empty one, not a verdict-less reply that would consume a retry."""
@@ -295,7 +296,7 @@ def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path):  #
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
 
 
-def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  #
+def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -315,7 +316,7 @@ def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  #
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_clears_it_first(tmp_path):  #
+def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_clears_it_first(tmp_path: Path):
     """Parking on an operator pause interrupts the elicitation
     rather than killing it, and names it on the park; once it has exited, the unpause
     clears the record before re-minting, so nothing is left in flight to race."""
@@ -358,7 +359,7 @@ def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_c
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_preempt_kills_the_in_flight_elicitation(tmp_path):  #
+def test_preempt_kills_the_in_flight_elicitation(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -378,7 +379,7 @@ def test_preempt_kills_the_in_flight_elicitation(tmp_path):  #
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_started_on_an_absent_record_is_refused_by_the_store(tmp_path):  #
+def test_started_on_an_absent_record_is_refused_by_the_store(tmp_path: Path):
     """No record stands for the pair: filling in a pid would silently write nothing and
     leave a judge the runner cannot track, so the store refuses instead."""
     store = _store(tmp_path)
@@ -388,7 +389,7 @@ def test_started_on_an_absent_record_is_refused_by_the_store(tmp_path):  #
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_relaunch_on_an_absent_record_is_refused_by_the_store(tmp_path):  #
+def test_relaunch_on_an_absent_record_is_refused_by_the_store(tmp_path: Path):
     store = _store(tmp_path)
     with pytest.raises(ElicitationNotRecorded) as refused:
         store.record_elicitation_relaunch("lease_1", 1, output_path="/tmp/x.1.elicitation")
@@ -396,7 +397,7 @@ def test_relaunch_on_an_absent_record_is_refused_by_the_store(tmp_path):  #
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path, monkeypatch):  #
+def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The record vanishes between the launch row and the started write: the store's refusal
     reaches `_elicit`'s kill-and-raise, so the judge it just launched is group-killed."""
     store = _store(tmp_path)
@@ -406,7 +407,7 @@ def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path, monkeypatch):
     ctx = _ctx(store, harness=harness, probe=probe)
     started = store.record_elicitation_started
 
-    def _cleared_first(lease_id, epoch, **kwargs):  #
+    def _cleared_first(lease_id, epoch, **kwargs):
         store.clear_elicitation(lease_id, epoch)
         started(lease_id, epoch, **kwargs)
 
@@ -419,7 +420,7 @@ def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path, monkeypatch):
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_a_judge_resume_launches_over_the_standing_record_and_sweeps_its_files(tmp_path):  #
+def test_a_judge_resume_launches_over_the_standing_record_and_sweeps_its_files(tmp_path: Path):
     """A launch over a standing record is legal and restarts the bound; the prior record's
     output files — every attempt it relaunched into — are swept before it is replaced."""
     store = _store(tmp_path)
@@ -449,7 +450,7 @@ def test_a_judge_resume_launches_over_the_standing_record_and_sweeps_its_files(t
     assert not record.stale(clock.now())
 
 
-def test_a_judge_launch_uses_the_callers_generation_and_elicitation_reads_over_the_stores(tmp_path):  #
+def test_a_judge_launch_uses_the_callers_generation_and_elicitation_reads_over_the_stores(tmp_path: Path):
     """The reads the caller hands `Judgement.of` stand in for the store's: the judge boundary
     opens under the passed generation, and a passed "no record" sweeps none of the files the
     store's own standing record still owns."""
@@ -475,7 +476,7 @@ def test_a_judge_launch_uses_the_callers_generation_and_elicitation_reads_over_t
     assert os.path.exists(second)  # the store's record was never consulted, so never swept
 
 
-def _usage_limit_judge_park(tmp_path):  #
+def _usage_limit_judge_park(tmp_path: Path):
     """A lease parked on its judge elicitation's usage limit, with that record left standing."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -494,7 +495,7 @@ def _usage_limit_judge_park(tmp_path):  #
     return store, harness, probe, ctx, lease, elicitation
 
 
-def _unpause(ctx, store, lease, elicitation):  #
+def _unpause(ctx, store, lease, elicitation):
     DormantSession(ctx, lease).on_unpause(
         store.open_pause_parks()["lease_1"],
         elicitation,
@@ -504,7 +505,7 @@ def _unpause(ctx, store, lease, elicitation):  #
     )
 
 
-def test_unpausing_a_judge_usage_limit_park_relaunches_the_judge_not_the_worker(tmp_path):  #
+def test_unpausing_a_judge_usage_limit_park_relaunches_the_judge_not_the_worker(tmp_path: Path):
     store, harness, _, ctx, lease, elicitation = _usage_limit_judge_park(tmp_path)
 
     _unpause(ctx, store, lease, elicitation)
@@ -514,7 +515,7 @@ def test_unpausing_a_judge_usage_limit_park_relaunches_the_judge_not_the_worker(
     assert store.pause_parked_lease_ids() == set()
 
 
-def test_unpausing_over_another_epochs_elicitation_wakes_the_worker_instead(tmp_path):  #
+def test_unpausing_over_another_epochs_elicitation_wakes_the_worker_instead(tmp_path: Path):
     """A record from another epoch is not this lease's judge park, so it stands for nothing."""
     store, harness, _, ctx, lease, elicitation = _usage_limit_judge_park(tmp_path)
 
@@ -524,7 +525,7 @@ def test_unpausing_over_another_epochs_elicitation_wakes_the_worker_instead(tmp_
     assert len(harness.resumed) == 1
 
 
-def test_unpausing_while_the_worker_is_still_alive_leaves_the_park_untouched(tmp_path):  #
+def test_unpausing_while_the_worker_is_still_alive_leaves_the_park_untouched(tmp_path: Path):
     store, harness, probe, ctx, lease, _ = _usage_limit_judge_park(tmp_path)
     probe.alive = {(100, "start-100")}  # the interrupted worker has not exited yet
 
@@ -534,7 +535,7 @@ def test_unpausing_while_the_worker_is_still_alive_leaves_the_park_untouched(tmp
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
 
-def test_unpausing_while_the_named_elicitation_is_still_alive_leaves_it_standing(tmp_path):  #
+def test_unpausing_while_the_named_elicitation_is_still_alive_leaves_it_standing(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")

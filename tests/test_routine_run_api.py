@@ -30,12 +30,12 @@ nodes:
 """
 
 
-def _mint_graph(hub, definition_yaml: str = _GRAPH) -> None:  #
+def _mint_graph(hub, definition_yaml: str = _GRAPH) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub, **overrides: object) -> dict:  #
+def _create_routine(hub, **overrides: object) -> dict:
     body: dict[str, object] = {
         "name": "gardening",
         "graph_name": "alpha",

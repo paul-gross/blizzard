@@ -181,7 +181,7 @@ def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -
     for _ in range(6):  # 3x the small fleet
         _mint(many, _GRAPH_A)
 
-    def call(hub) -> int:  #
+    def call(hub) -> int:
         resp = hub.client.get("/api/graphs")
         assert resp.status_code == 200, resp.text
         return len(resp.json())

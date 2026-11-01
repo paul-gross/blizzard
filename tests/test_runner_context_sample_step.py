@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -39,7 +40,7 @@ _SESSION = "sess-live"
 _HANDLE = WorkerHandle(session_id=_SESSION, pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -71,7 +72,7 @@ def _seed_running_lease(store, *, lease_id: str = "lease_1", session_id: str | N
     return lease_id
 
 
-def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300_000, interval: int = 60):  #
+def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300_000, interval: int = 60):
     source = FakeTranscriptSource(context_tokens_by_session={_SESSION: tokens} if tokens is not None else {})
     harness = FakeHarness(handle=_HANDLE, verdict="pass", transcript_source=source)
     return (
@@ -95,12 +96,12 @@ def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300
     )
 
 
-def _warnings(store) -> list[dict]:  #
+def _warnings(store) -> list[dict]:
     return [json.loads(f.payload) for f in store.pending_outbound() if f.kind == EVENT_RECORDED]
 
 
 @pytest.mark.unit
-def test_an_unconfigured_warn_line_samples_nothing_at_all(tmp_path) -> None:  #
+def test_an_unconfigured_warn_line_samples_nothing_at_all(tmp_path: Path) -> None:
     """Absent `context_warn_tokens` is off, not "warn at some default": a runner that never
     opts in must not pay a transcript read per lease per tick for a lane it does not use."""
     store = _store(tmp_path)
@@ -114,7 +115,7 @@ def test_an_unconfigured_warn_line_samples_nothing_at_all(tmp_path) -> None:  #
 
 
 @pytest.mark.unit
-def test_a_lease_under_the_line_is_sampled_but_never_warned(tmp_path) -> None:  #
+def test_a_lease_under_the_line_is_sampled_but_never_warned(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_running_lease(store)
     ctx, _ = _ctx(store, tokens=120_000, clock=FixedClock(_NOW))
@@ -129,7 +130,7 @@ def test_a_lease_under_the_line_is_sampled_but_never_warned(tmp_path) -> None:  
 
 
 @pytest.mark.unit
-def test_crossing_the_line_warns_exactly_once_while_sampling_continues(tmp_path) -> None:  #
+def test_crossing_the_line_warns_exactly_once_while_sampling_continues(tmp_path: Path) -> None:
     """The warning is a state change, not a level. A session past the line stays past it for
     the rest of its life, so re-reporting every cadence would bury the crossing it announced —
     while the samples themselves must keep landing, since the curve is the point of the lane."""
@@ -164,7 +165,7 @@ def test_crossing_the_line_warns_exactly_once_while_sampling_continues(tmp_path)
 
 
 @pytest.mark.unit
-def test_a_second_lease_on_the_same_session_and_chunk_warns_again(tmp_path) -> None:  #
+def test_a_second_lease_on_the_same_session_and_chunk_warns_again(tmp_path: Path) -> None:
     """The crossing is remembered per lease: a later lease resuming the same session on the same
     chunk has not yet reported its own crossing, so it warns once in its own right."""
     store = _store(tmp_path)
@@ -186,7 +187,7 @@ def test_a_second_lease_on_the_same_session_and_chunk_warns_again(tmp_path) -> N
 
 
 @pytest.mark.unit
-def test_the_cadence_gate_holds_a_second_read_inside_the_interval(tmp_path) -> None:  #
+def test_the_cadence_gate_holds_a_second_read_inside_the_interval(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_running_lease(store)
     clock = FixedClock(_NOW)
@@ -204,7 +205,7 @@ def test_the_cadence_gate_holds_a_second_read_inside_the_interval(tmp_path) -> N
 
 
 @pytest.mark.unit
-def test_an_unmeasurable_context_records_an_attempt_that_measures_nothing(tmp_path) -> None:  #
+def test_an_unmeasurable_context_records_an_attempt_that_measures_nothing(tmp_path: Path) -> None:
     """`None` is *unknown*; a 0 in its place would poison the curve and read as reassurance. The
     attempt is still recorded so the cadence anchor advances — else an unreadable transcript is
     re-read every tick instead of once per interval."""
@@ -227,7 +228,7 @@ def test_an_unmeasurable_context_records_an_attempt_that_measures_nothing(tmp_pa
 
 
 @pytest.mark.unit
-def test_a_lease_with_no_session_yet_is_skipped(tmp_path) -> None:  #
+def test_a_lease_with_no_session_yet_is_skipped(tmp_path: Path) -> None:
     """A minted-but-unspawned lease has no session to read — not an error, just nothing yet."""
     store = _store(tmp_path)
     _seed_running_lease(store, session_id=None)
@@ -240,7 +241,7 @@ def test_a_lease_with_no_session_yet_is_skipped(tmp_path) -> None:  #
 
 
 @pytest.mark.unit
-def test_one_leases_raising_read_does_not_cost_the_others_their_samples(tmp_path) -> None:  #
+def test_one_leases_raising_read_does_not_cost_the_others_their_samples(tmp_path: Path) -> None:
     """A diagnostic lane must never be able to end the sweep it rides in. Two leases, the first
     of which raises: the assertion that matters is the SECOND one's sample landing, which a
     total abort would not satisfy."""
@@ -254,7 +255,7 @@ def test_one_leases_raising_read_does_not_cost_the_others_their_samples(tmp_path
             raise RuntimeError("transcript unreadable (scripted)")
         return 140_000
 
-    source.context_tokens = _raise  #
+    source.context_tokens = _raise
 
     ContextSample(ctx).run()  # must not propagate
 

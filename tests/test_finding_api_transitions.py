@@ -18,7 +18,7 @@ from tests.support import build_hub, default_project, hub_scoped, hub_store_conn
 pytestmark = pytest.mark.component
 
 
-def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  #
+def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:
     with hub.engine.begin() as conn:
         if conn.execute(hub_scoped(s.scopes.select().where(s.scopes.c.slug == scope))).first() is None:
             conn.execute(
@@ -37,13 +37,13 @@ def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  #
     )
 
 
-def _record(hub, finding_id: str, kind: str, *, actor: str | None = None) -> None:  #
+def _record(hub, finding_id: str, kind: str, *, actor: str | None = None) -> None:
     FindingStore(hub_store_connections(hub.engine)).record_fact(
         finding_id, kind=kind, at=hub.clock.now() - timedelta(hours=1), note="earlier", actor=actor
     )
 
 
-def _state(hub, finding_id: str) -> str:  #
+def _state(hub, finding_id: str) -> str:
     return hub.client.get(f"/api/findings/{finding_id}").json()["state"]
 
 

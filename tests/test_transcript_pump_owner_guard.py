@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -62,7 +63,7 @@ def _batch(session_id: str) -> TranscriptBatch:
     )
 
 
-def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:  #
+def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:
     """The default owner alone (an unregistered ``foreign`` id reads as unknown), or —
     when ``unavailable`` — ``foreign`` registered with no transcript source bound (a known
     owner this runner cannot use right now, not an unheard-of one)."""
@@ -76,7 +77,7 @@ def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:  #
     return HarnessRegistry(bindings)
 
 
-def _open_segment(ctx, *, chunk_id: str, lease_id: str, session: SessionReference) -> str:  #
+def _open_segment(ctx, *, chunk_id: str, lease_id: str, session: SessionReference) -> str:
     ctx.stores.environments.record_binding(
         chunk_id=chunk_id, environment_id=f"e_{chunk_id}", workdir=f"/ws/{chunk_id}", bound_at=_NOW
     )
@@ -98,7 +99,7 @@ def _open_segment(ctx, *, chunk_id: str, lease_id: str, session: SessionReferenc
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_pump_skips_only_the_segment_with_an_unresolvable_owner(tmp_path, unavailable):  #
+def test_pump_skips_only_the_segment_with_an_unresolvable_owner(tmp_path: Path, unavailable):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     source = FakeTranscriptSource(batches_by_session={"sess-ok": _batch("sess-ok")})
     harness = FakeHarness(

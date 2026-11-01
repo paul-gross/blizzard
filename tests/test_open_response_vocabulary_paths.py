@@ -141,7 +141,7 @@ def test_a_request_carrying_an_unknown_value_is_refused_with_422() -> None:
     assert client.post("/shade", json={"shade": "gained"}).status_code == 422
 
 
-def _seed_running_lease(store) -> None:  #
+def _seed_running_lease(store) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -173,7 +173,7 @@ def _seed_running_lease(store) -> None:  #
     )
 
 
-def test_the_drain_accepts_an_unknown_apply_outcome_and_holds_the_binding(tmp_path) -> None:  #
+def test_the_drain_accepts_an_unknown_apply_outcome_and_holds_the_binding(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_running_lease(store)
     hub = FakeHub()

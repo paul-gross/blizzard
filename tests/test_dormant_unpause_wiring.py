@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -62,11 +63,11 @@ def _spy(monkeypatch: pytest.MonkeyPatch, owner: Any, name: str, result: Any = N
     return calls
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _rig(tmp_path, *, with_session: bool = True, with_binding: bool = True, probe: FakeProbe | None = None):  #
+def _rig(tmp_path: Path, *, with_session: bool = True, with_binding: bool = True, probe: FakeProbe | None = None):
     """A pause-parked lease whose worker is gone, its chunk routed to this runner and no longer paused."""
     store = _store(tmp_path)
     store.record_lease(
@@ -120,7 +121,7 @@ def _rig(tmp_path, *, with_session: bool = True, with_binding: bool = True, prob
     )
 
 
-def _unpause(rig, *, elicitation=None, ask_parked: bool = False, brakes=None, bindings=None):  #
+def _unpause(rig, *, elicitation=None, ask_parked: bool = False, brakes=None, bindings=None):
     DormantSession(rig.ctx, rig.lease).on_unpause(
         rig.park,
         elicitation,
@@ -130,7 +131,7 @@ def _unpause(rig, *, elicitation=None, ask_parked: bool = False, brakes=None, bi
     )
 
 
-def _elicitation(rig, *, epoch: int = 1):  #
+def _elicitation(rig, *, epoch: int = 1):
     rig.store.record_elicitation_launch("lease_1", 1, output_path="/tmp/unused-out", at=_NOW)
     standing = rig.store.in_flight_elicitation("lease_1", 1)
     assert standing is not None
@@ -140,7 +141,9 @@ def _elicitation(rig, *, epoch: int = 1):  #
 # --- on_unpause: the reads that decide the move -------------------------------------------------------
 
 
-def test_the_start_suppression_is_read_as_a_pause_resume_continuation_for_this_lease(tmp_path, monkeypatch):  #
+def test_the_start_suppression_is_read_as_a_pause_resume_continuation_for_this_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     suppression = _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     _spy(monkeypatch, dormant, "unpause_move", UnpauseMove.WAIT)
@@ -162,7 +165,9 @@ def test_the_start_suppression_is_read_as_a_pause_resume_continuation_for_this_l
     ]
 
 
-def test_an_unregistered_runner_stays_parked_having_read_nothing_further(tmp_path, monkeypatch):  #
+def test_an_unregistered_runner_stays_parked_having_read_nothing_further(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     monkeypatch.setattr(dormant, "registered_runner_id", lambda identity: None)
     suppression = _spy(monkeypatch, Spawner, "suppression", None, bound=True)
@@ -201,8 +206,15 @@ def test_an_unregistered_runner_stays_parked_having_read_nothing_further(tmp_pat
     ],
     ids=["clear", "braked", "declined", "ask-parked", "judge-parked", "no-binding", "no-session", "neither"],
 )
-def test_the_unpause_move_is_asked_about_the_view_runner_and_each_reading(  #
-    tmp_path, monkeypatch, suppression, ask_parked, judge_standing, with_binding, with_session, expected
+def test_the_unpause_move_is_asked_about_the_view_runner_and_each_reading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    suppression,
+    ask_parked,
+    judge_standing,
+    with_binding,
+    with_session,
+    expected,
 ):
     rig = _rig(tmp_path, with_session=with_session, with_binding=with_binding)
     _spy(monkeypatch, Spawner, "suppression", suppression, bound=True)
@@ -222,7 +234,7 @@ def test_the_unpause_move_is_asked_about_the_view_runner_and_each_reading(  #
     }
 
 
-def test_an_elicitation_of_another_epoch_is_not_a_standing_judge_park(tmp_path, monkeypatch):  #
+def test_an_elicitation_of_another_epoch_is_not_a_standing_judge_park(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     move = _spy(monkeypatch, dormant, "unpause_move", UnpauseMove.WAIT)
@@ -232,7 +244,9 @@ def test_an_elicitation_of_another_epoch_is_not_a_standing_judge_park(tmp_path, 
     assert move[0][1]["judge_parked"] is False
 
 
-def test_an_elicitation_the_settle_just_cleared_is_not_a_standing_judge_park(tmp_path, monkeypatch):  #
+def test_an_elicitation_the_settle_just_cleared_is_not_a_standing_judge_park(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     move = _spy(monkeypatch, dormant, "unpause_move", UnpauseMove.WAIT)
@@ -243,7 +257,9 @@ def test_an_elicitation_the_settle_just_cleared_is_not_a_standing_judge_park(tmp
     assert move[0][1]["judge_parked"] is False
 
 
-def test_the_settle_is_asked_about_the_park_the_elicitation_and_the_bindings(tmp_path, monkeypatch):  #
+def test_the_settle_is_asked_about_the_park_the_elicitation_and_the_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     settle = _spy(monkeypatch, DormantSession, "_pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
     elicitation = _elicitation(rig)
@@ -253,7 +269,7 @@ def test_the_settle_is_asked_about_the_park_the_elicitation_and_the_bindings(tmp
     assert settle == [((rig.park, elicitation, rig.bindings), {})]
 
 
-def test_an_unsettled_park_reads_nothing_and_moves_nothing(tmp_path, monkeypatch):  #
+def test_an_unsettled_park_reads_nothing_and_moves_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
     _spy(monkeypatch, DormantSession, "_pause_park_settled", PauseParkSettle.UNSETTLED, bound=True)
     suppression = _spy(monkeypatch, Spawner, "suppression", None, bound=True)
@@ -277,8 +293,8 @@ def test_an_unsettled_park_reads_nothing_and_moves_nothing(tmp_path, monkeypatch
     ],
     ids=["nothing", "chunk-paused", "ask-parked", "declined", "braked"],
 )
-def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(  #
-    tmp_path, monkeypatch, paused, ask_parked, suppression, operator_holds, declined
+def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paused, ask_parked, suppression, operator_holds, declined
 ):
     rig = _rig(tmp_path)
     throttle = ThrottleSettings(on_usage_limit=HoldOrRelease.RELEASE)
@@ -296,7 +312,7 @@ def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(  #
     assert release == [((throttle, rig.park), {"operator_holds": operator_holds, "declined": declined})]
 
 
-def test_a_chunk_routed_elsewhere_is_never_offered_back(tmp_path, monkeypatch):  #
+def test_a_chunk_routed_elsewhere_is_never_offered_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
     rig.hub.chunks["ch_1"] = replace(rig.hub.chunks["ch_1"], route_runner_id="someone-else")
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
@@ -309,7 +325,9 @@ def test_a_chunk_routed_elsewhere_is_never_offered_back(tmp_path, monkeypatch): 
     assert release == [] and offered == []
 
 
-def test_a_released_usage_limited_park_is_offered_with_its_bindings_and_moves_no_further(tmp_path, monkeypatch):  #
+def test_a_released_usage_limited_park_is_offered_with_its_bindings_and_moves_no_further(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     move = _spy(monkeypatch, dormant, "unpause_move", UnpauseMove.WAIT)
@@ -325,7 +343,7 @@ def test_a_released_usage_limited_park_is_offered_with_its_bindings_and_moves_no
 # --- on_unpause: each move's effects ----------------------------------------------------------------------
 
 
-def _moving(tmp_path, monkeypatch, move):  #
+def _moving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, move):
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     _spy(monkeypatch, dormant, "unpause_move", move)
@@ -336,7 +354,7 @@ def _moving(tmp_path, monkeypatch, move):  #
     return rig
 
 
-def test_waiting_changes_nothing(tmp_path, monkeypatch):  #
+def test_waiting_changes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAIT)
 
     _unpause(rig)
@@ -344,7 +362,9 @@ def test_waiting_changes_nothing(tmp_path, monkeypatch):  #
     assert (rig.resumes, rig.wake, rig.worker_usage) == ([], [], [])
 
 
-def test_clearing_for_an_answer_records_the_resume_for_this_lease_at_now_and_wakes_nothing(tmp_path, monkeypatch):  #
+def test_clearing_for_an_answer_records_the_resume_for_this_lease_at_now_and_wakes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.CLEAR_AWAIT_ANSWER)
 
     _unpause(rig, ask_parked=True)
@@ -353,7 +373,9 @@ def test_clearing_for_an_answer_records_the_resume_for_this_lease_at_now_and_wak
     assert (rig.wake, rig.worker_usage) == ([], [])
 
 
-def test_relaunching_the_judge_passes_now_and_the_standing_launch_instant(tmp_path, monkeypatch):  #
+def test_relaunching_the_judge_passes_now_and_the_standing_launch_instant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.RELAUNCH_JUDGE)
     relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
     elicitation = _elicitation(rig)
@@ -364,7 +386,7 @@ def test_relaunching_the_judge_passes_now_and_the_standing_launch_instant(tmp_pa
     assert (rig.resumes, rig.wake) == ([], [])
 
 
-def test_a_session_with_no_warm_env_cannot_resume_and_records_nothing(tmp_path, monkeypatch):  #
+def test_a_session_with_no_warm_env_cannot_resume_and_records_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.CANNOT_RESUME)
 
     _unpause(rig)
@@ -372,8 +394,8 @@ def test_a_session_with_no_warm_env_cannot_resume_and_records_nothing(tmp_path, 
     assert (rig.resumes, rig.wake, rig.worker_usage) == ([], [], [])
 
 
-def test_waking_books_the_paused_generation_then_wakes_with_the_unpause_message_and_records_the_resume(  #
-    tmp_path, monkeypatch
+def test_waking_books_the_paused_generation_then_wakes_with_the_unpause_message_and_records_the_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
     resolved = _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
@@ -386,7 +408,7 @@ def test_waking_books_the_paused_generation_then_wakes_with_the_unpause_message_
     assert rig.resumes == [((), {"lease_id": "lease_1", "resumed_at": _NOW})]
 
 
-def test_an_unresolvable_owner_wakes_nothing_and_books_nothing(tmp_path, monkeypatch):  #
+def test_an_unresolvable_owner_wakes_nothing_and_books_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", None, bound=True)
 
@@ -398,11 +420,13 @@ def test_an_unresolvable_owner_wakes_nothing_and_books_nothing(tmp_path, monkeyp
 # --- _pause_park_settled -------------------------------------------------------------------------------------
 
 
-def _settle(rig, elicitation=None):  #
+def _settle(rig, elicitation=None):
     return DormantSession(rig.ctx, rig.lease)._pause_park_settled(rig.park, elicitation, rig.bindings)
 
 
-def test_the_workers_group_is_judged_settled_by_its_own_identity_and_the_drain_deadline(tmp_path, monkeypatch):  #
+def test_the_workers_group_is_judged_settled_by_its_own_identity_and_the_drain_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     group = _spy(monkeypatch, DormantSession, "_owned_group_settled", False, bound=True)
 
@@ -410,7 +434,9 @@ def test_the_workers_group_is_judged_settled_by_its_own_identity_and_the_drain_d
     assert group == [((), {"pid": 100, "process_start_time": "start-100", "pgid": 100, "past_deadline": False})]
 
 
-def test_a_park_older_than_the_drain_budget_judges_its_group_past_the_deadline(tmp_path, monkeypatch):  #
+def test_a_park_older_than_the_drain_budget_judges_its_group_past_the_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     rig.ctx.clock.advance(timedelta(hours=1))
     group = _spy(monkeypatch, DormantSession, "_owned_group_settled", False, bound=True)
@@ -420,7 +446,9 @@ def test_a_park_older_than_the_drain_budget_judges_its_group_past_the_deadline(t
     assert group[0][1]["past_deadline"] is True
 
 
-def test_a_settled_worker_with_no_named_elicitation_settles_leaving_any_standing_record(tmp_path, monkeypatch):  #
+def test_a_settled_worker_with_no_named_elicitation_settles_leaving_any_standing_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     group = _spy(monkeypatch, DormantSession, "_owned_group_settled", True, bound=True)
     unnamed = _elicitation(rig)  # the park names no elicitation: a usage-limit judge park's record
@@ -430,11 +458,11 @@ def test_a_settled_worker_with_no_named_elicitation_settles_leaving_any_standing
     assert rig.store.in_flight_elicitation("lease_1", 1) is not None
 
 
-def _park_naming(rig, elicitation):  #
+def _park_naming(rig, elicitation):
     rig.park = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=elicitation.id)
 
 
-def test_a_named_elicitation_is_judged_settled_by_its_own_identity(tmp_path, monkeypatch):  #
+def test_a_named_elicitation_is_judged_settled_by_its_own_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
     elicitation = replace(_elicitation(rig), pid=7, process_start_time="start-7", pgid=8)
     _park_naming(rig, elicitation)
@@ -449,7 +477,9 @@ def test_a_named_elicitation_is_judged_settled_by_its_own_identity(tmp_path, mon
     assert rig.store.in_flight_elicitation("lease_1", 1) is not None
 
 
-def test_a_named_elicitation_that_exited_books_its_judge_usage_then_clears_and_sweeps(tmp_path, monkeypatch):  #
+def test_a_named_elicitation_that_exited_books_its_judge_usage_then_clears_and_sweeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     elicitation = replace(_elicitation(rig), pid=7, process_start_time="start-7", pgid=8, relaunch_count=3)
     _park_naming(rig, elicitation)
@@ -468,7 +498,9 @@ def test_a_named_elicitation_that_exited_books_its_judge_usage_then_clears_and_s
     assert swept == [(("lease_1", 1), {"through_attempt": 3})]
 
 
-def test_an_unresolvable_owner_still_clears_the_named_elicitation_without_booking_usage(tmp_path, monkeypatch):  #
+def test_an_unresolvable_owner_still_clears_the_named_elicitation_without_booking_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _rig(tmp_path)
     elicitation = replace(_elicitation(rig), pid=7, process_start_time="start-7", pgid=8)
     _park_naming(rig, elicitation)
@@ -481,18 +513,18 @@ def test_an_unresolvable_owner_still_clears_the_named_elicitation_without_bookin
     assert rig.store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_the_brakes_type_is_the_one_the_unpause_reads_from(tmp_path):  #
+def test_the_brakes_type_is_the_one_the_unpause_reads_from(tmp_path: Path):
     assert isinstance(Spawner(_rig(tmp_path).ctx).brakes(), RunnerBrakes)
 
 
 # --- the log lines each outcome leaves ------------------------------------------------------------------------
 
 
-def _logged(logs, event):  #
+def _logged(logs, event):
     return [{k: v for k, v in entry.items() if k != "timestamp"} for entry in logs if entry["event"] == event]
 
 
-def test_clearing_for_an_answer_logs_the_chunk(tmp_path, monkeypatch):  #
+def test_clearing_for_an_answer_logs_the_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.CLEAR_AWAIT_ANSWER)
 
     with capture_logs() as logs:
@@ -503,7 +535,7 @@ def test_clearing_for_an_answer_logs_the_chunk(tmp_path, monkeypatch):  #
     ]
 
 
-def test_a_session_that_cannot_resume_warns_with_the_chunk(tmp_path, monkeypatch):  #
+def test_a_session_that_cannot_resume_warns_with_the_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.CANNOT_RESUME)
 
     with capture_logs() as logs:
@@ -518,7 +550,7 @@ def test_a_session_that_cannot_resume_warns_with_the_chunk(tmp_path, monkeypatch
     ]
 
 
-def test_a_woken_session_logs_its_chunk_lease_epoch_and_new_pid(tmp_path, monkeypatch):  #
+def test_a_woken_session_logs_its_chunk_lease_epoch_and_new_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
 
@@ -537,7 +569,7 @@ def test_a_woken_session_logs_its_chunk_lease_epoch_and_new_pid(tmp_path, monkey
     ]
 
 
-def test_a_cleared_elicitation_logs_its_chunk_lease_and_epoch(tmp_path, monkeypatch):  #
+def test_a_cleared_elicitation_logs_its_chunk_lease_and_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rig = _rig(tmp_path)
     elicitation = replace(_elicitation(rig), pid=7, process_start_time="start-7", pgid=8)
     _park_naming(rig, elicitation)
@@ -558,7 +590,9 @@ def test_a_cleared_elicitation_logs_its_chunk_lease_and_epoch(tmp_path, monkeypa
     ]
 
 
-def test_a_standing_elicitation_does_not_relaunch_the_judge_unless_the_move_says_so(tmp_path, monkeypatch):  #
+def test_a_standing_elicitation_does_not_relaunch_the_judge_unless_the_move_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
     relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
@@ -569,7 +603,9 @@ def test_a_standing_elicitation_does_not_relaunch_the_judge_unless_the_move_says
     assert len(rig.wake) == 1
 
 
-def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the_wake(tmp_path, monkeypatch):  #
+def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the_wake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     rig = _moving(tmp_path, monkeypatch, UnpauseMove.RELAUNCH_JUDGE)
     _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
     relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -100,7 +101,7 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
 
 
 @pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0"])
-def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
+def test_release_wheel_stamps_the_full_tag_version(tmp_path: Path, tag: str) -> None:
     steps = _wheel_job()["steps"]
     derive = steps[_step_index(steps, lambda s: s.get("id") == "ver")]
     wheel = steps[_step_index(steps, lambda s: str(s.get("run", "")).strip() == "./scripts/build-wheel.sh")]

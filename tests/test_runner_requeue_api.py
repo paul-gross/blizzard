@@ -24,7 +24,7 @@ _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seeded lease's _NOW
 
 
-def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):  #
+def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = RequeueService(store, clock or FixedClock(_LATER))
@@ -33,7 +33,7 @@ def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):  #
     ), store
 
 
-def _seed_escalated_chunk(store) -> None:  #
+def _seed_escalated_chunk(store) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",

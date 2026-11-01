@@ -53,7 +53,7 @@ nodes:
 """
 
 
-def _ingest(hub) -> tuple[str, str]:  #
+def _ingest(hub) -> tuple[str, str]:
     """Mint the graph, ingest+promote+claim a chunk; return (chunk_id, build node_id)."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML})
     assert graph.status_code == 201, graph.text
@@ -70,7 +70,7 @@ def _ingest(hub) -> tuple[str, str]:  #
 
 
 def _submit(
-    hub,  #
+    hub,
     chunk_id: str,
     node_id: str,
     *,
@@ -155,7 +155,7 @@ def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(t
     assert retried.json()["outcome"] != "failure"
 
 
-def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx2.Response:  #
+def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx2.Response:
     body = {"from_node_id": node_id, "epoch": 1, "runner_id": "r1", "artifacts": artifacts}
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
 

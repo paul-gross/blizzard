@@ -22,7 +22,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _seed(hub) -> None:  #
+def _seed(hub) -> None:
     with hub.engine.begin() as conn:
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     FindingStore(hub_store_connections(hub.engine)).add(

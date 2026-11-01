@@ -10,6 +10,7 @@ sqlite) runner store with fakes at the seams."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -66,7 +67,7 @@ def _workspaces() -> WorkspaceRegistry:
     )
 
 
-def _store(tmp_path) -> SqlAlchemyRunnerStore:  #
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -75,9 +76,7 @@ def _bindings() -> tuple[BindingDeclaration, ...]:
     return (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("pr_b", "ws_b", 2))
 
 
-def _ctx(  #
-    store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...], *, agents: int = 2, workspaces=None
-):
+def _ctx(store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...], *, agents: int = 2, workspaces=None):
     return make_context(
         store,
         hub=hub,
@@ -94,7 +93,7 @@ def _entry(chunk_id: str, project_id: str, position: int = 0) -> QueueEntry:
     return QueueEntry(chunk_id=chunk_id, graph_id="gr_1", position=position, project_id=project_id)
 
 
-def _hold_open_lease(  #
+def _hold_open_lease(
     store,
     chunk_id: str,
     *,
@@ -136,7 +135,7 @@ class _StaleHintProvider(FakeProvider):
         raise WorkspaceAcquisitionError("no environment free")
 
 
-def test_the_hubs_queue_order_alone_picks_the_project_each_free_agent_works(tmp_path) -> None:  #
+def test_the_hubs_queue_order_alone_picks_the_project_each_free_agent_works(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = _Hub()
     hub.queue_responses = [[_entry("ch_w1", "pr_b")], [_entry("ch_d1", "pr_a")], [_entry("ch_d2", "pr_a")]]
@@ -149,7 +148,7 @@ def test_the_hubs_queue_order_alone_picks_the_project_each_free_agent_works(tmp_
     assert held == {"ch_w1": ("ws_b", "pr_b", "/root-b/b1"), "ch_d1": ("ws_a", "pr_a", "/root-a/a1")}
 
 
-def test_open_leases_are_counted_against_the_one_runner_count(tmp_path) -> None:  #
+def test_open_leases_are_counted_against_the_one_runner_count(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _hold_open_lease(store, "ch_running", workspace_id="ws_a", project_id="pr_a")
     hub = _Hub()
@@ -163,7 +162,7 @@ def test_open_leases_are_counted_against_the_one_runner_count(tmp_path) -> None:
     assert [c.chunk_id for c in hub.claims] == ["ch_b"]
 
 
-def test_a_held_row_of_unknown_workspace_counts_against_the_runner_count(tmp_path) -> None:  #
+def test_a_held_row_of_unknown_workspace_counts_against_the_runner_count(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _hold_open_lease(store, "ch_running", workspace_id=None, project_id=None)
     hub = _Hub()
@@ -174,7 +173,7 @@ def test_a_held_row_of_unknown_workspace_counts_against_the_runner_count(tmp_pat
     assert hub.peek_queue_requests == [] and hub.claims == []
 
 
-def test_a_workspace_with_no_free_environment_is_left_out_of_the_peek(tmp_path) -> None:  #
+def test_a_workspace_with_no_free_environment_is_left_out_of_the_peek(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _hold_open_lease(store, "ch_b1", workspace_id="ws_b", project_id="pr_b", environment_id="b1", workdir="/root-b/b1")
     _hold_open_lease(store, "ch_b2", workspace_id="ws_b", project_id="pr_b", environment_id="b2", workdir="/root-b/b2")
@@ -187,7 +186,7 @@ def test_a_workspace_with_no_free_environment_is_left_out_of_the_peek(tmp_path) 
     assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_a", "ws_a")]
 
 
-def test_no_workspace_with_a_free_environment_sends_no_peek(tmp_path) -> None:  #
+def test_no_workspace_with_a_free_environment_sends_no_peek(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for env in ("a1", "a2"):
         _hold_open_lease(
@@ -205,7 +204,9 @@ def test_no_workspace_with_a_free_environment_sends_no_peek(tmp_path) -> None:  
     assert hub.peek_queue_requests == [] and hub.claims == []
 
 
-def test_a_workspace_found_out_of_environments_at_acquisition_is_dropped_for_the_rest_of_the_tick(tmp_path) -> None:  #
+def test_a_workspace_found_out_of_environments_at_acquisition_is_dropped_for_the_rest_of_the_tick(
+    tmp_path: Path,
+) -> None:
     store = _store(tmp_path)
     workspaces = WorkspaceRegistry(
         [
@@ -222,7 +223,7 @@ def test_a_workspace_found_out_of_environments_at_acquisition_is_dropped_for_the
     assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_d1", "ws_a")]
 
 
-def test_an_entry_outside_the_named_projects_from_an_unfiltered_hub_ends_the_fill(tmp_path) -> None:  #
+def test_an_entry_outside_the_named_projects_from_an_unfiltered_hub_ends_the_fill(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = _Hub()
     hub.narrows_peek = False  # a hub too old to honor `projects` answers any served project's head
@@ -234,7 +235,7 @@ def test_an_entry_outside_the_named_projects_from_an_unfiltered_hub_ends_the_fil
     assert hub.claims == []
 
 
-def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_both(tmp_path) -> None:  #
+def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_both(tmp_path: Path) -> None:
     store = _store(tmp_path)
     bindings = (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("alpha", "ws_b", 2))
     hub = _Hub()
@@ -281,7 +282,7 @@ def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_bo
     ]
 
 
-def test_status_counts_capacity_across_every_bound_workspace(tmp_path) -> None:  #
+def test_status_counts_capacity_across_every_bound_workspace(tmp_path: Path) -> None:
     store = _store(tmp_path)
     hub = _Hub()
     hub.queue_responses = [[_entry("ch_a", "pr_a")], [_entry("ch_b", "pr_b")]]

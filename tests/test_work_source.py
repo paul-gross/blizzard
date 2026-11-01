@@ -443,7 +443,7 @@ def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
     }
     # Blizzard cyan variants, hashless per the API: a lighter cyan for ingested, a
     # darker one for in-progress.
-    assert forge_state(double)["repo_label_colors"] == {  #
+    assert forge_state(double)["repo_label_colors"] == {
         "blizzard:ingested": "5cd1e5",
         "blizzard:in-progress": "2b6675",
     }

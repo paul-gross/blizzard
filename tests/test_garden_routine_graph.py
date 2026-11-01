@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 _GRAPH = PACKAGED.named("garden-routine")
 
 
-def _doc():  #
+def _doc():
     return _GRAPH.doc
 
 

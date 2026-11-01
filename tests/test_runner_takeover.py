@@ -10,6 +10,7 @@ from __future__ import annotations
 from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -64,11 +65,11 @@ _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):  #
+def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
     return TakeoverService(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
@@ -84,7 +85,7 @@ def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
     )
 
 
-def _two_workspace_service(store):  #
+def _two_workspace_service(store):
     service = _service(store)
     service._workspaces = WorkspaceRegistry(
         [
@@ -108,7 +109,7 @@ def _seed_lease(
     session_name=None,
     resolved_model=None,
     resolved_effort=None,
-):  #
+):
     """A build lease, spawned and bound — the shape every scenario below starts from.
 
     The session stamps default to unset, i.e. the pre-#144 shape: every
@@ -138,7 +139,7 @@ def _seed_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  #
+def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:
     """The edge resolution `chunk_scope.resolved_takeover_open_scope` performs in production."""
     return TakeoverOpenScope(
         chunk_id=chunk_id,
@@ -153,7 +154,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  #
     )
 
 
-def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  #
+def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:
     """The edge resolution `chunk_scope.resolved_takeover_close_scope` performs in production."""
     return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=store.open_takeover_for_chunk(chunk_id))
 
@@ -162,7 +163,7 @@ def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  #
 # --------------------------------------------------------------------------- #
 
 
-def test_takeover_resumes_from_the_spawn_root_of_the_workspace_the_chunk_is_bound_in(tmp_path) -> None:  #
+def test_takeover_resumes_from_the_spawn_root_of_the_workspace_the_chunk_is_bound_in(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -173,7 +174,7 @@ def test_takeover_resumes_from_the_spawn_root_of_the_workspace_the_chunk_is_boun
 
 
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_takeover_opens_over_an_ask_parked_chunk(tmp_path, workspace_root, expected_cwd) -> None:  #
+def test_takeover_opens_over_an_ask_parked_chunk(tmp_path: Path, workspace_root, expected_cwd) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -193,7 +194,7 @@ def test_takeover_opens_over_an_ask_parked_chunk(tmp_path, workspace_root, expec
     assert store.pending_outbound() == []  # no fence bump enqueued — a dormant lease needs none
 
 
-def test_a_takeover_session_may_ask_on_the_still_active_parked_lease(tmp_path) -> None:  #
+def test_a_takeover_session_may_ask_on_the_still_active_parked_lease(tmp_path: Path) -> None:
     """The takeover's session asks against the active lease it resumed, still parked on its
     earlier question: accepted, and it is the lease's newest unforwarded ask."""
     store = _store(tmp_path)
@@ -212,7 +213,7 @@ def test_a_takeover_session_may_ask_on_the_still_active_parked_lease(tmp_path) -
     assert ask.question_id == question_id
 
 
-def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  #
+def test_takeover_opens_over_a_needs_human_chunk(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
@@ -226,7 +227,7 @@ def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  #
     assert record.fence_epoch is None
 
 
-def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_path) -> None:  #
+def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_path: Path) -> None:
     """A plain resume's owner unresolvable at node entry (`Spawner.enter_node`) mints a
     session-less lease newer than the prior session it could not resume. Once the owner is
     restored, a takeover must still resolve against that prior session, not the empty mint."""
@@ -314,7 +315,7 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
     assert record.holds("ch_1", 2)
 
 
-def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  #
+def test_takeover_opens_over_a_gate_parked_chunk(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="parked", closed_at=_NOW)
@@ -327,13 +328,13 @@ def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  #
     assert opened.workdir == "/ws/e1"
 
 
-def test_takeover_refuses_a_chunk_with_no_held_binding(tmp_path) -> None:  #
+def test_takeover_refuses_a_chunk_with_no_held_binding(tmp_path: Path) -> None:
     store = _store(tmp_path)
     with pytest.raises(ChunkNotTakeable):
         _service(store).open(_open_scope(store, "ch_missing"), force=False)
 
 
-def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  #
+def test_takeover_refuses_a_second_open_takeover(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -348,7 +349,7 @@ def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  #
 # --------------------------------------------------------------------------- #
 
 
-def test_forced_takeover_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path) -> None:  #
+def test_forced_takeover_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path: Path) -> None:
     """The same pid/pgid-reuse hazard `Attempt._kill_process` guards against: a LIVE pid
     whose start time no longer matches the recorded one is not this lease's worker any
     more, and a bare, unchecked kill would hit whoever the OS gave that pid to instead."""
@@ -365,7 +366,7 @@ def test_forced_takeover_skips_the_kill_when_the_recorded_pid_was_reused(tmp_pat
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
 
 
-def test_forced_takeover_group_kills_the_worker_when_a_pgid_is_recorded(tmp_path) -> None:  #
+def test_forced_takeover_group_kills_the_worker_when_a_pgid_is_recorded(tmp_path: Path) -> None:
     """A live worker with a durable recorded pgid is killed by GROUP, never by bare
     pid — the same preference `Attempt._kill_process` applies, reached here through the
     same shared, liveness-checked helper."""
@@ -387,7 +388,7 @@ def test_forced_takeover_group_kills_the_worker_when_a_pgid_is_recorded(tmp_path
     assert probe.killed == []  # the group kill covers it — no redundant bare-pid kill
 
 
-def test_takeover_refuses_a_live_worker_without_force(tmp_path) -> None:  #
+def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)  # active, not parked — a live attempt
 
@@ -399,7 +400,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path) -> None:  #
     assert store.pending_outbound() == []
 
 
-def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_no_retry(tmp_path) -> None:  #
+def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_no_retry(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
 
@@ -450,7 +451,7 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     assert store.active_lease("lease_1") is not None
 
 
-def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> None:  #
+def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path: Path) -> None:
     """The worker exited with its completion already buffered but the lease still
     ``live``; a fence minted now would arrive behind PULL's strict FIFO, too late to
     matter, so ``--force`` must refuse instead."""
@@ -471,7 +472,7 @@ def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> 
     assert pending[0].kind == "completion.submitted"
 
 
-def test_takeover_close_marks_it_ended(tmp_path) -> None:  #
+def test_takeover_close_marks_it_ended(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -484,7 +485,7 @@ def test_takeover_close_marks_it_ended(tmp_path) -> None:  #
     assert "ch_1" not in store.open_takeover_chunk_ids()
 
 
-def test_takeover_close_on_a_different_open_takeover_raises(tmp_path) -> None:  #
+def test_takeover_close_on_a_different_open_takeover_raises(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -495,7 +496,7 @@ def test_takeover_close_on_a_different_open_takeover_raises(tmp_path) -> None:  
         service.close(_close_scope(store), "tko_bogus")
 
 
-def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  #
+def test_takeover_close_is_idempotent_once_already_ended(tmp_path: Path) -> None:
     """Ending an already-ended takeover is the desired state, not an error —
     the shape the CLI's own end-PATCH ``finally`` needs when ``Pull`` closes it first."""
     store = _store(tmp_path)
@@ -508,7 +509,7 @@ def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  #
     service.close(_close_scope(store), opened.takeover_id)  # does not raise
 
 
-def test_takeover_close_with_no_takeover_ever_opened_is_a_no_op(tmp_path) -> None:  #
+def test_takeover_close_with_no_takeover_ever_opened_is_a_no_op(tmp_path: Path) -> None:
     store = _store(tmp_path)
     service = _service(store)
 
@@ -519,7 +520,7 @@ def test_takeover_close_with_no_takeover_ever_opened_is_a_no_op(tmp_path) -> Non
 # --------------------------------------------------------------------------- #
 
 
-def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path) -> None:  #
+def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
     # A forced takeover already killed pid 100 and fenced the chunk — this mirrors that
@@ -548,7 +549,7 @@ def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path) -> None:  
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_path) -> None:  #
+def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_path: Path) -> None:
     """A takeover holds its reference lease and anything up to its fence, not the chunk forever:
     a lease a later re-claim minted above both is the loop's again."""
     store = _store(tmp_path)
@@ -583,7 +584,7 @@ def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_p
     assert store.active_lease("lease_2") is None  # reaped like any stalled worker
 
 
-def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(tmp_path) -> None:  #
+def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
     store.record_takeover(
@@ -608,7 +609,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
     assert store.active_lease("lease_1") is not None  # left exactly as it was
 
 
-def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path) -> None:  #
+def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path: Path) -> None:
     store = _store(tmp_path)
     # A gate-parked chunk: a held binding, no active lease (its lease already closed
     # "parked"), and an open takeover over it.
@@ -650,7 +651,7 @@ def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path) -> 
 # --------------------------------------------------------------------------- #
 
 
-def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp_path) -> None:  #
+def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp_path: Path) -> None:
     """A hub-side park-supersede reaches this reconcile arm and reclaims into a fresh
     attempt at the held binding, deliberately, even while an open takeover still stands
     over the chunk — the park's own guarantee does not outlive the park itself."""
@@ -681,7 +682,7 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
-def _force_taken_over(store):  #
+def _force_taken_over(store):
     """An open forced takeover over an active lease, reached through the service's own verb."""
     probe = FakeProbe(alive={(100, "start-100")})
     _seed_lease(store, pid=100)
@@ -690,7 +691,7 @@ def _force_taken_over(store):  #
     return probe
 
 
-def test_pull_releases_the_environments_of_a_force_taken_chunk_the_hub_detached(tmp_path) -> None:  #
+def test_pull_releases_the_environments_of_a_force_taken_chunk_the_hub_detached(tmp_path: Path) -> None:
     """Detach reconciliation takes no takeover skip: the route is gone, so the person's chunk is released."""
     store = _store(tmp_path)
     probe = _force_taken_over(store)
@@ -707,7 +708,7 @@ def test_pull_releases_the_environments_of_a_force_taken_chunk_the_hub_detached(
     assert store.active_lease("lease_1") is None
 
 
-def test_resume_spawns_no_attempt_on_a_lease_a_force_taken_chunk_still_holds(tmp_path) -> None:  #
+def test_resume_spawns_no_attempt_on_a_lease_a_force_taken_chunk_still_holds(tmp_path: Path) -> None:
     """A resume intent waits for the takeover to end rather than resuming a session a person holds."""
     store = _store(tmp_path)
     probe = _force_taken_over(store)
@@ -730,7 +731,7 @@ def test_resume_spawns_no_attempt_on_a_lease_a_force_taken_chunk_still_holds(tmp
 # --------------------------------------------------------------------------- #
 
 
-def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) -> None:  #
+def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path: Path) -> None:
     """A read, not a re-resolution: the operator continues under the session's
     recorded model and effort rather than the runner's current defaults."""
     store = _store(tmp_path)
@@ -744,7 +745,7 @@ def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) ->
     assert opened.session_name == "code"
 
 
-def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp_path) -> None:  #
+def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)  # no stamps — *unknown*
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -755,7 +756,7 @@ def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp
     assert opened.session_name is None
 
 
-def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_path) -> None:  #
+def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_path: Path) -> None:
     """The taken-over session's worker identity: ``--resume`` inherits no
     spawn env, so the takeover carries it — with a freshly re-minted capability token,
     invalidating the prior one, and never baked into the printable command."""
@@ -780,7 +781,7 @@ def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_pat
     assert token not in opened.command  # env only — never a printable surface
 
 
-def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> None:  #
+def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path: Path) -> None:
     """What leaves the daemon is a bounded set: BLIZZARD_* identity
     plus PATH/HOME — never the daemon's TERM or an ``env_passthrough`` secret."""
     store = _store(tmp_path)
@@ -798,7 +799,9 @@ def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> Non
     assert set(opened.env) == {"PATH", "HOME"} | {k for k in opened.env if k.startswith("BLIZZARD_")}
 
 
-def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch, spawn_executor: Executor) -> None:  #
+def test_takeover_path_carries_the_workers_path_prepend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
     """The takeover's forwarded ``PATH`` is built from the same configured
     :class:`AllowlistedEnv` the worker's own spawn/resume used, so an operator resuming a
     worker's session resolves the same ``[worker] path_prepend`` tools the worker did."""
@@ -819,7 +822,9 @@ def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch, s
     assert opened.env["PATH"] == "/opt/mise/shims:/usr/bin:/bin"
 
 
-def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(tmp_path, spawn_executor: Executor) -> None:  #
+def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """The re-minted token makes the real binding's identity env point every captured signal at the runner;
     none of it reaches an attended session."""
     store = _store(tmp_path)
@@ -841,6 +846,6 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(tmp_pat
     assert not [n for n in opened.env if n.startswith(("OTEL_", "CLAUDE_CODE_"))]
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:  #
+def _active_in(store, chunk_id: str, lease_ids) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

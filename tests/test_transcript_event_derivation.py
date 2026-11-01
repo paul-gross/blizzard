@@ -228,36 +228,36 @@ def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    def __init__(self, store, clock) -> None:  #
+    def __init__(self, store, clock) -> None:
         super().__init__(store, clock)
         self.load_facts_calls = 0
         self.load_facts_for_calls = 0
         self.movement_facts_for_calls = 0
 
-    def load_facts(self, chunk_id: str):  #
+    def load_facts(self, chunk_id: str):
         self.load_facts_calls += 1
         return super().load_facts(chunk_id)
 
-    def load_facts_for(self, chunk_ids):  #
+    def load_facts_for(self, chunk_ids):
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 
-    def movement_facts_for(self, chunk_ids):  #
+    def movement_facts_for(self, chunk_ids):
         self.movement_facts_for_calls += 1
         return super().movement_facts_for(chunk_ids)
 
 
 class _CountingRecordStore(ChunkRecordStore):
-    def __init__(self, store, clock) -> None:  #
+    def __init__(self, store, clock) -> None:
         super().__init__(store, clock)
         self.get_calls = 0
         self.graph_id_of_many_calls = 0
 
-    def get(self, chunk_id: str):  #
+    def get(self, chunk_id: str):
         self.get_calls += 1
         return super().get(chunk_id)
 
-    def graph_id_of_many(self, chunk_ids):  #
+    def graph_id_of_many(self, chunk_ids):
         self.graph_id_of_many_calls += 1
         return super().graph_id_of_many(chunk_ids)
 
@@ -773,17 +773,17 @@ class _SpyEvents(TranscriptEventStore):
         self.log = log
         self._fail_plural = fail_plural
 
-    def segment_derivation_inputs(self, segment_ids: Sequence[str]):  #
+    def segment_derivation_inputs(self, segment_ids: Sequence[str]):
         self.log.append(("plural", tuple(segment_ids)))
         if self._fail_plural:
             raise RuntimeError("plural read down")
         return super().segment_derivation_inputs(segment_ids)
 
-    def segment_derivation_input(self, segment_id: str):  #
+    def segment_derivation_input(self, segment_id: str):
         self.log.append(("single", (segment_id,)))
         return super().segment_derivation_input(segment_id)
 
-    def replace_segment_events(self, segment_id: str, *args: Any, **kwargs: Any):  #
+    def replace_segment_events(self, segment_id: str, *args: Any, **kwargs: Any):
         self.log.append(("write", (segment_id,)))
         return super().replace_segment_events(segment_id, *args, **kwargs)
 

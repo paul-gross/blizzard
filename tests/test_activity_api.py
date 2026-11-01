@@ -21,7 +21,7 @@ from tests.test_fleet_auth import _bearer, _seed_enrolled
 pytestmark = pytest.mark.component
 
 
-def _activity(hub, **params) -> list[dict]:  #
+def _activity(hub, **params) -> list[dict]:
     resp = hub.client.get("/api/activity", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["activity"]

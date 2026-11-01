@@ -202,7 +202,7 @@ def _artifact(chunk_id: str, node_id: str) -> StoredArtifact:
     )
 
 
-def _claimed(hub) -> tuple[str, str, str]:  #
+def _claimed(hub) -> tuple[str, str, str]:
     """Mint the source graph + a target graph, claim a route. Returns (chunk_id,
     from_node_id, target_graph_id)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201

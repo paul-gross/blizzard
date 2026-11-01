@@ -201,11 +201,11 @@ def test_a_tenant_admin_is_refused_the_hub_level_routes_whichever_tenant_is_name
         assert hub.client.get("/api/traces/status", headers=headers).status_code == 403
 
 
-def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:  #
+def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:
     """Run ``step`` once, just before the next identity unit of work takes the identity lock."""
     begin = IdentityTransactions.begin
 
-    def begin_after_step(self: IdentityTransactions):  #
+    def begin_after_step(self: IdentityTransactions):
         monkeypatch.setattr(IdentityTransactions, "begin", begin)
         step()
         return begin(self)

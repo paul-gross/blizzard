@@ -254,5 +254,5 @@ def test_an_edit_with_none_clears_the_park_timeout(world: _World) -> None:
 def test_an_edit_with_none_on_any_other_field_is_refused(world: _World, field: str) -> None:
     record = world.create()
     with pytest.raises(ConfigFieldError, match="must not be null"):
-        world.authoring.edit_repository(record, RepositoryEdit(**{field: None}), _CLI)  #
+        world.authoring.edit_repository(record, RepositoryEdit(**{field: None}), _CLI)
     assert world.repository_changes() == 1

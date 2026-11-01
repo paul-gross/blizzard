@@ -60,7 +60,7 @@ def test_a_root_that_is_not_a_mapping_is_refused(document: bytes) -> None:
 
 
 @pytest.mark.parametrize("codec", CONFIG_CODECS, ids=lambda codec: codec.extensions[0])
-def test_encode_round_trips_through_decode(codec) -> None:  #
+def test_encode_round_trips_through_decode(codec) -> None:
     document: dict[str, object] = {
         "yes": "yes",
         "sci": "1e3",
@@ -137,7 +137,7 @@ def test_json_reads_tab_whitespace_and_surrogate_pair_escapes() -> None:
 
     assert decoded == {"a": 1, "b": "\U0001f600"}
     assert isinstance(decoded["b"], str)
-    decoded["b"].encode("utf-8")  #
+    decoded["b"].encode("utf-8")
 
 
 def test_json_reports_syntax_errors_with_position_and_refuses_a_non_mapping_root() -> None:

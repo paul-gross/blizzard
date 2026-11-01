@@ -147,7 +147,7 @@ _REPO = "acme/widget"
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         self.action = _HeldLanding()
-        actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])  #
+        actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])
         self.hub = build_hub(tmp_path, actions=actions)
         self.tenant = default_tenant(self.hub.engine)
         self.driver = self.hub.flow_driver
@@ -242,7 +242,7 @@ class _World:
                 ).scalars()
             )
 
-    def count(self, table) -> int:  #
+    def count(self, table) -> int:
         with self.hub.engine.connect() as conn:
             return int(conn.execute(hub_scoped(select(func.count()).select_from(table))).scalar() or 0)
 
@@ -755,7 +755,7 @@ def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry
     migrations.upgrade("head")
 
     action = _HeldLanding()
-    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])  #
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])
     reopened = build_hub(tmp_path, actions=actions)
     driver = reopened.flow_driver
     driver.recover_turns(default_tenant(reopened.engine))
@@ -840,7 +840,7 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
     world.complete(sound, build_sound)
     submit = FlowLineReconciler._submit
 
-    def flaky(self: FlowLineReconciler, standing):  #
+    def flaky(self: FlowLineReconciler, standing):
         if standing.chunk.chunk_id == broken:
             raise RuntimeError("unreadable visit")
         return submit(self, standing)

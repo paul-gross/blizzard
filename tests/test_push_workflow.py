@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -87,15 +88,15 @@ def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
 
 
 @pytest.mark.parametrize("cut_version, expected", [("0.1.0", "0.2.0"), ("0.2.0", "0.3.0")])
-def test_dev_version_targets_the_next_minor_train(tmp_path, cut_version: str, expected: str) -> None:
+def test_dev_version_targets_the_next_minor_train(tmp_path: Path, cut_version: str, expected: str) -> None:
     assert _dev_version(tmp_path, cut_version, 'floor = "0.2"\n') == f"{expected}.dev42+abcdef123"
 
 
-def test_an_open_major_builds_toward_its_first_release(tmp_path) -> None:
+def test_an_open_major_builds_toward_its_first_release(tmp_path: Path) -> None:
     assert _dev_version(tmp_path, "0.2.0", 'floor = "0.2"\nopening = "1"\n') == "1.0.0.dev42+abcdef123"
 
 
-def test_a_missing_window_file_fails_the_version_step(tmp_path) -> None:
+def test_a_missing_window_file_fails_the_version_step(tmp_path: Path) -> None:
     compute = next(s for s in _jobs()["dev-build"]["steps"] if s.get("id") == "ver")
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.0"\n')
     script = compute["run"].replace("${{ github.run_number }}", "42")
@@ -109,7 +110,7 @@ def test_a_missing_window_file_fails_the_version_step(tmp_path) -> None:
     assert result.returncode != 0
 
 
-def _dev_version(tmp_path, cut_version: str, window: str) -> str:
+def _dev_version(tmp_path: Path, cut_version: str, window: str) -> str:
     compute = next(s for s in _jobs()["dev-build"]["steps"] if s.get("id") == "ver")
     (tmp_path / "pyproject.toml").write_text(f'[project]\nversion = "{cut_version}"\n')
     (tmp_path / "src" / "blizzard" / "wire").mkdir(parents=True)

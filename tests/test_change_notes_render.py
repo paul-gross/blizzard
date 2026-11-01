@@ -163,7 +163,7 @@ def _render(
     return result
 
 
-def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, monkeypatch) -> None:
+def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     first = _render(repo, "v0.2.0", monkeypatch)
     assert first.exit_code == 0, first.output
     expected = """\
@@ -188,7 +188,9 @@ def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, mon
     assert _render(repo, "v0.2.0", monkeypatch).output == first.output
 
 
-def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(repo: Path, monkeypatch) -> None:
+def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _commit(repo, "chore: later", {"x": "y"})
     _git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
@@ -196,14 +198,14 @@ def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(repo: Pa
     assert result.output.startswith("## Commits\n") and "- later (" in result.output
 
 
-def test_a_tag_with_no_previous_tag_renders_the_empty_range_block(repo: Path, monkeypatch) -> None:
+def test_a_tag_with_no_previous_tag_renders_the_empty_range_block(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _render(repo, "v0.1.0", monkeypatch)
     assert result.exit_code == 0, result.output
     assert "- Fixes one." in result.output
     assert "- first (" not in result.output
 
 
-def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch) -> None:
+def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _commit(repo, "fix: bad", {"changes/0.3.0/bad.md": "no frontmatter\n"})
     _git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
@@ -211,11 +213,13 @@ def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch) 
     assert "changes/0.3.0/bad.md" in result.output
 
 
-def test_a_non_release_tag_is_a_usage_error(repo: Path, monkeypatch) -> None:
+def test_a_non_release_tag_is_a_usage_error(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert _render(repo, "nightly", monkeypatch).exit_code == 2
 
 
-def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(repo: Path, monkeypatch) -> None:
+def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = "src/blizzard/foundation/flags/registry.toml"
     off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
     _commit(repo, "feat: staged", {path: off})
@@ -232,7 +236,7 @@ def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(repo:
     assert "## Turned on" not in _render(repo, "v0.2.0", monkeypatch).output
 
 
-def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch) -> None:
+def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _commit(
         repo,
         "feat: immediate capability",
@@ -246,7 +250,7 @@ def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, mo
     assert "## Turned on\n\n- Immediate use" in result.output
 
 
-def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, monkeypatch) -> None:
+def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = "src/blizzard/foundation/flags/registry.toml"
     off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
     _commit(repo, "feat: staged", {path: off})
@@ -277,7 +281,9 @@ def breaking(repo: Path) -> Path:
     return repo
 
 
-def test_render_with_breaks_lists_the_break_and_reports_an_unrecorded_one(breaking: Path, monkeypatch) -> None:
+def test_render_with_breaks_lists_the_break_and_reports_an_unrecorded_one(
+    breaking: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = _breaks_file(breaking, "v0.3.0", entry("v0.2.0", "http-api", "GET /old"))
     result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", path)
     assert result.exit_code == 0, result.output
@@ -285,30 +291,32 @@ def test_render_with_breaks_lists_the_break_and_reports_an_unrecorded_one(breaki
     assert "GET /ghost is recorded by no compat break" in result.stderr
 
 
-def test_render_with_breaks_fails_on_an_unnamed_break_with_empty_stdout(breaking: Path, monkeypatch) -> None:
+def test_render_with_breaks_fails_on_an_unnamed_break_with_empty_stdout(
+    breaking: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = _breaks_file(breaking, "v0.3.0", entry("v0.2.0", "http-api", "GET /other"))
     result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", path)
     assert result.exit_code == 1 and result.stdout == ""
     assert "http-api GET /other (breaks v0.2.0)" in result.stderr
 
 
-def test_render_refuses_a_breaks_file_judging_another_tag(breaking: Path, monkeypatch) -> None:
+def test_render_refuses_a_breaks_file_judging_another_tag(breaking: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", _breaks_file(breaking, "v0.2.0"))
     assert result.exit_code == 1 and result.stdout == "" and "judged v0.2.0, not v0.3.0" in result.stderr
 
 
-def test_render_without_breaks_is_unchanged_by_the_option(breaking: Path, monkeypatch) -> None:
+def test_render_without_breaks_is_unchanged_by_the_option(breaking: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     plain = _render(breaking, "v0.3.0", monkeypatch)
     assert plain.exit_code == 0 and "Breaks GET" not in plain.stdout
 
 
-def test_also_in_marks_only_supported_releases(repo: Path, monkeypatch) -> None:
+def test_also_in_marks_only_supported_releases(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _render(repo, "v0.2.0", monkeypatch, supported=("v0.1.0",))
     assert "- Shared.\n" in result.output and "also in" not in result.output
     assert "releases --json --tag 0.2.0" in result.compat_calls  # type: ignore[attr-defined]
 
 
-def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch) -> None:
+def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _commit(repo, "chore: later", {"x": "y"})
     _git(repo, "tag", "v0.3.0")
     assert _render(repo, "v0.3.0", monkeypatch).compat_calls == ""  # type: ignore[attr-defined]

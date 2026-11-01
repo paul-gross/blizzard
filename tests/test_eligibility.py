@@ -399,7 +399,7 @@ def _agreement_rows() -> list[tuple[str, Graph, Chunk, list[RunnerCapability], b
 
 
 @pytest.mark.parametrize("row", _agreement_rows(), ids=lambda row: row[0])
-def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None:  #
+def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None:
     from blizzard.hub.domain.chunk.model import ChunkFacts
     from blizzard.hub.domain.execution.claim import ClaimAdmission, ClaimDeniedIncompatible
     from blizzard.hub.domain.operations.queue import QueueMatchPolicy, select_matched_entry

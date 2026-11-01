@@ -58,7 +58,7 @@ class _Runner:
         closed_lease(self.store, lease_id, opened=now - timedelta(minutes=1), closed=now, identified=identified)
         return lease_id
 
-    def events(self) -> list[dict]:  #
+    def events(self) -> list[dict]:
         return [json.loads(f.payload) for f in self.store.pending_outbound() if f.kind == EVENT_RECORDED]
 
     def kinds(self) -> list[str]:

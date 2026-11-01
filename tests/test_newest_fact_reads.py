@@ -99,7 +99,7 @@ def _engine(tmp_path: Path, *, depth: int) -> Engine:
 def _reads(engine: Engine) -> dict[str, object]:
     store = hub_store_connections(engine)
 
-    def registry(fn):  #
+    def registry(fn):
         def run() -> object:
             with store.read("test") as conn:
                 return fn(conn, _KEYS)
@@ -169,7 +169,7 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
     }
 
 
-def _read(store, fn):  #
+def _read(store, fn):
     with store.read("test") as conn:
         return fn(conn)
 
@@ -182,7 +182,7 @@ def test_retirement_reads_are_flat_across_history_depth(tmp_path: Path) -> None:
         bounded = name.endswith("bounded")
         answer = deep[name]()  # type: ignore[operator]
         assert answer == shallow[name](), name  # type: ignore[operator]
-        assert len(answer) == (1 if bounded else 2), name  #
+        assert len(answer) == (1 if bounded else 2), name
         assert count_rows_read(deep_engine, deep[name]) <= (2 if bounded else len(_KEYS)), name  # type: ignore[arg-type]
 
 

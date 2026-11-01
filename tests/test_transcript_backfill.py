@@ -67,7 +67,7 @@ def _batch(session_id: str, turns: list[NormalizedTurn]) -> TranscriptBatch:
     )
 
 
-def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None = None):  #
+def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None = None):
     """A context whose harness source holds ``sessions``; ``on_disk`` narrows which of them
     still have a file, defaulting to all of them."""
     present = sessions.keys() if on_disk is None else on_disk
@@ -91,7 +91,7 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
     return ctx, source
 
 
-def _with_source(ctx, source: FakeTranscriptSource):  #
+def _with_source(ctx, source: FakeTranscriptSource):
     """Replace the production-shaped exact-owner source as well as the legacy sentinel."""
     return replace(
         ctx,
@@ -106,9 +106,7 @@ def _with_source(ctx, source: FakeTranscriptSource):  #
     )
 
 
-def _historical_lease(
-    ctx, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at=_NOW
-) -> None:  #
+def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at=_NOW) -> None:
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -134,7 +132,7 @@ def _historical_lease(
     )
 
 
-def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=_NOW) -> None:  #
+def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=_NOW) -> None:
     """A closed lease whose session's recorded owner this run's registry does not bind."""
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -156,7 +154,7 @@ def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=
     )
 
 
-def _shipped_bodies(ctx) -> list[dict]:  #
+def _shipped_bodies(ctx) -> list[dict]:
     hub = ctx.hub
     assert isinstance(hub, FakeHub)
     return [json.loads(record.model_dump_json()) for record in hub.transcripts_pushed]
@@ -493,7 +491,7 @@ def test_the_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
 # --- the operator re-ship (supersede an already-imported segment) ---------------
 
 
-def _import_one(ctx, *, session_id: str = "sess-a") -> str:  #
+def _import_one(ctx, *, session_id: str = "sess-a") -> str:
     """Backfill a single historical session and return the segment id it landed under."""
     _historical_lease(ctx, lease_id="lease_1", session_id=session_id, epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)

@@ -80,7 +80,9 @@ def _cut(root: Path, version: str, monkeypatch: pytest.MonkeyPatch, breaks: list
     return CliRunner().invoke(main, ["cut", version])
 
 
-def test_cut_moves_every_unreleased_note_and_keeps_the_keepfile(tmp_path: Path, monkeypatch) -> None:
+def test_cut_moves_every_unreleased_note_and_keeps_the_keepfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"unreleased/b-fix.md": _FIXED, "unreleased/a-fix.md": _FIXED})
     result = _cut(root, "0.3.0", monkeypatch)
     assert result.exit_code == 0, result.output
@@ -89,7 +91,7 @@ def test_cut_moves_every_unreleased_note_and_keeps_the_keepfile(tmp_path: Path, 
     assert validate(root) == []
 
 
-def test_a_second_cut_adds_to_the_existing_version_directory(tmp_path: Path, monkeypatch) -> None:
+def test_a_second_cut_adds_to_the_existing_version_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {"unreleased/one.md": _FIXED})
     assert _cut(root, "0.3.0", monkeypatch).exit_code == 0
     (root / "changes" / "unreleased" / "two.md").write_text(_FIXED)
@@ -97,7 +99,7 @@ def test_a_second_cut_adds_to_the_existing_version_directory(tmp_path: Path, mon
     assert sorted(p.name for p in (root / "changes" / "0.3.0").iterdir()) == ["one.md", "two.md"]
 
 
-def test_a_cut_with_nothing_to_move_succeeds_and_says_so(tmp_path: Path, monkeypatch) -> None:
+def test_a_cut_with_nothing_to_move_succeeds_and_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {})
     result = _cut(root, "0.3.0", monkeypatch)
     assert result.exit_code == 0
@@ -105,7 +107,7 @@ def test_a_cut_with_nothing_to_move_succeeds_and_says_so(tmp_path: Path, monkeyp
     assert not (root / "changes" / "0.3.0").exists()
 
 
-def test_cut_holds_off_flag_then_moves_note_and_guide_when_on(tmp_path: Path, monkeypatch) -> None:
+def test_cut_holds_off_flag_then_moves_note_and_guide_when_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {"unreleased/alpha.md": _BREAKING.replace("breaking: true", "breaking: true\nflag: staged")})
     registry = root / "src/blizzard/foundation/flags/registry.toml"
     registry.parent.mkdir(parents=True)
@@ -125,7 +127,9 @@ def test_cut_holds_off_flag_then_moves_note_and_guide_when_on(tmp_path: Path, mo
     assert "## Upgrading to 0.4.0" in (root / "docs/upgrade.md").read_text()
 
 
-def test_cut_refuses_to_move_a_held_nested_guide_with_its_parent(tmp_path: Path, monkeypatch) -> None:
+def test_cut_refuses_to_move_a_held_nested_guide_with_its_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     doc = _DOC.replace("Alpha text.", "Alpha text.\n\n#### Inner boundary\n\nInner text.")
     held = _BREAKING.replace("alpha-boundary", "inner-boundary").replace(
         "breaking: true", "breaking: true\nflag: staged"
@@ -141,7 +145,9 @@ def test_cut_refuses_to_move_a_held_nested_guide_with_its_parent(tmp_path: Path,
     assert _snapshot(root) == before
 
 
-def test_cut_moves_a_named_boundary_into_a_new_section_beneath_before_you_pull(tmp_path: Path, monkeypatch) -> None:
+def test_cut_moves_a_named_boundary_into_a_new_section_beneath_before_you_pull(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"unreleased/alpha.md": _BREAKING})
     result = _cut(root, "0.3.0", monkeypatch)
     assert result.exit_code == 0, result.output
@@ -154,7 +160,7 @@ def test_cut_moves_a_named_boundary_into_a_new_section_beneath_before_you_pull(t
     assert validate(root) == []
 
 
-def test_cut_appends_a_boundary_to_an_existing_release_section(tmp_path: Path, monkeypatch) -> None:
+def test_cut_appends_a_boundary_to_an_existing_release_section(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     doc = _DOC.replace(
         "## Upgrading to the next release",
         "## Upgrading to 0.3.0\n\n### Old boundary\n\nOld.\n\n## Upgrading to the next release",
@@ -171,7 +177,9 @@ def test_cut_appends_a_boundary_to_an_existing_release_section(tmp_path: Path, m
     assert validate(root) == []
 
 
-def test_a_boundary_already_under_a_release_heading_is_left_and_named(tmp_path: Path, monkeypatch) -> None:
+def test_a_boundary_already_under_a_release_heading_is_left_and_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     doc = _DOC.replace(
         "## Upgrading to the next release",
         "## Upgrading to 0.2.0\n\n### Alpha boundary\n\nOld.\n\n## Upgrading to the next release",
@@ -193,7 +201,7 @@ def test_a_boundary_already_under_a_release_heading_is_left_and_named(tmp_path: 
     ],
 )
 def test_a_refused_cut_exits_one_and_leaves_the_tree_untouched(
-    tmp_path: Path, monkeypatch, notes, doc, version
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, notes, doc, version
 ) -> None:
     root = _tree(tmp_path, notes, doc)
     before = _snapshot(root)
@@ -248,7 +256,9 @@ def test_due_pre_one_deprecation_needs_removal_or_postponement_before_writes(
         assert _snapshot(root) == before
 
 
-def test_due_major_deprecation_refuses_an_empty_cut_without_writes(tmp_path: Path, monkeypatch) -> None:
+def test_due_major_deprecation_refuses_an_empty_cut_without_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2")})
     before = _snapshot(root)
     result = _cut(root, "2.0.0", monkeypatch)
@@ -257,7 +267,9 @@ def test_due_major_deprecation_refuses_an_empty_cut_without_writes(tmp_path: Pat
     assert _snapshot(root) == before
 
 
-def test_earlier_retirement_does_not_refuse_a_later_opening_cut(tmp_path: Path, monkeypatch) -> None:
+def test_earlier_retirement_does_not_refuse_a_later_opening_cut(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(
         tmp_path,
         {
@@ -269,7 +281,7 @@ def test_earlier_retirement_does_not_refuse_a_later_opening_cut(tmp_path: Path, 
     assert result.exit_code == 0, result.output
 
 
-def test_opening_cut_cannot_borrow_a_later_removal_in_its_line(tmp_path: Path, monkeypatch) -> None:
+def test_opening_cut_cannot_borrow_a_later_removal_in_its_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(
         tmp_path,
         {
@@ -286,7 +298,7 @@ def test_opening_cut_cannot_borrow_a_later_removal_in_its_line(tmp_path: Path, m
     assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
 
 
-def test_opening_cut_cannot_borrow_a_later_postponement(tmp_path: Path, monkeypatch) -> None:
+def test_opening_cut_cannot_borrow_a_later_postponement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(
         tmp_path,
         {
@@ -435,7 +447,9 @@ def test_opening_cut_accepts_postponement_without_removal(tmp_path: Path, monkey
         _scheduled("changed", "3", target="old").replace("kind: changed", "kind: changed\nflag: staged"),
     ],
 )
-def test_held_note_cannot_satisfy_an_opening_promise(tmp_path: Path, monkeypatch, pending: str) -> None:
+def test_held_note_cannot_satisfy_an_opening_promise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pending: str
+) -> None:
     root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/pending.md": pending})
     registry = root / "src/blizzard/foundation/flags/registry.toml"
     registry.parent.mkdir(parents=True)
@@ -485,7 +499,9 @@ _NAMING = "---\nkind: changed\nbreaking: true\nsurfaces: [http-api]\nbreaks: ['G
 _UNRELATED = "---\nkind: changed\nbreaking: true\nsurfaces: [config]\nbreaks: [other]\n---\n\nChanges other.\n\n## Upgrade\n\nMove.\n"
 
 
-def test_cut_refuses_a_compat_break_no_note_names_and_writes_nothing(tmp_path: Path, monkeypatch) -> None:
+def test_cut_refuses_a_compat_break_no_note_names_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"unreleased/other.md": _UNRELATED})
     before = _snapshot(root)
     result = _cut(root, "0.3.0", monkeypatch, [_ROUTE])
@@ -494,7 +510,9 @@ def test_cut_refuses_a_compat_break_no_note_names_and_writes_nothing(tmp_path: P
     assert _snapshot(root) == before
 
 
-def test_cut_passes_once_a_breaking_note_names_the_break_and_reports_unrecorded(tmp_path: Path, monkeypatch) -> None:
+def test_cut_passes_once_a_breaking_note_names_the_break_and_reports_unrecorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"unreleased/route.md": _NAMING})
     result = _cut(root, "0.3.0", monkeypatch, [_ROUTE])
     assert result.exit_code == 0, result.output
@@ -502,12 +520,14 @@ def test_cut_passes_once_a_breaking_note_names_the_break_and_reports_unrecorded(
     assert (root / "changes" / "0.3.0" / "route.md").is_file()
 
 
-def test_cut_counts_a_note_an_earlier_candidate_already_moved(tmp_path: Path, monkeypatch) -> None:
+def test_cut_counts_a_note_an_earlier_candidate_already_moved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {"0.3.0/route.md": _NAMING, "unreleased/fix.md": _FIXED})
     assert _cut(root, "0.3.0", monkeypatch, [_ROUTE]).exit_code == 0
 
 
-def test_cut_refuses_when_compat_exits_non_zero_relaying_its_output(tmp_path: Path, monkeypatch) -> None:
+def test_cut_refuses_when_compat_exits_non_zero_relaying_its_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _tree(tmp_path, {"unreleased/fix.md": _FIXED})
     before = _snapshot(root)
     result = _cut(root, "0.3.0", monkeypatch, [], tag_exit=1)
@@ -515,7 +535,7 @@ def test_cut_refuses_when_compat_exits_non_zero_relaying_its_output(tmp_path: Pa
     assert _snapshot(root) == before
 
 
-def test_cut_does_not_trust_a_stale_breaks_file(tmp_path: Path, monkeypatch) -> None:
+def test_cut_does_not_trust_a_stale_breaks_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {"unreleased/fix.md": _FIXED})
     (root / "compat-breaks.json").write_text('{"tag": "v0.3.0", "breaks": []}')
     stub_compat(root, monkeypatch, tag_exit=0)

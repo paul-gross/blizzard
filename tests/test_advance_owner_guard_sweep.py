@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -42,11 +43,11 @@ _FOREIGN_HARNESS_ID = "foreign"
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):  #
+def _build_envelope(chunk="ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
@@ -70,7 +71,7 @@ def _done_chunk(chunk_id: str) -> ChunkState:
     return ChunkState(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
 
 
-def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  #
+def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:
     """The lease closed ``escalated``, exactly one ``escalation.recorded`` fact rode the
     outbound buffer for it, and it composed no takeover command — an owner this runner
     cannot resolve can never compose one."""
@@ -88,7 +89,7 @@ def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  #
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, unavailable):  #
+def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -145,7 +146,7 @@ def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_p
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, unavailable):  #
+def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
     """The owner resolved fine at launch, then stopped resolving before collect — e.g. an
     operator mid-repair. ``collect`` must not misread that as a lost write and relaunch — it
     escalates instead: no other runner can resume this exact session either."""
@@ -208,7 +209,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_
     _assert_escalated_once_with_no_takeover(store, "ch_1")
 
 
-def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_paused(tmp_path):  #
+def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_paused(tmp_path: Path):
     """`escalate_owner_unresolvable` takes the same locally-paused precedence `fail` takes:
     ADVANCE's sweep still reaches `collect`, but the escalation itself defers rather than
     closing the lease, exactly as `fail`'s own paused branch defers."""
@@ -269,7 +270,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
     assert [b for b in store.pending_outbound() if b.kind == EVENT_RECORDED and b.chunk_id == "ch_1"] == []
 
 
-def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chunk(tmp_path):  #
+def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chunk(tmp_path: Path):
     """`escalate_owner_unresolvable` takes the same detached precedence `fail` takes: a chunk
     the hub no longer routes here abandons instead of escalating."""
     store = _store(tmp_path)
@@ -324,7 +325,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover_command(tmp_path, unavailable):  #
+def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover_command(tmp_path: Path, unavailable):
     """The escalation's closure is already durable by the time the takeover command would be
     composed, so an unresolvable owner cannot undo it — the chunk still escalates, with the
     same empty takeover command the no-session/no-bindings branch already uses."""
@@ -374,7 +375,7 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allow(tmp_path, unavailable):  #
+def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allow(tmp_path: Path, unavailable):
     """A first failure with retry budget still open (``retried=0 < retries_max=2``) would
     ordinarily requeue, but an unresolvable recorded owner blocks that — the chunk escalates
     in place instead, on the same tick, consuming no retry."""
@@ -437,7 +438,7 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
     assert json.loads(escalation_events[0].payload)["takeover_command"] == ""
 
 
-def _pooled_envelope(chunk_id: str, node_name: str, node_id: str):  #
+def _pooled_envelope(chunk_id: str, node_name: str, node_id: str):
     return make_envelope(
         chunk_id,
         node_name,
@@ -452,8 +453,8 @@ def _pooled_envelope(chunk_id: str, node_name: str, node_id: str):  #
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
 def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chunk_still_advances(
-    tmp_path, unavailable
-):  #
+    tmp_path: Path, unavailable
+):
     """``Spawner.enter_node``: a named pool's head owner unresolvable at node entry escalates
     that chunk in place, never spawning or substituting a default harness — and never blocks
     a sibling the SAME ``Advance.run()`` sweep also drives into a fresh node."""
@@ -538,7 +539,9 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_still_advances(tmp_path, unavailable):  #
+def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_still_advances(
+    tmp_path: Path, unavailable
+):
     """A bare, un-pooled ``resume:`` whose latest session's own owner cannot be dispatched to
     escalates the chunk in place at node entry too, exactly as a named pool's breached head
     does, while a sibling the SAME sweep also drives still spawns."""

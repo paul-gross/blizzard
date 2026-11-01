@@ -16,7 +16,7 @@ from tests.support import build_hub, ingest
 pytestmark = pytest.mark.component
 
 
-def _claim_route(hub, chunk_id: str) -> None:  #
+def _claim_route(hub, chunk_id: str) -> None:
     """Claim a route for the chunk — a live route derives ``running``."""
     resp = hub.client.post(
         "/api/fleet/routes",

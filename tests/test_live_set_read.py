@@ -236,7 +236,7 @@ def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_coun
     assert _peek(bare, bare_token) == _peek(heavy, heavy_token)
     assert _peek(heavy, heavy_token)[0]["entries"]  # type: ignore[index]
 
-    def post(hub: HubHarness, token: str):  #
+    def post(hub: HubHarness, token: str):
         return lambda: hub.client.post(
             "/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=_bearer(token)
         )

@@ -50,7 +50,7 @@ def _projects_of(hub: HubHarness, source: str, ref: str, chunk_id: str) -> tuple
     return item_project, chunk.project_id
 
 
-def _create_item(hub: HubHarness, *, project: str | None = None) -> tuple[int, dict]:  #
+def _create_item(hub: HubHarness, *, project: str | None = None) -> tuple[int, dict]:
     params = {"project": project} if project is not None else {}
     resp = hub.client.post("/api/work-sources/hub/items", params=params, json={"title": "t", "body": "b"})
     return resp.status_code, resp.json()

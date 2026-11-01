@@ -41,7 +41,7 @@ class _CapturingConn:
         self.statements: list[object] = []
         self.get_execution_options = scoped.get_execution_options
 
-    def execute(self, stmt: object):  #
+    def execute(self, stmt: object):
         self.statements.append(stmt)
         return _FakeResult()
 

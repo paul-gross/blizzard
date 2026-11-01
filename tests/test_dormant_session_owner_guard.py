@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -34,7 +35,7 @@ _FOREIGN_HARNESS_ID = "foreign"
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
@@ -60,7 +61,7 @@ def _done_chunk(chunk_id: str) -> ChunkState:
     return ChunkState(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
 
 
-def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  #
+def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:
     """The lease closed ``escalated``, exactly one ``escalation.recorded`` fact rode the
     outbound buffer for it, and it composed no takeover command — an owner this runner
     cannot resolve can never compose one."""
@@ -78,7 +79,7 @@ def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:  #
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, unavailable):  #
+def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -145,7 +146,7 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, un
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, unavailable):  #
+def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -205,9 +206,7 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, u
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_place(  #
-    tmp_path, unavailable
-):
+def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -285,7 +284,7 @@ class _RecordWorkerSpy:
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_path, unavailable):  #
+def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_path: Path, unavailable):
     """Parking needs no harness at all; only the generation's usage spend does, so an
     unresolvable owner skips *that* record alone — the ask still reaches the hub and the
     chunk still parks, exactly as it would otherwise."""
@@ -354,7 +353,7 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
     assert store.held_environment_ids() == ["e1"]
 
 
-def _answered_question():  #
+def _answered_question():
     return HubQuestion(
         question_id="qn_1",
         chunk_id="ch_blocked",

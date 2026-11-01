@@ -42,7 +42,7 @@ _OLD_FINDINGS = sa.Table(
 )
 
 
-def _seed_preexisting_finding(tmp_path: Path):  #
+def _seed_preexisting_finding(tmp_path: Path):
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         conn.execute(sa.insert(_SCOPES).values(slug="blizzard", description="", created_at=_T0))

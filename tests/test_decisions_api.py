@@ -68,7 +68,7 @@ _BUILD_ARTIFACT = {
 }
 
 
-def _open_decision(hub) -> str:  #
+def _open_decision(hub) -> str:
     """Mint the gated graph, ingest+promote+claim+lease a chunk, and drive it to an
     open decision; return the decision id."""
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})

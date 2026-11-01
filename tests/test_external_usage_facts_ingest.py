@@ -83,7 +83,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     )
 
 
-def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):  #
+def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):
     with engine.connect() as conn:
         return conn.execute(
             hub_store_connections(engine)
@@ -576,7 +576,7 @@ def _miss_payload(*, slug: str, missed_at: datetime, reason: str, name: str | No
     return payload
 
 
-def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):  #
+def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):
     with engine.connect() as conn:
         return conn.execute(
             hub_store_connections(engine)

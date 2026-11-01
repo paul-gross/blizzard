@@ -23,7 +23,7 @@ def _on(tmp_path: Path, **extra: object) -> EgressConfig:
     return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)  # type: ignore[arg-type]
 
 
-def _status(hub: HubHarness) -> dict:  #
+def _status(hub: HubHarness) -> dict:
     resp = hub.client.get("/api/egress/status")
     assert resp.status_code == 200, resp.text
     return resp.json()

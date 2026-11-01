@@ -99,7 +99,7 @@ def _event(**overrides: object) -> TranscriptEvent:
     return TranscriptEvent(**values)  # type: ignore[arg-type]
 
 
-def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2")):  #
+def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2")):
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
@@ -638,7 +638,7 @@ def _derive(store: TranscriptEventStore, segment_id: str) -> None:
     )
 
 
-def _drop_rows(engine) -> list[Any]:  #
+def _drop_rows(engine) -> list[Any]:
     with engine.connect() as conn:
         return list(
             conn.execute(

@@ -206,12 +206,12 @@ nodes:
 """
 
 
-def _mint_graph(hub) -> None:  #
+def _mint_graph(hub) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH})
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub, name: str, default_scope_slug: str = "blizzard") -> dict:  #
+def _create_routine(hub, name: str, default_scope_slug: str = "blizzard") -> dict:
     resp = hub.client.post(
         "/api/routines",
         json={

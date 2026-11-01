@@ -162,7 +162,7 @@ def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
     }
 
 
-def _seed_owned_chunk(conn) -> None:  #
+def _seed_owned_chunk(conn) -> None:
     conn.execute(
         insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
     )

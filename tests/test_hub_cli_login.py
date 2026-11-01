@@ -62,7 +62,7 @@ def test_login_stores_the_loopback_token(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_login_paste_flag_uses_the_paste_code_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 
-    def fake_paste(cls: type, base: str, *, client_factory, prompt_for_code) -> _StubLogin:  #
+    def fake_paste(cls: type, base: str, *, client_factory, prompt_for_code) -> _StubLogin:
         calls["base"] = base
         calls["code"] = prompt_for_code()
         return _StubLogin("pasted-token")

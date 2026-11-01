@@ -18,7 +18,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "7"}
 
 
-def _claim(hub) -> tuple[str, str]:  #
+def _claim(hub) -> tuple[str, str]:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(
@@ -49,7 +49,7 @@ def _usage_payload(
 
 
 def _push_usage(
-    hub,  #
+    hub,
     *,
     chunk_id: str,
     node_id: str,
@@ -128,13 +128,13 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
     real_record_usage = hub.services.facts._usage.record_usage
     calls = {"n": 0}
 
-    def _crash_on_second_call(*args, **kwargs):  #
+    def _crash_on_second_call(*args, **kwargs):
         calls["n"] += 1
         if calls["n"] == 2:
             raise RuntimeError("simulated crash mid-batch")
         return real_record_usage(*args, **kwargs)
 
-    hub.services.facts._usage.record_usage = _crash_on_second_call  #
+    hub.services.facts._usage.record_usage = _crash_on_second_call
     try:
         payloads = [_usage_payload(node_id, epoch=1, cost_usd=cost) for cost in (0.10, 0.20, 0.30)]
         for payload in payloads:
@@ -152,7 +152,7 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
                 },
             )
     finally:
-        hub.services.facts._usage.record_usage = real_record_usage  #
+        hub.services.facts._usage.record_usage = real_record_usage
 
     # Seq 2's write and mark both landed before the crash; seq 3 raised before its own mark
     # write, and seq 4 was never attempted — so seq 2 replays as already_applied and seq 3 applies fresh.

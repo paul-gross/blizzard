@@ -68,7 +68,7 @@ def _batch(text: str, *, cursor: str) -> TranscriptBatch:
     )
 
 
-def _two_harness_ctx():  #
+def _two_harness_ctx():
     """A context bound to two harnesses — ``claude_code`` and ``other_harness`` — each
     with its own fake transcript source, both scripted to answer the SAME raw session id
     with different content."""
@@ -103,7 +103,7 @@ def _two_harness_ctx():  #
     return replace(ctx, harnesses=registry, transcripts_wired=True), source_a, source_b
 
 
-def _seed_open_segment(ctx, *, chunk_id: str, lease_id: str, env_id: str, harness_id: str) -> None:  #
+def _seed_open_segment(ctx, *, chunk_id: str, lease_id: str, env_id: str, harness_id: str) -> None:
     ctx.stores.environments.record_binding(
         chunk_id=chunk_id, environment_id=env_id, workdir=f"/ws/{env_id}", bound_at=_NOW
     )
@@ -128,7 +128,7 @@ def _seed_open_segment(ctx, *, chunk_id: str, lease_id: str, env_id: str, harnes
     )
 
 
-def test_pump_and_drain_never_cross_merge_same_raw_session_id_across_harnesses() -> None:  #
+def test_pump_and_drain_never_cross_merge_same_raw_session_id_across_harnesses() -> None:
     ctx, _, _ = _two_harness_ctx()
     _seed_open_segment(ctx, chunk_id="ch_a", lease_id="lease_a", env_id="e_a", harness_id=CLAUDE_CODE_HARNESS_ID)
     _seed_open_segment(ctx, chunk_id="ch_b", lease_id="lease_b", env_id="e_b", harness_id=_OTHER_HARNESS_ID)
@@ -152,7 +152,7 @@ def test_pump_and_drain_never_cross_merge_same_raw_session_id_across_harnesses()
     assert [t.text for t in by_chunk["ch_b"].turns] == ["hello from other_harness"]
 
 
-def test_backfill_imports_both_owners_of_the_same_raw_session_id() -> None:  #
+def test_backfill_imports_both_owners_of_the_same_raw_session_id() -> None:
     """The backfill's dedupe key is the full session (harness + raw id):
     a pre-lane lease under each harness, sharing one raw session id, both import as
     separate segments — neither reads as already-present because of the other."""

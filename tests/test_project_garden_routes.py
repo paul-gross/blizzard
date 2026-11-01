@@ -22,7 +22,7 @@ _CTX = ChangeContext(actor="operator", door=Door.API)
 _WINDOW = {"since": "2026-07-01T00:00:00Z", "until": "2026-08-01T00:00:00Z"}
 
 
-def _ok(response, status: int = 200):  #
+def _ok(response, status: int = 200):
     assert response.status_code == status, response.text
     return response.json()
 
@@ -40,7 +40,7 @@ def _graph_name(hub: HubHarness) -> str:
     ).name
 
 
-def _routine(hub: HubHarness, project: str, name: str = "nightly") -> dict:  #
+def _routine(hub: HubHarness, project: str, name: str = "nightly") -> dict:
     body = {"name": name, "graph_name": _graph_name(hub), "default_scope_slug": "blizzard"}
     return _ok(hub.client.post(f"/api/projects/{project}/routines", json=body), 201)
 
@@ -67,7 +67,7 @@ def _run(hub: HubHarness, project: str) -> str:
     return result.chunk_id
 
 
-def _proposal(hub: HubHarness, project: str, title: str = "t") -> dict:  #
+def _proposal(hub: HubHarness, project: str, title: str = "t") -> dict:
     body = {"class": "c", "title": title, "body": "b", "findings": []}
     return _ok(hub.client.post(f"/api/projects/{project}/garden-proposals", json=body), 201)
 

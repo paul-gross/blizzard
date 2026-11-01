@@ -22,7 +22,7 @@ class CountingRegistry(WorkSourceRegistry):
         self.get_calls: list[str] = []
         self.slug_calls: list[str] = []
 
-    def get(self, source: str):  #
+    def get(self, source: str):
         self.get_calls.append(source)
         return super().get(source)
 

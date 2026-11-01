@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 _GRAPH = PACKAGED.named("basic-harness-workflow")
 
 
-def _doc():  #
+def _doc():
     return _GRAPH.doc
 
 

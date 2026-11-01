@@ -8,6 +8,7 @@ Two tiers: the pure precedence tests (no store, no I/O) sit at unit; ``LocalLeas
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine
@@ -155,11 +156,11 @@ def test_state_parked_wins_over_backing_off() -> None:
 # Liveness.stale — the staleness-boundary pin
 
 
-def _store(tmp_path):  #
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> None:  #
+def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -174,7 +175,7 @@ def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> Non
     )
 
 
-def _liveness(store, lease):  #
+def _liveness(store, lease):
     """``lease``'s baseline from the facts the store holds for it."""
     return Liveness.of(
         lease, heartbeat=store.latest_heartbeat(lease.lease_id), spawn=store.latest_spawn(lease.lease_id)
@@ -182,7 +183,7 @@ def _liveness(store, lease):  #
 
 
 @pytest.mark.unit
-def test_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  #
+def test_stale_at_exact_threshold_is_not_stale(tmp_path: Path) -> None:
     """The true edge: ``now - last == THRESHOLD`` reads not-stale (strict ``>``)."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -195,7 +196,7 @@ def test_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  #
 
 
 @pytest.mark.unit
-def test_stale_just_past_threshold_is_stale(tmp_path) -> None:  #
+def test_stale_just_past_threshold_is_stale(tmp_path: Path) -> None:
     """One microsecond past the threshold flips stale — pins against a ``>``→``>=`` drift."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -208,7 +209,7 @@ def test_stale_just_past_threshold_is_stale(tmp_path) -> None:  #
 
 
 @pytest.mark.unit
-def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path) -> None:  #
+def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path: Path) -> None:
     """'s live incident, at the predicate: an ask-park resumed at T+2h, far
     past the threshold, records a fresh ``lease_spawns`` row — the worker gets the
     whole window back, not stale at birth and reaped seconds into its first turn."""
@@ -246,7 +247,7 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
 
 
 @pytest.mark.unit
-def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> None:  #
+def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path: Path) -> None:
     """The baseline is the newest of the two, not the spawn alone: a worker beating away
     long after its spawn must not be measured from the spawn and reaped mid-work."""
     store = _store(tmp_path)
@@ -268,7 +269,7 @@ def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> N
 
 
 @pytest.mark.unit
-def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path) -> None:  #
+def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path: Path) -> None:
     """REAP's residue — minted at FILL, spawn-return never recorded. The pre-#150
     ``created_at`` floor is unchanged for it."""
     store = _store(tmp_path)
@@ -320,14 +321,14 @@ def _lease_service(
     )
 
 
-def _counting_store(tmp_path) -> _CountingParkedIdsStore:  #
+def _counting_store(tmp_path: Path) -> _CountingParkedIdsStore:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     runner_metadata.create_all(engine)
     return _CountingParkedIdsStore(engine, runner_store_errors())
 
 
 @pytest.mark.component
-def test_list_active_over_empty_store_returns_empty_list(tmp_path) -> None:  #
+def test_list_active_over_empty_store_returns_empty_list(tmp_path: Path) -> None:
     store = _store(tmp_path)
     service = _lease_service(store, FixedClock(_NOW), FakeProbe())
 
@@ -335,7 +336,7 @@ def test_list_active_over_empty_store_returns_empty_list(tmp_path) -> None:  #
 
 
 @pytest.mark.component
-def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  #
+def test_list_active_joins_binding_and_heartbeat(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn(
@@ -365,7 +366,7 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  #
 
 
 @pytest.mark.component
-def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) -> None:  #
+def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path: Path) -> None:
     """Reuses REAP's baseline: a lease resumed after a long park does not
     render ``stale``. Its ``last_heartbeat_at`` stays honest — the old beat, not the
     spawn — reporting what the worker last did, not when staleness is measured from."""
@@ -396,7 +397,7 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) ->
     assert activities[0].last_heartbeat_at == _NOW
 
 
-def _seed_spawned_lease(store) -> FakeProbe:  #
+def _seed_spawned_lease(store) -> FakeProbe:
     """One active lease, spawned at ``_NOW``, whose worker process is alive."""
     _seed_lease(store)
     store.record_spawn(
@@ -411,7 +412,7 @@ def _seed_spawned_lease(store) -> FakeProbe:  #
 
 @pytest.mark.component
 def test_list_active_renders_a_lease_running_when_its_heartbeat_is_newer_than_a_spawn_older_than_the_window(
-    tmp_path,  #
+    tmp_path: Path,
 ) -> None:
     store = _store(tmp_path)
     probe = _seed_spawned_lease(store)
@@ -424,7 +425,7 @@ def test_list_active_renders_a_lease_running_when_its_heartbeat_is_newer_than_a_
 
 @pytest.mark.component
 def test_list_active_renders_an_alive_lease_stale_when_its_newest_activity_is_older_than_the_window(
-    tmp_path,  #
+    tmp_path: Path,
 ) -> None:
     store = _store(tmp_path)
     probe = _seed_spawned_lease(store)
@@ -435,7 +436,7 @@ def test_list_active_renders_an_alive_lease_stale_when_its_newest_activity_is_ol
 
 @pytest.mark.component
 def test_list_active_honors_a_stale_after_shorter_than_the_default_threshold(
-    tmp_path,  #
+    tmp_path: Path,
 ) -> None:
     store = _store(tmp_path)
     probe = _seed_spawned_lease(store)
@@ -447,7 +448,7 @@ def test_list_active_honors_a_stale_after_shorter_than_the_default_threshold(
 
 
 @pytest.mark.component
-def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None:  #
+def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path: Path) -> None:
     store = _counting_store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")
     store.record_spawn(
@@ -475,7 +476,7 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
 
 
 @pytest.mark.component
-def test_list_active_renders_a_backing_off_lease(tmp_path) -> None:  #
+def test_list_active_renders_a_backing_off_lease(tmp_path: Path) -> None:
     """An open, un-elapsed overload fact renders ``backing-off`` — not
     ``exited``, even though the process the fact records has already exited (no probe entry)."""
     store = _store(tmp_path)
@@ -510,7 +511,7 @@ def test_list_active_renders_a_backing_off_lease(tmp_path) -> None:  #
 
 
 @pytest.mark.component
-def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  #
+def test_list_recent_appends_closed_leases_after_active(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")
     store.record_spawn(
@@ -548,7 +549,7 @@ def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  #
 
 
 @pytest.mark.component
-def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_path) -> None:  #
+def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_path: Path) -> None:
     """A single newest-N-overall read would let recently-closed leases crowd out a
     long-running active one. Pinned here with ``recent_limit=1`` — the active lease is
     older than both closed ones and must still appear."""
@@ -584,7 +585,7 @@ def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_pat
 
 
 @pytest.mark.component
-def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) -> None:  #
+def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path: Path) -> None:
     """A closed lease's bindings are always released by the time closure is recorded
      — the read model must be honest about that, so ``environment_id``/
     ``workdir`` come back ``None`` even though a binding once existed."""
@@ -604,7 +605,7 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
 
 
 @pytest.mark.unit
-def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  #
+def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path: Path) -> None:
     """The caller may already have read `latest_heartbeat`, so it can hand it in
     rather than have `Liveness.of` re-query. A supplied `None` (a lease that genuinely
     never beat) is honored as such, never re-read."""
@@ -661,7 +662,7 @@ def test_only_a_transitioned_closure_is_healthy() -> None:
 
 
 @pytest.mark.unit
-def test_every_injected_dependency_is_read_through_the_service(tmp_path) -> None:  #
+def test_every_injected_dependency_is_read_through_the_service(tmp_path: Path) -> None:
     """Each constructor argument shapes the panel: the clock and ``stale_after`` judge
     staleness, the probe aliveness, the stores the lease, beat, binding and open ask, and
     ``recent_limit`` the closed tail."""

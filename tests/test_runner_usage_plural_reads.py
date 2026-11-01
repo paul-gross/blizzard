@@ -38,7 +38,7 @@ def _payload(utilization: float, *, resets_in: timedelta = timedelta(hours=2)) -
     )
 
 
-def _record(store, slug: str, minutes: int, *, payload: str | None, miss_reason: str | None = None) -> None:  #
+def _record(store, slug: str, minutes: int, *, payload: str | None, miss_reason: str | None = None) -> None:
     store.record_external_usage_attempt(
         slug=slug,
         sampled_at=_NOW + timedelta(minutes=minutes),
@@ -49,7 +49,7 @@ def _record(store, slug: str, minutes: int, *, payload: str | None, miss_reason:
     )
 
 
-def _seed(store) -> list[str]:  #
+def _seed(store) -> list[str]:
     """never-sampled, ok, miss, and a newest miss hiding an older full window."""
     _record(store, "ok", 0, payload=_payload(40.0))
     _record(store, "ok", 1, payload=_payload(55.0))

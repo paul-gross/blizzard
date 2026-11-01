@@ -26,7 +26,7 @@ _BEFORE = "20260721_1008_hub_graph_node_session_source"  # the head just before 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _upgrade_existing_store_to_head(tmp_path: Path):  #
+def _upgrade_existing_store_to_head(tmp_path: Path):
     """A store already migrated to the revision *before* this one, then upgraded to
     head — the "existing store" half of the AC (a fresh ``base -> head`` store is
     covered by ``tests/test_store_migrations.py``)."""

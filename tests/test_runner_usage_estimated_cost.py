@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
@@ -30,7 +31,7 @@ def _sample(*, cost: float | None, estimate: float | None) -> UsageSample:
     )
 
 
-def _record(store, lease: str, sample: UsageSample) -> None:  #
+def _record(store, lease: str, sample: UsageSample) -> None:
     record_usage(
         store,
         lease_id=lease,
@@ -43,7 +44,7 @@ def _record(store, lease: str, sample: UsageSample) -> None:  #
     )
 
 
-def _rows(tmp_path):  #
+def _rows(tmp_path: Path):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         facts = conn.execute(
@@ -63,7 +64,7 @@ def _rows(tmp_path):  #
     return facts, [json.loads(p)["estimated_cost_usd"] for p in payloads]
 
 
-def test_the_row_keeps_the_same_estimate_the_outbound_fact_carries(tmp_path):  #
+def test_the_row_keeps_the_same_estimate_the_outbound_fact_carries(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _record(store, "lease_est", _sample(cost=None, estimate=0.42))
     _record(store, "lease_none", _sample(cost=1.5, estimate=None))
@@ -76,7 +77,7 @@ def test_the_row_keeps_the_same_estimate_the_outbound_fact_carries(tmp_path):  #
     assert outbound == [pytest.approx(0.42), None]
 
 
-def test_the_estimate_counts_toward_the_usage_totals(tmp_path):  #
+def test_the_estimate_counts_toward_the_usage_totals(tmp_path: Path):
     with_estimate = make_store(f"sqlite:///{tmp_path / 'a.db'}")
     without_estimate = make_store(f"sqlite:///{tmp_path / 'b.db'}")
     for store, estimate in ((with_estimate, 0.42), (without_estimate, None)):

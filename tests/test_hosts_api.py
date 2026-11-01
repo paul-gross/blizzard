@@ -501,7 +501,7 @@ def test_a_runner_gaining_a_route_after_the_check_is_a_409_and_the_committed_hos
     real = fleet.holdings
     reads: list[str] = []
 
-    def stale_first(runner_id: str):  #
+    def stale_first(runner_id: str):
         reads.append(runner_id)
         return [] if len(reads) == 1 else real(runner_id)
 

@@ -35,12 +35,12 @@ nodes:
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _mint_graph(hub, definition_yaml: str = _GRAPH) -> None:  #
+def _mint_graph(hub, definition_yaml: str = _GRAPH) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub, **overrides: object) -> dict:  #
+def _create_routine(hub, **overrides: object) -> dict:
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",
@@ -248,7 +248,7 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
     assert trend.status_code == 200, trend.text
 
 
-def _mint_scope(hub, slug: str) -> None:  #
+def _mint_scope(hub, slug: str) -> None:
     resp = hub.client.post("/api/scopes", json={"slug": slug, "description": ""})
     assert resp.status_code == 201, resp.text
 

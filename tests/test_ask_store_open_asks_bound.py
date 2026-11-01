@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -28,13 +29,13 @@ class _RowCountingConnections(RunnerStoreConnections):
 
     rows_read = 0
 
-    def all(self, stmt):  #
+    def all(self, stmt):
         rows = super().all(stmt)
         self.rows_read += len(rows)
         return rows
 
 
-def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path) -> None:  #
+def test_open_asks_does_not_read_the_park_rows_of_closed_leases(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     _create_all(runner_metadata, engine)
     counting = _RowCountingConnections(engine, runner_store_errors(), FIXTURE_RUNNER_ID)
