@@ -49,8 +49,13 @@ def _upgrade_entry(note: Note, tag: str, prose: str, upgrade: str) -> str:
     return f"### {_title(note, tag, prose)}\n\n{upgrade}"
 
 
+def first_sentence(prose: str) -> str:
+    """The first sentence of prose, with whitespace normalized to one line."""
+    return _SENTENCE_END.split(" ".join(prose.split()), maxsplit=1)[0]
+
+
 def _title(note: Note, tag: str, prose: str) -> str:
-    sentence = _SENTENCE_END.split(" ".join(prose.split()), maxsplit=1)[0]
+    sentence = first_sentence(prose)
     guide = note.fields.get("upgrade-guide")
     return f"[{sentence}]({UPGRADE_DOC_URL.format(tag=tag, anchor=guide)})" if isinstance(guide, str) else sentence
 
