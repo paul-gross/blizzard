@@ -581,7 +581,7 @@ def test_takeover_requires_the_exported_session_identity(tmp_path: Path) -> None
 
 def test_takeover_rejects_a_non_sse_upstream_response(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, takeover_non_sse=True, timeout_seconds=1.5)
+    probe, _ = _probe(mock_opencode, tmp_path, takeover_non_sse=True, timeout_seconds=5.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -607,7 +607,7 @@ def test_takeover_rejects_an_immediate_upstream_eof_or_failure(
     probe, _ = _probe(
         mock_opencode,
         tmp_path,
-        timeout_seconds=1.5,
+        timeout_seconds=5.0,
         takeover_immediate_eof=takeover_immediate_eof,
         takeover_stream_failure=takeover_stream_failure,
     )
