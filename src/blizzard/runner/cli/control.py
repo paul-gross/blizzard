@@ -3,7 +3,6 @@ requeue, selftest."""
 
 from __future__ import annotations
 
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +10,7 @@ from typing import NotRequired, TypedDict
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
@@ -728,13 +728,14 @@ def selftest(
             raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
         resp.raise_for_status()
         run = resp.json()
-        deadline = time.monotonic() + _SELFTEST_POLL_TIMEOUT
+        monotonic_clock = CliCollaborators.of(ctx).monotonic_clock
+        deadline = monotonic_clock.monotonic() + _SELFTEST_POLL_TIMEOUT
         while run["status"] == "running":
-            if time.monotonic() > deadline:
+            if monotonic_clock.monotonic() > deadline:
                 raise click.ClickException(
                     f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s — the runner may be wedged"
                 )
-            time.sleep(_SELFTEST_POLL_INTERVAL)
+            monotonic_clock.sleep(_SELFTEST_POLL_INTERVAL)
             run = daemon.get(f"/api/selftests/{run['id']}").json()
 
     for check in run["checks"]:

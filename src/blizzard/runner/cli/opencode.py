@@ -7,12 +7,12 @@ from pathlib import Path
 
 import click
 
+from blizzard.runner.cli.children import RunnerCliCollaborators
 from blizzard.runner.harness.compatibility import CompatibilityContractError
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
 from blizzard.runner.harness.opencode.compatibility.compaction import SubprocessOpenCodeCompactor
 from blizzard.runner.harness.opencode.compatibility.diagnostic import run_opencode_compatibility
 from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence, OpenCodeEvidenceError
-from blizzard.runner.harness.opencode.compatibility.loopback import UrllibLoopbackTransport
 from blizzard.runner.harness.opencode.compatibility.probe import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     OpenCodeCompatibilityProbe,
@@ -22,7 +22,6 @@ from blizzard.runner.harness.opencode.compatibility.process import SubprocessOpe
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
 from blizzard.runner.process.child_env import AllowlistedEnv
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 
 @click.group("opencode")
@@ -55,7 +54,9 @@ def opencode_group() -> None:
     required=True,
     help="Required explicit opt-in to provider-reaching probes.",
 )
+@click.pass_context
 def opencode_compatibility(
+    ctx: click.Context,
     binary: Path,
     model: str,
     variant: str,
@@ -64,9 +65,10 @@ def opencode_compatibility(
 ) -> None:
     """Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."""
     try:
-        children = SubprocessChildProcesses()
+        carrier = RunnerCliCollaborators.of(ctx)
+        children = carrier.children
         process = SubprocessOpenCodeProcess(children)
-        transport = UrllibLoopbackTransport()
+        transport = carrier.loopback
         probe = OpenCodeCompatibilityProbe(
             binary=str(binary),
             model=model,
