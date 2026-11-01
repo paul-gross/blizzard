@@ -1979,6 +1979,22 @@ export type ChunkUsageView = {
 };
 
 /**
+ * ChunkWorkItemsView
+ *
+ * Many chunks' pass-through work items, from one bulk read: each resolved chunk's id to its entries, exactly what
+ * ``GET /api/chunks/{chunk_id}/work-items`` answers for it (comments aside, which are empty unless asked for). A
+ * chunk id that is unknown or ephemeral is absent, never an error.
+ */
+export type ChunkWorkItemsView = {
+    /**
+     * Chunks
+     */
+    chunks: {
+        [key: string]: Array<WorkItemEntry>;
+    };
+};
+
+/**
  * ChunksPageView
  *
  * ``GET /api/chunks``'s own bounded page — ``next_cursor`` is
@@ -19288,6 +19304,40 @@ export type AssignRoleApiUsersUserIdRolePostResponses = {
 };
 
 export type AssignRoleApiUsersUserIdRolePostResponse = AssignRoleApiUsersUserIdRolePostResponses[keyof AssignRoleApiUsersUserIdRolePostResponses];
+
+export type GetBulkWorkItemsApiWorkItemsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: Array<string>;
+        /**
+         * Include Comments
+         */
+        include_comments?: boolean;
+    };
+    url: '/api/work-items';
+};
+
+export type GetBulkWorkItemsApiWorkItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBulkWorkItemsApiWorkItemsGetError = GetBulkWorkItemsApiWorkItemsGetErrors[keyof GetBulkWorkItemsApiWorkItemsGetErrors];
+
+export type GetBulkWorkItemsApiWorkItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkWorkItemsView;
+};
+
+export type GetBulkWorkItemsApiWorkItemsGetResponse = GetBulkWorkItemsApiWorkItemsGetResponses[keyof GetBulkWorkItemsApiWorkItemsGetResponses];
 
 export type ListWorkSourcesApiWorkSourcesGetData = {
     body?: never;

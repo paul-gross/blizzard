@@ -3,6 +3,8 @@ with no configured record or credential."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
@@ -15,7 +17,13 @@ from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWor
 from blizzard.hub.domain.work_items.model import WorkItemEdit, is_readable
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
+from blizzard.hub.work_sources.source import (
+    IWorkSource,
+    IWorkSourceBatchReader,
+    WorkItem,
+    WorkSourceError,
+    resolve_author_view,
+)
 
 
 class HubWorkSource:
@@ -57,6 +65,28 @@ class HubWorkSource:
             author=resolve_author_view(item.author, self._users),
             stated_priority=item.stated_priority,
         )
+
+    def fetch_many(
+        self, pointers: Sequence[WorkRef], *, include_comments: bool
+    ) -> Mapping[WorkRef, WorkItem | WorkSourceError]:
+        """:meth:`fetch` over every pointer in one store read and one author read. A hub item carries no comments, so
+        ``include_comments`` changes nothing."""
+        found = self._items.get_many(pointers)
+        users = self._users.get_many(sorted({i.author.user_id for i in found.values() if i.author.user_id is not None}))
+        result: dict[WorkRef, WorkItem | WorkSourceError] = {}
+        for pointer in pointers:
+            item = found.get(pointer)
+            if item is None or not is_readable(item):
+                result[pointer] = WorkSourceError(f"no open {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
+                continue
+            result[pointer] = WorkItem(
+                body=item.body,
+                title=item.title,
+                comments=[],
+                author=resolve_author_view(item.author, users),
+                stated_priority=item.stated_priority,
+            )
+        return result
 
     def label(self, pointer: WorkRef) -> str:
         return f"{RESERVED_HUB_SOURCE_NAME}:{pointer.ref}"
@@ -125,6 +155,9 @@ class HubWorkSource:
 
 
 _work_source_conforms: type[IWorkSource] = HubWorkSource
+
+
+_work_batch_reader_conforms: type[IWorkSourceBatchReader] = HubWorkSource
 
 
 _work_editor_conforms: type[IWorkEditor] = HubWorkSource

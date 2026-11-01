@@ -451,8 +451,10 @@ describe('GlanceBoard — work items', () => {
           next_cursor: null,
         };
       }
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}/work-items`) {
-        return { items: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments' }] };
+      if (method === 'GET' && path === '/api/work-items') {
+        return {
+          chunks: { [CHUNK_ID]: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments' }] },
+        };
       }
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
@@ -480,6 +482,6 @@ describe('GlanceBoard — work items', () => {
     expect(row?.querySelector('.head .cid')?.textContent?.trim()).toMatch(/^C-/);
     expect(row?.querySelector('[data-testid="glance-title"]')?.textContent?.trim()).toBe('Add idempotency keys to POST /payments');
     expect(row?.querySelector('[data-testid="glance-title-skeleton"]')).toBeNull();
-    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/work-items`, 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/work-items', 'GET')).toHaveLength(1);
   });
 });

@@ -7,7 +7,6 @@ stored column. The work-item read is a pass-through whose contents are never sto
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
@@ -18,8 +17,7 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
-from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.foundation.work_items import WorkItemPriority
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -32,6 +30,7 @@ from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
@@ -61,7 +60,6 @@ from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.graph.model import TargetGraphRetired
-from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.delete import (
     ChunkHasDependents,
@@ -88,7 +86,6 @@ from blizzard.hub.domain.operations.restart import (
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.work_sources.registry import SelectedWorkSources
-from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,
     ChunkCompleteRequest,
@@ -114,12 +111,10 @@ from blizzard.wire.chunk import (
     HubMarkerRequest,
     HubMarkerResponse,
     ReviewFindingsDeliveryResponse,
-    WorkItemEntry,
     WorkItemsView,
 )
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.project import ProjectRequiredBody, SourceNotLinkedBody
-from blizzard.wire.work_source import WorkItemAuthorView
 
 #: How many of the most recently finished ``done`` chunks stay on it however old, per tenant (per project
 #: under ``?project=``) — the board's Done lane is never emptier than this while that many exist.
@@ -908,21 +903,6 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     return ChunkDeleteResponse(chunk_id=chunk_id)
 
 
-def _author_view(author: AuthorView, runner_names: Mapping[str, str]) -> WorkItemAuthorView:
-    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here: the
-    source already resolved it, this only reshapes the fields and names a fleet author's
-    runner out of ``runner_names``, the caller's one batched read."""
-    return WorkItemAuthorView(
-        kind=author.kind,
-        user_id=author.user_id,
-        login=author.login,
-        runner_id=author.runner_id,
-        runner_name=runner_names.get(author.runner_id) if author.runner_id is not None else None,
-        chunk_id=author.chunk_id,
-        node_name=author.node_name,
-    )
-
-
 @router.get(
     "/chunks/{chunk_id}/work-items",
     response_model=WorkItemsView,
@@ -932,67 +912,10 @@ def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
     """Pass-through work items read, one entry per pointer, contents never stored. A
     per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
     failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
+    entries = read_chunk_work_items([chunk_id], services, include_comments=True)
+    if chunk_id not in entries:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    fetched_at = iso_utc(services.clock.now())
-    holders = services.chunks.work_refs.live_holders(chunk.work_refs)
-    # Each entry beside its fetched author, so one read names every fleet author afterwards.
-    entries: list[tuple[WorkItemEntry, AuthorView | None]] = []
-    for pointer in chunk.work_refs:
-        source = services.work_sources.get(pointer.source)
-        named = WorkItemEntry(
-            source=pointer.source,
-            ref=pointer.ref,
-            slug=services.work_sources.source_label(pointer.source),
-            hub_source=pointer.source == RESERVED_HUB_SOURCE_NAME,
-            fetched_at=fetched_at,
-        )
-        if source is None:
-            entries.append(
-                (
-                    named.model_copy(
-                        update={
-                            "label": services.work_sources.label(pointer),
-                            "error": f"no work source is configured under {pointer.source!r}",
-                        }
-                    ),
-                    None,
-                )
-            )
-            continue
-        label = services.work_sources.label(pointer)
-        web_url = source.web_url(pointer, live_holder=holders.get(pointer))
-        try:
-            item = source.fetch(pointer)
-            stated_priority = WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None
-        except (WorkSourceError, ValueError) as exc:
-            entries.append((named.model_copy(update={"label": label, "web_url": web_url, "error": str(exc)}), None))
-        else:
-            entries.append(
-                (
-                    named.model_copy(
-                        update={
-                            "label": label,
-                            "web_url": web_url,
-                            "title": item.title,
-                            "body": item.body,
-                            "comments": item.comments,
-                            "stated_priority": stated_priority,
-                        }
-                    ),
-                    item.author,
-                )
-            )
-    runner_names = services.registry.names_for(
-        author.runner_id for _, author in entries if author is not None and author.runner_id is not None
-    )
-    return WorkItemsView(
-        items=[
-            entry if author is None else entry.model_copy(update={"author": _author_view(author, runner_names)})
-            for entry, author in entries
-        ]
-    )
+    return WorkItemsView(items=entries[chunk_id])
 
 
 # `/pm-items` is a deprecated alias onto the *same handler* as `/work-items`:

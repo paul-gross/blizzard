@@ -157,7 +157,13 @@ from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateErro
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.source import (
+    IWorkSource,
+    IWorkSourceBatchReader,
+    IWorkSourceRegistry,
+    WorkItem,
+    WorkSourceError,
+)
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.config_inputs import VERSION_WINDOW, create_hub_app
 
@@ -612,6 +618,28 @@ def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
     return x
 
 
+class FakeBatchWorkSource(FakeWorkSource):
+    """A :class:`FakeWorkSource` that also reads in batches; ``batches`` logs each call's refs and its comments flag."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.batches: list[tuple[list[str], bool]] = []
+
+    def fetch_many(
+        self, pointers: Sequence[WorkRef], *, include_comments: bool
+    ) -> Mapping[WorkRef, WorkItem | WorkSourceError]:
+        self.batches.append(([p.ref for p in pointers], include_comments))
+        result: dict[WorkRef, WorkItem | WorkSourceError] = {}
+        for pointer in pointers:
+            try:
+                item = super().fetch(pointer)
+            except WorkSourceError as exc:
+                result[pointer] = exc
+            else:
+                result[pointer] = item if include_comments else replace(item, comments=[])
+        return result
+
+
 class WorkSourceRegistry:
     """A dict-backed work-source registry — the test double for the store-backed one.
 
@@ -663,6 +691,10 @@ class WorkSourceRegistry:
 
     def editor(self, source: str) -> IWorkEditor | None:
         return self._editors.get(source)
+
+    def batch_reader(self, source: str) -> IWorkSourceBatchReader | None:
+        bound = self._sources.get(source)
+        return bound if isinstance(bound, IWorkSourceBatchReader) else None
 
     def resolve(self, token: str) -> WorkRef | None:
         for source in self._sources.values():

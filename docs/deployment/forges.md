@@ -129,6 +129,11 @@ after a hub restart send every caller. A forge that refuses a call for its rate 
 `Retry-After`, or a secondary limit — holds every caller of that key until the refusal lifts, a secondary limit for at
 least a minute. A landing turned away answers `pending` and is polled again at the reset.
 
+A work source's batch read goes out as one GraphQL request, which draws from the forge's `graphql` bucket rather than
+its `core` one. It is admitted through the same gate, and the budget learns the bucket from the answer's
+`X-RateLimit-Resource`. A GraphQL answer of `200` whose errors say `RATE_LIMITED` is a refusal like a `403` with nothing
+left: it holds every caller of that key until the answer's `X-RateLimit-Reset`.
+
 `blizzard hub forge get <forge>` prints each budget's last reading as a `budget` line — the secret, or `(anonymous)`,
 the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`.
 Nothing is listed before the forge has answered.

@@ -246,6 +246,20 @@ A stranded ref degrades without failing anything: its label renders as `{stored 
 `GET /api/chunks/<id>/work-items` carries `error="no work source is configured under '<stored value>'"`. Verify after
 the upgrade by reading a pre-existing chunk's work items and confirming every entry's `error` is null.
 
+## Reading many chunks' items at once
+
+`GET /api/work-items?chunk_id=<id>&chunk_id=<id>` reads up to 100 chunks' items in one request and answers
+`{"chunks": {"<id>": [entries]}}`, each entry exactly what `GET /api/chunks/<id>/work-items` gives that pointer.
+Comments are empty unless `include_comments=true`. A chunk id that is unknown is left out of the answer, and more than
+100 ids answer `422`. This is the read the board's titles use.
+
+The cost to a source is bounded by the sources, not the items. A GitHub source is asked once per request, through one
+GraphQL request for every item of it the chunks hold, where the single-chunk read spends two REST requests per item; the
+hub's own items are one store read. A source the hub cannot read leaves an `error` on its own entries alone, and a
+missing issue errors only itself. When the source's rate budget is low, or the forge refuses for rate, every one of its
+entries carries the `error` and the time the budget lifts, as the single-chunk read's does
+([forges.md](./forges.md#the-rate-budget)).
+
 ## Upgrading past the `close` flag
 
 Closure is unconditional, so a `close` key on a leftover `[[work_source]]` block has nothing left to opt into;

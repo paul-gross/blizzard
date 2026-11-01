@@ -100,6 +100,7 @@ from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
+from blizzard.hub.api.work_item_reads import router as work_item_reads_router
 from blizzard.hub.api.work_source_params import refuse_built_in_work_source
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
@@ -500,6 +501,7 @@ def create_app(
     app.include_router(garden_proposals_router)
     app.include_router(garden_runs_router)
     app.include_router(chunks_router)
+    app.include_router(work_item_reads_router)
     app.include_router(flows_router)
     app.include_router(chunk_dependencies_router)
     app.include_router(decisions_router)

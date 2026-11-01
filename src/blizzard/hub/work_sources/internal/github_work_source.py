@@ -8,6 +8,7 @@ and ``web_base`` and carrying its own credentialed client."""
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar
@@ -16,13 +17,13 @@ import httpx2
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model
-from blizzard.foundation.untyped import as_table
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateGate
-from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceBatchReader, WorkItem, WorkSourceError
 
 _log = get_logger("blizzard.hub.work_sources")
 
@@ -132,6 +133,60 @@ class GitHubWorkSource:
             title=str(issue.json().get("title") or ""),
             comments=[str(c.get("body") or "") for c in comments.json()],
         )
+
+    def fetch_many(
+        self, pointers: Sequence[WorkRef], *, include_comments: bool
+    ) -> Mapping[WorkRef, WorkItem | WorkSourceError]:
+        """:meth:`fetch` over every pointer in one GraphQL request, admitted through the gate once. A turn-away or a
+        rate refusal of any form (a ``403``/``429``, or a ``200`` whose ``errors`` carry ``RATE_LIMITED``) errors
+        every pointer with the instant the budget lifts; any other transport or HTTP failure errors every pointer
+        alike; a pointer the answer holds no item for errors alone."""
+        if not pointers:
+            return {}
+        if (resume_at := self._turned_away()) is not None:
+            return {
+                p: WorkSourceError(f"{self._name}#{p.ref}: rate budget low until {resume_at}", retry_after=resume_at)
+                for p in pointers
+            }
+        try:
+            answer = self._client.post(
+                self._graphql_url(),
+                json={"query": _batch_query(pointers, include_comments), "variables": self._owner_name()},
+            )
+            answer.raise_for_status()
+            payload = as_table(answer.json()) or {}
+        except (httpx2.HTTPError, ValueError) as exc:
+            _log.error("work-item batch fetch failed", source=self._name, count=len(pointers), error=str(exc))
+            resume = self._rate_refusal(exc) if isinstance(exc, httpx2.HTTPError) else None
+            return {
+                p: WorkSourceError(f"failed to read {self._name}#{p.ref}: {exc}", retry_after=resume) for p in pointers
+            }
+        errors = as_list(payload.get("errors")) or []
+        if (resume_at := self._graphql_rate_refusal(errors, answer.headers)) is not None:
+            return {
+                p: WorkSourceError(f"{self._name}#{p.ref}: rate budget low until {resume_at}", retry_after=resume_at)
+                for p in pointers
+            }
+        data = as_table(payload.get("data")) or {}
+        nodes = as_table(data.get("repository")) or {}
+        return {p: _batch_item(self._name, p, nodes.get(f"i{p.ref}"), errors) for p in pointers}
+
+    def _owner_name(self) -> dict[str, str]:
+        owner, _, name = self._repo.partition("/")
+        return {"owner": owner, "name": name}
+
+    def _graphql_url(self) -> str:
+        """The forge's GraphQL address from its REST base: GHES serves it at ``/api/graphql`` beside ``/api/v3``,
+        every other base (``https://api.github.com``, the mock forge) at ``/graphql``."""
+        base = str(self._client.base_url).rstrip("/")
+        return f"{base.removesuffix('/api/v3')}/api/graphql" if base.endswith("/api/v3") else f"{base}/graphql"
+
+    def _graphql_rate_refusal(self, errors: list[object], headers: Mapping[str, str]) -> datetime | None:
+        """When a ``200`` answer's ``errors`` carry ``RATE_LIMITED``, the instant the budget lifts — the gate marking
+        it spent as it does a ``429``."""
+        if self._gate is None or not any((as_table(e) or {}).get("type") == "RATE_LIMITED" for e in errors):
+            return None
+        return self._gate.refused(429, {**headers, "x-ratelimit-remaining": "0"}, "RATE_LIMITED")
 
     def label(self, pointer: WorkRef) -> str | None:
         """``{slug}#{ref}`` — always renders; ``ref`` is opaque here."""
@@ -294,6 +349,31 @@ def _message(response: httpx2.Response) -> str:
     return message if isinstance(message, str) else ""
 
 
+def _batch_query(pointers: Sequence[WorkRef], include_comments: bool) -> str:
+    """One aliased ``issueOrPullRequest`` field per pointer under the source's repository."""
+    selection = "title body" + (" comments(first: 100) { nodes { body } }" if include_comments else "")
+    fields = "\n".join(
+        f"i{p.ref}: issueOrPullRequest(number: {int(p.ref)}) {{ ... on Issue {{ {selection} }} "
+        f"... on PullRequest {{ {selection} }} }}"
+        for p in pointers
+    )
+    return f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{\n{fields}\n}} }}"
+
+
+def _batch_item(name: str, pointer: WorkRef, node: object, errors: list[object]) -> WorkItem | WorkSourceError:
+    """One alias's answer as an item, or the error that ref alone failed with."""
+    fields = as_table(node)
+    if fields is None:
+        path = ["repository", f"i{pointer.ref}"]
+        reason = next(
+            (str(e.get("message")) for e in map(as_table, errors) if e and e.get("path") == path), "not found"
+        )
+        return WorkSourceError(f"failed to read {name}#{pointer.ref}: {reason}")
+    thread = as_table(fields.get("comments")) or {}
+    comments = [str((as_table(c) or {}).get("body") or "") for c in as_list(thread.get("nodes")) or []]
+    return WorkItem(body=str(fields.get("body") or ""), title=str(fields.get("title") or ""), comments=comments)
+
+
 def _trace_marker(chunk_id: str) -> str:
     return f"<!-- blizzard-delivery:{chunk_id} -->"
 
@@ -315,6 +395,9 @@ def _trace_comment(trace: DeliveryTrace, marker: str) -> str:
 
 
 _work_source_conforms: type[IWorkSource] = GitHubWorkSource
+
+
+_work_batch_reader_conforms: type[IWorkSourceBatchReader] = GitHubWorkSource
 
 
 _work_annotator_conforms: type[IWorkAnnotator] = GitHubWorkSource

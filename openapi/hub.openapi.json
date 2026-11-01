@@ -3585,6 +3585,27 @@
         "title": "ChunkUsageView",
         "type": "object"
       },
+      "ChunkWorkItemsView": {
+        "description": "Many chunks' pass-through work items, from one bulk read: each resolved chunk's id to its entries, exactly what\n``GET /api/chunks/{chunk_id}/work-items`` answers for it (comments aside, which are empty unless asked for). A\nchunk id that is unknown or ephemeral is absent, never an error.",
+        "properties": {
+          "chunks": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/WorkItemEntry"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Chunks",
+            "type": "object"
+          }
+        },
+        "required": [
+          "chunks"
+        ],
+        "title": "ChunkWorkItemsView",
+        "type": "object"
+      },
       "ChunksPageView": {
         "description": "``GET /api/chunks``'s own bounded page \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
@@ -34708,6 +34729,63 @@
         "summary": "Assign Role",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/work-items": {
+      "get": {
+        "description": "Many chunks' pass-through work items in one read \u2014 repeatable ``chunk_id``, at most 100 (``422`` beyond).\nEach GitHub source is asked once however many items it holds. An unknown or ephemeral chunk id is omitted, never\na 404; a per-pointer failure is that entry's own ``error``. Comments are empty unless ``include_comments``.",
+        "operationId": "get_bulk_work_items_api_work_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "title": "Chunk Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_comments",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Comments",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkWorkItemsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Bulk Work Items",
+        "tags": [
+          "chunks"
         ]
       }
     },

@@ -29,8 +29,8 @@ function answer(_method: string, path: string): unknown {
       return { chunks: [CHUNK], next_cursor: null };
     case `/api/chunks/${RUNNING}`:
       return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [], open_prs: [], closed_prs: [], landed_repos: [] };
-    case `/api/chunks/${RUNNING}/work-items`:
-      return { items: [{ source: 'hub', ref: '1', title: 'Fix the lease', fetched_at: 't', comments: [] }] };
+    case '/api/work-items':
+      return { chunks: { [RUNNING]: [{ source: 'hub', ref: '1', title: 'Fix the lease', fetched_at: 't', comments: [] }] } };
     case '/api/queue':
     case '/api/backlog':
       return { entries: [], next_cursor: null };
@@ -71,7 +71,7 @@ describe('BoardPage layout and titles', () => {
     const { el } = await open('/board');
 
     const paths = stub.requests.map((request) => request.path);
-    expect(paths.indexOf(`/api/chunks/${RUNNING}/work-items`)).toBeGreaterThan(paths.indexOf('/api/chunks'));
+    expect(paths.indexOf('/api/work-items')).toBeGreaterThan(paths.indexOf('/api/chunks'));
     const titled = el.querySelector<HTMLElement>(`[data-chunk="${RUNNING}"] [data-testid="chunk-title"]`);
     expect(titled?.textContent?.trim()).toBe('Fix the lease');
   });

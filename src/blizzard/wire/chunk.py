@@ -747,6 +747,14 @@ class WorkItemsView(WireModel):
     items: list[WorkItemEntry] = []
 
 
+class ChunkWorkItemsView(WireModel):
+    """Many chunks' pass-through work items, from one bulk read: each resolved chunk's id to its entries, exactly what
+    ``GET /api/chunks/{chunk_id}/work-items`` answers for it (comments aside, which are empty unless asked for). A
+    chunk id that is unknown or ephemeral is absent, never an error."""
+
+    chunks: dict[str, list[WorkItemEntry]] = {}
+
+
 class ChunkDependencyDeclareRequest(BaseModel):
     """Declare that CHUNK depends on ``prerequisite_chunk_id``. Records who
     declared it."""

@@ -94,6 +94,7 @@ export {
   hubMembersKey,
   hubWorkItemKey,
   hubWorkItemsKey,
+  hubBoardChunkWorkItemsKey,
   hubWorkItemsBatchKey,
   hubProjectKey,
   hubProjectLinksKey,
@@ -257,6 +258,7 @@ export {
   getFindingApiFindingsFindingIdGet,
   getGraphApiGraphsGraphIdGet,
   getQueueApiQueueGet,
+  getBulkWorkItemsApiWorkItemsGet,
   getWorkItemsApiChunksChunkIdWorkItemsGet,
   getWorkItemApiWorkSourcesSourceItemsRefGet,
   healthApiHealthGet,
@@ -311,7 +313,7 @@ export {
   supersedeFindingsApiFindingsSupersedePost,
   wontFixFindingsApiFindingsWontFixPost,
 } from './lib/api/hub';
-export type { ChunkDetail, WorkItemsView } from './lib/api/hub';
+export type { ChunkDetail, ChunkWorkItemsView, WorkItemsView } from './lib/api/hub';
 export type { ProjectCreateRequest, ProjectPatchRequest, RepositoryLinkView, SourceLinkView } from './lib/api/hub';
 // A project's garden: its nested reads and its scopes' by-slug verbs, each addressed inside the project.
 export {
