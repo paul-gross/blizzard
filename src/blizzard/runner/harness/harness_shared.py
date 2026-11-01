@@ -3,14 +3,12 @@
 Not a base class either adapter must inherit — only what was implemented nearly verbatim
 in both ``src/blizzard/runner/harness/claude_code/adapter.py`` and
 ``src/blizzard/runner/harness/opencode/adapter.py`` lives here: the identity env, the
-``<Choice>`` scan, the stdout-target idiom, and the model-resolution skeleton."""
+``<Choice>`` scan, and the model-resolution skeleton."""
 
 from __future__ import annotations
 
-import contextlib
 import json
-from collections.abc import Callable, Generator, Mapping, Sequence
-from typing import IO
+from collections.abc import Callable, Mapping, Sequence
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
@@ -161,16 +159,3 @@ def text_after_choice_close(text: str) -> str | None:
     if close == -1:
         return None
     return text[close + len(CHOICE_CLOSE) :].strip()
-
-
-@contextlib.contextmanager
-def stdout_target(path: str, *, mode: str = "ab") -> Generator[IO[bytes] | None, None, None]:
-    """The injected stdout file, opened in ``mode``, else ``None`` (no redirect) when
-    ``path`` is empty. A context manager so no caller leaks the descriptor across a failed
-    ``Popen``. ``mode`` defaults to append (``"ab"``) — a lease's own growing capture; a
-    detached judgement's single-shot reply file passes ``mode="wb"`` instead."""
-    if not path:
-        yield None
-        return
-    with open(path, mode) as f:
-        yield f

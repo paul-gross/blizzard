@@ -7,7 +7,7 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import collaborator
@@ -60,6 +60,25 @@ class WorkerScratchDirs:
             return 0
         for entry in entries:
             if entry.name in active:
+                continue
+            with contextlib.suppress(OSError):
+                shutil.rmtree(entry.path)
+                removed += 1
+        return removed
+
+    def sweep_flat_entries(self, removable: Callable[[str], bool]) -> int:
+        """Remove each directory directly under ``root`` — a pre-upgrade, runner-unkeyed scratch entry — that
+        ``removable`` accepts by name and that is not a runner's subtree (``rn_…``). Anything else is left
+        alone, since it may be another runner's. Returns the count removed."""
+        if not self.root:
+            return 0
+        removed = 0
+        try:
+            entries = list(os.scandir(self.root))
+        except OSError:
+            return 0
+        for entry in entries:
+            if entry.name.startswith("rn_") or not removable(entry.name):
                 continue
             with contextlib.suppress(OSError):
                 shutil.rmtree(entry.path)

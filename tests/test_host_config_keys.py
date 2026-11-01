@@ -313,6 +313,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "runner[].opencode.models.supported": ["openai/*"],
     "runner[].worker.path_prepend": ["/opt/bin"],
     "runner[].worker.shell": "/opt/bin/sh",
+    "tools.path_prepend": ["/opt/tools"],
     "runner[].throttle.budget.usd": 0.25,
     "runner[].throttle.schedule.days": ["mon"],
     "runner[].throttle.schedule.hours": ["19:00-08:00"],

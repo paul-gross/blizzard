@@ -8,7 +8,7 @@ from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
-from blizzard.runner.hub.identity import IdentityVerdict, judged
+from blizzard.runner.hub.identity import IdentityVerdict, judged, served_runner_state
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStore,
     ForeignStoreKind,
@@ -115,3 +115,14 @@ def test_a_tick_runs_every_step_unless_refusing_and_the_registration_alone_when_
     state: IdentityState, registration_checks: bool, scope: TickScope
 ) -> None:
     assert tick_scope(_verdict(state), registration_checks=registration_checks) is scope
+
+
+def test_a_served_runner_with_no_verdict_or_a_verdict_nothing_refuses_is_serving() -> None:
+    assert served_runner_state(None) == ("serving", [])
+    assert served_runner_state(_verdict(IdentityState.MATCHED)) == ("serving", [])
+
+
+def test_a_served_runner_whose_verdict_refuses_is_halted_naming_why() -> None:
+    state, reasons = served_runner_state(_verdict(IdentityState.NOT_HELD, reason="not held at its hub"))
+
+    assert (state, reasons) == ("halted", ["not held at its hub"])

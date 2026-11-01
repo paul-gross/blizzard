@@ -26,6 +26,11 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.host_layout import (
+    ELICITATION_OUTPUT_DIRNAME,
+    WORKER_SCRATCH_DIRNAME,
+    WORKER_STDOUT_DIRNAME,
+)
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
@@ -114,21 +119,29 @@ class LoopWiring:
         )
         # The per-lease harness-stdout directory, created once here so a worker's
         # stdout redirect target always exists by the time a spawn/resume opens it.
-        worker_stdout_dir = config.root / "worker-stdout"
+        worker_stdout_dir = config.root / WORKER_STDOUT_DIRNAME
         worker_stdout_dir.mkdir(parents=True, exist_ok=True)
         # The detached elicitation's own output directory — load-bearing,
         # so it is always created, unlike `worker_stdout_dir`'s empty-disables convention.
-        elicitation_output_dir = config.root / "elicitation-output"
+        elicitation_output_dir = config.root / ELICITATION_OUTPUT_DIRNAME
         elicitation_output_dir.mkdir(parents=True, exist_ok=True)
         # The per-lease scratch directory (`BLIZZARD_TMPDIR`), created once here so a worker's
         # staging target always exists by the time a spawn/resume/judge opens it.
-        worker_scratch_dir = config.root / "worker-tmp"
+        # Keyed by runner id: a host serves several runners from one root, and each sweeps only its own subtree.
+        worker_scratch_root = config.root / WORKER_SCRATCH_DIRNAME
+        worker_scratch_dir = worker_scratch_root / graph.runner_id
         worker_scratch_dir.mkdir(parents=True, exist_ok=True)
         _worker_scratch = WorkerScratchDirs(str(worker_scratch_dir))
         if sweep_worker_scratch:
             # A one-shot crash reconciliation — sweeping any orphan a crash left between a
             # directory's `ensure` and its owning lease's row landing.
-            _worker_scratch.sweep_orphans(lease.lease_id for lease in stores.lease_record.list_active_leases())
+            active = {lease.lease_id for lease in stores.lease_record.list_active_leases()}
+            _worker_scratch.sweep_orphans(active)
+            # Pre-upgrade entries sit directly under the shared root, unkeyed by runner. One is this runner's to
+            # remove only when this runner's own store holds its lease and that lease has closed.
+            WorkerScratchDirs(str(worker_scratch_root)).sweep_flat_entries(
+                lambda name: stores.lease_record.lease(name) is not None and name not in active,
+            )
         # The tool profile the runner's own `git` and check commands launch under: no lease identity.
         tool_env = config.tool_env(graph.trace_settings)
         loop_config = LoopConfig(

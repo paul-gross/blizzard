@@ -1935,7 +1935,7 @@ _DOMAIN_CORE_DRIVER_EXCEPTIONS: dict[Path, tuple[str, ...]] = {
     _RUNNER_DIR / "process" / "child_env.py": ("os",),
     # The one home of ``os.killpg``, which its TERM, grace, KILL sequence signals through.
     _RUNNER_DIR / "process" / "groups.py": ("os",),
-    # The canary builds paths in, and reads its resume stdout back from, its own throwaway scratch workdir.
+    # The canary builds paths in its own throwaway scratch workdir.
     _RUNNER_DIR / "selftest" / "checks.py": ("os",),
 }
 

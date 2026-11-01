@@ -28,13 +28,8 @@ class ProcStat:
     fields: tuple[str, ...]
 
     @classmethod
-    def of(cls, pid: int) -> ProcStat:
-        """Read ``pid``'s stat line — a vanished or unreadable pid yields empty fields."""
-        try:
-            with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
-                stat = fh.read()
-        except (FileNotFoundError, ProcessLookupError, PermissionError):
-            return cls(())
+    def parse(cls, stat: str) -> ProcStat:
+        """Parse one stat line's text — an empty or malformed line yields empty fields."""
         # ``comm`` (field 2) is paren-wrapped and may contain spaces and parens, so split
         # after the *last* ``)``; the remainder begins at field 3 (``state``).
         close = stat.rfind(")")

@@ -209,3 +209,53 @@ def test_each_runners_worker_exports_and_platform_spans_carry_that_runners_ident
     finally:
         hosted.close()
         host.close()
+
+
+def test_one_runners_start_sweep_leaves_the_other_runners_live_scratch(tmp_path: Path) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        first, second = host.runners
+        first_ctx = LoopWiring.of(first.config).context(FakeHub(), first)
+        live = Path(
+            first_ctx.worker_scratch.ensure("lease_live_on_first")
+        )  # a lease only the first runner's store holds
+
+        LoopWiring.of(second.config).context(FakeHub(), second, sweep_worker_scratch=True)
+
+        assert live.is_dir()
+    finally:
+        host.close()
+
+
+def test_a_pre_upgrade_flat_entry_is_removed_only_when_the_sweeping_runner_holds_its_closed_lease(
+    tmp_path: Path,
+) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        first = host.runners[0]
+        flat = tmp_path / "worker-tmp"
+        flat.mkdir(exist_ok=True)
+        (flat / "lease_never_held").mkdir()
+        (flat / "lease_closed_here").mkdir()
+        first.stores.lease_record.record_lease(
+            NewLease(
+                lease_id="lease_closed_here",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=REGISTERED_AT,
+            )
+        )
+        first.stores.lease_record.record_closure(
+            lease_id="lease_closed_here", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=REGISTERED_AT
+        )
+
+        LoopWiring.of(first.config).context(FakeHub(), first, sweep_worker_scratch=True)
+
+        assert (flat / "lease_never_held").is_dir()
+        assert not (flat / "lease_closed_here").exists()
+    finally:
+        host.close()

@@ -30,6 +30,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
@@ -65,7 +66,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.probe import IProcessProbe
 
@@ -216,6 +217,9 @@ def _instants_of(decoded: JsonObject) -> list[int]:
             if isinstance(state, dict):
                 take(state.get("time"), "start", "end")
     return found
+
+
+_OPENCODE_CONFIG_VARIABLES = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR")
 
 
 class OpenCodeAdapter:
@@ -387,11 +391,11 @@ class OpenCodeAdapter:
             self._check_plugins(workdir, env)
         env = self._compose_compaction(workdir, env, model if resume_from else model or self._model, compaction_window)
         env = self.deny_unanswerable_asks(workdir, env)
-        # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
+        # Both go through `stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
-            harness_shared.stdout_target(preamble.stdout_path) as stdout_file,
-            harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
+            stdout_target(preamble.stdout_path) as stdout_file,
+            stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -464,7 +468,7 @@ class OpenCodeAdapter:
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self.deny_unanswerable_asks(session_cwd, env)
         try:
-            with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
+            with stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
@@ -514,7 +518,7 @@ class OpenCodeAdapter:
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self.deny_unanswerable_asks(session_cwd, env)
         # Deferred: a resume gets spawn/judge's ownership.
-        with harness_shared.stdout_target(stdout_path) as stdout_file:
+        with stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd,
                 cwd=session_cwd,
@@ -591,7 +595,7 @@ class OpenCodeAdapter:
             limits = self._limits_catalog.limits_for(reference.provider, reference.model)
             if limits is None:
                 raise ValueError("model limits unavailable")
-            effective = self._permission_resolver.resolve(cwd=cwd, env=self._worker_env.worker(env)).merged_config
+            effective = self._permission_resolver.resolve(cwd=cwd, env=self._resolver_env(env)).merged_config
             content = env.get("OPENCODE_CONFIG_CONTENT")
             base = decode_json(content) if content else {}
             if not isinstance(base, dict):
@@ -612,6 +616,11 @@ class OpenCodeAdapter:
                 )
             return env
 
+    def _resolver_env(self, env: dict[str, str]) -> ChildEnv:
+        """The tool profile for a permission-resolution child, plus the OpenCode config variables the composed launch
+        env carries: the resolver reads configuration, so it needs no lease identity or runner address."""
+        return self._worker_env.tool().adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
+
     def deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
@@ -625,7 +634,7 @@ class OpenCodeAdapter:
         if resolver is None:
             raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")
         try:
-            resolved = resolver.resolve(cwd=cwd, env=self._worker_env.worker(env))
+            resolved = resolver.resolve(cwd=cwd, env=self._resolver_env(env))
             overrides = compose_ask_denials(resolved.merged_config, resolved.agent_rulesets)
             if not overrides:
                 return env
@@ -635,7 +644,7 @@ class OpenCodeAdapter:
                 raise json.JSONDecodeError("OPENCODE_CONFIG_CONTENT is not a JSON object", content or "", 0)
             document = merge_overrides(base, overrides)
             composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
-            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._worker_env.worker(composed)).agent_rulesets)
+            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._resolver_env(composed)).agent_rulesets)
         except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
             raise HarnessSpawnError(f"cannot establish that an unattended OpenCode launch never asks: {exc}") from exc
         if remaining:

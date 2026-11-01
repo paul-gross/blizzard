@@ -544,7 +544,7 @@ def build_host_process(
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
     used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id."""
     graph = _build_host_graph(
-        runners[0].config if runners else host.host_view(),
+        host.host_view(),
         subscriptions=host.subscriptions,
         events=events,
         environ=environ,

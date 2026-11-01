@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.api.wiring import RunnerWiring, ServedRunner
+from blizzard.runner.hub.identity import served_runner_state
 from blizzard.wire.base import WireModel
 from blizzard.wire.runner_host import HostRunnerStateView
 
@@ -27,12 +28,18 @@ class ReadinessResponse(WireModel):
     runners: list[HostRunnerStateView] = []
 
 
+def _served_view(wiring: RunnerWiring, served: ServedRunner) -> HostRunnerStateView:
+    current = wiring.for_runner(served).maybe_identity_verdict()
+    state, _ = served_runner_state(current.verdict() if current is not None else None)
+    return HostRunnerStateView(runner_id=served.runner_id, name=served.name, state=state)
+
+
 @router.get("/ready")
 def ready(request: Request) -> ReadinessResponse:
     wiring = RunnerWiring.of(request)
     registry = wiring.runners()
     runners = [
-        *(HostRunnerStateView(runner_id=r.runner_id, name=r.name, state="serving") for r in registry.served),
+        *(_served_view(wiring, r) for r in registry.served),
         *(HostRunnerStateView(runner_id=r.id, name=r.name, state="halted") for r in registry.halted),
     ]
     service = wiring.maybe_readiness()

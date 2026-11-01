@@ -7,6 +7,7 @@ runner's own stores, stamping its id. Exercised over a real store via TestClient
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -272,6 +273,34 @@ def test_a_served_runner_whose_version_is_refused_is_listed_halted_naming_the_wi
     assert (items[1]["state"], items[1]["halted_reasons"]) == ("halted", ["upgrade the runner to 0.9 or later"])
 
 
+def test_ready_reports_each_served_runner_the_state_host_runners_does_for_every_refusal(tmp_path: Path) -> None:
+    not_held = IdentityVerdictHolder("reset")
+    not_held.record(IdentityState.MATCHED, store_runner_id="rn_b", token_runner_id="rn_b", checked_at=_NOW)
+    not_held.stand(HostStanding.NOT_HELD, reason="not held under this host (hs_1) at its hub")
+    mismatched = IdentityVerdictHolder("reset")
+    mismatched.record(IdentityState.MISMATCHED, store_runner_id="rn_a", token_runner_id="rn_x", checked_at=_NOW)
+    app, _a, _b = _two_runner_app(tmp_path, verdicts=(mismatched, not_held))
+    client = TestClient(app)
+
+    ready = [(r["runner_id"], r["state"]) for r in client.get("/api/ready").json()["runners"]]
+    listed = [(i["runner_id"], i["state"]) for i in client.get("/api/host/runners").json()["items"]]
+
+    assert ready == listed == [("rn_a", "halted"), ("rn_b", "halted")]
+
+
+def test_ready_reports_a_version_refused_runner_halted_and_its_sibling_serving(tmp_path: Path) -> None:
+    refused = IdentityVerdictHolder("reset")
+    refused.record(IdentityState.MATCHED, store_runner_id="rn_b", token_runner_id="rn_b", checked_at=_NOW)
+    refused.refuse_version("upgrade the runner to 0.9 or later")
+    held = IdentityVerdictHolder("reset")
+    held.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_NOW)
+    app, _a, _b = _two_runner_app(tmp_path, verdicts=(held, refused))
+
+    runners = TestClient(app).get("/api/ready").json()["runners"]
+
+    assert [(r["runner_id"], r["state"]) for r in runners] == [("rn_a", "serving"), ("rn_b", "halted")]
+
+
 def test_the_host_registration_read_names_where_the_host_stands(tmp_path: Path) -> None:
     unregistered, _a, _b = _two_runner_app(tmp_path)
     assert TestClient(unregistered).get("/api/host/registration").json() == {
@@ -422,3 +451,25 @@ def test_a_workers_runner_url_is_its_runners_base_under_the_host() -> None:
     config = RunnerConfig(root=Path("."), db_url="sqlite://", host="127.0.0.1", port=8431, runner_id="rn_a")
 
     assert config.local_api_url == "http://127.0.0.1:8431/runners/rn_a"
+
+
+def test_the_selftest_canary_env_withholds_otel_passthrough_under_the_graphs_tracing_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blizzard.foundation.trace_export.settings import TracingSettings
+
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.setenv("OTEL_CANARY_PROBE", "1")
+    config, stores = _runner(tmp_path, "rn_a", "r-claude", bindings=())
+    config = dataclasses.replace(config, worker_env_passthrough=("OTEL_CANARY_PROBE",))
+
+    seams = runner_seams(
+        config,
+        clock=FixedClock(_NOW),
+        process=None,  # type: ignore[arg-type]
+        children=CHILDREN,
+        runner_stores=stores,
+        tracing=TracingSettings.of({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}),
+    )
+
+    assert "OTEL_CANARY_PROBE" not in seams.seams.selftests._scratch_git._env.variables  # type: ignore[union-attr]

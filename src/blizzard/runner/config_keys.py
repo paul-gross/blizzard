@@ -52,11 +52,14 @@ from blizzard.runner.config import (
 from blizzard.runner.harness.wiring import HARNESS_RUNTIME_FILES, HARNESS_SECTION_KINDS
 from blizzard.runner.host_layout import (
     DATA_DIRNAME,
+    ELICITATION_OUTPUT_DIRNAME,
     HOST_CONFIG_FILENAME,
     HOST_LOCK_FILENAME,
     HOST_SOCKET_FILENAME,
     HOST_STORE_FILENAME,
     RUNNERS_DIRNAME,
+    WORKER_SCRATCH_DIRNAME,
+    WORKER_STDOUT_DIRNAME,
 )
 from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME
 from blizzard.runner.loop.mode import LoopMode
@@ -159,6 +162,9 @@ _HOST_KEYS = (
     ConfigKey("transcripts.chunk_max_bytes", INTEGER),
     ConfigKey("worker_stdout", TABLE),
     ConfigKey("worker_stdout.retention_days", INTEGER, default=DEFAULT_WORKER_STDOUT_RETENTION_DAYS),
+    ConfigKey("tools", TABLE),
+    ConfigKey("tools.path_prepend", STRING_LIST, default=()),
+    ConfigKey("tools.env_passthrough", STRING_LIST, default=()),
     ConfigKey("subscription", ARRAY_OF_TABLES),
     ConfigKey("subscription[].slug", STRING, required=True),
     ConfigKey("subscription[].name", STRING, required=True),
@@ -269,6 +275,11 @@ HOST_REGISTRY = ConfigRegistry(
             f"{RUNNERS_DIRNAME}/<name>",
             "one runner's own directory, named for the runner",
             written_by=("add", "ingest"),
+        ),
+        DurablePath(WORKER_STDOUT_DIRNAME, "each worker's harness stdout, one file per lease generation"),
+        DurablePath(ELICITATION_OUTPUT_DIRNAME, "each elicitation's output, one file per attempt"),
+        DurablePath(
+            f"{WORKER_SCRATCH_DIRNAME}/<runner-id>", "one runner's per-lease scratch directories (BLIZZARD_TMPDIR)"
         ),
         *(DurablePath(path, holds, written_by=("init",)) for path, holds in HARNESS_RUNTIME_FILES),
     ),

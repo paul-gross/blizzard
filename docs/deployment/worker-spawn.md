@@ -376,6 +376,13 @@ directory absent on disk does not fail startup — `runner host` warns about it 
 simply never reaches a child's `PATH` until it exists. Because the takeover's own forwarded `PATH` above is the
 daemon's, an operator taking over a worker's session resolves the same prepended tools that worker did.
 
+`[tools]` is the host's own profile for the children that belong to the host rather than to a runner — workspace
+provisioning and credential renewal. It holds `path_prepend` and `env_passthrough`, with the same meaning and `~`
+expansion as under `[runner.worker]`. Without a `[tools]` table the host takes the runners' own values when every runner
+declares the same `path_prepend` and `env_passthrough`, which a single-runner host always does. Runners that disagree
+make `runner host --check` and `runner host` refuse, naming `[tools]`; declare it to resolve the conflict.
+`[runner.worker]` `shell` has no host counterpart: only a worker's own environment reads it.
+
 `[runner.worker]` `shell` names the absolute shell (`~` allowed) a worker's Bash tool runs under, `/bin/bash` when
 unset. A Claude Code worker's environment carries it as `CLAUDE_CODE_SHELL` — the supported override, which the
 allowlist's absent `SHELL` would otherwise leave to Claude Code's own detection, preferring zsh wherever installed — and

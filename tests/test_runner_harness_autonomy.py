@@ -573,3 +573,16 @@ def test_loading_records_where_the_autonomy_posture_comes_from(tmp_path: Path) -
     loaded = load_runner_config(tmp_path)
     assert loaded.autonomy is Autonomy.Normal
     assert loaded.autonomy_source == "[harness] autonomy"
+
+
+def test_opencode_resolver_children_run_under_the_tool_profile_with_only_the_config_variables(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=resolver)
+
+    _unattended(adapter, tmp_path, launcher)
+
+    identity = {"BLIZZARD_LEASE_TOKEN", "BLIZZARD_RUNNER_URL", "CLAUDE_CODE_SHELL"}
+    for call in resolver.calls:
+        assert identity.isdisjoint(call)
+    assert any("OPENCODE_CONFIG_CONTENT" in call for call in resolver.calls)

@@ -10,16 +10,25 @@ from blizzard.runner.process.groups import ProcStat, group_exists, signal_group
 from blizzard.runner.process.probe import IProcessProbe
 
 
+def _read_stat(pid: int) -> ProcStat:
+    """Read ``pid``'s stat line — a vanished or unreadable pid yields empty fields."""
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
+            return ProcStat.parse(fh.read())
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return ProcStat(())
+
+
 class LinuxProcessProbe:
     """``/proc``-backed probe: field-22 ``starttime`` is the reuse-proof identity."""
 
     def start_time(self, pid: int) -> str | None:
-        return ProcStat.of(pid).start_time
+        return _read_stat(pid).start_time
 
     def is_alive(self, pid: int, process_start_time: str) -> bool:
         # An unreaped child lingers in /proc with the same start time after it exits, so
         # a zombie must read as dead here.
-        if ProcStat.of(pid).zombie:
+        if _read_stat(pid).zombie:
             return False
         current = self.start_time(pid)
         return current is not None and current == process_start_time

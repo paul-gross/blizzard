@@ -3,6 +3,7 @@ host's own credential, or take one in from another store."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import click
@@ -124,6 +125,16 @@ def add(
         subscription=SCAFFOLD_SUBSCRIPTION.slug if SCAFFOLD_SUBSCRIPTION.slug in declared else None,
         runner_id=answer.runner_id,
     )
+    if entry.own is not None:
+        # The new runner joins the host's tool profile, so a host whose runners agreed on it still does.
+        entry = replace(
+            entry,
+            own=replace(
+                entry.own,
+                worker_path_prepend=config.tool_path_prepend,
+                worker_env_passthrough=config.tool_env_passthrough,
+            ),
+        )
     try:
         append_runner(config.layout, runner_toml(entry), strict=config.strict)
     except ConfigError as exc:

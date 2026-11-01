@@ -690,3 +690,49 @@ def test_a_loop_that_is_neither_timed_nor_stepped_is_refused_naming_the_key(tmp_
         load_host_config(root)
 
     assert any(error.startswith("loop: loop must be one of") for error in refused.value.errors)
+
+
+def _two_runners(first_worker: str, second_worker: str, tools: str = "") -> str:
+    def runner(name: str, worker: str) -> str:
+        return (
+            f'\n[[runner]]\nname = "{name}"\nagents = 1\nprojects = [{{ project = "p", workspace = "ws" }}]\n{worker}\n'
+        )
+
+    return (
+        'host_token = "tok"\n'
+        f'{tools}\n[[workspace]]\nid = "ws"\nroot = "/w"\n'
+        f"{runner('r-one', first_worker)}{runner('r-two', second_worker)}"
+    )
+
+
+_XPS_WORKER = '[runner.worker]\nenv_passthrough = ["SSH_AUTH_SOCK"]\npath_prepend = ["/opt/shims"]\n'
+
+
+def test_runners_that_agree_on_the_worker_profile_resolve_it_as_the_host_tool_profile(tmp_path: Path) -> None:
+    config = load_host_config(_write(tmp_path / "host", _two_runners(_XPS_WORKER, _XPS_WORKER)))
+
+    assert config.host_view().worker_path_prepend == ("/opt/shims",)
+    assert config.host_view().worker_env_passthrough == ("SSH_AUTH_SOCK",)
+
+
+def test_a_tools_table_decides_the_host_tool_profile_whatever_the_runners_say(tmp_path: Path) -> None:
+    tools = '[tools]\npath_prepend = ["/opt/host"]\nenv_passthrough = ["HOST_VAR"]\n'
+    other = '[runner.worker]\npath_prepend = ["/opt/other"]\n'
+    config = load_host_config(_write(tmp_path / "host", _two_runners(_XPS_WORKER, other, tools)))
+
+    assert config.tool_path_prepend == ("/opt/host",)
+    assert config.tool_env_passthrough == ("HOST_VAR",)
+    assert config.host_view().worker_path_prepend == ("/opt/host",)
+    assert config.host_view().worker_env_passthrough == ("HOST_VAR",)
+
+
+def test_disagreeing_runners_with_no_tools_table_are_refused_naming_tools(tmp_path: Path) -> None:
+    other = '[runner.worker]\npath_prepend = ["/opt/other"]\n'
+
+    assert "[tools]" in _refusal(tmp_path, _two_runners(_XPS_WORKER, other))
+
+
+def test_a_host_with_no_runner_and_no_tools_table_has_an_empty_tool_profile(tmp_path: Path) -> None:
+    config = load_host_config(_write(tmp_path / "host", ""))
+
+    assert config.host_view().worker_path_prepend == ()
