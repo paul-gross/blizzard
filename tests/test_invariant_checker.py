@@ -3222,6 +3222,93 @@ def test_flow_invariants_hold_before_submission_and_after_landing(tmp_path: Path
     assert _flow_line_breaches(engine) == []
 
 
+@pytest.mark.parametrize("outcome", ["landed", "escalated"])
+def test_parked_delivery_turns_keep_flow_invariants(tmp_path: Path, outcome: str) -> None:
+    """A parked visit can poll repeatedly, then land or escalate without overlapping turns."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn)
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        for n in (1, 2):
+            conn.execute(
+                insert(hub.hub_turns).values(
+                    stamp(
+                        hub.hub_turns,
+                        turn_id=f"htn_{n}",
+                        submission_id="fsub_1",
+                        started_at=_NOW,
+                        ended_at=_NOW,
+                        outcome="pending",
+                    )
+                )
+            )
+        _open_turn(conn, "htn_3", "fsub_1")
+    assert _flow_line_breaches(engine) == []
+
+    with engine.begin() as conn:
+        conn.execute(
+            hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_3")).values(
+                ended_at=_NOW, outcome=outcome
+            )
+        )
+        conn.execute(
+            insert(hub.flow_submission_closures).values(
+                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome=outcome, closed_at=_NOW)
+            )
+        )
+    assert _flow_line_breaches(engine) == []
+    with engine.connect() as conn:
+        assert (
+            conn.execute(
+                hub_scoped(
+                    sa.select(sa.func.count()).select_from(hub.hub_turns).where(hub.hub_turns.c.ended_at.is_(None))
+                )
+            ).scalar_one()
+            == 0
+        )
+
+
+def test_branch_and_zero_flow_garden_turns_can_overlap(tmp_path: Path) -> None:
+    """A garden visit does not contend with a pending branch visit for a flow."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn, "ch_branch")
+        _seed_at_deliver(conn, "ch_garden")
+        _submit(conn, "fsub_branch", chunk_id="ch_branch", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        conn.execute(
+            insert(hub.flow_submissions).values(
+                stamp(
+                    hub.flow_submissions,
+                    submission_id="fsub_garden",
+                    chunk_id="ch_garden",
+                    node_id="nd_deliver",
+                    epoch=1,
+                    generation=0,
+                    arrival=2,
+                    submitted_at=_NOW,
+                )
+            )
+        )
+        _open_turn(conn, "htn_branch", "fsub_branch")
+        _open_turn(conn, "htn_garden", "fsub_garden")
+    assert _flow_line_breaches(engine) == []
+
+    with engine.begin() as conn:
+        conn.execute(
+            hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_garden")).values(
+                ended_at=_NOW, outcome="recorded"
+            )
+        )
+        conn.execute(
+            insert(hub.flow_submission_closures).values(
+                stamp(hub.flow_submission_closures, submission_id="fsub_garden", outcome="recorded", closed_at=_NOW)
+            )
+        )
+    assert _flow_line_breaches(engine) == []
+
+
 def test_two_open_turns_on_one_flow_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
