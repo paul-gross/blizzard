@@ -21,8 +21,9 @@ from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
-from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -160,7 +161,6 @@ def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Generator
         yield lambda token: HttpHostHubClient(http, token=token)
 
 
-@collaborator
 @dataclass(frozen=True)
 class InitCollaborators:
     """The hub clients, store migrations, host-process builder, and harness-bundle publisher a runtime verb
@@ -169,6 +169,8 @@ class InitCollaborators:
 
     hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
+    #: Where the operator's `blizzard hub login` session is read from.
+    sessions: IReadSessionStore
     #: The runner store's migrations at a URL.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
     build_host_process: Callable[..., HostProcess] = build_host_process
@@ -181,11 +183,13 @@ class InitCollaborators:
 
     @classmethod
     def http(cls, client_factory: ClientFactory) -> InitCollaborators:
-        return cls(partial(_http_hub_clients, client_factory), partial(_http_host_clients, client_factory))
+        return cls(
+            partial(_http_hub_clients, client_factory), partial(_http_host_clients, client_factory), SessionFile.of()
+        )
 
     def join_with(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:
         """The identity read and the add for ``hub_url``, under the held ``token`` and the operator's session."""
-        return self.hub_clients(hub_url, token, SessionFile.of().load(hub_url))
+        return self.hub_clients(hub_url, token, self.sessions.load(hub_url))
 
     def identity_for(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:
         """The identity read for ``hub_url`` under ``token``, with no operator session."""

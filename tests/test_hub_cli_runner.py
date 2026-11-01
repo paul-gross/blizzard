@@ -13,7 +13,6 @@ import pytest
 from click.testing import Result
 
 from blizzard.auth_core import Role
-from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from tests.support import HubHarness, build_hub, seed_session, seed_user
@@ -223,8 +222,8 @@ def test_runners_added_under_one_name_both_list_never_connected_under_their_own_
 @pytest.mark.component
 def test_add_is_refused_to_a_signed_in_contributor_and_adds_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    SessionFile.of().save(_HUB_URL, seed_session(hub, seed_user(hub, username="cora", role=Role.CONTRIBUTOR)))
     bound = _against(hub)
+    bound.sessions.save(_HUB_URL, seed_session(hub, seed_user(hub, username="cora", role=Role.CONTRIBUTOR)))
 
     result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
 

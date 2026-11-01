@@ -7,32 +7,13 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.cli.session_service import SessionService
+from tests.session_store_fakes import InMemorySessionStore
 
 pytestmark = pytest.mark.unit
 
 
-class _FakeStore:
-    """A tiny in-memory ``IWriteSessionStore``, recording every call it receives."""
-
-    def __init__(self) -> None:
-        self.saved: list[tuple[str, str]] = []
-        self.deleted: list[str] = []
-        self._tokens: dict[str, str] = {}
-
-    def load(self, hub_url: str) -> str | None:
-        return self._tokens.get(hub_url)
-
-    def save(self, hub_url: str, token: str) -> None:
-        self.saved.append((hub_url, token))
-        self._tokens[hub_url] = token
-
-    def delete(self, hub_url: str) -> None:
-        self.deleted.append(hub_url)
-        self._tokens.pop(hub_url, None)
-
-
 def test_login_saves_the_token_to_the_underlying_store() -> None:
-    store = _FakeStore()
+    store = InMemorySessionStore()
     service = SessionService(store)
 
     service.login("http://hub.local:8421", "the-token")
@@ -41,7 +22,7 @@ def test_login_saves_the_token_to_the_underlying_store() -> None:
 
 
 def test_logout_revokes_then_deletes() -> None:
-    store = _FakeStore()
+    store = InMemorySessionStore()
     service = SessionService(store)
     calls: list[str] = []
 
@@ -52,7 +33,7 @@ def test_logout_revokes_then_deletes() -> None:
 
 
 def test_logout_still_deletes_when_revoke_raises() -> None:
-    store = _FakeStore()
+    store = InMemorySessionStore()
     service = SessionService(store)
 
     def failing_revoke() -> None:
@@ -64,7 +45,7 @@ def test_logout_still_deletes_when_revoke_raises() -> None:
 
 
 def test_load_delegates_to_the_underlying_store() -> None:
-    store = _FakeStore()
+    store = InMemorySessionStore()
     store.save("http://hub.local:8421", "stored-token")
     service = SessionService(store)
 

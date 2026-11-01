@@ -66,13 +66,13 @@ that is a client verb: it writes the store, so it goes through the daemon, at
 
 ## Choosing the runner: `--runner`
 
-`status`, `pause`, `start`, `takeover`, `requeue`, `selftest`, `traces status`, and `traces replay` each act on one of
-the host's runners, which `--runner` names by name or by id. The verb resolves it against the running host's
-`GET /api/host/runners`, over either door, and addresses that runner under its prefix. Omitted on a host of one runner,
-it is that runner. On a host of several runners `--runner` is required: omitted, or naming none the host holds, the verb
-fails naming the host's runners. A runner the host holds halted by its own configuration fails naming why; one its hub
-halts is still served, so `status` reads it and names the halt. `clear-floor` takes `--runner` the same way, but only in
-place of `--subscription`: it names exactly one of the two, so omitting both fails.
+`status`, `pause`, `start`, `takeover`, `requeue`, `selftest`, `traces status`, `traces replay`, and `transcript list`
+and `get` each act on one of the host's runners, which `--runner` names by name or by id. The verb resolves it against
+the running host's `GET /api/host/runners`, over either door, and addresses that runner under its prefix. Omitted on a
+host of one runner, it is that runner. On a host of several runners `--runner` is required: omitted, or naming none the
+host holds, the verb fails naming the host's runners. A runner the host holds halted by its own configuration fails
+naming why; one its hub halts is still served, so `status` reads it and names the halt. `clear-floor` takes `--runner`
+the same way, but only in place of `--subscription`: it names exactly one of the two, so omitting both fails.
 
 The offline verbs — `tick`, `transcript backfill` and `reship`, `harness status`, and the `prompt` verbs — read the host
 file rather than the running host, and take `--runner` the same way: optional on a host of one runner, required on a

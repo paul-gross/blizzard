@@ -13,6 +13,9 @@ from click.testing import CliRunner
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.span_clock import Clock
+from blizzard.hub.cli.collaborators import HubCliCollaborators
+from blizzard.hub.cli.session_service import SessionService
+from tests.session_store_fakes import InMemorySessionStore
 
 
 class StubClient(httpx2.Client):
@@ -107,7 +110,7 @@ class _StubFactory:
 class _BoundRunner(CliRunner):
     """A ``CliRunner`` whose every invocation hands the root group the bound collaborators."""
 
-    def __init__(self, collaborators: CliCollaborators) -> None:
+    def __init__(self, collaborators: HubCliCollaborators) -> None:
         super().__init__()
         self._collaborators = collaborators
 
@@ -120,9 +123,16 @@ class _BoundRunner(CliRunner):
 class Bound:
     """The collaborators a test bound, the runner that hands them down, and the clients built from them."""
 
-    collaborators: CliCollaborators
+    collaborators: HubCliCollaborators
     runner: CliRunner
     built: list[Any]
+    #: The operator session store the hub verbs read and write through, in memory.
+    sessions: InMemorySessionStore
+
+
+def _carrying(collaborators: CliCollaborators) -> tuple[HubCliCollaborators, InMemorySessionStore]:
+    store = InMemorySessionStore()
+    return HubCliCollaborators.extending(collaborators, SessionService(store)), store
 
 
 def bind_stubs(
@@ -149,10 +159,15 @@ def bind_stubs(
     collaborators = CliCollaborators(
         client_factory=factory, clock=Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
     )
-    return Bound(collaborators, _BoundRunner(collaborators), factory.built)
+    carrier, store = _carrying(collaborators)
+    return Bound(carrier, _BoundRunner(carrier), factory.built, store)
 
 
-def bind_transport(handler: Callable[[httpx2.Request], httpx2.Response], *, clock: Clock | None = None) -> Bound:
+def bind_transport(
+    handler: Callable[[httpx2.Request], httpx2.Response],
+    *,
+    clock: Clock | None = None,
+) -> Bound:
     """Answer worker commands' requests through an ``httpx2.MockTransport``."""
     built: list[Any] = []
 
@@ -172,7 +187,8 @@ def bind_transport(handler: Callable[[httpx2.Request], httpx2.Response], *, cloc
     collaborators = CliCollaborators(
         client_factory=factory, clock=clock or Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
     )
-    return Bound(collaborators, _BoundRunner(collaborators), built)
+    carrier, store = _carrying(collaborators)
+    return Bound(carrier, _BoundRunner(carrier), built, store)
 
 
 #: In-process daemon reads get a longer budget under loaded xdist; these tests do not assert latency.
@@ -200,4 +216,5 @@ def bind_local_only(*, allow_base_urls: tuple[str, ...] = ()) -> Bound:
     collaborators = CliCollaborators(
         client_factory=factory, clock=Clock(), wall_clock=SystemClock(), monotonic_clock=SystemMonotonicClock()
     )
-    return Bound(collaborators, _BoundRunner(collaborators), [])
+    carrier, store = _carrying(collaborators)
+    return Bound(carrier, _BoundRunner(carrier), [], store)

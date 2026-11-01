@@ -58,6 +58,7 @@ from tests.runner_ingest_support import (
 )
 from tests.runner_init_fakes import FakeInitHub, init_runner
 from tests.runner_scope_seeding import T0, reflect, seed_tables
+from tests.session_store_fakes import InMemorySessionStore
 from tests.test_baseline_floor import make_tree
 
 pytestmark = pytest.mark.component
@@ -397,6 +398,7 @@ def test_ingest_refuses_absorbed_source_before_any_write(tmp_path: Path, fake_in
     collaborators = InitCollaborators(
         fake_init_hub.clients,
         fake_init_hub.host_clients,
+        InMemorySessionStore(),
         store_migrations=lambda url: MigrationRunner(script_location=tree, url=url),
     )
     unchanged = _unchanged(hosts)

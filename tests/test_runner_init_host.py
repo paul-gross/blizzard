@@ -15,7 +15,6 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import SystemClock
-from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores
@@ -30,6 +29,7 @@ from tests.config_inputs import STRICT, load_host_config
 from tests.host_files import load_runner_config
 from tests.runner_fakes import runner_store_errors
 from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.session_store_fakes import InMemorySessionStore
 
 pytestmark = pytest.mark.component
 
@@ -325,9 +325,11 @@ def test_init_on_an_open_hub_registers_a_host_named_after_its_first_runner_and_a
 def test_init_registers_the_host_under_the_operator_session_held_for_its_hub(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
-    SessionFile.of().save(f"{_HUB}/", "operator-session")
+    sessions = InMemorySessionStore({_HUB: "operator-session"})
 
-    result = _init(fake_init_hub, tmp_path / "host", "--tenant", "ten_bravo")
+    result = init_runner(fake_init_hub, sessions=sessions).invoke(
+        blizzard, ["runner", "init", str(tmp_path / "host"), "--hub", _HUB, "--tenant", "ten_bravo"]
+    )
 
     assert result.exit_code == 0, result.output
     assert fake_init_hub.calls[0].operator_token == "operator-session"
