@@ -36,9 +36,10 @@ class ProjectAuthoring:
     # --- Projects ----------------------------------------------------------------
 
     def create(
-        self, slug: str, name: str, ctx: ChangeContext, *, description: str = "", color: str | None = None
+        self, slug: str, name: str | None, ctx: ChangeContext, *, description: str = "", color: str | None = None
     ) -> Project:
-        """With no ``color`` stated, the project takes the tenant's least-used one."""
+        """With no ``name`` stated, the project is named by its slug; with no ``color``, it takes the tenant's
+        least-used one."""
         decided = decide_color(color, lambda: (project.color for project in self._projects.list_all()), self._pick)
         record, change = Project.new(slug, name, decided, ctx, at=self._clock.now(), description=description)
         return self._projects.create(record, change=change)

@@ -9,7 +9,6 @@ from typing import TypedDict, Unpack
 
 import httpx2
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from tests.worker_http import bind_stubs
@@ -79,13 +78,18 @@ def test_finding_list_with_source_review_does_not_require_routine() -> None:
 
 
 @pytest.mark.unit
-def test_finding_list_without_routine_or_source_review_is_a_usage_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = CliRunner().invoke(
-        hub_group, ["finding", "list", "--scope", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"}
-    )
+def test_finding_list_sends_only_the_filters_typed_and_leaves_refusing_to_the_hub() -> None:
+    calls: list[dict[str, str]] = []
 
-    assert result.exit_code != 0
-    assert "--routine is required unless --source review" in result.output
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, {"findings": [], "next_cursor": None})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "list"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"include_gone": "false", "limit": "1000"}]
 
 
 @pytest.mark.unit

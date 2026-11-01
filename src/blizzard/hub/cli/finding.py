@@ -59,10 +59,8 @@ def finding_group() -> None:
 
 
 @finding_group.command("list", cls=FleetCommand)
-@click.option(
-    "--routine", "routine", default=None, help="The routine whose findings to list. Required unless --source review."
-)
-@click.option("--scope", "scope", required=True, help="The scope to filter to.")
+@click.option("--routine", "routine", default=None, help="Narrow to this routine's findings.")
+@click.option("--scope", "scope", default=None, help="Narrow to this scope.")
 @click.option(
     "--source",
     "source",
@@ -75,14 +73,14 @@ def finding_group() -> None:
 )
 @project_option(required_by_hub=True)
 def finding_list(
-    cli: CliContext, routine: str | None, scope: str, source: str | None, include_gone: bool, project: str | None
+    cli: CliContext, routine: str | None, scope: str | None, source: str | None, include_gone: bool, project: str | None
 ) -> None:
-    """List findings under SCOPE — live only, unless --include-gone, which also
-    surfaces every exited finding, not just a merely `gone` one. --routine is required
-    unless --source review, since a review-sourced finding carries no routine."""
-    if routine is None and source != "review":
-        raise click.UsageError("--routine is required unless --source review")
-    params: dict[str, str] = {"scope": scope, "include_gone": str(include_gone).lower()}
+    """List findings — live only, unless --include-gone, which also surfaces every
+    exited finding, not just a merely `gone` one. --scope and --routine each narrow the
+    list; with neither, it lists every finding."""
+    params: dict[str, str] = {"include_gone": str(include_gone).lower()}
+    if scope is not None:
+        params["scope"] = scope
     if routine is not None:
         params["routine"] = routine
     if source is not None:

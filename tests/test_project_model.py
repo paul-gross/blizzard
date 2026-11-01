@@ -232,3 +232,15 @@ def test_the_project_that_left_a_slug_may_take_it_back() -> None:
     assert match is not None
     assert (match.project, match.by) == (back, MatchedBy.SLUG)
     assert locate("frost", projects) is not None
+
+
+def test_a_project_created_with_no_name_is_named_by_its_slug() -> None:
+    record, _ = Project.new("winter", None, ProjectColor.TEAL, _CTX, at=_AT)
+
+    assert (record.slug, record.name) == ("winter", "winter")
+
+
+def test_a_stated_name_is_kept_over_the_slug() -> None:
+    record, _ = Project.new("winter", "Winter Co", ProjectColor.TEAL, _CTX, at=_AT)
+
+    assert record.name == "Winter Co"

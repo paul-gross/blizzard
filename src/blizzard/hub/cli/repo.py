@@ -66,7 +66,7 @@ def repo_group() -> None:
 
 @repo_group.command("create", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--name", default=None, help="The repository's display name (default: SLUG).")
+@click.option("--name", default=None, help="The repository's display name; its slug when omitted.")
 @click.option("--forge", "forge", default=None, help="The forge the repository is on, by id or slug.")
 @click.option(
     "--forge-api-url",
@@ -93,7 +93,7 @@ def repo_create(
     policy: str | None,
     park_timeout: int | None,
 ) -> None:
-    """Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.
+    """Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.
 
     Exactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge
     holding that origin — made when none does — and warned about.
@@ -106,7 +106,7 @@ def repo_create(
     named = {"forge": forge} if forge is not None else {"forge_api_url": forge_api_url}
     body = {
         "slug": slug,
-        "name": name if name is not None else slug,
+        **({} if name is None else {"name": name}),
         **named,
         "owner": owner,
         "repo": repo,

@@ -11,10 +11,10 @@ Both belong to a project. The listing verbs take `--project <id|slug>` to show o
 
 ## Findings
 
-`blizzard hub finding list --routine <name> --scope <slug> [--source routine|review] [--include-gone]` and
-`get <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential, naming
-any routine and any scope, live only unless `--include-gone`, which also surfaces every exited finding alongside a
-merely `gone` one. `--routine` is required unless `--source review`, since a review-sourced finding carries no routine.
+`blizzard hub finding list [--routine <name>] [--scope <slug>] [--source routine|review] [--include-gone]` and
+`get <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential,
+live only unless `--include-gone`, which also surfaces every exited finding alongside a merely `gone` one. `--routine`
+and `--scope` each narrow the list; with neither, it lists the tenant's findings.
 `state`, `live`, `last_seen_at`, and `observed_count` track each finding's own fact history, changing as later runs
 observe or lose it, or a person exits or reopens it.
 

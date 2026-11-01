@@ -72,4 +72,5 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
         json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id},
         on_status={409: f"chunk {chunk_id} is not in the ready list (it may be in the not_ready backlog instead)"},
     )
-    cli.finish(resp, f"moved {chunk_id} to position {position}")
+    landed = next(entry["position"] for entry in resp.json()["entries"] if entry["chunk_id"] == chunk_id)
+    cli.finish(resp, f"moved {chunk_id} to position {landed}")

@@ -86,13 +86,15 @@ def project_group() -> None:
 
 @project_group.command("create", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--name", default=None, help="The project's display name (default: SLUG).")
+@click.option("--name", default=None, help="The project's display name; its slug when omitted.")
 @click.option("--description", default="", help="What the project is for.")
 @_COLOR
 def project_create(cli: CliContext, slug: str, name: str | None, description: str, color: str | None) -> None:
-    """Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub
+    """Create project SLUG at revision 1, named NAME, else its slug. It draws work only from the built-in hub
     source until a work source or repository is linked to it. Refused when SLUG is another project's current slug."""
-    body: dict[str, Any] = {"slug": slug, "name": name if name is not None else slug, "description": description}
+    body: dict[str, Any] = {"slug": slug, "description": description}
+    if name is not None:
+        body["name"] = name
     if color is not None:
         body["color"] = color
     resp = cli.post("/api/projects", "POST /projects", json_body=body, on_status=_refusals(slug), door=True)

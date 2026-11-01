@@ -6230,7 +6230,7 @@ export type ProjectColor = 'red' | 'orange' | 'amber' | 'lime' | 'green' | 'teal
  * ProjectCreateRequest
  *
  * A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's
- * current slugs, and a display ``name``. A ``color`` is a palette name or a
+ * current slugs. Its display ``name`` is the slug when none is stated. A ``color`` is a palette name or a
  * ``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color.
  */
 export type ProjectCreateRequest = {
@@ -6245,7 +6245,7 @@ export type ProjectCreateRequest = {
     /**
      * Name
      */
-    name: string;
+    name?: string | null;
     /**
      * Slug
      */

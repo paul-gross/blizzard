@@ -216,3 +216,13 @@ def test_queue_show_marks_a_blocked_entry() -> None:
     lines = result.output.splitlines()
     assert "[blocked on ch_prereq]" in lines[0]
     assert "[blocked" not in lines[1]
+
+
+@pytest.mark.unit
+def test_queue_move_echoes_where_the_hub_landed_the_chunk_not_the_argument() -> None:
+    bound, _ = _stub(["ch_a", "ch_b", "ch_c"])
+
+    result = bound.runner.invoke(hub_group, ["queue", "move", "ch_a", "99"])
+
+    assert result.exit_code == 0, result.output
+    assert "moved ch_a to position 0" in result.output

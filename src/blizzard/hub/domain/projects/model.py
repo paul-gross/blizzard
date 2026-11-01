@@ -107,18 +107,19 @@ class Project:
     def new(
         cls,
         slug: str,
-        name: str,
+        name: str | None,
         color: ProjectColor | HexColor,
         ctx: ChangeContext,
         *,
         at: datetime,
         description: str = "",
     ) -> tuple[Project, ConfigChange]:
-        """A new project in ``color``, the color its creator decided."""
+        """A new project in ``color``, the color its creator decided; a ``name`` of ``None`` is the slug."""
+        parsed = ProjectSlug.parse(slug).value
         record = cls(
             project_id=ProjectId(Id.mint_at(IdPrefix.PROJECT, at).value),
-            slug=ProjectSlug.parse(slug).value,
-            name=ProjectName.parse(name).value,
+            slug=parsed,
+            name=parsed if name is None else ProjectName.parse(name).value,
             description=description,
             color=color,
             revision=1,
