@@ -467,7 +467,7 @@ def test_the_selftest_canary_env_withholds_otel_passthrough_under_the_graphs_tra
 
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.setenv("OTEL_CANARY_PROBE", "1")
-    config, stores = _runner(tmp_path, "rn_a", "r-claude", bindings=())
+    config, _store, stores = _runner(tmp_path, "rn_a", "r-claude", bindings=())
     config = dataclasses.replace(config, worker_env_passthrough=("OTEL_CANARY_PROBE",))
 
     seams = runner_seams(
