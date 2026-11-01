@@ -91,7 +91,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
         (escalation,) = escalations.json()["items"]
         assert escalation["resume_command"].startswith(f"cd {workdir} && ")
 
-        assert runner_seams(hosted.app).transcripts._spawn_cwd("ch_1") == workdir
+        assert runner_seams(hosted.app).transcripts.spawn_cwd("ch_1") == workdir
     finally:
         hosted.close()
         graph.close()

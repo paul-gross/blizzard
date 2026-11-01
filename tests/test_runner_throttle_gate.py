@@ -17,7 +17,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.api.control import throttle_view
-from blizzard.runner.cli.control import _Throttle, _throttle_lines
+from blizzard.runner.cli.control import Throttle, throttle_lines
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
@@ -120,7 +120,7 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
     assert view.floor.hold is not None
     assert view.floor.hold.expected_reset.endswith("Z")
     assert view.levers == []
-    assert "declining: floor" in _throttle_lines(cast(_Throttle, view.model_dump()))[0]
+    assert "declining: floor" in throttle_lines(cast(Throttle, view.model_dump()))[0]
     ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW, by="operator"))
     cleared = throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
     assert cleared.floor.admits
@@ -136,11 +136,11 @@ def test_status_holds_on_both_with_no_settings_and_shows_the_configured_choices(
     releasing = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
     view = throttle_view(ThrottleStatus.of(gate.verdict(), braked=False, settings=releasing))
     assert (view.on_decline, view.on_usage_limit) == ("release", "hold")
-    assert "on_decline: release; on_usage_limit: hold" in "\n".join(_throttle_lines(cast(_Throttle, view.model_dump())))
+    assert "on_decline: release; on_usage_limit: hold" in "\n".join(throttle_lines(cast(Throttle, view.model_dump())))
 
 
 def test_cli_renders_configured_lever_setting_reading_answer_and_until() -> None:
-    throttle: _Throttle = {
+    throttle: Throttle = {
         "state": "declining",
         "declining": ["pace"],
         "floor": {"subscription": None, "admits": True, "hold": None, "clear": None},
@@ -164,7 +164,7 @@ def test_cli_renders_configured_lever_setting_reading_answer_and_until() -> None
         "on_usage_limit": "hold",
     }
 
-    lines = _throttle_lines(throttle)
+    lines = throttle_lines(throttle)
     assert lines[2] == "    pace (7d, lead 5 points): hold — 70% spent, 50% elapsed; until 2026-10-22T19:00:00Z"
     assert lines[3] == "    schedule (weekdays 09:00-17:00 America/New_York): admit — inside span; until none"
 
@@ -211,7 +211,7 @@ def test_a_runner_naming_no_subscription_reads_its_own_mark() -> None:
     assert view.state == "declining"
     assert view.declining == ["floor"]
     assert view.floor.subscription is None
-    assert "floor (runner): hold" in _throttle_lines(cast(_Throttle, view.model_dump()))[1]
+    assert "floor (runner): hold" in throttle_lines(cast(Throttle, view.model_dump()))[1]
 
 
 def test_an_unsampled_providers_mark_opens_at_its_reset_alone() -> None:

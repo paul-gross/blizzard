@@ -105,6 +105,10 @@ class FleetService:
         self._clock = clock
         self._stale_after = stale_after
 
+    @property
+    def registry(self) -> IWriteRunnerRegistry:
+        return self._registry
+
     def register(
         self,
         held: RunnerRegistration,

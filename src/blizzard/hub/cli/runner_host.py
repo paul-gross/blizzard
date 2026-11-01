@@ -87,7 +87,7 @@ class HostDetail:
         yield f"  runners={', '.join(self.body.get('runner_ids') or []) or '-'}"
 
 
-def _token_lines(token: str) -> tuple[str, str]:
+def token_lines(token: str) -> tuple[str, str]:
     """A freshly minted host bearer token, printed once as the line a host's ``.env`` takes."""
     return "bearer token, shown only once — put this line in the host's .env:", f"{HOST_TOKEN_VARIABLE}={token}"
 
@@ -130,7 +130,7 @@ def host_add(cli: CliContext, name: str, adopt: tuple[str, ...]) -> None:
     lines = [f"added host {body['host_id']} ({body['host_name']}) — never connected"]
     if body.get("adopted"):
         lines.append(f"adopted: {', '.join(body['adopted'])}")
-    cli.show_lines(body, *lines, *_token_lines(body["token"]))
+    cli.show_lines(body, *lines, *token_lines(body["token"]))
 
 
 @runner_host_group.command("list", cls=FleetCommand)
@@ -218,7 +218,7 @@ def host_enroll(cli: CliContext, host_id: str) -> None:
         on_status={404: f"unknown host {host_id}", 409: f"host {host_id} is retired"},
     )
     body = resp.json()
-    cli.show_lines(body, f"enrolled {host_id} — its previous token no longer resolves", *_token_lines(body["token"]))
+    cli.show_lines(body, f"enrolled {host_id} — its previous token no longer resolves", *token_lines(body["token"]))
 
 
 @runner_host_group.command("retire", cls=FleetCommand)

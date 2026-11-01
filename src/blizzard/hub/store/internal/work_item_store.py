@@ -49,6 +49,10 @@ class WorkItemStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
+    @property
+    def store(self) -> ScopedConnections:
+        return self._store
+
     def get(self, source: str, ref: str) -> HubWorkItem | None:
         with self._store.read("get") as conn:
             row = conn.execute(

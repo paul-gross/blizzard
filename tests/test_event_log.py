@@ -413,7 +413,7 @@ def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Pa
                 )
             )
 
-    newest = store.escalations._newest_escalation_per_chunk()  # type: ignore[attr-defined]
+    newest = store.escalations.newest_escalation_per_chunk()  # type: ignore[attr-defined]
 
     assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_tie": "second"}
 
@@ -458,7 +458,7 @@ def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_
             )
         )
 
-    newest = store.escalations._newest_escalation_per_chunk()  # type: ignore[attr-defined]
+    newest = store.escalations.newest_escalation_per_chunk()  # type: ignore[attr-defined]
 
     assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_a": "newer", "ch_b": "only"}
 

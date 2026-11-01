@@ -5,11 +5,16 @@ a pre-host daemon answers on its socket."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
+from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import store as store_cli
@@ -149,20 +154,16 @@ def test_reset_of_a_declared_runner_without_an_id_is_refused(tmp_path: Path, fak
     assert _archives(root) == []
 
 
-def test_reset_is_refused_when_the_archive_it_would_write_exists(
-    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    class _Frozen:
-        def now(self) -> datetime:
-            return datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-
-    monkeypatch.setattr(store_cli, "SystemClock", _Frozen)
+def test_reset_is_refused_when_the_archive_it_would_write_exists(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    frozen = replace(CliCollaborators.production(), wall_clock=FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)))
     root = _host(tmp_path, fake_init_hub)
-    ok(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
+    args = ["runner", "store", "reset", str(root), "--runner", "r2"]
+    first = CliRunner().invoke(blizzard, args, obj=frozen)
+    assert first.exit_code == 0, first.output
     [archive] = _archives(root)
     before = archive.read_bytes()
 
-    result = run(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
+    result = CliRunner().invoke(blizzard, args, obj=frozen)
 
     assert result.exit_code != 0
     assert f"cannot archive runner r2: {archive} already exists" in result.output

@@ -15,7 +15,7 @@ from fastapi.exceptions import HTTPException
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import ManualMonotonicClock
-from blizzard.runner.api.hub_proxy import _HUB_RETRY_CEILING, _RETRY_BACKOFF_SECONDS, HubProxy
+from blizzard.runner.api.hub_proxy import HUB_RETRY_CEILING, RETRY_BACKOFF_SECONDS, HubProxy
 from blizzard.runner.config import RunnerConfig
 
 _HUB_URL = "http://hub.local:8421"
@@ -49,7 +49,7 @@ def test_a_transport_error_then_a_gateway_502_then_a_success_returns_the_success
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert len(calls) == 3
-    assert clock.delays == [_RETRY_BACKOFF_SECONDS[0], _RETRY_BACKOFF_SECONDS[1]]
+    assert clock.delays == [RETRY_BACKOFF_SECONDS[0], RETRY_BACKOFF_SECONDS[1]]
 
 
 @pytest.mark.unit
@@ -199,7 +199,7 @@ def test_a_retry_is_not_scheduled_when_its_backoff_would_overrun_the_budget(tmp_
         proxy.get("/api/fleet/chunks/ch_1", timeout=8.0)
 
     assert excinfo.value.status_code == 502
-    assert clock.delays == list(_RETRY_BACKOFF_SECONDS[:4])
+    assert clock.delays == list(RETRY_BACKOFF_SECONDS[:4])
     assert clock.reading <= 8.0
 
 
@@ -218,7 +218,7 @@ def test_the_exhausted_schedule_under_the_default_ceiling_is_bounded_by_the_budg
         proxy.get("/api/fleet/chunks/ch_1")
 
     assert clock.delays == [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
-    assert clock.reading <= _HUB_RETRY_CEILING
+    assert clock.reading <= HUB_RETRY_CEILING
 
 
 @pytest.mark.unit
@@ -259,7 +259,7 @@ def test_an_attempt_that_consumes_budget_cuts_the_schedule_short(tmp_path: Path)
 
 @pytest.mark.unit
 def test_a_caller_supplied_timeout_caps_every_attempt_and_the_whole_forward(tmp_path: Path) -> None:
-    """A caller-narrower-than-``_HUB_TIMEOUT`` budget (the dashboard's 3s) caps every
+    """A caller-narrower-than-``HUB_TIMEOUT`` budget (the dashboard's 3s) caps every
     attempt at that budget, not the module's 15s per-attempt bound, and the forward still
     exhausts and raises rather than retrying forever."""
     seen_timeouts: list[float] = []

@@ -368,7 +368,7 @@ def test_an_idle_bucket_is_evicted() -> None:
     limiter.take("a", 1)
     clock.advance(timedelta(minutes=5))
     limiter.take("b", 1)
-    assert list(limiter._buckets) == ["b"]
+    assert list(limiter.buckets) == ["b"]
 
 
 def test_the_counter_tallies_accepted_and_dropped() -> None:

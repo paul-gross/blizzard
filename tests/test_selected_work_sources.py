@@ -49,6 +49,6 @@ def test_selected_bindings_share_fallback_slug_without_caching_pointer_labels_or
     assert selected.source("missing") is None
     assert registry.slug_calls == ["configured", "missing"]
 
-    registry._slugs["configured"] = "renamed"
+    registry.rename("configured", "renamed")
     fresh = SelectedWorkSources(registry, ["configured"])
     assert fresh.label(WorkRef("configured", "21")) == "renamed#21"

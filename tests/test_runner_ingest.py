@@ -822,8 +822,8 @@ def test_an_archive_carries_the_prompt_of_the_workspace_its_runner_is_bound_to_t
 
 def test_a_rewritten_bindings_literal_keeps_only_the_agents_a_binding_declared() -> None:
     from blizzard.runner.config import ProjectBinding
-    from blizzard.runner.ingest import _bindings_literal
+    from blizzard.runner.ingest import bindings_literal
 
-    literal = _bindings_literal((ProjectBinding("a", "w", 2), ProjectBinding("b", "w")))
+    literal = bindings_literal((ProjectBinding("a", "w", 2), ProjectBinding("b", "w")))
 
     assert literal == '[{ project = "a", workspace = "w", agents = 2 }, { project = "b", workspace = "w" }]'

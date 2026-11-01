@@ -90,7 +90,7 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path: Path)
     provider = _BlockingProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
     store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
-    store_b = SqlAlchemyRunnerStore(store_a._engine, runner_store_errors(), "r_b")
+    store_b = SqlAlchemyRunnerStore(store_a.engine, runner_store_errors(), "r_b")
     ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
     ctx_b = dataclasses.replace(_runner(store_b, "r_b", workspaces, "ch_b"), host_stores=ctx_a.host_stores)
 
@@ -125,7 +125,7 @@ def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tm
     provider = _BlockingProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
     store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
-    store_b = SqlAlchemyRunnerStore(store_a._engine, runner_store_errors(), "r_b")
+    store_b = SqlAlchemyRunnerStore(store_a.engine, runner_store_errors(), "r_b")
     ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
     ctx_b = dataclasses.replace(_runner(store_b, "r_b", workspaces, "ch_b"), host_stores=ctx_a.host_stores)
 

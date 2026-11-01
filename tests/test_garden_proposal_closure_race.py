@@ -80,7 +80,7 @@ def test_is_closed_locks_the_proposal_row_before_reading_closures() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
-        GardenProposalStore(store=None)._is_closed(conn, "gprop_1")  # type: ignore[arg-type]
+        GardenProposalStore(store=None).is_closed(conn, "gprop_1")  # type: ignore[arg-type]
 
     assert len(conn.statements) == 2  # the lock, then the closures read
     _assert_locks_garden_proposals_row(conn.statements[0])

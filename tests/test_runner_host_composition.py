@@ -16,8 +16,9 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 
+import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
-from blizzard.runner.cli.runtime import _host_tick_driver
+from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
@@ -140,13 +141,13 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
     renewal: Any = _CountingRenewal()
     host.host_tick = HostTick(credential_renewal=renewal)
     drivers = [PeriodicDriver(config, interval_seconds=0.01, process_graph=runner) for runner in (blocked, free)]
-    host_tick = _host_tick_driver(host, tick_seconds=0.01)
+    host_tick = host_tick_driver(host, tick_seconds=0.01)
     assert not isinstance(renewal, CredentialRenewalPass)  # a counting double stands in for the renewal pass
     try:
         for driver in drivers:
             driver.start()
         host_tick.start()
-        assert host_tick._thread.name == "blizzard-host-tick"
+        assert host_tick.thread.name == "blizzard-host-tick"
         assert entered.wait(timeout=10), "the blocking runner's tick never ran"
         free_before, host_before = ticks[id(free.stores)], renewal.passes
         _wait_until(
@@ -206,24 +207,25 @@ def _register(runner: RunnerProcess) -> None:
     runner.identity.hold(identity)
 
 
-def _fake_samplers(host: HostProcess) -> dict[str, FakeSubscriptionSampler]:
-    """Stand a scriptable sampler in for every declared subscription's real one."""
-    sampling = host.host_tick.external_usage_sample
-    assert sampling is not None
-    fakes = {
-        sampled.slug: FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(_SAMPLED_AT, ()))
-        for sampled in sampling._subscriptions
-    }
-    sampling._subscriptions = tuple(
-        dataclasses.replace(sampled, sampler=fakes[sampled.slug]) for sampled in sampling._subscriptions
-    )
+def _fake_samplers(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeSubscriptionSampler]:
+    """Stand a scriptable sampler in for every declared subscription's real one, for each host built after."""
+    fakes: dict[str, FakeSubscriptionSampler] = {}
+
+    def select(declaration: SubscriptionDeclaration, **_: object) -> FakeSubscriptionSampler:
+        return fakes.setdefault(
+            declaration.slug, FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(_SAMPLED_AT, ()))
+        )
+
+    monkeypatch.setattr(composition, "select_sampler", select)
     return fakes
 
 
-def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(tmp_path: Path) -> None:
+def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    samplers = _fake_samplers(monkeypatch)
     host = _host(_sampling_config(tmp_path), "rn_a", "rn_b")
     try:
-        samplers = _fake_samplers(host)
         _register(host.runners[0])
         for _ in range(4):
             host.host_tick.run()
@@ -233,10 +235,10 @@ def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(tmp_
         host.close()
 
 
-def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path) -> None:
+def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    samplers = _fake_samplers(monkeypatch)
     host = _host(_sampling_config(tmp_path), "rn_a")
     try:
-        samplers = _fake_samplers(host)
         _register(host.runners[0])
         host.host_tick.run()
         assert samplers["spare"].sample_calls == 1
@@ -245,7 +247,10 @@ def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path) -> Non
         host.close()
 
 
-def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is_announced(tmp_path: Path) -> None:
+def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is_announced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_samplers(monkeypatch)
     events = EventBroker()
     config = _sampling_config(tmp_path)
     host = build_host_process(
@@ -254,7 +259,6 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
         events=events,
     )
     try:
-        _fake_samplers(host)
         _register(host.runners[0])
         host.host_tick.run()
         runner = host.runners[0]
@@ -279,7 +283,10 @@ def _registered_host(config: RunnerConfig) -> HostProcess:
     )
 
 
-def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(tmp_path: Path) -> None:
+def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_samplers(monkeypatch)
     config = _sampling_config(tmp_path)
     first = _host(config, "rn_a")
     first.host_stores.host_identity.record_host_identity(HostIdentity("hs_1", "tn_1", _SAMPLED_AT))
@@ -287,7 +294,6 @@ def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(t
     host = _host(config, "rn_a")
     try:
         assert host.host_identity.current() == HostIdentity("hs_1", "tn_1", _SAMPLED_AT)
-        _fake_samplers(host)
         _register(host.runners[0])
         host.host_tick.run()
         assert [fact.kind for fact in host.runners[0].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
@@ -297,12 +303,14 @@ def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(t
         host.close()
 
 
-def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(tmp_path: Path) -> None:
+def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_samplers(monkeypatch)
     # Registered means holding a host token: the lane is the host's own before its hub has ever answered.
     host = _registered_host(_sampling_config(tmp_path))
     try:
         assert host.host_identity.current() is None
-        _fake_samplers(host)
         host.host_tick.run()
         assert host.runners[0].stores.outbound.pending_outbound() == []
         with host.engine.connect() as conn:
@@ -316,11 +324,13 @@ def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(
         host.close()
 
 
-def test_an_unregistered_hosts_sample_is_recorded_under_the_first_runner_that_has_registered(tmp_path: Path) -> None:
+def test_an_unregistered_hosts_sample_is_recorded_under_the_first_runner_that_has_registered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_samplers(monkeypatch)
     config = _sampling_config(tmp_path)
     host = _host(config, "rn_a", "rn_b")
     try:
-        _fake_samplers(host)
         _register(host.runners[1])
         host.host_tick.run()
         assert host.runners[0].stores.outbound.pending_outbound() == []
@@ -331,10 +341,11 @@ def test_an_unregistered_hosts_sample_is_recorded_under_the_first_runner_that_ha
 
 def test_an_unregistered_hosts_sample_is_not_recorded_while_no_runner_has_registered_and_is_taken_again_after(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    samplers = _fake_samplers(monkeypatch)
     host = _host(_sampling_config(tmp_path), "rn_a")
     try:
-        samplers = _fake_samplers(host)
         host.host_tick.run()
         runner = host.runners[0]
         assert runner.stores.outbound.pending_outbound() == []

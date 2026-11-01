@@ -419,7 +419,7 @@ def _annotate_chunk(request: Request) -> None:
 
 
 @contextlib.asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
     and drive the sweeps across the app's lifetime (pinned:
     ``tests/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
@@ -459,7 +459,7 @@ def create_app(
     app = TraceGatedFastAPI(
         title="blizzard-hub",
         version=__version__,
-        lifespan=_lifespan,
+        lifespan=lifespan,
         telemetry=platform_tracing.fastapi_telemetry(),
         dependencies=[Depends(_annotate_chunk)],
     )
@@ -468,9 +468,9 @@ def create_app(
     app.state.flags = flags
     app.state.readiness = readiness
     app.state.services = services
-    # Set on shutdown by ``_lifespan``; every SSE stream races it.
+    # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
-    # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``_lifespan`` runs it beside the sweeps.
+    # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.
     app.state.flow_driver = None
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
@@ -550,7 +550,7 @@ def create_app(
     return app
 
 
-def _transcript_caps(config: HubConfig) -> TranscriptCaps:
+def transcript_caps(config: HubConfig) -> TranscriptCaps:
     """The configured ingest ceilings, each falling back to the domain's own default
     (see ``TranscriptCapsConfig`` in `src/blizzard/hub/config.py`)."""
     defaults = TranscriptCaps()
@@ -639,7 +639,7 @@ def build_hosted_app(
         secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         login_throttle=config.auth.login_throttle,
-        transcript_caps=_transcript_caps(config),
+        transcript_caps=transcript_caps(config),
         # No exporter is built unless OpenTelemetry's own variables enable tracing.
         trace_exporter=(
             OtlpTraceExporter(
@@ -689,8 +689,8 @@ def build_hosted_app(
                 )
         Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
-        _announce_rejected_tracing(tracing, services)
-        _announce_rejected_egress(config.egress, services)
+        announce_rejected_tracing(tracing, services)
+        announce_rejected_egress(config.egress, services)
     app = create_app(
         config,
         readiness=readiness,
@@ -700,7 +700,7 @@ def build_hosted_app(
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
-    # Only a store at the expected head is reconciled; `_lifespan` runs the driver it finds here.
+    # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
     app.state.flow_driver = flow_driver
     return app
 
@@ -716,7 +716,7 @@ def _announce_started(revision: str | None, services: HubServices) -> None:
     )
 
 
-def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
+def announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
     """A rejected tracing setting never stops startup: the hub serves with tracing off and
     records one ``trace-config-rejected`` in the hub's own event log per start, naming the setting."""
     if tracing.state != "rejected":
@@ -729,7 +729,7 @@ def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) 
     )
 
 
-def _announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
+def announce_rejected_egress(egress: EgressConfig, services: HubServices) -> None:
     """An export the hub cannot fully honor never stops startup, and records one ``egress-config-rejected`` in the
     hub's own event log per start. Without its format's extra the export is off and the event names the format;
     without the path hash key a hashing file path policy needs, only the events dataset is off and the event names the

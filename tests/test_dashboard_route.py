@@ -17,8 +17,8 @@ from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.api.dashboard import _DASHBOARD_HUB_TIMEOUT
-from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
+from blizzard.runner.api.dashboard import DASHBOARD_HUB_TIMEOUT
+from blizzard.runner.api.hub_proxy import HUB_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -230,9 +230,9 @@ def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(tmp_path: Path)
     resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
-    assert seen_timeouts == [_DASHBOARD_HUB_TIMEOUT]
-    assert _DASHBOARD_HUB_TIMEOUT < 5.0
-    assert _DASHBOARD_HUB_TIMEOUT < _HUB_TIMEOUT
+    assert seen_timeouts == [DASHBOARD_HUB_TIMEOUT]
+    assert DASHBOARD_HUB_TIMEOUT < 5.0
+    assert DASHBOARD_HUB_TIMEOUT < HUB_TIMEOUT
 
 
 @pytest.mark.component

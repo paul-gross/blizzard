@@ -14,7 +14,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.sweep_passes import SweepPassOutcome
-from blizzard.hub.app import Sweep, _lifespan
+from blizzard.hub.app import Sweep, lifespan
 from blizzard.hub.config import ConfigError, parse_sweep_modes
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.domain.sweeps.locks import SweepInProgress, SweepLock, SweepLocks, admits
@@ -233,7 +233,7 @@ def test_a_stepped_sweep_runs_no_pass_at_boot_or_after_its_interval(tmp_path: Pa
     ]
 
     async def boot() -> None:
-        async with _lifespan(hub.app):  # type: ignore[arg-type]
+        async with lifespan(hub.app):  # type: ignore[arg-type]
             await asyncio.sleep(0.3)
 
     with capture_logs() as logs:

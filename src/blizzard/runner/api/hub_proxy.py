@@ -24,20 +24,20 @@ from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
 
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
-_HUB_TIMEOUT = 15.0
+HUB_TIMEOUT = 15.0
 # The whole-forward bound a caller-less ``GET`` retries within; pinned at
 # tests/test_pin_runner_misc.py::test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room.
-_HUB_RETRY_CEILING = 25.0
+HUB_RETRY_CEILING = 25.0
 # A gateway restart answers one of these while it is mid-swap; a `GET` retries past them.
 _RETRYABLE_STATUSES = frozenset(
     {status.HTTP_502_BAD_GATEWAY, status.HTTP_503_SERVICE_UNAVAILABLE, status.HTTP_504_GATEWAY_TIMEOUT}
 )
 # Bounded backoff between retries — the last value repeats for any retry past it.
-_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 8.0)
+RETRY_BACKOFF_SECONDS: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 8.0)
 
 
 def _backoff(retries_so_far: int) -> float:
-    return _RETRY_BACKOFF_SECONDS[min(retries_so_far, len(_RETRY_BACKOFF_SECONDS) - 1)]
+    return RETRY_BACKOFF_SECONDS[min(retries_so_far, len(RETRY_BACKOFF_SECONDS) - 1)]
 
 
 def _unverified(verdict: IdentityVerdict) -> str:
@@ -134,12 +134,12 @@ class HubProxy:
         to name the configured runner answers ``503`` with the reason, forwarding nothing.
 
         A ``GET`` retries a transport error or a ``502``/``503``/``504`` with bounded backoff,
-        within ``timeout`` when the caller supplies one or ``_HUB_RETRY_CEILING`` otherwise —
-        that whole-forward budget, not ``_HUB_TIMEOUT``, is what ``timeout`` means for a
-        retrying call, and each attempt's own timeout is whichever of ``_HUB_TIMEOUT`` and the
+        within ``timeout`` when the caller supplies one or ``HUB_RETRY_CEILING`` otherwise —
+        that whole-forward budget, not ``HUB_TIMEOUT``, is what ``timeout`` means for a
+        retrying call, and each attempt's own timeout is whichever of ``HUB_TIMEOUT`` and the
         budget remaining is smaller. Every other status mismatching ``expect`` raises verbatim
         on the first response. A ``POST`` never retries; it runs at exactly the resolved
-        budget (the caller's ``timeout`` or ``_HUB_TIMEOUT``). ``severity`` names the
+        budget (the caller's ``timeout`` or ``HUB_TIMEOUT``). ``severity`` names the
         structlog level the exhausted-forward line logs at — every route keeps ``error``
         unless it opts into a lower one for a tolerated failure. ``fields`` add a structured
         subject to that line."""
@@ -159,7 +159,7 @@ class HubProxy:
     ) -> httpx2.Response:
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         retryable = method == "GET"
-        budget = timeout if timeout is not None else (_HUB_RETRY_CEILING if retryable else _HUB_TIMEOUT)
+        budget = timeout if timeout is not None else (HUB_RETRY_CEILING if retryable else HUB_TIMEOUT)
         started = self.clock.monotonic()
         retries = 0
         while True:
@@ -167,7 +167,7 @@ class HubProxy:
             # a caller-supplied `timeout` must land on the wire unchanged, not shaved by the
             # cost of reading the clock. Only a retry's attempt is drawn from what is left.
             remaining = budget if retries == 0 else budget - (self.clock.monotonic() - started)
-            attempt_timeout = max(min(_HUB_TIMEOUT, remaining), 0.001) if retryable else budget
+            attempt_timeout = max(min(HUB_TIMEOUT, remaining), 0.001) if retryable else budget
             try:
                 upstream = self.client.request(
                     method,
@@ -209,7 +209,7 @@ class HubProxy:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="runner wired an identity check without a way to read the token's identity",
             )
-        budget = timeout if timeout is not None else _HUB_RETRY_CEILING
+        budget = timeout if timeout is not None else HUB_RETRY_CEILING
         started = self.clock.monotonic()
         retries = 0
         while True:

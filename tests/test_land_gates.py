@@ -535,7 +535,7 @@ def _merged_for(
         heads={_BRANCH: tip} if tip is not None else {},
         replies=dict(replies or {}),
     )
-    return asyncio.run(_PullRequest._merged_for_branch(_target(state, commit=commit)))
+    return asyncio.run(_PullRequest.merged_for_branch(_target(state, commit=commit)))
 
 
 def test_a_stale_merged_change_on_a_reused_branch_name_is_not_the_runs_landing() -> None:
@@ -810,10 +810,10 @@ def test_a_patch_that_cannot_be_trusted_complete_parses_to_nothing(
 def test_a_translation_accumulates_the_shift_of_every_feature_block_before_it() -> None:
     feature = [_Block(1, 1, 3, ("-a",)), _Block(5, 0, 2, ("+b",))]
 
-    assert base_merge._translate([_Block(20, 1, 1, ("-c", "+d"))], feature) == [_Block(24, 1, 1, ("-c", "+d"))]
+    assert base_merge.translate([_Block(20, 1, 1, ("-c", "+d"))], feature) == [_Block(24, 1, 1, ("-c", "+d"))]
 
 
 def test_a_base_block_abutting_a_feature_block_is_not_translated() -> None:
-    assert base_merge._translate([_Block(3, 2, 1, ())], [_Block(5, 1, 1, ())]) is None
-    assert base_merge._translate([_Block(6, 1, 1, ())], [_Block(5, 1, 1, ())]) is None
-    assert base_merge._translate([_Block(3, 1, 1, ())], [_Block(5, 1, 1, ())]) == [_Block(3, 1, 1, ())]
+    assert base_merge.translate([_Block(3, 2, 1, ())], [_Block(5, 1, 1, ())]) is None
+    assert base_merge.translate([_Block(6, 1, 1, ())], [_Block(5, 1, 1, ())]) is None
+    assert base_merge.translate([_Block(3, 1, 1, ())], [_Block(5, 1, 1, ())]) == [_Block(3, 1, 1, ())]

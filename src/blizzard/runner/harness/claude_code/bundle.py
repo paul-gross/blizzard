@@ -38,7 +38,7 @@ def claude_code_bundle_layout(permission_mode: str | None = None) -> HarnessLayo
             EntryPoint("agents.json"),
             EntryPoint("plugins", is_dir=True),
         ),
-        compose=_composer(permission_mode),
+        compose=composer(permission_mode),
     )
 
 
@@ -79,7 +79,7 @@ class ClaudeCodeBundleDelivery:
         return args
 
 
-def _composer(permission_mode: str | None) -> Callable[[HarnessComposition], None]:
+def composer(permission_mode: str | None) -> Callable[[HarnessComposition], None]:
     def compose(composition: HarnessComposition) -> None:
         staged = composition.staged_dir / SETTINGS_FILENAME
         operator = decode_json_object(staged.read_text()) if staged.exists() else {}

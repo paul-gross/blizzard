@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRe
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
-from blizzard.runner.hub.internal.http_hub import _chunk_state
+from blizzard.runner.hub.internal.http_hub import chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
 from blizzard.tools.invariants import hub_invariants
 from blizzard.wire.chunk import ChunkStatusView
@@ -396,7 +396,7 @@ def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path
     open_ids = [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]]
     assert decision_id not in open_ids
     statuses = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": [chunk_id]})
-    view = _chunk_state(ChunkStatusView.model_validate(statuses.json()[0]))
+    view = chunk_state(ChunkStatusView.model_validate(statuses.json()[0]))
     assert view.decision is None
     move = held_chunk_move(
         view,

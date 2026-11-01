@@ -90,7 +90,7 @@ class TranscriptService:
         if segment is None or segment.chunk_id != chunk_id:
             return None
         start_cursor = session_start_cursor(segment, self._transcript_ledger.transcript_segments_for_chunk(chunk_id))
-        spawn_cwd = self._spawn_cwd(chunk_id)
+        spawn_cwd = self.spawn_cwd(chunk_id)
         local = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=start_cursor)
         tail = None
         if local.available and segment.final and segment.cursor is not None:
@@ -101,7 +101,7 @@ class TranscriptService:
         assert lease.session_id is not None
         session = lease.session
         assert session is not None
-        return self._read_local_session(session, spawn_cwd=self._spawn_cwd(lease.chunk_id))
+        return self._read_local_session(session, spawn_cwd=self.spawn_cwd(lease.chunk_id))
 
     def _read_local_session(
         self, session: SessionReference, *, spawn_cwd: str | None, since: str | None = None
@@ -109,7 +109,7 @@ class TranscriptService:
         repository = self._transcripts.transcript_repository(session.harness_id)
         return repository.read_turns(session.session_id, spawn_cwd=spawn_cwd, since=since)
 
-    def _spawn_cwd(self, chunk_id: str) -> str | None:
+    def spawn_cwd(self, chunk_id: str) -> str | None:
         # The newest binding, released or not: a closed lease's transcript still reads in its own workspace. A
         # chunk never bound here has no hint, which the primary by-session-id lookup does not need.
         binding = self._environments.newest_binding_for_chunk(chunk_id)

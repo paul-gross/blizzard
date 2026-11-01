@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
-from blizzard.hub.api.transcripts import _content_view
+from blizzard.hub.api.transcripts import content_view
 from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     TranscriptCaps,
@@ -613,7 +613,7 @@ def test_the_late_link_handles_survive_the_lease_reads_own_renumbering(tmp_path:
 
 
 def test_a_turn_stored_before_the_late_link_fields_still_validates_on_read_back(tmp_path: Path) -> None:
-    """Both fields are optional and defaulted for exactly this: `_content_view` re-validates
+    """Both fields are optional and defaulted for exactly this: `content_view` re-validates
     every stored turn, and a record written before they existed must not 500 the route."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
@@ -692,4 +692,4 @@ def test_the_content_view_serializes_byte_equal_to_the_decode_first_path(tool: d
         ),
     ]
 
-    assert _content_view("sg_1", records).model_dump_json() == _decoded_view("sg_1", records).model_dump_json()
+    assert content_view("sg_1", records).model_dump_json() == _decoded_view("sg_1", records).model_dump_json()

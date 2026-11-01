@@ -12,6 +12,7 @@ import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.composition import RunnerProcess
@@ -221,12 +222,12 @@ def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaini
     assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
     rerun = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert rerun.exit_code == 0, rerun.output
-    assert set(named_runners(load_host_config(root))) == {"rn_init1", "rn_init2"}
+    assert set(named_runners(load_host_config(root), SystemClock())) == {"rn_init1", "rn_init2"}
 
     result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
 
     assert result.exit_code == 0, result.output
-    assert named_runners(load_host_config(root)) == ("rn_init1",)
+    assert named_runners(load_host_config(root), SystemClock()) == ("rn_init1",)
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert again.exit_code == 0, again.output
 
@@ -240,13 +241,13 @@ def test_a_readd_of_one_runner_beside_another_refuses_rather_than_set_the_shared
     env = root / ENV_FILENAME
     env.write_text("".join(line for line in env.read_text().splitlines(keepends=True) if "BZ_HUB_TOKEN_R2" not in line))
     store = HostLayout(root).store_path
-    before = (named_runners(load_host_config(root)), HostLayout(root).config_path.read_bytes())
+    before = (named_runners(load_host_config(root), SystemClock()), HostLayout(root).config_path.read_bytes())
 
     refused = _run(fake_init_hub, "init", str(root), "--hub", _HUB, "--allow-readd")
 
     assert refused.exit_code != 0
     assert "runner-local" in refused.output and "blizzard runner retire --runner r2" in refused.output
-    assert (named_runners(load_host_config(root)), HostLayout(root).config_path.read_bytes()) == before
+    assert (named_runners(load_host_config(root), SystemClock()), HostLayout(root).config_path.read_bytes()) == before
     assert not [path for path in store.parent.iterdir() if path.name.startswith(f"{store.name}.")]
     assert len(fake_init_hub.admin.added) == 2
 

@@ -108,7 +108,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
 ) -> None:
     hub, exporter = _hub(tmp_path)
     sweep = trace_export_sweep(hub)
-    append = sweep._steps.append_cursor
+    append = sweep.steps.append_cursor
     attempts = 0
 
     def append_once_failed(record: TraceCheckpoint) -> None:
@@ -118,7 +118,7 @@ def test_a_failed_first_cursor_write_retries_start_without_a_restart(
             raise OSError("transient cursor write failure")
         append(record)
 
-    monkeypatch.setattr(sweep._steps, "append_cursor", append_once_failed)
+    monkeypatch.setattr(sweep.steps, "append_cursor", append_once_failed)
     with pytest.raises(OSError, match="transient cursor write failure"):
         sweep.sweep()
     assert trace_store(hub).newest_cursor() is None
@@ -348,7 +348,7 @@ def test_a_failed_jump_write_retries_and_records_the_skipped_window_once(
 ) -> None:
     restarted = _gapped_restart(tmp_path)
     sweep = trace_export_sweep(restarted)
-    append = sweep._steps.append_cursor
+    append = sweep.steps.append_cursor
     attempts = 0
 
     def append_once_failed(record: TraceCheckpoint) -> None:
@@ -358,7 +358,7 @@ def test_a_failed_jump_write_retries_and_records_the_skipped_window_once(
             raise OSError("transient cursor write failure")
         append(record)
 
-    monkeypatch.setattr(sweep._steps, "append_cursor", append_once_failed)
+    monkeypatch.setattr(sweep.steps, "append_cursor", append_once_failed)
     with pytest.raises(OSError, match="transient cursor write failure"):
         sweep.sweep()
     assert _skipped_count(restarted) == 0
@@ -377,7 +377,7 @@ def test_a_jump_whose_cursor_write_never_succeeds_records_no_skipped_window(
     def append_always_failed(record: TraceCheckpoint) -> None:
         raise OSError("cursor store down")
 
-    monkeypatch.setattr(sweep._steps, "append_cursor", append_always_failed)
+    monkeypatch.setattr(sweep.steps, "append_cursor", append_always_failed)
     for _ in range(3):
         with pytest.raises(OSError, match="cursor store down"):
             sweep.sweep()

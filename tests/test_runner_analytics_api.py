@@ -16,8 +16,8 @@ import pytest
 from fastapi import FastAPI
 
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.api.analytics import _ANALYTICS_HUB_TIMEOUT
-from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
+from blizzard.runner.api.analytics import ANALYTICS_HUB_TIMEOUT
+from blizzard.runner.api.hub_proxy import HUB_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests.config_inputs import create_runner_app
@@ -254,7 +254,7 @@ def test_a_scan_that_runs_the_whole_attempt_is_not_retried(tmp_path: Path, suffi
         )
     assert resp.status_code == 502, resp.text
     assert attempts == 1
-    assert _ANALYTICS_HUB_TIMEOUT == _HUB_TIMEOUT
+    assert ANALYTICS_HUB_TIMEOUT == HUB_TIMEOUT
 
 
 @pytest.mark.parametrize("suffix", _ROUTES)

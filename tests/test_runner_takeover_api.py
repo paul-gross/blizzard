@@ -145,7 +145,7 @@ def test_open_without_force_over_a_live_worker_is_409(tmp_path: Path) -> None:
 def test_unknown_recorded_owner_blocks_takeover_as_409_without_opening_one(tmp_path: Path) -> None:
     app, store = _app_with_takeover(tmp_path, harnesses=HarnessRegistry({}))
     _seed_lease(store)
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 

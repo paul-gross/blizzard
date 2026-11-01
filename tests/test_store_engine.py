@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, event, text
 
-from blizzard.foundation.store.engine import _set_sqlite_pragmas, create_engine_from_url
+from blizzard.foundation.store.engine import create_engine_from_url, set_sqlite_pragmas
 
 pytestmark = pytest.mark.unit
 
@@ -39,7 +39,7 @@ def test_non_sqlite_url_gets_no_pragma_listener(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("blizzard.foundation.store.engine.create_engine", lambda *a, **k: fake_engine)
     engine = create_engine_from_url("postgresql://user:pass@localhost/blizzard")
     assert engine is fake_engine
-    assert not event.contains(engine, "connect", _set_sqlite_pragmas)
+    assert not event.contains(engine, "connect", set_sqlite_pragmas)
     engine.dispose()
 
 

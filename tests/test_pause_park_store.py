@@ -263,7 +263,7 @@ def test_open_pause_parks_reads_one_row_per_lease_whatever_the_repark_depth(tmp_
             for n in range(depth):
                 # Each re-park is left open beneath the next — only the newest may be read.
                 store.record_pause_park(lease_id=lease, chunk_id="ch_" + lease, parked_at=_NOW + timedelta(minutes=n))
-        rows = count_rows_read(store._engine, store.open_pause_parks)
+        rows = count_rows_read(store.engine, store.open_pause_parks)
         return rows, {k: v.parked_at for k, v in store.open_pause_parks().items()}
 
     shallow_rows, shallow = parks_at(2, tmp_path / "shallow")

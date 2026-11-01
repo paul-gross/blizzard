@@ -157,9 +157,7 @@ def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tm
             if n % 2 == 0 and n < depth - 1:
                 store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id=f"q{n}", parked_at=at)
         ask = store.unforwarded_ask("lease_1")
-        return count_rows_read(
-            store._engine, lambda: store.unforwarded_ask("lease_1")
-        ), ask.question_id if ask else None
+        return count_rows_read(store.engine, lambda: store.unforwarded_ask("lease_1")), ask.question_id if ask else None
 
     shallow_rows, shallow = at_depth(2, tmp_path / "shallow")
     deep_rows, deep = at_depth(9, tmp_path / "deep")

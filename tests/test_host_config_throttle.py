@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner, _throttle_toml
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, throttle_toml
 from blizzard.runner.throttle.settings import (
     BudgetSettings,
     HoldOrRelease,
@@ -262,7 +262,7 @@ def test_a_choice_alone_configures_the_table(tmp_path: Path) -> None:
 
 def test_a_release_on_decline_alone_round_trips_through_its_table() -> None:
     settings = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
-    assert _throttle_toml(settings) == '\n[runner.throttle]\non_decline = "release"\n'
+    assert throttle_toml(settings) == '\n[runner.throttle]\non_decline = "release"\n'
 
 
 def test_rendering_a_runner_and_loading_it_keeps_its_choices(tmp_path: Path) -> None:

@@ -1270,7 +1270,6 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "cli" / "store_guard.py",
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
-        _RUNNER_DIR / "cli" / "harness.py",
         _RUNNER_DIR / "cli" / "children.py",
         _SRC_DIR / "cli" / "dev.py",
         _SRC_DIR / "tools" / "invariants.py",

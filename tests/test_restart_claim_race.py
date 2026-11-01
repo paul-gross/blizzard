@@ -33,14 +33,14 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
     entered_write = threading.Event()
     release_write = threading.Event()
     movement = cast(ChunkMovementStore, hub.services.chunks.movement)
-    real_record_restart_conn = movement._record_restart_conn
+    real_record_restart_conn = movement.record_restart_conn
 
     def _blocking_record_restart_conn(conn, cid, **kwargs):
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the restart's write"
         return real_record_restart_conn(conn, cid, **kwargs)
 
-    movement._record_restart_conn = _blocking_record_restart_conn  # type: ignore[method-assign]
+    movement.record_restart_conn = _blocking_record_restart_conn  # type: ignore[method-assign]
 
     restart_result: dict[str, int] = {}
 

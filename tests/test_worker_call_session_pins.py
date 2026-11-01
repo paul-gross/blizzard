@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation import cli_spans
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
 from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
@@ -31,7 +31,12 @@ _ENV = {
 def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     """Collaborators whose client factory hands out ``client`` — a fresh stub when none is given."""
     handed = client or StubClient({})
-    return CliCollaborators(client_factory=lambda **_: handed, clock=Clock(), wall_clock=SystemClock())
+    return CliCollaborators(
+        client_factory=lambda **_: handed,
+        clock=Clock(),
+        wall_clock=SystemClock(),
+        monotonic_clock=SystemMonotonicClock(),
+    )
 
 
 def _runner_context() -> click.Context:
@@ -180,9 +185,9 @@ def test_the_send_is_capped_by_the_sessions_own_environment(
 def test_finishing_the_span_records_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _record_sends(monkeypatch, released=True)
     session = _traced(_ENV)
-    assert session._span is not None
+    assert session.span is not None
     codes: list[int] = []
-    monkeypatch.setattr(session._span, "finish", codes.append)
+    monkeypatch.setattr(session.span, "finish", codes.append)
 
     session.finish(7)
 

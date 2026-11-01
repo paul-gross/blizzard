@@ -66,6 +66,10 @@ class TraceExportSweep:
         )
         self._cursor_started = False
 
+    @property
+    def steps(self) -> IWriteTraceCursor:
+        return self._steps
+
     def sweep(self) -> None:
         now = self._clock.now()
         if not self._latch.is_due(now):

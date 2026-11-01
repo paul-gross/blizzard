@@ -157,7 +157,7 @@ _ADAPTER_CASES = [
         "ChunkEscalationsStore",
         lambda store: ChunkEscalationsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
         lambda a: a.list_open_escalations(),
-        "_newest_escalation_per_chunk",
+        "newest_escalation_per_chunk",
     ),
     _AdapterCase(
         "ChunkEventsStore",

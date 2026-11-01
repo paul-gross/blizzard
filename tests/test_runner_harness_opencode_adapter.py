@@ -30,9 +30,9 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.adapter import (
-    _MAX_IDENTITY_PREAMBLE_LINES,
+    MAX_IDENTITY_PREAMBLE_LINES,
     OpenCodeAdapter,
-    _PendingOpenCodeIdentity,
+    PendingOpenCodeIdentity,
 )
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
@@ -91,7 +91,7 @@ def _jsonl(events: list[dict[str, Any]]) -> str:
 def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mirrors ``tests/test_runner_harness_adapter.py``'s fixture of the same shape: a unit
     test's fake spawn must not depend on whether ``opencode`` is really installed on this
-    machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup runs before the
+    machine's ``PATH`` — `ensure_executable`'s `shutil.which` lookup runs before the
     faked ``subprocess.Popen`` ever sees the call."""
     monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
 
@@ -126,7 +126,7 @@ def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
         worker_config_path=str(effective / "opencode.json"),
         effective_config_dir=str(effective),
     )
-    for env in (adapter.identity_env(_preamble(str(tmp_path)), "ch_1", "ses_1"), adapter._config_env()):
+    for env in (adapter.identity_env(_preamble(str(tmp_path)), "ch_1", "ses_1"), adapter.config_env()):
         assert env["OPENCODE_CONFIG"] == str(effective / "opencode.json")
         assert env["OPENCODE_CONFIG_CONTENT"] == content
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
@@ -676,7 +676,7 @@ class _AskingResolver:
 def test_non_object_config_content_fails_the_launch_as_a_spawn_error(spawn_executor: Executor, content: str) -> None:
     adapter = _adapter(spawn_executor, autonomy=Autonomy.Normal, permission_resolver=_AskingResolver())
     with pytest.raises(HarnessSpawnError, match="cannot establish"):
-        adapter._deny_unanswerable_asks("/ws/e1", {"OPENCODE_CONFIG_CONTENT": content})
+        adapter.deny_unanswerable_asks("/ws/e1", {"OPENCODE_CONFIG_CONTENT": content})
 
 
 # --------------------------------------------------------------------------- #
@@ -792,14 +792,14 @@ def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Pat
     stdout_path.write_bytes(b"")
     stderr_path = tmp_path / "lease-1.stderr"
     stderr_path.write_text("Traceback (most recent call last):\nRuntimeError: mock-opencode blew up\n")
-    adapter = _adapter(spawn_executor, binary="opencode", process=FakeProbe(alive=set()))  # already gone
-    pending = _PendingOpenCodeIdentity(
+    probe = FakeProbe(alive=set())  # already gone
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
         stdout_path=str(stdout_path),
         stderr_path=str(stderr_path),
-        process=adapter._process,
+        process=probe,
     )
 
     with pytest.raises(WorkerIdentityError, match="mock-opencode blew up"):
@@ -813,16 +813,14 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path, spawn_exec
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
     stdout_path.write_bytes(b"")
-    adapter = _adapter(
-        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
-    )
-    pending = _PendingOpenCodeIdentity(
+    probe = FakeProbe(alive={(4242, "start-token")})
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
         stdout_path=str(stdout_path),
         stderr_path="",
-        process=adapter._process,
+        process=probe,
     )
 
     with pytest.raises(WorkerIdentityError):
@@ -849,14 +847,14 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
         ).encode()
         + b"\n"
     )
-    adapter = _adapter(spawn_executor, binary="opencode", process=FakeProbe(alive=set()))  # already gone
-    pending = _PendingOpenCodeIdentity(
+    probe = FakeProbe(alive=set())  # already gone
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
         stdout_path=str(stdout_path),
         stderr_path="",
-        process=adapter._process,
+        process=probe,
     )
 
     handle = pending.await_identity(0.1)
@@ -898,7 +896,7 @@ def test_fresh_spawn_reads_the_record_a_worker_flushed_as_it_exited(tmp_path: Pa
         ).encode()
         + b"\n"
     )
-    pending = _PendingOpenCodeIdentity(
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
@@ -926,16 +924,14 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path, spawn_exec
         }
     )
     stdout_path.write_text(f"A tool banner opencode never asked for\nnot json either\n{identity_line}\n")
-    adapter = _adapter(
-        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
-    )
-    pending = _PendingOpenCodeIdentity(
+    probe = FakeProbe(alive={(4242, "start-token")})
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
         stdout_path=str(stdout_path),
         stderr_path="",
-        process=adapter._process,
+        process=probe,
     )
 
     handle = pending.await_identity(1.0)
@@ -946,20 +942,18 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path, spawn_exec
 @pytest.mark.component
 def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: Path, spawn_executor: Executor) -> None:
     """The leading-noise tolerance is bounded: a permanently noisy stream with no valid
-    identity in the first ``_MAX_IDENTITY_PREAMBLE_LINES`` lines fails the handshake
+    identity in the first ``MAX_IDENTITY_PREAMBLE_LINES`` lines fails the handshake
     outright, rather than waiting on ``await_identity``'s own timeout."""
     stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_text("not json\n" * (_MAX_IDENTITY_PREAMBLE_LINES + 1))
-    adapter = _adapter(
-        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
-    )
-    pending = _PendingOpenCodeIdentity(
+    stdout_path.write_text("not json\n" * (MAX_IDENTITY_PREAMBLE_LINES + 1))
+    probe = FakeProbe(alive={(4242, "start-token")})
+    pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
         process_start_time="start-token",
         stdout_path=str(stdout_path),
         stderr_path="",
-        process=adapter._process,
+        process=probe,
     )
 
     with pytest.raises(WorkerIdentityError):

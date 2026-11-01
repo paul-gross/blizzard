@@ -489,7 +489,7 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
         revealed.append(name.value)
         raise SecretRetired(name.value)
 
-    monkeypatch.setattr(hub.services.forges._secrets, "reveal", retired)
+    monkeypatch.setattr(hub.services.forges.secrets, "reveal", retired)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
 

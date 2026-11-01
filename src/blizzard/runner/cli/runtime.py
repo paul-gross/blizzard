@@ -19,7 +19,7 @@ from blizzard.cli.collaborators import CliCollaborators, ClientFactory, ConnectE
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.roles import collaborator, dto
@@ -239,11 +239,12 @@ def init(
     aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     named = projects or None
     door = Door.of(ctx)
+    clock = CliCollaborators.of(ctx).wall_clock
     initialized: list[HostConfig] = []
 
     def initialize(root: Path) -> HostConfig:
         runtime = runtime_of(root, door, hub_url=hub_url, projects=named)
-        if allow_readd and (aside := runtime.set_aside_pre_host_store(now=SystemClock().now())) is not None:
+        if allow_readd and (aside := runtime.set_aside_pre_host_store(now=clock.now())) is not None:
             for path in aside.moved:
                 click.echo(f"set the pre-host store aside as {path}")
         initialized.append(runtime.init())
@@ -259,13 +260,13 @@ def init(
     (config,) = initialized
     collaborators = InitCollaborators.of(ctx)
     rerun = _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd, projects=named)
-    store = _RuntimeStore(config, door)
+    store = _RuntimeStore(config, door, clock)
     for entry in config.runners:
         _refuse_tokenless(config, entry, store, rerun)
     with collaborators.host_clients(config.hub_url) as host_clients:
         host = register_host(config, collaborators, host_clients, store, rerun)
         for entry in config.runners:
-            _join_runner(config, entry, collaborators, HostJoin(host, host_clients(host.token)), store, rerun)
+            _join_runner(config, entry, collaborators, HostJoin(host, host_clients(host.token)), store, rerun, clock)
 
 
 def write_runner_token(root: Path, token_env: str, token: str) -> None:
@@ -447,12 +448,15 @@ def _join_runner(
     host: HostJoin,
     store: _RuntimeStore,
     rerun: _Rerun,
+    clock: IClock,
 ) -> None:
     """Join ``entry``'s runner to the hub under the host, then write its id into the host file and its identity
     row into the store."""
     token = config.token_for(entry)
     with collaborators.join_with(config.hub_url, token.value) as (identity, _admin):
-        joined = _join_hub(config, entry, token, identity, HostRunnerAdmin(host.client), store.for_runner(entry), rerun)
+        joined = _join_hub(
+            config, entry, token, identity, HostRunnerAdmin(host.client), store.for_runner(entry), rerun, clock
+        )
     if not joined.added and not host.joined.holds(joined.runner_id):
         raise click.ClickException(_stands_elsewhere(config, entry, joined, host.joined, rerun))
     # The token is written before the id, and the id before the identity row: a crash between any two is completed
@@ -461,7 +465,7 @@ def _join_runner(
     if entry.id != joined.runner_id:
         with click_exception_on(ConfigError):
             write_runner_id(config.layout, entry.name, joined.runner_id, strict=config.strict)
-    _record_identity(config, joined)
+    _record_identity(config, joined, clock)
 
 
 def _stands_elsewhere(
@@ -477,11 +481,11 @@ def _stands_elsewhere(
     )
 
 
-def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner) -> None:
+def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, clock: IClock) -> None:
     """Stop a kept runner whose store holds a runner neither it nor a sibling ``[[runner]]`` is, before anything is
     written. The configured id is not counted as ours: a store naming a stale one under a re-add is foreign too."""
     siblings = tuple(other.id for other in config.runners if other.name != entry.name and other.id is not None)
-    verdict = foreign_store(named_runners(config), (joined.runner_id, *siblings))
+    verdict = foreign_store(named_runners(config, clock), (joined.runner_id, *siblings))
     if verdict is None:
         return
     held = f"runner {entry.name}'s token belongs to runner {joined.runner_id}"
@@ -544,16 +548,17 @@ class _RuntimeStore:
     """The host's own store, as ``init`` sees it while the host is down. It is set aside at most once per init:
     the host added again and each runner added again share the one fresh store."""
 
-    def __init__(self, config: HostConfig, door: Door) -> None:
+    def __init__(self, config: HostConfig, door: Door, clock: IClock) -> None:
         self.config = config
         self.door = door
+        self.clock = clock
         self._set_aside = False
 
     def stored_runner_id(self, *, sibling_of: RunnerEntry | None = None) -> str | None:
         """The runner the store's identity rows name, other than any another ``[[runner]]`` of the host configures
         beside ``sibling_of`` — asked of the cross-runner audit, since no runner is bound to a view yet."""
         siblings = {e.id for e in self.config.runners if sibling_of is not None and e.name != sibling_of.name}
-        named = [runner_id for runner_id in named_runners(self.config) if runner_id not in siblings]
+        named = [runner_id for runner_id in named_runners(self.config, self.clock) if runner_id not in siblings]
         return named[0] if named else None
 
     def is_set_aside(self) -> bool:
@@ -562,7 +567,7 @@ class _RuntimeStore:
     def set_aside(self) -> None:
         if self._set_aside:
             return
-        aside = runtime_of(self.config.root, self.door).reset_store(now=SystemClock().now())
+        aside = runtime_of(self.config.root, self.door).reset_store(now=self.clock.now())
         self._set_aside = True
         for path in aside.moved:
             click.echo(f"set the old store aside as {path}")
@@ -606,7 +611,7 @@ class _Joining:
     overridden_by: str | None
 
 
-def _record_identity(config: HostConfig, joined: JoinedRunner) -> None:
+def _record_identity(config: HostConfig, joined: JoinedRunner, clock: IClock) -> None:
     """Write the joined runner's identity row from the hub's answer, so a configured runner has its row before it
     writes anything else."""
     engine = create_engine_from_url(config.db_url)
@@ -618,7 +623,7 @@ def _record_identity(config: HostConfig, joined: JoinedRunner) -> None:
             RunnerIdentity(
                 runner_id=joined.runner_id,
                 runner_name=joined.runner_name,
-                registered_at=SystemClock().now(),
+                registered_at=clock.now(),
                 tenant_id=joined.tenant_id,
                 tenant_name=joined.tenant_name,
             )
@@ -647,6 +652,7 @@ def _join_hub(
     admin: IRunnerAdder,
     store: IRunnerStoreAside,
     rerun: _Rerun,
+    clock: IClock,
 ) -> JoinedRunner:
     """Keep the runner the held token names, or add one and write its token; any stop exits
     non-zero with nothing added."""
@@ -675,7 +681,7 @@ def _join_hub(
     except (ConfigError, StoreResetRefused) as exc:
         raise click.ClickException(str(exc)) from exc
     if not joined.added:
-        _refuse_unsettled(config, entry, joined)
+        _refuse_unsettled(config, entry, joined, clock)
     tenant = _in_tenant(joined.tenant_id, joined.tenant_name)
     if joined.added:
         click.echo(
@@ -926,6 +932,7 @@ def host(
         config,
         action="start the host",
         door=Door.of(ctx),
+        clock=CliCollaborators.of(ctx).wall_clock,
         runners={built.id: built.config.name for built in runners},
         configured=ours,
         refuse_foreign=False,
@@ -936,10 +943,10 @@ def host(
             for built in runners
             if built.id in foreign
         ]
-        _start(config, kept, halted, InitCollaborators.of(ctx))
+        start(config, kept, halted, InitCollaborators.of(ctx))
 
 
-def _start(
+def start(
     config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[HaltedRunner], collaborators: InitCollaborators
 ) -> None:
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped."""
@@ -948,7 +955,7 @@ def _start(
     for built in runners:
         if refusal := worker_shell_refusal(built.config.worker_shell):
             raise click.ClickException(f"runner {built.config.name}: {refusal}")
-    bundles = {built.id: _publish_harness_bundle(built.config, collaborators) for built in runners}
+    bundles = {built.id: publish_runner_bundle(built.config, collaborators) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
@@ -1000,7 +1007,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
     try:
         ensure_current_revision(config)
         click.echo(f"store: {config.db_url} is at the revision this build expects")
-        named = named_runners(config)
+        named = named_runners(config, CliCollaborators.of(ctx).wall_clock)
     except (RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError) as exc:
         problems.append(f"store: {exc}")
         named = ()
@@ -1041,7 +1048,7 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
     return None
 
 
-def _publish_harness_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
+def publish_runner_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
     accepted, returning it for the process graph to deliver; a runtime with no
     `[harness] config_dir` is left untouched."""
@@ -1101,7 +1108,7 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
     host_tick = (
         None
         if stepped or hosted.host_stepper is None
-        else _host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
+        else host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
     )
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
@@ -1164,7 +1171,7 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
             Uds(config.socket_path).unlink()
 
 
-def _host_tick_driver(
+def host_tick_driver(
     host: HostProcess, *, tick_seconds: float, stepper: HostPassStepper | None = None
 ) -> PeriodicPassDriver:
     """The host's own thread, passing on the tick's own interval with no jitter, so a credential lapsed across a
@@ -1242,11 +1249,12 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         config,
         action="run a tick",
         door=Door.of(ctx),
+        clock=CliCollaborators.of(ctx).wall_clock,
         runners={runner_built.id: runner_built.config.name},
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        bundle = _publish_harness_bundle(runner_built.config, InitCollaborators.of(ctx))
+        bundle = publish_runner_bundle(runner_built.config, InitCollaborators.of(ctx))
         graph = build_runner_process(
             runner_built.config,
             bundle=bundle,

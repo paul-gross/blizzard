@@ -7,9 +7,9 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.runtime import click_exception_on
-from blizzard.foundation.clock import SystemClock
 from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.composition import build_runner_store_files
@@ -52,15 +52,16 @@ def reset(ctx: click.Context, directory: str, runner: str | None) -> None:
     and its outbox counters stay. Refused while the host holds the directory or a pre-host daemon answers on its
     socket, and for a store that is not a SQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     root = Path(directory)
+    clock = CliCollaborators.of(ctx).wall_clock
     runtime = runtime_of(root, Door.of(ctx))
     if runner is not None:
         with click_exception_on(ConfigError, StoreResetRefused):
-            archived = runtime.reset_runner(runner, now=SystemClock().now(), rows=build_runner_store_files())
+            archived = runtime.reset_runner(runner, now=clock.now(), rows=build_runner_store_files())
         click.echo(f"archived runner {runner} ({archived.runner_id}) to {archived.archive}")
         click.echo(f"its rows are gone from the store at {root}; its outbox counters stay")
         return
     with click_exception_on(ConfigError, StoreResetRefused):
-        aside = runtime.reset_store(now=SystemClock().now())
+        aside = runtime.reset_store(now=clock.now())
     for path in aside.moved:
         click.echo(f"set aside {path}")
     click.echo(f"runner store at {root} is fresh" + ("" if aside.moved else " (there was none to set aside)"))

@@ -390,7 +390,7 @@ class HostReadiness(ReadinessService):
         return replace(readiness, detail=detail)
 
 
-def _pool_held_ids(audit: IRunnerAudit, workspace_id: str) -> Callable[[], list[str]]:
+def pool_held_ids(audit: IRunnerAudit, workspace_id: str) -> Callable[[], list[str]]:
     """The environment ids any of the host's runners holds in ``workspace_id``'s pool, or under no workspace."""
 
     def held() -> list[str]:
@@ -412,7 +412,7 @@ def build_workspaces(
     pool's held set host-wide."""
     entries: list[WorkspaceEntry] = []
     for workspace in declared:
-        held_ids = _pool_held_ids(audit, workspace.id) if audit is not None else None
+        held_ids = pool_held_ids(audit, workspace.id) if audit is not None else None
         provider = build_workspace_provider(workspace.settings(host_root), launch=launch, held_ids=held_ids)
         entries.append(
             WorkspaceEntry(
@@ -428,7 +428,7 @@ def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) ->
     return tuple(dict.fromkeys(workspaces.spawn_root(workspace.id) for workspace in config.bound_workspaces))
 
 
-def _credential_renewal_pass(
+def credential_renewal_pass(
     declarations: Sequence[SubscriptionDeclaration],
     host_stores: HostStores,
     clock: SystemClock,
@@ -776,7 +776,7 @@ def _build_host_graph(
                     if host_hub is not None
                     else None
                 ),
-                credential_renewal=_credential_renewal_pass(
+                credential_renewal=credential_renewal_pass(
                     subscriptions, host_stores, clock, children=children, env=tool_env
                 ),
             ),

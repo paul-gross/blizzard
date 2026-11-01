@@ -85,7 +85,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "trace-config-rejected": Recorded("runner/tracing/sweep.py:announce_rejected_tracing", "warning"),
     "egress-write-failed": HubOnly("hub/domain/observability/egress/sweep.py:EgressSweep._failed", "warning"),
     "egress-write-recovered": HubOnly("hub/domain/observability/egress/sweep.py:EgressSweep._recovered", "info"),
-    "egress-config-rejected": HubOnly("hub/app.py:_announce_rejected_egress", "warning"),
+    "egress-config-rejected": HubOnly("hub/app.py:announce_rejected_egress", "warning"),
     "egress-cursor-reset": HubOnly("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
     "forge-status-source-skipped": Recorded(
         "hub/domain/observability/forge_status.py:TenantAnnotation._announce_skipped", "warning"
@@ -98,10 +98,10 @@ HUB_EVENT_KIND_CENSUS: dict[str, tuple[str, ...]] = {
     "trace-export-failed": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
     "trace-export-recovered": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
     "trace-window-skipped": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),
-    "trace-config-rejected": ("hub/app.py:_announce_rejected_tracing",),
+    "trace-config-rejected": ("hub/app.py:announce_rejected_tracing",),
     "egress-write-failed": ("hub/domain/observability/egress/sweep.py:EgressSweep._failed",),
     "egress-write-recovered": ("hub/domain/observability/egress/sweep.py:EgressSweep._recovered",),
-    "egress-config-rejected": ("hub/app.py:_announce_rejected_egress",),
+    "egress-config-rejected": ("hub/app.py:announce_rejected_egress",),
     "egress-cursor-reset": ("hub/domain/observability/egress/reset.py:EgressReset.reset",),
     "hub-started": ("hub/app.py:_announce_started",),
     "hub-migrated": ("hub/runtime.py:Runtime.init", "hub/runtime.py:Runtime.migrate"),

@@ -546,7 +546,7 @@ class Judgement:
         assessment = harness.parse_assessment(output)
         attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
-        self._buffer_completion(selected.name, checks, artifacts)
+        self.buffer_completion(selected.name, checks, artifacts)
 
     def _buffer_decision(self, artifacts: list[CompletionArtifact], checks: list[ExecutedCheck]) -> None:
         """Buffer a runner-config gate decision — the gated node-step's outcome.
@@ -565,7 +565,7 @@ class Judgement:
         OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
 
-    def _buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[CompletionArtifact]) -> None:
+    def buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[CompletionArtifact]) -> None:
         """One atomic, epoch-fenced write. The entry names the lease, so ADVANCE skips it
         until the flush closes it."""
         lease = self.lease

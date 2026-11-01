@@ -299,9 +299,9 @@ def test_factory_gives_each_source_its_own_credentialed_client(tmp_path: Path) -
     source_two = registry.get(ids["two"])
     assert isinstance(source_one, GitHubWorkSource)
     assert isinstance(source_two, GitHubWorkSource)
-    assert source_one._client.headers["Authorization"] == "token token-one"
-    assert source_two._client.headers["Authorization"] == "token token-two"
-    assert source_one._client is not source_two._client
+    assert source_one.client.headers["Authorization"] == "token token-one"
+    assert source_two.client.headers["Authorization"] == "token token-two"
+    assert source_one.client is not source_two.client
 
 
 def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_path: Path) -> None:

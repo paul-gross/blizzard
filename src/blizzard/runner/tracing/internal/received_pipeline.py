@@ -161,7 +161,7 @@ def _emitted(record: ReceivedLogRecord, resource: Resource) -> ReadWriteLogRecor
     )
 
 
-class _MetricQueue:
+class MetricQueue:
     """Batches of data points waiting for the metric exporter, drained in order by one daemon thread. Full, it
     drops its oldest batch, as the SDK batch processors do; a failed export is dropped with a warning."""
 
@@ -175,6 +175,10 @@ class _MetricQueue:
         self._condition = threading.Condition()
         self._thread = threading.Thread(target=self._drain, name="blizzard-received-metrics", daemon=True)
         self._thread.start()
+
+    @property
+    def thread(self) -> threading.Thread:
+        return self._thread
 
     def put(self, data: MetricsData, points: int) -> None:
         with self._condition:
@@ -236,7 +240,7 @@ class EnabledReceivedTelemetryExport:
         log_exporter: LogRecordExporter | None,
     ) -> None:
         self._resource = resource
-        self._metrics = _MetricQueue(metric_exporter) if metric_exporter is not None else None
+        self._metrics = MetricQueue(metric_exporter) if metric_exporter is not None else None
         self._logs = BatchLogRecordProcessor(log_exporter) if log_exporter is not None else None
 
     @classmethod

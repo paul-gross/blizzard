@@ -11,7 +11,7 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedEpochOwner
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, StepKind, identify_steps
-from blizzard.hub.domain.observability.tracing.summary import _node_executor, _runner_id, summarize_step
+from blizzard.hub.domain.observability.tracing.summary import node_executor, runner_id, summarize_step
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit
@@ -30,27 +30,27 @@ def _gate() -> tuple[StepFacts, NodeStep]:
 
 def test_a_runner_step_on_a_runner_node_is_executed_by_the_runner() -> None:
     facts = fx.scenarios()["runner-step"]
-    assert _node_executor(facts, _first(facts, StepKind.RUNNER)) == "runner"
+    assert node_executor(facts, _first(facts, StepKind.RUNNER)) == "runner"
 
 
 def test_a_hub_step_on_a_hub_node_is_executed_by_the_hub() -> None:
     facts = fx.scenarios()["hub-step"]
     step = _first(facts, StepKind.HUB)
     assert facts.graphs["g1"].node_by_id(step.position.node_id).executor is Executor.HUB  # type: ignore[union-attr]
-    assert _node_executor(facts, step) == "hub"
+    assert node_executor(facts, step) == "hub"
 
 
 def test_a_gate_is_executed_by_a_human_whatever_its_node() -> None:
     facts, step = _gate()
-    assert _node_executor(facts, step) == "human"
-    assert _node_executor(replace(facts, graphs={}), step) == "human"
+    assert node_executor(facts, step) == "human"
+    assert node_executor(replace(facts, graphs={}), step) == "human"
 
 
 def test_the_nodes_declared_executor_wins_over_the_step_kind() -> None:
     facts = fx.scenarios()["runner-step"]
     step = _first(facts, StepKind.RUNNER)
     hub_g1 = replace(fx.G1, nodes=[fx.node("g1", n.name, Executor.HUB) for n in fx.G1.nodes])
-    assert _node_executor(replace(facts, graphs={"g1": hub_g1, "g2": fx.G2}), step) == "hub"
+    assert node_executor(replace(facts, graphs={"g1": hub_g1, "g2": fx.G2}), step) == "hub"
 
 
 @pytest.mark.parametrize(
@@ -60,7 +60,7 @@ def test_the_nodes_declared_executor_wins_over_the_step_kind() -> None:
 def test_a_missing_graph_falls_back_to_the_step_kind(name: str, kind: StepKind, expected: str) -> None:
     facts = fx.scenarios()[name]
     step = _first(facts, kind)
-    assert _node_executor(replace(facts, graphs={}), step) == expected
+    assert node_executor(replace(facts, graphs={}), step) == expected
 
 
 @pytest.mark.parametrize(
@@ -71,7 +71,7 @@ def test_a_missing_node_falls_back_to_the_step_kind(name: str, kind: StepKind, e
     facts = fx.scenarios()[name]
     step = _first(facts, kind)
     moved = replace(step, position=replace(step.position, node_id="g1-absent"))
-    assert _node_executor(facts, moved) == expected
+    assert node_executor(facts, moved) == expected
 
 
 def test_a_gate_without_a_runner_reports_its_epochs_latest_owner() -> None:
@@ -83,21 +83,21 @@ def test_a_gate_without_a_runner_reports_its_epochs_latest_owner() -> None:
         TracedEpochOwner(step.epoch, "r-middle", fx.at(3)),
         TracedEpochOwner(step.epoch + 1, "r-other-epoch", fx.at(9)),
     )
-    assert _runner_id(replace(facts, epoch_owners=owners), step) == "r-late"
+    assert runner_id(replace(facts, epoch_owners=owners), step) == "r-late"
 
 
 def test_a_gate_with_no_owner_of_its_epoch_has_no_runner() -> None:
     facts, step = _gate()
     step = replace(step, runner_id=None)
     owners = (TracedEpochOwner(step.epoch + 1, "r-other-epoch", fx.at(9)),)
-    assert _runner_id(replace(facts, epoch_owners=owners), step) is None
+    assert runner_id(replace(facts, epoch_owners=owners), step) is None
 
 
 def test_a_gate_already_holding_a_runner_keeps_it() -> None:
     facts, step = _gate()
     step = replace(step, runner_id="r-held")
     owners = (TracedEpochOwner(step.epoch, "r-owner", fx.at(5)),)
-    assert _runner_id(replace(facts, epoch_owners=owners), step) == "r-held"
+    assert runner_id(replace(facts, epoch_owners=owners), step) == "r-held"
 
 
 @pytest.mark.parametrize("runner", ["r-step", None])
@@ -105,7 +105,7 @@ def test_a_non_gate_step_passes_its_runner_through(runner: str | None) -> None:
     facts = fx.scenarios()["runner-step"]
     step = replace(_first(facts, StepKind.RUNNER), runner_id=runner)
     owners = (TracedEpochOwner(step.epoch, "r-owner", fx.at(50)),)
-    assert _runner_id(replace(facts, epoch_owners=owners), step) == runner
+    assert runner_id(replace(facts, epoch_owners=owners), step) == runner
 
 
 def test_work_sources_flow_from_the_facts_to_the_summary_and_the_sources_column() -> None:

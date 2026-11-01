@@ -23,21 +23,21 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.position import (
     Position,
-    _starting_graph_id,
     arrivals_with_entry,
     movement_arrivals,
     position_of_node,
+    starting_graph_id,
 )
 from blizzard.hub.domain.observability.tracing.steps import (
     NodeStep,
     PrecededBy,
     StepKind,
     StepOutcome,
-    _gate_close,
-    _hub_start,
-    _runner_close,
-    _terminal_candidates,
-    _with_preceded_by,
+    gate_close,
+    hub_start,
+    runner_close,
+    terminal_candidates,
+    with_preceded_by,
 )
 from tests import trace_fixtures as fx
 
@@ -66,7 +66,7 @@ def _facts_of(closers: list[tuple[str, object, StepOutcome]]) -> StepFacts:
 @pytest.mark.parametrize("first", range(len(RUNNER_CLOSERS)))
 def test_runner_close_table_order_breaks_an_exact_tie(first: int) -> None:
     tied = RUNNER_CLOSERS[first:]
-    close = _runner_close(_facts_of(tied), 1, START)
+    close = runner_close(_facts_of(tied), 1, START)
     assert close is not None
     assert close.outcome is tied[0][2]
     assert close.at == TIE
@@ -79,7 +79,7 @@ def test_runner_close_earlier_fact_beats_table_order(index: int) -> None:
     stopped = TracedChunkStop(TIE + US) if table != "chunk_stopped" else TracedChunkCompletion(TIE + US)
     extra = "chunk_stopped" if table != "chunk_stopped" else "chunk_completed"
     facts = fx.make_facts(**fx.merge({table: (fact,)}, {extra: (stopped,)}))
-    close = _runner_close(facts, 1, START)
+    close = runner_close(facts, 1, START)
     assert close is not None
     assert (close.outcome, close.at, close.fact) == (outcome, TIE, fact)
 
@@ -99,7 +99,7 @@ def test_runner_close_earlier_fact_beats_table_order(index: int) -> None:
     ],
 )
 def test_runner_close_ignores_facts_not_closing_this_epoch(table: str, fact: object) -> None:
-    assert _runner_close(fx.make_facts(**{table: (fact,)}), 1, START) is None
+    assert runner_close(fx.make_facts(**{table: (fact,)}), 1, START) is None
 
 
 @pytest.mark.parametrize(
@@ -116,7 +116,7 @@ def test_runner_close_ignores_facts_not_closing_this_epoch(table: str, fact: obj
     ],
 )
 def test_runner_close_start_bounds(table: str, fact: object, closes: bool) -> None:
-    close = _runner_close(fx.make_facts(**{table: (fact,)}), 1, START)
+    close = runner_close(fx.make_facts(**{table: (fact,)}), 1, START)
     assert (close is not None and close.fact is fact) is closes
 
 
@@ -136,14 +136,14 @@ def test_runner_close_release_is_void_behind_a_later_fact_at_its_epoch(
     later: dict[str, tuple[object, ...]], released: bool
 ) -> None:
     release = TracedRouteRelease(fx.at(20))
-    close = _runner_close(fx.make_facts(route_released=(release,), **later), 1, START)
+    close = runner_close(fx.make_facts(route_released=(release,), **later), 1, START)
     assert (close is not None and close.fact is release) is released
 
 
 def test_terminal_candidates_supersede_at_the_earliest_higher_owner() -> None:
     first = TracedEpochOwner(3, "r-3", fx.at(40))
     facts = fx.make_facts(epoch_owners=(TracedEpochOwner(2, "r-2", fx.at(50)), first, TracedEpochOwner(1, "r", TIE)))
-    (candidate,) = _terminal_candidates(facts, START, 1)
+    (candidate,) = terminal_candidates(facts, START, 1)
     assert (candidate.at, candidate.order, candidate.outcome, candidate.fact) == (
         fx.at(40),
         7,
@@ -156,7 +156,7 @@ def test_terminal_candidates_orders() -> None:
     stopped, completed = TracedChunkStop(TIE), TracedChunkCompletion(TIE)
     owner = TracedEpochOwner(2, "r-2", TIE)
     facts = fx.make_facts(chunk_stopped=(stopped,), chunk_completed=(completed,), epoch_owners=(owner,))
-    found = [(c.order, c.outcome, c.fact) for c in _terminal_candidates(facts, START, 1)]
+    found = [(c.order, c.outcome, c.fact) for c in terminal_candidates(facts, START, 1)]
     assert found == [
         (5, StepOutcome.STOPPED, stopped),
         (6, StepOutcome.COMPLETED, completed),
@@ -182,7 +182,7 @@ GATE_CLOSERS: list[tuple[str, object, StepOutcome]] = [
 @pytest.mark.parametrize("first", range(len(GATE_CLOSERS)))
 def test_gate_close_table_order_breaks_an_exact_tie(first: int) -> None:
     tied = GATE_CLOSERS[first:]
-    close = _gate_close(_facts_of(tied), GATE)
+    close = gate_close(_facts_of(tied), GATE)
     assert close is not None
     assert (close.outcome, close.at, close.fact) == (tied[0][2], TIE, tied[0][1])
 
@@ -200,12 +200,12 @@ def test_gate_close_table_order_breaks_an_exact_tie(first: int) -> None:
     ],
 )
 def test_gate_close_ignores_facts_not_carrying_its_decision(table: str, fact: object) -> None:
-    assert _gate_close(fx.make_facts(**{table: (fact,)}), GATE) is None
+    assert gate_close(fx.make_facts(**{table: (fact,)}), GATE) is None
 
 
 def test_gate_close_supersede_bound_is_inclusive_of_submission() -> None:
     owner = TracedEpochOwner(2, "r-2", GATE.submitted_at)
-    close = _gate_close(fx.make_facts(epoch_owners=(owner,)), GATE)
+    close = gate_close(fx.make_facts(epoch_owners=(owner,)), GATE)
     assert close is not None
     assert (close.outcome, close.at, close.fact) == (StepOutcome.SUPERSEDED, GATE.submitted_at, owner)
 
@@ -226,7 +226,7 @@ MINTED = fx.at(10)
 )
 def test_hub_start_requeue_bounds(requeue: datetime, start: datetime) -> None:
     facts = fx.make_facts(transitions=(fx.to("g1", "gate", 5, 1),), requeues=(TracedRequeue(requeue),))
-    assert _hub_start(facts, MINTED) == start
+    assert hub_start(facts, MINTED) == start
 
 
 @pytest.mark.parametrize(
@@ -236,12 +236,12 @@ def test_hub_start_requeue_bounds(requeue: datetime, start: datetime) -> None:
 def test_hub_start_placement_must_precede_the_lease(placed: datetime, start: datetime) -> None:
     gate = TracedTransition(epoch=1, recorded_at=placed, graph_id="g1", to_node_id="g1-gate")
     facts = fx.make_facts(transitions=(fx.to("g1", "review", 1, 1), gate))
-    assert _hub_start(facts, MINTED) == start
+    assert hub_start(facts, MINTED) == start
 
 
 def test_hub_start_without_placement_is_the_lease_and_ignores_requeues() -> None:
     facts = fx.make_facts(requeues=(TracedRequeue(MINTED - US),))
-    assert _hub_start(facts, MINTED) == MINTED
+    assert hub_start(facts, MINTED) == MINTED
 
 
 def test_hub_start_takes_the_latest_placement_and_latest_requeue() -> None:
@@ -249,7 +249,7 @@ def test_hub_start_takes_the_latest_placement_and_latest_requeue() -> None:
         transitions=(fx.to("g1", "review", 3, 1), fx.to("g1", "gate", 5, 1)),
         requeues=(TracedRequeue(fx.at(6)), TracedRequeue(fx.at(8)), TracedRequeue(fx.at(7))),
     )
-    assert _hub_start(facts, MINTED) == fx.at(8)
+    assert hub_start(facts, MINTED) == fx.at(8)
 
 
 POS = Position("g1", "g1-build", "build", 1)
@@ -314,7 +314,7 @@ def test_with_preceded_by_nearest_fence_event_between_steps(
     extra: dict[str, tuple[object, ...]], preceded: PrecededBy | None
 ) -> None:
     steps = [_step(1, fx.at(10)), _step(2, fx.at(20))]
-    first, second = _with_preceded_by(fx.make_facts(**extra), steps)
+    first, second = with_preceded_by(fx.make_facts(**extra), steps)
     assert first.preceded_by is None
     assert second.preceded_by is preceded
 
@@ -324,20 +324,20 @@ def test_with_preceded_by_nearest_fence_event_between_steps(
     [(fx.at(9), PrecededBy.REQUEUE), (fx.at(10), None), (fx.at(0), PrecededBy.REQUEUE)],
 )
 def test_with_preceded_by_first_step_has_no_lower_bound(requeue: datetime, preceded: PrecededBy | None) -> None:
-    (step,) = _with_preceded_by(fx.make_facts(requeues=(TracedRequeue(requeue),)), [_step(1, fx.at(10))])
+    (step,) = with_preceded_by(fx.make_facts(requeues=(TracedRequeue(requeue),)), [_step(1, fx.at(10))])
     assert step.preceded_by is preceded
 
 
 def test_with_preceded_by_gate_epoch_is_not_a_step_epoch() -> None:
     facts = fx.make_facts(epoch_owners=(TracedEpochOwner(7, "r-1", fx.at(15)),))
     steps = [_step(1, fx.at(10)), _step(7, fx.at(12), StepKind.GATE), _step(2, fx.at(20))]
-    out = _with_preceded_by(facts, steps)
+    out = with_preceded_by(facts, steps)
     assert [s.preceded_by for s in out] == [None, None, PrecededBy.RELEASED_CLAIM]
     assert [s.start for s in out] == [fx.at(10), fx.at(12), fx.at(20)]
 
 
 def _starting(facts: StepFacts) -> str:
-    return _starting_graph_id(facts, movement_arrivals(facts))
+    return starting_graph_id(facts, movement_arrivals(facts))
 
 
 @pytest.mark.parametrize(

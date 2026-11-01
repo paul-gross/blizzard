@@ -1,4 +1,4 @@
-"""`InterruptedClaims._reclaim` — every argument it hands the hub, the route-token store and the spawn.
+"""`InterruptedClaims.reclaim` — every argument it hands the hub, the route-token store and the spawn.
 
 Unit tier over a real store, with a recording spy at the spawn seam and a recording workspace-reach stub: the
 loop scenarios prove a reclaim happens, and this pins what the claim and the spawn are *given*."""
@@ -109,7 +109,7 @@ def test_the_claim_names_the_chunk_the_held_workspace_and_every_held_environment
 ):
     rig = _rig(tmp_path, monkeypatch)
 
-    InterruptedClaims(rig.ctx)._reclaim("ch_1", rig.bindings)
+    InterruptedClaims(rig.ctx).reclaim("ch_1", rig.bindings)
 
     assert rig.workspaces.held_calls == [("ws-bound", rig.ctx.config.bound_workspace_ids)]
     assert len(rig.hub.claims) == 1
@@ -124,7 +124,7 @@ def test_a_won_reclaim_spawns_the_claimed_envelope_into_the_held_environments_un
     rig = _rig(tmp_path, monkeypatch)
 
     with capture_logs() as logs:
-        InterruptedClaims(rig.ctx)._reclaim("ch_1", rig.bindings)
+        InterruptedClaims(rig.ctx).reclaim("ch_1", rig.bindings)
 
     assert rig.spawns == [
         (

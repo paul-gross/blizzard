@@ -19,7 +19,7 @@ _T0 = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 def _two_runners(tmp_path: Path) -> tuple[SqlAlchemyRunnerStore, SqlAlchemyRunnerStore, RunnerAudit]:
     store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
-    store_b = SqlAlchemyRunnerStore(store_a._engine, runner_store_errors(), "r_b")
+    store_b = SqlAlchemyRunnerStore(store_a.engine, runner_store_errors(), "r_b")
     return store_a, store_b, RunnerAudit(store_a.connections)
 
 

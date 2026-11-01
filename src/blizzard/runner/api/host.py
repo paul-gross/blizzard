@@ -193,10 +193,10 @@ def list_subscriptions(request: Request) -> HostSubscriptionListResponse:
     for served in wiring.runners().served:
         for declaration in wiring.for_runner(served).config().resolved_subscriptions():
             spenders.setdefault(declaration.slug, []).append(served.runner_id)
-    return _subscription_list(wiring.subscriptions(), wiring.host_read_stores().external_usage, spenders)
+    return subscription_list(wiring.subscriptions(), wiring.host_read_stores().external_usage, spenders)
 
 
-def _subscription_list(
+def subscription_list(
     declarations: Sequence[SubscriptionDeclaration],
     usage: IReadExternalUsageRepository,
     spenders: dict[str, list[str]],

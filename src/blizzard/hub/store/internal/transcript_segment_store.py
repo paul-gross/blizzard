@@ -70,7 +70,7 @@ def _identity_values(record: TranscriptSlice) -> dict[str, object]:
     }
 
 
-def _segments_for_chunk_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
+def segments_for_chunk_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
     c = s.transcript_segments.c
     return (
         stmts.select(
@@ -95,7 +95,7 @@ def _segments_for_chunk_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[A
     )
 
 
-def _records_for_segment_stmt(stmts: ScopedStatements, chunk_id: str, segment_id: str) -> Select[Any]:
+def records_for_segment_stmt(stmts: ScopedStatements, chunk_id: str, segment_id: str) -> Select[Any]:
     return (
         stmts.select(s.transcript_segments)
         .where(
@@ -106,7 +106,7 @@ def _records_for_segment_stmt(stmts: ScopedStatements, chunk_id: str, segment_id
     )
 
 
-def _lease_runner_ids_stmt(stmts: ScopedStatements, chunk_id: str, node_id: str, epoch: int) -> Select[Any]:
+def lease_runner_ids_stmt(stmts: ScopedStatements, chunk_id: str, node_id: str, epoch: int) -> Select[Any]:
     return stmts.select(s.transcript_segments, s.transcript_segments.c.runner_id).where(
         s.transcript_segments.c.chunk_id == chunk_id,
         s.transcript_segments.c.node_id == node_id,
@@ -134,7 +134,7 @@ def _superseded_segment_ids(
     )
 
 
-def _records_for_lease_stmt(
+def records_for_lease_stmt(
     stmts: ScopedStatements, chunk_id: str, node_id: str, epoch: int, runner_id: str
 ) -> Select[Any]:
     """A lease's records, superseded segments dropped. The key here is the LEASE, not the
@@ -159,26 +159,26 @@ def _records_for_lease_stmt(
     )
 
 
-def _high_water_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
+def high_water_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
     return stmts.select(s.transcript_high_water, s.transcript_high_water.c.seq).where(
         s.transcript_high_water.c.runner_id == runner_id
     )
 
 
-def _high_water_owner_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
+def high_water_owner_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
     return stmts.select(s.transcript_high_water, s.transcript_high_water.c.runner_id).where(
         s.transcript_high_water.c.runner_id == runner_id
     )
 
 
-def _natural_key_state_stmt(stmts: ScopedStatements, segment_id: str, turn_range_start: int) -> Select[Any]:
+def natural_key_state_stmt(stmts: ScopedStatements, segment_id: str, turn_range_start: int) -> Select[Any]:
     return stmts.select(s.transcript_segments, s.transcript_segments.c.rejected).where(
         s.transcript_segments.c.segment_id == segment_id,
         s.transcript_segments.c.turn_range_start == turn_range_start,
     )
 
 
-def _epoch_owners_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str], epochs: Sequence[int]) -> Select[Any]:
+def epoch_owners_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str], epochs: Sequence[int]) -> Select[Any]:
     """The owners of ``chunk_ids`` at any of ``epochs`` — a superset of the pairs asked for,
     since a row-value ``IN`` is not portable (`bzh:sql-portable`)."""
     return stmts.select(
@@ -186,7 +186,7 @@ def _epoch_owners_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str], epochs
     ).where(s.epoch_owners.c.chunk_id.in_(chunk_ids), s.epoch_owners.c.epoch.in_(epochs))
 
 
-def _chunk_stored_bytes_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
+def chunk_stored_bytes_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
     total = func.coalesce(func.sum(s.transcript_segments.c.byte_count), 0)
     return stmts.select(s.transcript_segments, total).where(
         s.transcript_segments.c.chunk_id == chunk_id,
@@ -194,7 +194,7 @@ def _chunk_stored_bytes_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[A
     )
 
 
-def _runner_window_bytes_stmt(stmts: ScopedStatements, runner_id: str, since: datetime) -> Select[Any]:
+def runner_window_bytes_stmt(stmts: ScopedStatements, runner_id: str, since: datetime) -> Select[Any]:
     total = func.coalesce(func.sum(s.transcript_segments.c.byte_count), 0)
     return stmts.select(s.transcript_segments, total).where(
         s.transcript_segments.c.runner_id == runner_id,
@@ -202,11 +202,11 @@ def _runner_window_bytes_stmt(stmts: ScopedStatements, runner_id: str, since: da
     )
 
 
-def _insert_high_water_stmt(stmts: ScopedStatements, runner_id: str, *, seq: int, at: datetime) -> Insert:
+def insert_high_water_stmt(stmts: ScopedStatements, runner_id: str, *, seq: int, at: datetime) -> Insert:
     return stmts.insert(s.transcript_high_water).values(runner_id=runner_id, seq=seq, updated_at=at)
 
 
-def _update_high_water_stmt(stmts: ScopedStatements, runner_id: str, *, seq: int, at: datetime) -> Update:
+def update_high_water_stmt(stmts: ScopedStatements, runner_id: str, *, seq: int, at: datetime) -> Update:
     return (
         stmts.update(s.transcript_high_water)
         .where(s.transcript_high_water.c.runner_id == runner_id)
@@ -214,7 +214,7 @@ def _update_high_water_stmt(stmts: ScopedStatements, runner_id: str, *, seq: int
     )
 
 
-def _insert_accepted_stmt(
+def insert_accepted_stmt(
     stmts: ScopedStatements, record: TranscriptSlice, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Insert:
     return stmts.insert(s.transcript_segments).values(
@@ -229,7 +229,7 @@ def _insert_accepted_stmt(
     )
 
 
-def _insert_rejected_stmt(
+def insert_rejected_stmt(
     stmts: ScopedStatements, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime
 ) -> Insert:
     return stmts.insert(s.transcript_segments).values(
@@ -252,7 +252,7 @@ def _natural_key_rejected_row(stmts: ScopedStatements, record: TranscriptSlice) 
     )
 
 
-def _update_to_accepted_stmt(
+def update_to_accepted_stmt(
     stmts: ScopedStatements, record: TranscriptSlice, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Update:
     # Re-adjudication refreshes: a re-offer's identity fields replace the original rejected
@@ -269,10 +269,10 @@ def _update_to_accepted_stmt(
     )
 
 
-def _update_still_rejected_stmt(
+def update_still_rejected_stmt(
     stmts: ScopedStatements, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime
 ) -> Update:
-    # Re-adjudication refreshes: see `_update_to_accepted_stmt`. `byte_count` replaces rather than
+    # Re-adjudication refreshes: see `update_to_accepted_stmt`. `byte_count` replaces rather than
     # accumulates — why, in tests/test_transcript_segment_store.py.
     return _natural_key_rejected_row(stmts, record).values(
         **_identity_values(record),
@@ -293,7 +293,7 @@ class TranscriptSegmentStore:
 
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]:
         with self._store.read("segments_for_chunk") as conn:
-            rows = conn.execute(_segments_for_chunk_stmt(self._store, chunk_id)).all()
+            rows = conn.execute(segments_for_chunk_stmt(self._store, chunk_id)).all()
         return [
             self._index_row(segment_id, list(group))
             for segment_id, group in itertools.groupby(rows, key=lambda r: r.segment_id)
@@ -301,7 +301,7 @@ class TranscriptSegmentStore:
 
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
         with self._store.read("records_for_segment") as conn:
-            rows = conn.execute(_records_for_segment_stmt(self._store, chunk_id, segment_id)).all()
+            rows = conn.execute(records_for_segment_stmt(self._store, chunk_id, segment_id)).all()
         return [
             SegmentRecordContent(
                 turn_range_start=row.turn_range_start,
@@ -318,7 +318,7 @@ class TranscriptSegmentStore:
         """The single ``runner_id`` on a lease's stored segments; more than one raises
         (``tests/test_transcript_segment_store.py::test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key``)."""
         with self._store.read("runner_id_for_lease") as conn:
-            rows = conn.execute(_lease_runner_ids_stmt(self._store, chunk_id, node_id, epoch)).all()
+            rows = conn.execute(lease_runner_ids_stmt(self._store, chunk_id, node_id, epoch)).all()
         if not rows:
             return None
         runner_ids = sorted({row.runner_id for row in rows})
@@ -332,7 +332,7 @@ class TranscriptSegmentStore:
 
     def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
         with self._store.read("records_for_lease") as conn:
-            rows = conn.execute(_records_for_lease_stmt(self._store, chunk_id, node_id, epoch, runner_id)).all()
+            rows = conn.execute(records_for_lease_stmt(self._store, chunk_id, node_id, epoch, runner_id)).all()
         return [
             SegmentRecordContent(
                 turn_range_start=row.turn_range_start,
@@ -347,12 +347,12 @@ class TranscriptSegmentStore:
 
     def high_water(self, runner_id: str) -> int:
         with self._store.read("high_water") as conn:
-            row = conn.execute(_high_water_stmt(self._store, runner_id)).one_or_none()
+            row = conn.execute(high_water_stmt(self._store, runner_id)).one_or_none()
             return row.seq if row is not None else 0
 
     def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
         with self._store.read("natural_key_state") as conn:
-            row = conn.execute(_natural_key_state_stmt(self._store, segment_id, turn_range_start)).one_or_none()
+            row = conn.execute(natural_key_state_stmt(self._store, segment_id, turn_range_start)).one_or_none()
         if row is None:
             return "absent"
         return "rejected" if row.rejected else "accepted"
@@ -373,7 +373,7 @@ class TranscriptSegmentStore:
             # ``wanted`` is filtered out below.
             for batch in id_batches(sorted(epochs_by_chunk)):
                 epochs = sorted(set[int]().union(*(epochs_by_chunk[c] for c in batch)))
-                rows = conn.execute(_epoch_owners_stmt(self._store, batch, epochs)).all()
+                rows = conn.execute(epoch_owners_stmt(self._store, batch, epochs)).all()
                 for row in rows:
                     if (row.chunk_id, row.epoch) in wanted:
                         owner = EpochOwner.hub() if row.runner_id is None else EpochOwner.runner(row.runner_id)
@@ -382,47 +382,45 @@ class TranscriptSegmentStore:
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         with self._store.read("chunk_stored_bytes") as conn:
-            total = conn.execute(_chunk_stored_bytes_stmt(self._store, chunk_id)).scalar_one()
+            total = conn.execute(chunk_stored_bytes_stmt(self._store, chunk_id)).scalar_one()
             return int(total)
 
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int:
         with self._store.read("runner_window_bytes") as conn:
-            total = conn.execute(_runner_window_bytes_stmt(self._store, runner_id, since)).scalar_one()
+            total = conn.execute(runner_window_bytes_stmt(self._store, runner_id, since)).scalar_one()
             return int(total)
 
     # --- writes -----------------------------------------------------------------
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_high_water") as conn:
-            existing = conn.execute(_high_water_owner_stmt(self._store, runner_id)).one_or_none()
+            existing = conn.execute(high_water_owner_stmt(self._store, runner_id)).one_or_none()
             if existing is None:
-                conn.execute(_insert_high_water_stmt(self._store, runner_id, seq=seq, at=at))
+                conn.execute(insert_high_water_stmt(self._store, runner_id, seq=seq, at=at))
                 return
-            conn.execute(_update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
+            conn.execute(update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
 
     def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
         with self._store.write("insert_accepted") as conn:
             conn.execute(
-                _insert_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
+                insert_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
             )
 
     def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         with self._store.write("insert_rejected") as conn:
-            conn.execute(_insert_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
+            conn.execute(insert_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
 
     def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
         with self._store.write("update_to_accepted") as conn:
             conn.execute(
-                _update_to_accepted_stmt(
-                    self._store, record, byte_count=byte_count, codec=codec, content=content, at=at
-                )
+                update_to_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
             )
 
     def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
         with self._store.write("update_still_rejected") as conn:
-            conn.execute(_update_still_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
+            conn.execute(update_still_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
 
     # --- helpers ------------------------------------------------------------
 

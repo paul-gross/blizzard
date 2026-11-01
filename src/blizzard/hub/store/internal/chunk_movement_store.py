@@ -392,7 +392,7 @@ class ChunkMovementStore:
         """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
         the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
         each of the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end."""
-        return self._record_restart_conn(
+        return self.record_restart_conn(
             conn_of(handle),
             chunk_id,
             from_node_id=from_node_id,
@@ -406,7 +406,7 @@ class ChunkMovementStore:
             note=note,
         )
 
-    def _record_restart_conn(
+    def record_restart_conn(
         self,
         conn: Connection,
         chunk_id: str,

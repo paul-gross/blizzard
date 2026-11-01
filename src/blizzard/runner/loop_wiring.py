@@ -247,7 +247,7 @@ class LoopWiring:
             tracer=tracer or NoopPlatformTracer(),
         )
 
-    def _with_context(self, use: Callable[[LoopContext], _T], *, process: RunnerProcess | None = None) -> _T:
+    def with_context(self, use: Callable[[LoopContext], _T], *, process: RunnerProcess | None = None) -> _T:
         """Build the process graph, the hub client and one context over them, run ``use``,
         and close all three — the standalone verbs' one shared lifecycle.
 
@@ -271,19 +271,19 @@ class LoopWiring:
 
         ``process`` runs the tick over a caller-owned graph, which this call neither builds nor closes;
         without one, the tick builds and closes its own."""
-        self._with_context(tick, process=process)
+        self.with_context(tick, process=process)
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
-        return self._with_context(
+        return self.with_context(
             lambda ctx: TranscriptBackfill(_identity_checked(ctx)).run(dry_run=dry_run, limit=limit)
         )
 
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
-        return self._with_context(lambda ctx: TranscriptBackfill(_identity_checked(ctx)).reship(segment_id))
+        return self.with_context(lambda ctx: TranscriptBackfill(_identity_checked(ctx)).reship(segment_id))
 
 
 def _identity_checked(ctx: LoopContext) -> LoopContext:
@@ -446,6 +446,10 @@ class PeriodicDriver:
         self._interval = interval_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
+
+    @property
+    def wiring(self) -> LoopWiring:
+        return self._wiring
 
     def start(self) -> None:
         self._thread.start()

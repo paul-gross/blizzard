@@ -82,7 +82,7 @@ _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 _IDENTITY_POLL_INTERVAL_SECONDS = 0.05
 
 # Leading non-identity lines the handshake tolerates before giving up as a spawn failure.
-_MAX_IDENTITY_PREAMBLE_LINES = 20
+MAX_IDENTITY_PREAMBLE_LINES = 20
 
 # Bound on the diagnostic stderr tail a failed handshake's error carries (enough for one traceback line).
 _STDERR_TAIL_BYTES = 2000
@@ -105,7 +105,7 @@ _OVERLOAD_NAME_RE = re.compile(r"overloaded", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
-class _PendingOpenCodeIdentity:
+class PendingOpenCodeIdentity:
     """Phase one's OpenCode-specific pending handle: the launch is real, but identity
     is read from the worker's own stdout (execution spec, "Fresh-session handshake"). Never
     constructed for a resume, which already knows its session id and returns a plain
@@ -158,7 +158,7 @@ class _PendingOpenCodeIdentity:
 
     def _first_event(self) -> OpenCodeRunEvent | None:
         """The first line, among those captured so far, that parses as a complete OpenCode
-        identity record — tolerating up to :data:`_MAX_IDENTITY_PREAMBLE_LINES` leading
+        identity record — tolerating up to :data:`MAX_IDENTITY_PREAMBLE_LINES` leading
         non-JSON lines ahead of it. ``None`` while fewer complete lines than that bound
         have arrived (not yet written, not malformed); exceeding the bound with none valid
         raises, rather than waiting on ``await_identity``'s own timeout to notice."""
@@ -168,7 +168,7 @@ class _PendingOpenCodeIdentity:
         except OSError:
             return None
         complete_lines = content.split(b"\n")[:-1]  # a trailing partial line is never complete
-        for raw_line in complete_lines[:_MAX_IDENTITY_PREAMBLE_LINES]:
+        for raw_line in complete_lines[:MAX_IDENTITY_PREAMBLE_LINES]:
             line = raw_line.strip()
             if not line:
                 continue
@@ -177,9 +177,9 @@ class _PendingOpenCodeIdentity:
                 return parse_run_event(decoded)
             except (UnicodeDecodeError, ValueError, OpenCodeShapeError):
                 continue
-        if len(complete_lines) >= _MAX_IDENTITY_PREAMBLE_LINES:
+        if len(complete_lines) >= MAX_IDENTITY_PREAMBLE_LINES:
             raise WorkerIdentityError(
-                f"no valid identity within the first {_MAX_IDENTITY_PREAMBLE_LINES} lines of OpenCode's output"
+                f"no valid identity within the first {MAX_IDENTITY_PREAMBLE_LINES} lines of OpenCode's output"
             )
         return None
 
@@ -226,7 +226,7 @@ class OpenCodeAdapter:
     """The OpenCode binding. Dumb: translates the CLI surface, never decides.
 
     Self-mints its own session id (``honors_session_hint`` is ``False``): a fresh spawn
-    returns a :class:`_PendingOpenCodeIdentity`, never an already-identified handle."""
+    returns a :class:`PendingOpenCodeIdentity`, never an already-identified handle."""
 
     def __init__(
         self,
@@ -281,6 +281,10 @@ class OpenCodeAdapter:
         self._permission_resolver = permission_resolver
         # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
+
+    @property
+    def autonomy(self) -> Autonomy:
+        return self._autonomy
 
     def observe_version(self) -> str | None:
         """Shared verbatim with Claude Code (:class:`VersionProbe`); only
@@ -386,7 +390,7 @@ class OpenCodeAdapter:
         if workdir:
             self._check_plugins(workdir, env)
         env = self._compose_compaction(workdir, env, model if resume_from else model or self._model, compaction_window)
-        env = self._deny_unanswerable_asks(workdir, env)
+        env = self.deny_unanswerable_asks(workdir, env)
         # Both go through `stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
@@ -420,7 +424,7 @@ class OpenCodeAdapter:
                 pgid=launched.pgid,
                 confirm_durable=launched.confirm_durable,
             )
-        return _PendingOpenCodeIdentity(
+        return PendingOpenCodeIdentity(
             pid=launched.pid,
             pgid=launched.pgid,
             process_start_time=launched.process_start_time,
@@ -458,11 +462,11 @@ class OpenCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
             if preamble is not None
-            else self._config_env()
+            else self.config_env()
         )
         self._check_plugins(session_cwd, env)
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
-        env = self._deny_unanswerable_asks(session_cwd, env)
+        env = self.deny_unanswerable_asks(session_cwd, env)
         try:
             with stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -509,10 +513,10 @@ class OpenCodeAdapter:
             variant=effort,
             auto=self._autonomy is not Autonomy.Normal,
         )
-        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
+        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self.config_env()
         self._check_plugins(session_cwd, env)
         env = self._compose_compaction(session_cwd, env, model, compaction_window)
-        env = self._deny_unanswerable_asks(session_cwd, env)
+        env = self.deny_unanswerable_asks(session_cwd, env)
         # Deferred: a resume gets spawn/judge's ownership.
         with stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
@@ -554,13 +558,13 @@ class OpenCodeAdapter:
         env = harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
-        config_env = self._config_env()
+        config_env = self.config_env()
         for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR"):
             if key in config_env:
                 env[key] = config_env[key]
         return env
 
-    def _config_env(self) -> dict[str, str]:
+    def config_env(self) -> dict[str, str]:
         env = dict(self._worker_env.variables)
         if self._worker_config_path:
             env["OPENCODE_CONFIG"] = self._worker_config_path
@@ -617,7 +621,7 @@ class OpenCodeAdapter:
         env carries: the resolver reads configuration, so it needs no lease identity or runner address."""
         return self._worker_env.tool().adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
 
-    def _deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
+    def deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
         Every reachable ask is composed to ``deny`` in ``OPENCODE_CONFIG_CONTENT``, then OpenCode re-resolves the

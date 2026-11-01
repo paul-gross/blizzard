@@ -327,7 +327,7 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
             fixture_repository("gadget", _FORGE, owner="acme") | {"secret_name": "other-forge-token"},
         ],
     )
-    secrets = hub.services.forges._secrets
+    secrets = hub.services.forges.secrets
     reveal = secrets.reveal
 
     def reveal_unless_retired(name: SecretName):

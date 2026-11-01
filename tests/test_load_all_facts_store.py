@@ -40,7 +40,7 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
-from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
+from blizzard.hub.store.internal.chunk_facts_store import ALL_FAMILIES, STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections
@@ -520,10 +520,10 @@ def test_load_live_statuses_matches_the_non_terminal_load_all_facts_statuses(tmp
 
 
 def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> None:
-    """Every family `_ALL_FAMILIES` carries beyond `_STATUS_FAMILIES` is populated with a
+    """Every family `ALL_FAMILIES` carries beyond `STATUS_FAMILIES` is populated with a
     value that would change `.status()` if it were (incorrectly) read; `.status()` must come
-    back unchanged, mechanically pinning `_STATUS_FAMILIES` against `.status()`'s own reach."""
-    non_status = _ALL_FAMILIES - _STATUS_FAMILIES
+    back unchanged, mechanically pinning `STATUS_FAMILIES` against `.status()`'s own reach."""
+    non_status = ALL_FAMILIES - STATUS_FAMILIES
     assert non_status == {
         "delivery_landed",
         "landed_repos",

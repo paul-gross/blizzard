@@ -61,6 +61,14 @@ class AnthropicSubscriptionSampler:
         self._http_client = http_client
         self._clock: IClock = clock
 
+    @property
+    def credentials_path(self) -> str:
+        return self._credentials_path
+
+    @property
+    def http_client(self) -> Callable[[], httpx2.Client]:
+        return self._http_client
+
     def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         access_token = self._read_access_token()
         if isinstance(access_token, SampleMiss):

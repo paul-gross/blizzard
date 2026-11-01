@@ -35,17 +35,17 @@ from blizzard.runner.transcripts.ledger import (
     TranscriptSegmentState,
 )
 from blizzard.runner.transcripts.transcript_pump import (
-    _ARRAY_SEPARATOR_BYTES,
+    ARRAY_SEPARATOR_BYTES,
     CHUNK_TRANSCRIPT_MAX_BYTES,
     MAX_BUFFERED_BYTES,
     PUMP_LEASE_MAX_SECONDS,
     TRANSCRIPT_RECORD_MAX_BYTES,
     TranscriptPump,
-    _record_envelope,
-    _record_overhead,
-    _sidechain_wire,
-    _tool_wire,
-    _turn_wire,
+    record_envelope,
+    record_overhead,
+    sidechain_wire,
+    tool_wire,
+    turn_wire,
 )
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.runner_fakes import (
@@ -77,13 +77,13 @@ def _turns_over_cap(fraction: float) -> int:
     """How many no-text turns sum past ``fraction`` of the cap, MEASURED off the real wire
     shape. A hard-coded byte figure here drifted 3x unnoticed and silently tripled every
     batch derived from it — the count a test wants is a function of the shape, not a literal."""
-    per_turn = len(json.dumps(_turn_wire(normalized_turn(0, ""), 0)).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    per_turn = len(json.dumps(turn_wire(normalized_turn(0, ""), 0)).encode("utf-8")) + ARRAY_SEPARATOR_BYTES
     return _cap_share(fraction) // per_turn
 
 
 def _empty_edits_over_cap(fraction: float) -> int:
     """The same, for `MultiEdit`-shaped `{"old_string": "", "new_string": ""}` entries."""
-    per_edit = len(json.dumps({"old_string": "", "new_string": ""}).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    per_edit = len(json.dumps({"old_string": "", "new_string": ""}).encode("utf-8")) + ARRAY_SEPARATOR_BYTES
     return _cap_share(fraction) // per_edit
 
 
@@ -404,7 +404,7 @@ def test_pump_never_reads_before_the_cursor() -> None:
     TranscriptPump(ctx).run()
     # A real source never re-serves the same turns at the same position; scripting the
     # second read to advance keeps the fake honest about what `since` is carried into.
-    source._batches["sess-a"] = transcript_batch([normalized_turn(1, "more")], next_token="pos-2")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(1, "more")], next_token="pos-2"))
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[0][2] is None  # first read: from the start
@@ -426,7 +426,7 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
     assert segment.normalizer_version == "fake/1"  # learned even with nothing to ship
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # nothing to ship — no record enqueued
 
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "finally a turn")], next_token="pos-2")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, "finally a turn")], next_token="pos-2"))
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[-1][2] == TranscriptPosition("pos-1")  # read from the advanced cursor
@@ -474,7 +474,7 @@ def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
     TranscriptPump(ctx).run()
     assert ctx.stores.transcript_ledger.transcript_segment(segment_id).truncated_reason == "record_cap_exceeded"  # type: ignore[union-attr]
 
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "small")], next_token="pos-2")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, "small")], next_token="pos-2"))
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[1][2] == TranscriptPosition("pos-1")  # read past the truncated batch
@@ -490,9 +490,9 @@ def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-2")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, huge)], next_token="pos-2"))
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-3")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, huge)], next_token="pos-3"))
     TranscriptPump(ctx).run()
 
     assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 3  # every tick still shipped, shrunk
@@ -511,10 +511,10 @@ def test_pump_warns_once_per_reason_even_as_the_segments_displayed_reason_altern
     TranscriptPump(ctx).run()  # tick 1: source_read_truncated (mild) — new reason, warns
 
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, huge)], next_token="pos-2")
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, huge)], next_token="pos-2"))
     TranscriptPump(ctx).run()  # tick 2: record_cap_exceeded (worse) — new reason, warns
 
-    source._batches["sess-a"] = transcript_batch([normalized_turn(0, "bye")], next_token="pos-3", truncated=True)
+    source.script_batch("sess-a", transcript_batch([normalized_turn(0, "bye")], next_token="pos-3", truncated=True))
     TranscriptPump(ctx).run()  # tick 3: source_read_truncated AGAIN — same reason, no re-warn
 
     fact_events = ctx.stores.outbound.pending_outbound()
@@ -586,26 +586,24 @@ def test_record_overhead_bounds_every_group_envelope_the_batch_can_produce() -> 
     batch = transcript_batch([normalized_turn(0, "")], next_token="pos-1")
     turn_count = 100_000
 
-    budgeted = _record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
+    budgeted = record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
 
     # Every (start, end) a group of this batch can close on, both fields varied independently.
     for start in (0, 9, 99, 9_999, turn_count):
         for end in (start, start + 9, turn_count):
-            envelope = _record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
+            envelope = record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
             assert len(json.dumps(envelope).encode("utf-8")) <= budgeted, f"under-counted at {start}..{end}"
 
 
 def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
-    """`_sidechain_wire`/`_tool_wire` write every optional field the wire model can default
+    """`sidechain_wire`/`tool_wire` write every optional field the wire model can default
     explicitly, rather than omitting it — the stored payload's own byte length is what
-    `TranscriptDrain._estimated_size` bounds a delta's actual rendered length by, and an
+    `TranscriptDrain.estimated_size` bounds a delta's actual rendered length by, and an
     omitted key there renders bigger once the model fills its own default back in."""
-    tool_wire = _tool_wire(_tool_call(""))
-    assert "output_patch" in tool_wire
-    sidechain_wire = _sidechain_wire(
-        SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[])
-    )
-    assert "parent_tool_use_id" in sidechain_wire
+    wire = tool_wire(_tool_call(""))
+    assert "output_patch" in wire
+    wire = sidechain_wire(SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[]))
+    assert "parent_tool_use_id" in wire
 
     turn = NormalizedTurn(
         index=0,
@@ -617,7 +615,7 @@ def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
         sidechain=SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[]),
         truncated=False,
     )
-    wire = _turn_wire(turn, 0)
+    wire = turn_wire(turn, 0)
     rendered = TurnSegmentView.model_validate(wire).model_dump_json()
     assert len(json.dumps(wire).encode("utf-8")) >= len(rendered.encode("utf-8"))
 
@@ -852,18 +850,21 @@ def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -
     TranscriptPump(ctx).run()
     assert ctx.stores.transcript_ledger.transcript_segment(segment_id).cursor == "pos-1"  # type: ignore[union-attr]
 
-    source._batches["sess-a"] = TranscriptBatch(
-        session_id="sess-a",
-        available=True,
-        reason=None,
-        turns=[normalized_turn(0, "second"), normalized_turn(1, "third")],
-        unlinked_sidechains=[],
-        next_position=None,  # stuck: turns to ship, nowhere to advance to
-        complete=True,
-        truncated=False,
-        sidechain_truncated=False,
-        normalizer_version="fake/1",
-        harness_version=None,
+    source.script_batch(
+        "sess-a",
+        TranscriptBatch(
+            session_id="sess-a",
+            available=True,
+            reason=None,
+            turns=[normalized_turn(0, "second"), normalized_turn(1, "third")],
+            unlinked_sidechains=[],
+            next_position=None,  # stuck: turns to ship, nowhere to advance to
+            complete=True,
+            truncated=False,
+            sidechain_truncated=False,
+            normalizer_version="fake/1",
+            harness_version=None,
+        ),
     )
 
     with capture_logs() as logs:
@@ -1056,8 +1057,9 @@ def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     assert len(open_segments) == 1  # exactly one open segment ever reads "sess-a"
     assert open_segments[0].cursor == "pos-1"  # carried forward, not re-read from the start
 
-    source._batches["sess-a"] = transcript_batch(
-        [normalized_turn(0, "hi"), normalized_turn(1, "more")], next_token="pos-2"
+    source.script_batch(
+        "sess-a",
+        transcript_batch([normalized_turn(0, "hi"), normalized_turn(1, "more")], next_token="pos-2"),
     )
     TranscriptPump(ctx).run()
 
@@ -1399,15 +1401,21 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
-    source._batches["sess-a"] = transcript_batch(
-        [normalized_turn(1, "again")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+    source.script_batch(
+        "sess-a",
+        transcript_batch(
+            [normalized_turn(1, "again")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+        ),
     )
     TranscriptPump(ctx).run()
     # A second, distinct subagent still gets its own first warning.
-    source._batches["sess-a"] = transcript_batch(
-        [normalized_turn(2, "again")],
-        next_token="pos-3",
-        unlinked_sidechains=[_unlinked_sidechain("sub_1"), _unlinked_sidechain("sub_2")],
+    source.script_batch(
+        "sess-a",
+        transcript_batch(
+            [normalized_turn(2, "again")],
+            next_token="pos-3",
+            unlinked_sidechains=[_unlinked_sidechain("sub_1"), _unlinked_sidechain("sub_2")],
+        ),
     )
     TranscriptPump(ctx).run()
 
@@ -2093,18 +2101,21 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
     segment_id = _spawn_one_segment(ctx)
     # Stuck: turns present, `next_position=None` so `new_cursor` falls back to the
     # segment's own (still-`None`) cursor — the guard fires on the very first read too.
-    source._batches["sess-a"] = TranscriptBatch(
-        session_id="sess-a",
-        available=True,
-        reason=None,
-        turns=[normalized_turn(0, "first"), normalized_turn(1, "second")],
-        unlinked_sidechains=[],
-        next_position=None,
-        complete=True,
-        truncated=False,
-        sidechain_truncated=False,
-        normalizer_version="fake/1",
-        harness_version=None,
+    source.script_batch(
+        "sess-a",
+        TranscriptBatch(
+            session_id="sess-a",
+            available=True,
+            reason=None,
+            turns=[normalized_turn(0, "first"), normalized_turn(1, "second")],
+            unlinked_sidechains=[],
+            next_position=None,
+            complete=True,
+            truncated=False,
+            sidechain_truncated=False,
+            normalizer_version="fake/1",
+            harness_version=None,
+        ),
     )
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
@@ -2212,8 +2223,8 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
     ctx, _source = _ctx(ship=True)
     pump = TranscriptPump(ctx)
 
-    assert pump._record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
-    assert pump._chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
+    assert pump.record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
+    assert pump.chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
 
 
 # --- cross-window correlation ----------------------------------------

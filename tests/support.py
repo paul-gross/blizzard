@@ -671,6 +671,10 @@ class WorkSourceRegistry:
     def source_label(self, source: str) -> str:
         return self._slugs.get(source, source)
 
+    def rename(self, source: str, slug: str) -> None:
+        """Display ``source`` under ``slug`` from now on."""
+        self._slugs[source] = slug
+
     def label(self, pointer: WorkRef) -> str:
         source = self._sources.get(pointer.source)
         rendered = source.label(pointer) if source is not None else None

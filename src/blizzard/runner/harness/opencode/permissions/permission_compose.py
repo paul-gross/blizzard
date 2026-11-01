@@ -54,7 +54,7 @@ def residual_asks(agent_rulesets: Mapping[str, tuple[OpenCodePermissionRule, ...
     )
 
 
-def _holds_ask(permission_node: JsonValue, permission: str, pattern: str) -> bool:
+def holds_ask(permission_node: JsonValue, permission: str, pattern: str) -> bool:
     """Whether a config ``permission`` object itself writes this ``ask``."""
     if not isinstance(permission_node, dict):
         return False
@@ -68,7 +68,7 @@ def _is_map(permission_node: JsonValue, permission: str) -> bool:
     return isinstance(permission_node, dict) and isinstance(permission_node.get(permission), dict)
 
 
-def _deny_in(target: JsonObject, permission: str, pattern: str, *, as_map: bool) -> None:
+def deny_in(target: JsonObject, permission: str, pattern: str, *, as_map: bool) -> None:
     """Write the deny in the shape the layer wrote the ask: a scalar for a bare ``*``, else a pattern map."""
     existing = target.get(permission)
     if pattern == "*" and not as_map and not isinstance(existing, dict):
@@ -98,20 +98,20 @@ def compose_ask_denials(
         agent_permission = agent_node.get("permission") if isinstance(agent_node, dict) else None
         for index in _unshadowed_asks(rules):
             rule = rules[index]
-            if _holds_ask(agent_permission, rule.permission, rule.pattern):
-                _deny_in(
+            if holds_ask(agent_permission, rule.permission, rule.pattern):
+                deny_in(
                     agent_overrides.setdefault(agent, {}),
                     rule.permission,
                     rule.pattern,
                     as_map=_is_map(agent_permission, rule.permission),
                 )
-            elif _holds_ask(top, rule.permission, rule.pattern):
-                _deny_in(top_overrides, rule.permission, rule.pattern, as_map=_is_map(top, rule.permission))
+            elif holds_ask(top, rule.permission, rule.pattern):
+                deny_in(top_overrides, rule.permission, rule.pattern, as_map=_is_map(top, rule.permission))
             else:
                 target = agent_overrides.setdefault(agent, {})
                 later_rules = [later for later in rules[index + 1 :] if later.permission == rule.permission]
                 # Some permissions (`doom_loop`) take only a bare action; a map is for ones with patterns to keep.
-                _deny_in(target, rule.permission, rule.pattern, as_map=bool(later_rules))
+                deny_in(target, rule.permission, rule.pattern, as_map=bool(later_rules))
                 restated = target[rule.permission]
                 for later in later_rules:
                     if isinstance(restated, dict) and restated.get(later.pattern) != _DENY:

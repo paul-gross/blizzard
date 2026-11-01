@@ -13,8 +13,8 @@ from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
-from blizzard.hub.store.internal.repository_record_store import _retirements
-from blizzard.hub.store.internal.work_source_record_store import _retired_ids
+from blizzard.hub.store.internal.repository_record_store import retirements
+from blizzard.hub.store.internal.work_source_record_store import retired_ids
 from blizzard.hub.store.scoped import statements_of
 from tests.support import hub_store_connections, migrate_to, stamp
 
@@ -58,7 +58,7 @@ def _read(engine: Engine, fn):
 def test_repository_retirements_carry_the_newest_facts_set_at_for_every_retired_key(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
 
-    assert _read(engine, lambda conn: _retirements(conn)) == {
+    assert _read(engine, lambda conn: retirements(conn)) == {
         "k1": _T0 + timedelta(days=3),
         "k3": _T0 + timedelta(days=2),
     }
@@ -67,7 +67,7 @@ def test_repository_retirements_carry_the_newest_facts_set_at_for_every_retired_
 def test_repository_retirements_bounded_to_ids_read_only_those_ids(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
 
-    answer = _read(engine, lambda conn: _retirements(conn, [RepositoryId("k1"), RepositoryId("k2")]))
+    answer = _read(engine, lambda conn: retirements(conn, [RepositoryId("k1"), RepositoryId("k2")]))
 
     assert answer == {"k1": _T0 + timedelta(days=3)}
 
@@ -75,13 +75,13 @@ def test_repository_retirements_bounded_to_ids_read_only_those_ids(tmp_path: Pat
 def test_work_source_retired_ids_follow_the_newest_fact_by_id(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
 
-    assert _read(engine, lambda conn: _retired_ids(conn)) == {"k1", "k3"}
+    assert _read(engine, lambda conn: retired_ids(conn)) == {"k1", "k3"}
 
 
 def test_work_source_retired_ids_bounded_to_ids_read_only_those_ids(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
 
-    assert _read(engine, lambda conn: _retired_ids(conn, [WorkSourceId("k2"), WorkSourceId("k3")])) == {"k3"}
+    assert _read(engine, lambda conn: retired_ids(conn, [WorkSourceId("k2"), WorkSourceId("k3")])) == {"k3"}
 
 
 def test_newest_fact_select_returns_each_keys_highest_id_row_whatever_its_retirement(tmp_path: Path) -> None:
