@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -28,7 +28,7 @@ def _reconciled_hub(tmp_path: Path):
     return hub
 
 
-def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:
+def _claimed_triage_chunk(hub: HubHarness, *, ref: str) -> tuple[str, str]:
     """Ingest + promote + claim one default-pinned chunk; returns (chunk_id, node_id)."""
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}
@@ -43,7 +43,7 @@ def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:
     return chunk_id, envelope["node"]["node_id"]
 
 
-def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:
+def _route(hub: HubHarness, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

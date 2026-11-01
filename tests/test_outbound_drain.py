@@ -26,6 +26,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     runner_invariant_violations,
@@ -51,7 +52,7 @@ _COMPLETION_PAYLOAD = json.dumps(
 )
 
 
-def _ctx(hub: FakeHub, *, store=None):
+def _ctx(hub: FakeHub, *, store: SqlAlchemyRunnerStore | None = None):
     store = store if store is not None else make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(

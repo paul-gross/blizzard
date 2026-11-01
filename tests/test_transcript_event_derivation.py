@@ -37,6 +37,7 @@ from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     chunk_stores,
     count_queries,
@@ -228,7 +229,7 @@ def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching
 
 
 class _CountingFactsStore(ChunkFactsStore):
-    def __init__(self, store, clock) -> None:
+    def __init__(self, store: ScopedConnections, clock: FixedClock) -> None:
         super().__init__(store, clock)
         self.load_facts_calls = 0
         self.load_facts_for_calls = 0
@@ -248,7 +249,7 @@ class _CountingFactsStore(ChunkFactsStore):
 
 
 class _CountingRecordStore(ChunkRecordStore):
-    def __init__(self, store, clock) -> None:
+    def __init__(self, store: ScopedConnections, clock: FixedClock) -> None:
         super().__init__(store, clock)
         self.get_calls = 0
         self.graph_id_of_many_calls = 0

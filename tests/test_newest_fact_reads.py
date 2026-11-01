@@ -169,7 +169,7 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
     }
 
 
-def _read(store, fn):
+def _read(store: ScopedConnections, fn):
     with store.read("test") as conn:
         return fn(conn)
 

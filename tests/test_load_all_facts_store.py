@@ -43,6 +43,7 @@ from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
+from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     build_hub,
     chunk_stores,
@@ -447,7 +448,7 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
     ingest(hub, [{"source": "default", "ref": "2"}])
 
     class _CountingFactsStore(ChunkFactsStore):
-        def __init__(self, store, clock) -> None:
+        def __init__(self, store: ScopedConnections, clock: FixedClock) -> None:
             super().__init__(store, clock)
             self.load_live_statuses_calls = 0
             self.load_facts_calls = 0
@@ -461,7 +462,7 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
             return super().load_facts(chunk_id)
 
     class _CountingRecordStore(ChunkRecordStore):
-        def __init__(self, store, clock) -> None:
+        def __init__(self, store: ScopedConnections, clock: FixedClock) -> None:
             super().__init__(store, clock)
             self.list_all_calls = 0
 

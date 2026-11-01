@@ -79,7 +79,7 @@ def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):
     )
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub, *, provider=None, probe=None, harness=None):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=None, harness=None):
     return make_context(
         store,
         hub=hub,

@@ -72,7 +72,7 @@ def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _ctx(store: SqlAlchemyRunnerStore, *, hub=None, probe=None, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, *, hub: FakeHub | None = None, probe=None, clock=None):
     return make_context(
         store,
         hub=hub or FakeHub(),

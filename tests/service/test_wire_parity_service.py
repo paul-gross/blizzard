@@ -12,6 +12,7 @@ import time
 import uuid
 from pathlib import Path
 
+import httpx2
 import pytest
 
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
@@ -39,7 +40,7 @@ pytestmark = [pytest.mark.service, service_gate]
 _WORK_REF_URL = f"{REPO}/issues/1"
 
 
-def _seed(hub) -> str:
+def _seed(hub: httpx2.Client) -> str:
     resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]

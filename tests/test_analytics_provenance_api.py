@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import report_lease
+from tests.support import HubHarness, report_lease
 from tests.test_analytics_durations_api import _complete, _cookie, _mint_chunk, _seeded_hub
 
 pytestmark = pytest.mark.component
@@ -19,12 +19,12 @@ pytestmark = pytest.mark.component
 _SEQ = itertools.count(1)  # one monotone seq per runner, shared by lease and usage facts
 
 
-def _lease(hub, chunk_id: str, *, epoch: int) -> None:
+def _lease(hub: HubHarness, chunk_id: str, *, epoch: int) -> None:
     report_lease(hub, chunk_id, epoch=epoch, seq=next(_SEQ))
 
 
 def _usage(
-    hub,
+    hub: HubHarness,
     *,
     chunk_id: str,
     node_id: str,
@@ -92,7 +92,7 @@ def _seed(tmp_path: Path):
     return hub, token, nodes, {"a": a, "b": b, "c": c, "d": d}
 
 
-def _get(hub, token: str, path: str, **params: str):
+def _get(hub: HubHarness, token: str, path: str, **params: str):
     resp = hub.client.get(f"/api/analytics/{path}", params=params, headers=_cookie(token))
     assert resp.status_code == 200, resp.text
     return resp.json()

@@ -160,7 +160,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -175,7 +175,7 @@ def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> Non
     )
 
 
-def _liveness(store, lease):
+def _liveness(store: SqlAlchemyRunnerStore, lease):
     """``lease``'s baseline from the facts the store holds for it."""
     return Liveness.of(
         lease, heartbeat=store.latest_heartbeat(lease.lease_id), spawn=store.latest_spawn(lease.lease_id)
@@ -397,7 +397,7 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path: Pa
     assert activities[0].last_heartbeat_at == _NOW
 
 
-def _seed_spawned_lease(store) -> FakeProbe:
+def _seed_spawned_lease(store: SqlAlchemyRunnerStore) -> FakeProbe:
     """One active lease, spawned at ``_NOW``, whose worker process is alive."""
     _seed_lease(store)
     store.record_spawn(
