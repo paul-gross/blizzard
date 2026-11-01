@@ -123,6 +123,10 @@ Unlinking a repository takes it out of the order; linking it again restores its 
 `deliver` step: a step that has taken its first turn keeps the order it took
 ([repositories.md](./repositories.md#how-delivery-uses-a-record)).
 
+On the board, Admin → Projects shows a project's repositories in two sections, the ranked order and "Unranked". A user
+with `config:edit` drags a repository to reorder it, and each drop writes one position; a move within "Unranked" writes
+nothing.
+
 ## A call that names no project
 
 A call that needs a project — creating a scope, routine, operator garden proposal, hub item or link, or looking up a

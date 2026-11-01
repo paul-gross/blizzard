@@ -43,6 +43,7 @@ export const secretLifecycleMutationKey = ['hub', 'mutation', 'secret-lifecycle'
 export const createProjectMutationKey = ['hub', 'mutation', 'create-project'] as const;
 export const editProjectMutationKey = ['hub', 'mutation', 'edit-project'] as const;
 export const projectLinkMutationKey = ['hub', 'mutation', 'project-link'] as const;
+export const landingPositionMutationKey = ['hub', 'mutation', 'landing-position'] as const;
 export const hostRetireMutationKey = ['hub', 'mutation', 'host-retire'] as const;
 export const hostRevokeTokenMutationKey = ['hub', 'mutation', 'host-revoke-token'] as const;
 export const hostEnrollMutationKey = ['hub', 'mutation', 'host-enroll'] as const;

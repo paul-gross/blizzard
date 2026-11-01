@@ -20,7 +20,7 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, openPrsByChunk, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
 import { injectProjectsQuery } from '../core/projects.query';
 import { UnservedBanner } from './unserved/unserved-banner';
@@ -157,6 +157,9 @@ export class BoardPage {
   protected readonly boardChunks = computed<readonly ChunkSummary[]>(() =>
     withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()),
   );
+
+  /** Each board chunk's open PRs by chunk id — the Delivery band links a parked chunk's change from them. */
+  protected readonly openPrs = computed(() => openPrsByChunk(this.boardChunks()));
 
   /** {@link readyOrder} with pending ready-queue repositions and anchored promotes folded in (`foldRepositions`). */
   protected readonly readyLaneOrder = computed<readonly string[]>(() =>

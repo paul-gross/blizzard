@@ -29,11 +29,13 @@
       [pendingRepositoryKeys]="pendingRepositoryKeys()"
       [sourceError]="sourceError()"
       [repositoryError]="repositoryError()"
+      [landingOrder]="landingOrder()"
       (edit)="onEdit()"
       (color)="onColorOpen()"
       (tabChange)="onTab($event)"
       (link)="onLinkOpen($event)"
       (unlink)="onUnlink($event)"
+      (reposition)="onReposition($event)"
     />
 
     @if (editOpen()) {

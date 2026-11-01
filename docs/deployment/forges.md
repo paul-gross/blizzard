@@ -67,7 +67,8 @@ A forge is configured through the same doors as the records that name it:
   and refuses an entry whose `kind` differs from the stored forge's.
 - The board's Admin page, whose Forges tab lists each forge with its revision, history, and the records that name it,
   and lets a user with `config:edit` create, edit, retire and enable one on a desktop. On a phone the tab is read-only
-  and names the `blizzard hub forge` command that makes the change.
+  and names the `blizzard hub forge` command that makes the change. A forge's detail shows its capabilities and each
+  budget's last reading, or "no reading yet" before the forge has answered.
 
 ## Records that name a forge
 

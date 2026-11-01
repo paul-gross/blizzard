@@ -98,3 +98,17 @@
 .collapsed .verdict-outcome {
   color: var(--text);
 }
+/* A chunk chip and the change a parked chunk waits on sit side by side: the link is beside the chip's button, never
+   inside it. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.change {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}

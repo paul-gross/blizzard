@@ -1,4 +1,4 @@
-import { compactRef, type FlowPlaceView, type FlowView, ageMs, formatAbsolute, formatAgo, formatWhen, type Tone, type WorkItemsView } from 'fleet';
+import { compactRef, type FlowPlaceView, type FlowView, type PrView, type RepositorySummary, ageMs, formatAbsolute, formatAgo, formatWhen, type Tone, type WorkItemsView } from 'fleet';
 
 import { placeStateLabel, placeStateTone } from './flow-place.model';
 
@@ -14,7 +14,25 @@ export interface LaneChunk {
   /** When a polling chunk's next poll is due, as a short stamp — `null` for every other state. */
   readonly pollAt: string | null;
   readonly pollAtTitle: string | null;
+  /** The open change an `awaiting-merge` chunk waits on, when one of its open PRs is on the flow's repository —
+   * `null` otherwise, never a guessed link. */
+  readonly change: LaneChange | null;
 }
+
+/** The forge-side change a parked chunk waits on. */
+export interface LaneChange {
+  readonly url: string;
+  /** `owner/repo#12`. */
+  readonly label: string;
+}
+
+/** What a lane joins on to link a parked chunk's change: each chunk's open PRs, and the tenant's repositories. */
+export interface LaneChanges {
+  readonly openPrs: ReadonlyMap<string, readonly PrView[]>;
+  readonly repositories: readonly RepositorySummary[];
+}
+
+const NO_CHANGES: LaneChanges = { openPrs: new Map(), repositories: [] };
 
 /** The flow's last verdict, and how long ago it came. */
 export interface LaneVerdict {
@@ -42,7 +60,25 @@ export function laneTitle(flow: FlowView): string {
   return `${flow.repository_name ?? flow.repository_slug ?? flow.resource} · ${flow.branch}`;
 }
 
-function laneChunk(place: FlowPlaceView, workItems: ReadonlyMap<string, WorkItemsView>, now: Date): LaneChunk {
+/** The flow repository's forge-side `owner/repo` — `null` while the repository list has not named it. */
+function forgeRepo(flow: FlowView, repositories: readonly RepositorySummary[]): string | null {
+  const repository = repositories.find((candidate) => candidate.repository_id === flow.repository_id);
+  return repository ? `${repository.owner}/${repository.repo}` : null;
+}
+
+/** The open PR an `awaiting-merge` place waits on: the chunk's open PR on the flow's forge-side repository. */
+function laneChange(place: FlowPlaceView, repo: string | null, openPrs: LaneChanges['openPrs']): LaneChange | null {
+  if (place.state !== 'awaiting-merge' || repo === null) return null;
+  const pr = openPrs.get(place.chunk_id)?.find((candidate) => candidate.repo === repo);
+  return pr ? { url: pr.url, label: `${pr.repo}#${pr.number}` } : null;
+}
+
+function laneChunk(
+  place: FlowPlaceView,
+  workItems: ReadonlyMap<string, WorkItemsView>,
+  now: Date,
+  change: LaneChange | null = null,
+): LaneChunk {
   const polling = place.state === 'polling' && place.next_poll_at !== null;
   return {
     chunkId: place.chunk_id,
@@ -53,12 +89,19 @@ function laneChunk(place: FlowPlaceView, workItems: ReadonlyMap<string, WorkItem
     tone: placeStateTone(place.state),
     pollAt: polling ? formatWhen(place.next_poll_at ?? '', now) : null,
     pollAtTitle: polling ? formatAbsolute(place.next_poll_at) : null,
+    change,
   };
 }
 
 /** One flow's lane: the chunk landing now, the rest of the line in arrival order, and the last verdict. */
-export function deliveryLane(flow: FlowView, workItems: ReadonlyMap<string, WorkItemsView>, now: number): DeliveryLane {
+export function deliveryLane(
+  flow: FlowView,
+  workItems: ReadonlyMap<string, WorkItemsView>,
+  now: number,
+  changes: LaneChanges = NO_CHANGES,
+): DeliveryLane {
   const at = new Date(now);
+  const repo = forgeRepo(flow, changes.repositories);
   const ordered = [...flow.line].sort((a, b) => a.arrival - b.arrival);
   const landingId = flow.turn?.chunk_id ?? ordered.find((place) => place.state === 'landing')?.chunk_id ?? null;
   const landingPlace = ordered.find((place) => place.chunk_id === landingId);
@@ -70,7 +113,7 @@ export function deliveryLane(flow: FlowView, workItems: ReadonlyMap<string, Work
           workItems,
           at,
         );
-  const line = ordered.filter((place) => place.chunk_id !== landingId).map((place) => laneChunk(place, workItems, at));
+  const line = ordered.filter((place) => place.chunk_id !== landingId).map((place) => laneChunk(place, workItems, at, laneChange(place, repo, changes.openPrs)));
   return { flowId: flow.flow_id, title: laneTitle(flow), landing, line, verdict: laneVerdict(flow, now), collapsed: landing === null && line.length === 0 };
 }
 
@@ -88,6 +131,7 @@ export function deliveryLanes(
   flows: readonly FlowView[],
   workItems: ReadonlyMap<string, WorkItemsView>,
   now: number,
+  changes: LaneChanges = NO_CHANGES,
 ): readonly DeliveryLane[] {
-  return flows.map((flow) => deliveryLane(flow, workItems, now));
+  return flows.map((flow) => deliveryLane(flow, workItems, now, changes));
 }

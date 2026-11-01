@@ -1,4 +1,4 @@
-import type { FlowPlaceView, FlowView, WorkItemsView } from 'fleet';
+import type { FlowPlaceView, FlowView, PrView, RepositorySummary, WorkItemsView } from 'fleet';
 
 import { deliveryLanes, laneTitle } from './delivery-band.model';
 
@@ -102,5 +102,34 @@ describe('deliveryLanes', () => {
     const [lane] = deliveryLanes([flow({ line: [place('ch_a', 1), place('ch_b', 2)] })], items, NOW);
     expect(lane.line.map((chunk) => chunk.title)).toEqual(['Migrate the store', null]);
     expect(lane.line[1].shortId).not.toBe('');
+  });
+});
+
+describe('a parked chunk\'s change', () => {
+  const repositories = [{ repository_id: 'repo_1', owner: 'paul-gross', repo: 'blizzard' } as RepositorySummary];
+  const pr = (repo: string, number: number): PrView => ({ repo, number, url: `https://forge.example/${repo}/pull/${number}` });
+  const parked = flow({ line: [place('ch_a', 1, { state: 'awaiting-merge' }), place('ch_b', 2, { state: 'next' })] });
+
+  it('reads awaiting merge in the passed-over tone and links the open PR on the flow\'s forge-side repository', () => {
+    const openPrs = new Map([['ch_a', [pr('paul-gross/other', 3), pr('paul-gross/blizzard', 12)]]]);
+    const [lane] = deliveryLanes([parked], NO_ITEMS, NOW, { openPrs, repositories });
+    const [chunk, next] = lane.line;
+    expect(chunk.stateLabel).toBe('awaiting merge');
+    expect(chunk.tone).toBe('idle');
+    expect(chunk.change).toEqual({ url: 'https://forge.example/paul-gross/blizzard/pull/12', label: 'paul-gross/blizzard#12' });
+    expect(next.state).toBe('next');
+    expect(next.change).toBeNull();
+  });
+
+  it('links nothing when no open PR is on the flow\'s repository, or the repository is not yet read', () => {
+    const openPrs = new Map([['ch_a', [pr('paul-gross/other', 3)]]]);
+    expect(deliveryLanes([parked], NO_ITEMS, NOW, { openPrs, repositories })[0].line[0].change).toBeNull();
+    const matching = new Map([['ch_a', [pr('paul-gross/blizzard', 12)]]]);
+    expect(deliveryLanes([parked], NO_ITEMS, NOW, { openPrs: matching, repositories: [] })[0].line[0].change).toBeNull();
+  });
+
+  it('links no change for a place that is not awaiting merge', () => {
+    const openPrs = new Map([['ch_b', [pr('paul-gross/blizzard', 12)]]]);
+    expect(deliveryLanes([parked], NO_ITEMS, NOW, { openPrs, repositories })[0].line[1].change).toBeNull();
   });
 });

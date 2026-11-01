@@ -21,6 +21,7 @@ import {
   KitDialog,
   KitErrorLine,
   type KitTabOption,
+  type LandingPositionRequest,
   ProjectColor,
   RecordKind,
   restingAsyncState,
@@ -29,7 +30,7 @@ import {
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { projectLinkMutationKey } from '../../core/mutation-keys';
+import { landingPositionMutationKey, projectLinkMutationKey } from '../../core/mutation-keys';
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectHubRunnersQuery } from '../../core/runners.query';
@@ -40,10 +41,16 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { injectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectColorPicker } from './project-color-picker';
+import {
+  foldLandingPositions,
+  landingSections,
+  type LandingPositionVars,
+} from './project-landing-order.model';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
 import {
   injectEditProjectMutation,
+  injectLandingPositionMutation,
   injectProjectLinkMutation,
   type ProjectLinkKind,
   type ProjectLinkVars,
@@ -139,6 +146,15 @@ export class ProjectDetail {
   protected readonly repositoryRows = computed(() =>
     repositoryLinkRows(this.repositoryLinksQuery.data() ?? [], this.repositoriesQuery.data() ?? []),
   );
+  private readonly pendingPositions = injectPendingMutationVariables<LandingPositionVars>(landingPositionMutationKey);
+  /** The repository rows as a landing order, each pending move folded in so it renders before it settles. */
+  protected readonly landingOrder = computed(() =>
+    foldLandingPositions(
+      landingSections(this.repositoryRows(), this.repositoryLinksQuery.data() ?? []),
+      this.pendingPositions(),
+      this.projectId(),
+    ),
+  );
   protected readonly servedBy = computed(() =>
     projectServedBy(this.projectId(), this.runnersQuery.data()),
   );
@@ -183,6 +199,7 @@ export class ProjectDetail {
 
   protected readonly editMutation = injectEditProjectMutation();
   protected readonly linkMutation = injectProjectLinkMutation();
+  private readonly positionMutation = injectLandingPositionMutation();
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
   protected readonly shown = computed(() => projectFormValues(this.project()));
@@ -307,6 +324,18 @@ export class ProjectDetail {
       await this.linkMutation.mutateAsync({ projectId, kind, name: row.key, linked: false, revision: row.revision });
     } catch (error) {
       this.linkFailure.set({ kind, message: errorMessage(error, 'Unlink failed.') });
+    }
+  }
+
+  /** One drop's landing position; a refusal shows on the repositories panel's error line. */
+  protected async onReposition(body: LandingPositionRequest): Promise<void> {
+    const projectId = this.projectId();
+    if (projectId === null) return;
+    this.linkFailure.set(null);
+    try {
+      await this.positionMutation.mutateAsync({ projectId, body });
+    } catch (error) {
+      this.linkFailure.set({ kind: 'repository', message: errorMessage(error, 'Reorder failed.') });
     }
   }
 }

@@ -15,6 +15,7 @@ import {
 } from '../chunk-detail';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
+import { hasDelivery } from '../chunk-detail/has-delivery';
 import { LensLink } from '../../core/lens-link';
 
 /**
@@ -94,6 +95,9 @@ export class ChunkGeneralTab {
    * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a
    * pure activation signal this tab holds no selection state of its own for. */
   readonly pickStep = output<string | null>();
+
+  /** Whether the delivery section shows — {@link hasDelivery}. */
+  protected readonly showDelivery = computed(() => hasDelivery(this.detail()));
 
   protected readonly pointerCount = computed(() => this.detail().work_refs?.length ?? 0);
 

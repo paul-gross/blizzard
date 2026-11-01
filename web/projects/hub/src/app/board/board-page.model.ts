@@ -1,4 +1,4 @@
-import { type ChunkSummary } from 'fleet';
+import { type ChunkSummary, type PrView } from 'fleet';
 
 /** A requested lane placement — `chunkId` lands immediately after `afterChunkId`, or at the very top when that is `null`. */
 export interface LaneMove {
@@ -90,4 +90,9 @@ export function resolveSelectedChunk(
   if (chunkId === null) return null;
   if (chunks.some((chunk) => chunk.chunk_id === chunkId)) return chunkId;
   return linkedDetailChunkId === chunkId ? chunkId : null;
+}
+
+/** Each chunk's open PRs by chunk id; a chunk with none is absent. */
+export function openPrsByChunk(chunks: readonly ChunkSummary[]): ReadonlyMap<string, readonly PrView[]> {
+  return new Map(chunks.flatMap((chunk) => (chunk.open_prs?.length ? [[chunk.chunk_id, chunk.open_prs] as const] : [])));
 }

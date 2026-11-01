@@ -1,5 +1,5 @@
 import type { ForgeDetail, ForgeSummary } from 'fleet';
-import { FORGE_FIELDS, forgeCreate, forgeOptions, forgePickerFields, forgeRecordVm, forgeRows } from './forges.model';
+import { budgetFacts, FORGE_FIELDS, forgeCreate, forgeOptions, forgePickerFields, forgeRecordVm, forgeRows } from './forges.model';
 
 const GITHUB: ForgeSummary = {
   forge_id: 'frg_1', slug: 'github', name: 'GitHub', kind: 'github', api_base: 'https://api.github.com',
@@ -44,5 +44,26 @@ describe('forge admin models', () => {
       { kind: 'repository', name: 'blizzard', route: ['/admin', 'repositories', 'repo_1'] },
       { kind: 'work source', name: 'issues', route: ['/admin', 'work-sources', 'wsrc_1'] },
     ]);
+  });
+
+  it('shows the capabilities it offers and one fact per budget reading', () => {
+    const detail: ForgeDetail = {
+      ...GITHUB, repositories: [], work_sources: [], offered: ['checks', 'merge'],
+      budgets: [
+        { bucket: 'core', secret_name: 'gh', remaining: 4000, limit: 5000, reset: '2026-11-01T12:00:00Z' },
+        { bucket: 'graphql', secret_name: null, remaining: 10, limit: 100, reset: '2026-11-01T13:00:00Z' },
+      ],
+    };
+    const facts = forgeRecordVm(detail)!.facts.map((fact) => [fact.label, fact.value]);
+    expect(facts).toContainEqual(['Capabilities', 'checks, merge']);
+    expect(facts).toContainEqual(['Budget core · gh', '4000/5000 remaining, resets 2026-11-01T12:00:00Z']);
+    expect(facts).toContainEqual(['Budget graphql', '10/100 remaining, resets 2026-11-01T13:00:00Z']);
+  });
+
+  it('reads none for no capabilities and no reading yet for no budgets', () => {
+    const detail: ForgeDetail = { ...GITHUB, repositories: [], work_sources: [], offered: [], budgets: [] };
+    const facts = forgeRecordVm(detail)!.facts.map((fact) => [fact.label, fact.value]);
+    expect(facts).toContainEqual(['Capabilities', 'none']);
+    expect(budgetFacts([])).toEqual([{ label: 'Budgets', value: 'no reading yet' }]);
   });
 });

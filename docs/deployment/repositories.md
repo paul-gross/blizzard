@@ -112,8 +112,11 @@ Writes need the `config:edit` permission and reads need `fleet:view`. Over HTTP 
 The board's Admin page lists repositories, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change. The repository
-form picks an enabled forge by name instead of editing an address. Version-2 configuration documents use the forge's
-slug in `forge`; version-1 documents continue to use the deprecated `forge_api_url`.
+form picks an enabled forge by name instead of editing an address, and picks the landing policy: a policy the chosen
+forge cannot honour is disabled and names the capabilities it lacks, and the park timeout appears only for `park`. A
+repository's detail shows its landing policy, and for `park` its timeout, or `default` when none is set. Version-2
+configuration documents use the forge's slug in `forge`; version-1 documents continue to use the deprecated
+`forge_api_url`.
 
 ## Checking forge addresses before the forge migration
 

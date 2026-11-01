@@ -18,11 +18,10 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { REPOSITORY_FIELDS, repositoryCreate, repositoryRows } from './repositories.model';
-import { injectRepositoriesQuery } from './repositories.query';
+import { chosenForgeOffered, repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
+import { injectRepositoriesQuery, injectRepositorySchemaQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
-import { forgePickerFields } from '../forges/forges.model';
-import { injectForgesQuery } from '../forges/forges.query';
+import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
 /**
  * `/admin/repositories` — the repository list beside a `<router-outlet>` holding the
@@ -87,7 +86,17 @@ export class RepositoriesPage {
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateRepositoryMutation();
   private readonly forgesQuery = injectForgesQuery(() => false);
-  protected readonly fields = computed(() => forgePickerFields(REPOSITORY_FIELDS, this.forgesQuery.data() ?? []));
+  private readonly schemaQuery = injectRepositorySchemaQuery();
+  /** The forge the create form has picked — its detail says which policies it can honour. */
+  private readonly pickedForge = signal<string | null>(null);
+  private readonly forgeQuery = injectForgeQuery(() => this.pickedForge());
+  protected readonly fields = computed(() =>
+    repositoryFields(
+      this.forgesQuery.data() ?? [],
+      this.schemaQuery.data() ?? null,
+      chosenForgeOffered(this.pickedForge(), this.forgeQuery.data()),
+    ),
+  );
   protected readonly createOpen = signal(false);
   protected readonly createError = signal<string | null>(null);
 
@@ -96,7 +105,13 @@ export class RepositoriesPage {
 
   protected onNew(): void {
     this.createError.set(null);
+    this.pickedForge.set(null);
     this.createOpen.set(true);
+  }
+
+  protected onValues(values: ConfigFormValues): void {
+    const forge = values['forge'];
+    this.pickedForge.set(typeof forge === 'string' && forge !== '' ? forge : null);
   }
 
   protected onCreate(values: ConfigFormValues): void {

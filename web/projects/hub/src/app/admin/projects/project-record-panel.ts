@@ -8,12 +8,14 @@ import {
   KitFactList,
   KitSwatch,
   type KitTabOption,
+  type LandingPositionRequest,
   KitTabs,
   type ProjectView,
 } from 'fleet';
 
 import { type LastChangeVm, type RevisionRowVm } from '../config-history.model';
 import { ConfigRevisions } from '../config-revisions';
+import type { LandingSections } from './project-landing-order.model';
 import { ProjectLinkPanel } from './project-link-panel';
 import { ProjectOverviewCard } from './project-overview-card';
 import { projectFacts, type OverviewLineVm } from './project-overview.model';
@@ -32,7 +34,8 @@ export interface ProjectUnlinkEvent {
 /**
  * The selected project's record — its header (swatch, name, description, Color and Edit), the tab strip, and the
  * Overview, Linked sources and Linked repositories bodies. Presentational: the project, its reads' view models and
- * states, the pending unlinks and the panels' failures in; edit, color, tab, link and unlink out.
+ * states, the pending unlinks, the landing order and the panels' failures in; edit, color, tab, link, unlink and
+ * reposition out.
  */
 @Component({
   selector: 'app-project-record-panel',
@@ -69,12 +72,15 @@ export class ProjectRecordPanel {
   readonly pendingRepositoryKeys = input<ReadonlySet<string>>(new Set());
   readonly sourceError = input<string | null>(null);
   readonly repositoryError = input<string | null>(null);
+  /** The linked repositories as a landing order, ranked then unranked. */
+  readonly landingOrder = input<LandingSections | null>(null);
 
   readonly edit = output<void>();
   readonly color = output<void>();
   readonly tabChange = output<string>();
   readonly link = output<ProjectLinkKind>();
   readonly unlink = output<ProjectUnlinkEvent>();
+  readonly reposition = output<LandingPositionRequest>();
 
   private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
   private readonly colorTemplate = viewChild<TemplateRef<unknown>>('colorFact');

@@ -118,7 +118,7 @@ export function servedProjectIds(
 
 /** The patch an edit sends. A cleared description is sent as empty text: on a project `null`
  * means "leave it", and the description may be empty. */
-export function projectPatch(body: Readonly<Record<string, string | boolean | null>>): ProjectPatchRequest {
+export function projectPatch(body: Readonly<Record<string, string | number | boolean | null>>): ProjectPatchRequest {
   const patch: ProjectPatchRequest = {};
   for (const [key, value] of Object.entries(body)) {
     if (key === 'slug' || key === 'name') patch[key] = typeof value === 'string' ? value : null;

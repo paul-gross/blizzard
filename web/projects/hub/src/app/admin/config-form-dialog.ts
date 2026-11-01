@@ -8,7 +8,9 @@ import {
   configEdit,
   editableFields,
   emptyFormValues,
+  invalidNumbers,
   missingRequired,
+  shownFields,
 } from './config-edit.model';
 
 /** What the dialog is for: a create takes every field; an edit takes the editable ones
@@ -44,6 +46,9 @@ export class ConfigFormDialog {
 
   readonly closed = output<void>();
   readonly submitted = output<ConfigFormValues>();
+  /** The form's values after each change the user makes — for a container whose fields
+   * depend on what is picked. */
+  readonly valuesChange = output<ConfigFormValues>();
 
   /** Only the keys the user has edited. Untouched fields read through to `shown()`, so a
    * refetched `initial` — another writer's change after a failed save — reaches them
@@ -53,12 +58,13 @@ export class ConfigFormDialog {
   protected readonly shown = computed(() => this.initial() ?? emptyFormValues(this.fields()));
   protected readonly values = computed(() => ({ ...this.shown(), ...this.typed() }));
   protected readonly visibleFields = computed(() =>
-    this.mode() === 'edit' ? editableFields(this.fields()) : this.fields(),
+    shownFields(this.mode() === 'edit' ? editableFields(this.fields()) : this.fields(), this.values()),
   );
   protected readonly edit = computed(() => configEdit(this.fields(), this.shown(), this.values()));
 
   protected readonly canSubmit = computed(() => {
     if (this.submitting()) return false;
+    if (invalidNumbers(this.fields(), this.values()).length > 0) return false;
     if (this.mode() === 'edit') return this.edit().diff.length > 0;
     return missingRequired(this.visibleFields(), this.values()).length === 0;
   });
@@ -77,14 +83,16 @@ export class ConfigFormDialog {
       ...typed, [key]: value,
       ...Object.fromEntries(this.fields().filter((field) => field.filterBy === key).map((field) => [field.key, ''])),
     }));
+    this.valuesChange.emit(this.values());
   }
 
-  protected optionsFor(field: ConfigFieldDef): readonly { value: string; label: string }[] {
+  protected optionsFor(field: ConfigFieldDef): readonly { value: string; label: string; disabled?: boolean }[] {
     return (field.options ?? []).filter((option) => !field.filterBy || option.kind === this.textOf(field.filterBy));
   }
 
   protected onFlag(key: string, checked: boolean): void {
     this.typed.update((typed) => ({ ...typed, [key]: checked }));
+    this.valuesChange.emit(this.values());
   }
 
   protected onSubmit(): void {

@@ -1,5 +1,6 @@
 export { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
 export { ChunkDelivery } from './chunk-delivery';
+export { hasDelivery } from './has-delivery';
 // The dock's presentational siblings a second shell re-stacks — the hub's chunk
 // detail page composes exactly these, in one column instead of three. Which siblings
 // belong here is `bzh:frontend-disjoint-diffs`.

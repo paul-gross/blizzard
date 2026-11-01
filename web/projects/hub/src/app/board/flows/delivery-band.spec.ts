@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type FlowView, hubClient, hubFlowsKey, toneColor } from 'fleet';
+import { type FlowView, hubClient, hubFlowsKey, type PrView, toneColor } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { DeliveryBand } from './delivery-band';
 
@@ -30,7 +30,11 @@ describe('DeliveryBand', () => {
 
   beforeEach(async () => {
     flows = [flow()];
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flows' ? { flows } : {}));
+    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flows'
+        ? { flows }
+        : path === '/api/repositories'
+          ? { repositories: [{ repository_id: 'repo_1', owner: 'paul-gross', repo: 'blizzard' }] }
+          : {}));
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await TestBed.configureTestingModule({
       imports: [DeliveryBand],
@@ -109,5 +113,25 @@ describe('DeliveryBand', () => {
 
     expect(chunks).toEqual(['ch_01inline0000000000000000000']);
     expect(picked).toEqual(['flw_1']);
+  });
+
+  it('links a parked chunk\'s matched change beside its chip button, and links nothing without a match', async () => {
+    const parked = 'ch_01parked00000000000000000000';
+    flows = [flow({ turn: null, line: [{ chunk_id: parked, submission_id: 'sub_p', arrival: 1, state: 'awaiting-merge', position: 1, next_poll_at: null }] })];
+    const fixture = TestBed.createComponent(DeliveryBand);
+    const pr: PrView = { repo: 'paul-gross/blizzard', number: 12, url: 'https://forge.example/paul-gross/blizzard/pull/12' };
+    fixture.componentRef.setInput('openPrs', new Map([[parked, [pr]]]));
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const chip = el.querySelector<HTMLElement>(`[data-chunk="${parked}"]`)!;
+    expect(chip.querySelector('[data-testid="delivery-state"]')?.textContent?.trim()).toBe('awaiting merge');
+    const link = el.querySelector<HTMLAnchorElement>('[data-testid="delivery-change"]')!;
+    expect(link.href).toBe(pr.url);
+    expect(link.closest('button')).toBeNull();
+    expect(link.parentElement).toBe(chip.parentElement);
+
+    fixture.componentRef.setInput('openPrs', new Map([[parked, [{ ...pr, repo: 'paul-gross/other' }]]]));
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="delivery-change"]')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import {
   editableFields,
   emptyFormValues,
   formValuesOf,
+  invalidNumbers,
   missingRequired,
   shownFormValues,
 } from './config-edit.model';
@@ -126,5 +127,37 @@ describe('shownFormValues', () => {
   it('is null with no record, and the record as form values otherwise', () => {
     expect(shownFormValues(FIELDS, undefined)).toBeNull();
     expect(shownFormValues(FIELDS, { locator: 'o/r' })?.['locator']).toBe('o/r');
+  });
+});
+
+describe('conditional and number fields', () => {
+  const GATED: readonly ConfigFieldDef[] = [
+    { key: 'policy', label: 'Policy', kind: 'select' },
+    { key: 'hours', label: 'Hours', kind: 'number', required: true, shownWhen: { key: 'policy', value: 'park' } },
+  ];
+  const parked = { policy: 'park', hours: '6' };
+
+  it('reads a stored number as text', () => {
+    expect(formValuesOf(GATED, { policy: 'park', hours: 6 })).toEqual(parked);
+    expect(formValuesOf(GATED, { policy: 'park', hours: null })).toEqual({ policy: 'park', hours: '' });
+  });
+
+  it('neither requires nor sends a hidden field', () => {
+    expect(missingRequired(GATED, { policy: 'merge', hours: '' })).toEqual([]);
+    expect(missingRequired(GATED, { policy: 'park', hours: '' })).toEqual(['Hours']);
+    expect(createBody(GATED, { policy: 'merge', hours: '6' })).toEqual({ policy: 'merge' });
+    expect(configEdit(GATED, parked, { policy: 'merge', hours: '6' }).body).toEqual({ policy: 'merge' });
+  });
+
+  it('sends a changed number as a number, and a blank one as null', () => {
+    expect(configEdit(GATED, parked, { policy: 'park', hours: ' 12 ' }).body).toEqual({ hours: 12 });
+    expect(configEdit(GATED, parked, { policy: 'park', hours: '' }).body).toEqual({ hours: null });
+  });
+
+  it('names a shown number that is not a whole number', () => {
+    expect(invalidNumbers(GATED, { policy: 'park', hours: '1.5' })).toEqual(['Hours']);
+    expect(invalidNumbers(GATED, { policy: 'park', hours: 'x' })).toEqual(['Hours']);
+    expect(invalidNumbers(GATED, { policy: 'park', hours: '' })).toEqual([]);
+    expect(invalidNumbers(GATED, { policy: 'merge', hours: 'x' })).toEqual([]);
   });
 });

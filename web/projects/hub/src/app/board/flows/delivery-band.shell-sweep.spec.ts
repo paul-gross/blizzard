@@ -37,7 +37,7 @@ const FLOWS: FlowView[] = [
       place('ch_01landing000000000000000000', 1, 'landing'),
       place('ch_01next00000000000000000000', 2, 'next'),
       place('ch_01polling00000000000000000', 3, 'polling', '2026-10-29T12:05:00Z'),
-      place('ch_01unknown00000000000000000', 4, 'awaiting-merge'),
+      place('ch_01unknown00000000000000000', 4, 'future-state'),
     ],
     last_verdict: {
       id: 7, flow_id: 'flw_busy', chunk_id: 'ch_01done0000000000000000000', submission_id: 'sub_0', kind: 'turn-ended',
@@ -132,7 +132,7 @@ describe('delivery band shell sweep (web:shell-sweep)', () => {
       try {
         const chunk = root.querySelector<HTMLElement>('[data-chunk="ch_01unknown00000000000000000"]')!;
         const badge = chunk.querySelector<HTMLElement>('[data-testid="delivery-state"]')!;
-        expect(badge.textContent?.trim()).toBe('awaiting-merge');
+        expect(badge.textContent?.trim()).toBe('future-state');
         const rect = badge.getBoundingClientRect();
         expect(rect.width).toBeGreaterThan(0);
         expect(inside(rect, chunk.getBoundingClientRect()), `width ${width}: the state leaves its chunk`).toBe(true);

@@ -49,7 +49,9 @@ const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.
 
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
+  let record: RepositorySummary = CORE;
   afterEach(() => {
+    record = CORE;
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
@@ -58,7 +60,7 @@ describe('RepositoryDetail', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (path === '/api/me') return EDITOR;
       if (path === '/api/repositories/repo_c' || path === '/api/repositories/blizzard') {
-        return method === 'PATCH' ? { ...CORE, slug: 'core-2', revision: 4 } : CORE;
+        return method === 'PATCH' ? { ...record, slug: 'core-2', revision: 4 } : record;
       }
       if (path === '/api/config/changes') return HISTORY;
       return {};
@@ -103,6 +105,29 @@ describe('RepositoryDetail', () => {
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ slug: 'core-2' });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('shows the landing policy, and the park timeout for a parking repository', async () => {
+    const { harness } = await open('/admin/repositories/repo_c');
+    const text = (harness.routeNativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('merge on checks');
+    expect(text).not.toContain('Park timeout');
+  });
+
+  it('sends a blank park timeout as null', async () => {
+    record = { ...CORE, landing_policy: 'park', park_timeout_hours: 6 };
+    const { harness } = await open('/admin/repositories/repo_c');
+    expect((harness.routeNativeElement as HTMLElement).textContent).toContain('6 h');
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!.click();
+    await settle(harness.fixture);
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-repository-edit-field-park_timeout_hours"]')!;
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="admin-repository-edit-submit"]')!.click();
+    await settle(harness.fixture);
+
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ park_timeout_hours: null });
   });
 
   it('keys the history read by the id', async () => {
