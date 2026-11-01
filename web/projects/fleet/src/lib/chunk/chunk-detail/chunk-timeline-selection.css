@@ -43,7 +43,7 @@
   background: var(--surface-selected);
 }
 /* Line 1 — identity: the attempt and the node, the row's own primary text. Ellipsized
-   rather than wrapped (the app's standing rule — see `board-card.css`'s own comment):
+   rather than wrapped (the app's standing rule — see `chunk-card.css`'s own comment):
    the seeded stress fixture's ~150-char custom node name clips instead of blowing out
    the row's height or the column's width. */
 .line1 {

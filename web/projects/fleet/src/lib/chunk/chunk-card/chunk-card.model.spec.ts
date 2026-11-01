@@ -1,8 +1,8 @@
-import { compactRef } from 'fleet';
+import { compactRef } from '../../core/compact-ref';
 import { workItemEntry, workRefView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { blockedLabel, cardShowsStatus, finishedWord, foldTitles, stepLabel, workLines } from './board-card.model';
+import { blockedLabel, cardShowsStatus, finishedWord, foldTitles, stepLabel, workLines } from './chunk-card.model';
 
 const item = (fields: { title?: string; label?: string; body?: string; web_url?: string }) =>
   workItemEntry({ source: 'hub', ref: '1', fetched_at: 't', label: null, title: null, body: null, web_url: null, ...fields });

@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { BoardCard } from './board-card';
-import { BoardCardComponent } from './board-card';
+import { ChunkCard } from 'fleet';
+import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**
  * The card's cost row at its fullest — a done-lane card's completion stamp at its left, the
@@ -35,11 +35,11 @@ const WIDTHS = [800, 390, 320];
 async function renderCard(width: number, card: BoardCard = CARD): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [BoardCardComponent],
+    imports: [ChunkCard],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
+  const fixture = TestBed.createComponent(ChunkCard);
+  fixture.componentRef.setInput('card', boardCardView(card));
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);

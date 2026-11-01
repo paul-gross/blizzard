@@ -33,7 +33,8 @@ test('test_runner_panel_updates_live_over_sse_with_no_reload', async ({ api, iss
   await page.setViewportSize(wideViewport);
   await page.goto(`${runnerHost.url}/board`);
   await expect(page.getByTestId('local-panel')).toBeVisible();
-  const card = page.locator(`[data-testid="chunk-row"][data-chunk-id="${chunkId}"]`);
+  const card = page.locator(`[data-testid="chunk-card"][data-chunk="${chunkId}"]`);
+  const doneCard = page.getByTestId('lane-done').locator(`[data-testid="chunk-card"][data-chunk="${chunkId}"]`);
   await expect(card).toHaveCount(0);
 
   expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
@@ -42,6 +43,6 @@ test('test_runner_panel_updates_live_over_sse_with_no_reload', async ({ api, iss
 
   // The host steps the chunk to done; the ended chunk stays on the board, in the Done lane, with no live worker.
   await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body.status, (status) => status === 'done');
-  await expect(card).toHaveAttribute('data-lane', 'done', { timeout: PUSHED_WITHIN });
+  await expect(doneCard).toHaveCount(1, { timeout: PUSHED_WITHIN });
   await expect(card.getByTestId('chunk-row-worker')).toHaveCount(0);
 });

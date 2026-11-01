@@ -1,4 +1,6 @@
-import { type ChunkStatus, compactRef, type WorkItemsView, type WorkRefView } from 'fleet';
+import type { ChunkStatus, LandedRepoView, PrView, WorkItemsView, WorkRefView } from '../../api/hub';
+import { compactRef } from '../../core/compact-ref';
+import type { Tone } from '../../kit';
 
 /** A group past this many titles folds to its first {@link FOLDED_TITLES} until opened. */
 const UNFOLDED_TITLES = 3;
@@ -73,4 +75,79 @@ export function stepLabel(status: ChunkStatus, node: string): string {
  * more than one is unmet. */
 export function blockedLabel(blockedOn: string | null, blockedCount: number): string {
   return blockedCount > 1 ? `${blockedCount} chunks` : compactRef(blockedOn ?? '');
+}
+
+/** One place a chunk holds on a delivery flow, as a card or row draws it: its line, in its state's tone. */
+export interface ChunkCardPlace {
+  /** What keeps the place distinct among the chunk's places — the flow it is on. */
+  readonly key: string;
+  readonly text: string;
+  readonly tone: Tone;
+  readonly title: string;
+}
+
+/** The runner holding a chunk, as a card or row names it. */
+export interface ChunkCardHolder {
+  /** The holder's host, clipped first — `null` where it is not told. */
+  readonly host: string | null;
+  readonly name: string;
+  readonly title: string;
+}
+
+/** A chunk's blocked marking: what it names, and the blocker's own status beside it. */
+export interface ChunkCardBlocked {
+  /** The one unmet prerequisite's compact ref, or the count once more than one is unmet ({@link blockedLabel}). */
+  readonly label: string;
+  /** Whether {@link label} is a count rather than a ref. */
+  readonly counted: boolean;
+  readonly title: string;
+  /** The single blocker's own status, or `null` where none, or more than one, is named. */
+  readonly state: string | null;
+}
+
+/**
+ * One chunk as the fleet card and list row draw it — presentation data each app derives from its own reads,
+ * never a mirror of one of them (`bzh:frontend-wire-conformist`). Status arrives as a word and a {@link Tone}, never
+ * as a status vocabulary of its own; the card's edge and id are drawn in that tone. A region only one app fills is
+ * optional, and renders nothing without its data.
+ */
+export interface ChunkCardView {
+  readonly chunkId: string;
+  /** The chunk's compact id, which ends the card's step row and heads the row's work. */
+  readonly shortId: string;
+  /** The status word the card is marked with — the `data-status` handle and the status's hover text. */
+  readonly status: string;
+  /** The status's tone — the card's edge and id colour. */
+  readonly tone: Tone;
+  /** The status word the step row names, or `null` where it would only repeat the lane. */
+  readonly statusWord: string | null;
+  /** The step the chunk is on. */
+  readonly step: string;
+  /** The step's hover text, or `null` for none. */
+  readonly stepTitle: string | null;
+  /** The chunk's work items, each a label over its title. */
+  readonly workLines: readonly WorkLine[];
+  /** Whether the work items have been read — until then each title holds a skeleton. */
+  readonly itemsRead: boolean;
+  /** The runner holding the chunk, or `null` where none does. */
+  readonly holder?: ChunkCardHolder | null;
+  readonly blocked?: ChunkCardBlocked | null;
+  /** Whether the card draws its delivery block — its places, an awaited merge, and its open PRs. */
+  readonly showsDelivery?: boolean;
+  readonly places?: readonly ChunkCardPlace[];
+  readonly awaitingExternalMerge?: boolean;
+  readonly openPrs?: readonly PrView[];
+  readonly landedRepos?: readonly LandedRepoView[];
+  /** The chunk's spend, already formatted, or `null` for none to show. */
+  readonly cost?: string | null;
+  /** When a finished chunk finished, or `null` for one not finished. */
+  readonly completedAt?: string | null;
+  /** The word a finished chunk is named by on its row's closing line ({@link finishedWord}). */
+  readonly finishedWord?: string | null;
+  /** The status a list row names in its trailing cell, where it names one, or `null`. */
+  readonly rowStatus?: string | null;
+  /** Whether the chunk may be promoted — with the card's `canControl`, offers Promote. */
+  readonly promotable?: boolean;
+  readonly projectName?: string | null;
+  readonly projectColor?: string | null;
 }

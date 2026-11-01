@@ -28,6 +28,7 @@ export * from './lib/chunk/chunk-detail';
 export * from './lib/chunk/chunk-artifacts-panel';
 export * from './lib/chunk/chunk-issue-list';
 export * from './lib/chunk/work-ref-link';
+export * from './lib/chunk/chunk-card';
 export * from './lib/sse';
 export * from './lib/core/mutation-pending';
 export * from './lib/transcripts';

@@ -3,7 +3,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import type { BoardCard } from '../board-card/board-card';
+import type { BoardCard } from '../board-card/board-card-view.model';
 import type { BoardLaneMove, BoardReposition } from '../board-shell/board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
 

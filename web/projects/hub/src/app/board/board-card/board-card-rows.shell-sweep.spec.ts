@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { BoardCard } from './board-card';
-import { BoardCardComponent } from './board-card';
+import { ChunkCard } from 'fleet';
+import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**
  * A card's rows stack in one order at their fullest — the title, the blocked marking, the
@@ -40,11 +40,11 @@ const WIDTHS = [800, 390, 320];
 async function renderCard(width: number, card: BoardCard = CARD, canControl = false): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [BoardCardComponent],
+    imports: [ChunkCard],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
+  const fixture = TestBed.createComponent(ChunkCard);
+  fixture.componentRef.setInput('card', boardCardView(card));
   fixture.componentRef.setInput('canControl', canControl);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

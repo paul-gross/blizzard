@@ -1,7 +1,7 @@
 .card {
   box-sizing: border-box;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--edge);
   --bg-resting: var(--surface-resting);
   --bg-hover: var(--surface-hover);
   --bg-selected: var(--surface-selected);
@@ -15,7 +15,7 @@
   min-width: 0;
   cursor: pointer;
 }
-/* An armed card clears room for `board-column.css`'s reorder grip beside it, and stands at
+/* An armed card clears room for the board column's reorder grip beside it, and stands at
    least the grip's 32px tall so a one-row card still holds it. */
 :host(.reorder-armed) .card {
   padding-left: 22px;
@@ -31,22 +31,18 @@
 /* Hover reads as the background step plus a dim-cyan edge on three sides
    (never the left, which stays status-colored) — the background step alone
    measured too subtle against this card's own borders/text/chrome to read
-   at a glance; the edge tint reuses the same dim cyan `runner-view.css`
-   already draws a hover-tier accent with, one step below `.selected`'s
-   full-brightness cyan. */
+   at a glance; the edge tint is the dim cyan hover tier, one step below
+   `.selected`'s full-brightness cyan. */
 .card:hover {
   border-top-color: var(--cyan-dim);
   border-right-color: var(--cyan-dim);
   border-bottom-color: var(--cyan-dim);
   background: var(--bg-hover);
 }
-/* Selected reads as the lightest background plus the left-edge accent: the status color
-   below yields to it while selected — a transient override, not a loss of
-   the status signal, since the status rules below re-take the edge the
-   instant `.selected` no longer matches. `[data-status]` (always present,
-   see `board-card.html`) bumps this selector's own specificity a notch over
-   theirs, so it wins regardless of which rule a future edit places last. */
-.card.selected[data-status] {
+/* Selected reads as the lightest background plus the left-edge accent: the status tone yields
+   to the selection cyan while selected — a transient override, not a loss of the status signal,
+   since the edge re-takes `--edge` the instant `.selected` no longer matches. */
+.card.selected {
   border-left-color: var(--cyan);
   background: var(--bg-selected);
 }
@@ -54,24 +50,6 @@
    the selected background rather than dimming to the hover tone. */
 .card.selected:hover {
   background: var(--bg-selected);
-}
-/* Done and stopped cards keep a green accent; an escalated card
-   (needs_human) reads in the alarm color. */
-.card[data-status='done'],
-.card[data-status='stopped'] {
-  border-left-color: var(--green);
-}
-.card[data-status='needs_human'] {
-  border-left-color: var(--red);
-}
-.card[data-status='needs_human'] .card-id {
-  color: var(--red);
-}
-/* The BACKLOG card reads as held/inert: a dim accent, distinct from the
-   READY lane beside it and from any live lane. Colors come from tokens,
-   never hard-coded hex. */
-.card[data-status='not_ready'] {
-  border-left-color: var(--label-dim);
 }
 /* The open control fills the card beneath its rows, which stack over it in order. */
 .card-open {
@@ -139,7 +117,7 @@
 .card-id {
   flex: none;
   margin-left: auto;
-  color: var(--amber);
+  color: var(--edge);
   font-size: var(--fs-sm);
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -213,6 +191,11 @@
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+/* The holder ahead of the step reads as a name, not a label. */
+.nd .runner {
+  text-transform: none;
+  letter-spacing: normal;
 }
 /* The status word keeps its room; the node beside it is what clips. */
 .step-row .st {

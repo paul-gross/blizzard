@@ -30,10 +30,10 @@
     [cdkDropListConnectedTo]="connectedTo()"
     (cdkDropListDropped)="dropped($event)"
   >
-    @for (card of cards(); track card.chunkId) {
+    @for (card of views(); track card.chunkId) {
       <div class="q-card" cdkDrag [cdkDragData]="card.chunkId">
         <app-reorder-grip class="reorder-grip" data-testid="board-reorder-grip" />
-        <app-board-card
+        <fleet-chunk-card
           class="reorder-armed"
           [card]="card"
           [selected]="card.chunkId === selectedChunkId()"
@@ -47,8 +47,8 @@
   </div>
 } @else {
   <div class="b-col-body">
-    @for (card of cards(); track card.chunkId) {
-      <app-board-card
+    @for (card of views(); track card.chunkId) {
+      <fleet-chunk-card
         [card]="card"
         [selected]="card.chunkId === selectedChunkId()"
         [gated]="gatedChunkIds().has(card.chunkId)"

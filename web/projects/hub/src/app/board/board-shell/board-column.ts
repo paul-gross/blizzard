@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
-import { BoardCardComponent, type BoardCard } from '../board-card/board-card';
+import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { type Lane, KitBeacon } from 'fleet';
+import { ChunkCard, type Lane, KitBeacon } from 'fleet';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { resolveDrop } from './board-drop.model';
 
@@ -62,7 +62,7 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardComponent, BoardCardSkeleton, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
+  imports: [BoardCardSkeleton, ChunkCard, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
@@ -77,6 +77,9 @@ export class BoardColumn {
   /** How many card skeletons stand in for the lane's cards while the chunk read is loading —
    * 0 once it has answered. */
   readonly skeletons = input(0);
+
+  /** Each card as the fleet card draws it. */
+  protected readonly views = computed(() => this.cards().map(boardCardView));
 
   /** One index per skeleton, for the template's loop. */
   protected readonly skeletonIndexes = computed(() => Array.from({ length: this.skeletons() }, (_, i) => i));
@@ -101,7 +104,7 @@ export class BoardColumn {
   readonly reorderControls = input(false);
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`),
-   * forwarded to each {@link BoardCardComponent}. */
+   * forwarded to each card. */
   readonly canControl = input(false);
 
   /** Whether the current identity may reorder the ready queue and backlog

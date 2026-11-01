@@ -93,9 +93,9 @@ describe('LocalPanelLayout', () => {
     const fixture = await render({ selectedChunkId: MACHINE_CHUNK.lease.chunk_id });
     const el = fixture.nativeElement as HTMLElement;
 
-    const cards = el.querySelectorAll('[data-testid="lane-progress"] [data-testid="chunk-row"]');
+    const cards = el.querySelectorAll('[data-testid="lane-progress"] [data-testid="chunk-card"]');
     expect(cards).toHaveLength(1);
-    expect(cards[0].getAttribute('data-chunk-id')).toBe(MACHINE_CHUNK.lease.chunk_id);
+    expect(cards[0].getAttribute('data-chunk')).toBe(MACHINE_CHUNK.lease.chunk_id);
     expect(cards[0].classList).toContain('selected');
     expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
     expect(el.querySelector('[data-testid="chunk-filter-show-all"]')).toBeNull();
@@ -115,7 +115,7 @@ describe('LocalPanelLayout', () => {
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-card"]')?.click();
     expect(selected).toBe(MACHINE_CHUNK.lease.chunk_id);
   });
 

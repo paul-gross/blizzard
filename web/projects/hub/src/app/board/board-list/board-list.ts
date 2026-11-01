@@ -2,10 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 
-import type { BoardCard } from '../board-card/board-card';
+import { ChunkListRow } from 'fleet';
+
+import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import type { BoardLaneMove, BoardReorderList, BoardReposition } from '../board-shell/board-column';
 import { resolveDrop } from '../board-shell/board-drop.model';
-import { BoardListRow } from './board-list-row';
+import { LaneIcon } from '../lane-icon/lane-icon';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { BoardListRowSkeleton } from './board-list-row-skeleton';
 
@@ -43,7 +45,7 @@ export function listDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardListRow, BoardListRowSkeleton, CdkDrag, CdkDropList, NgTemplateOutlet, ReorderGrip],
+  imports: [BoardListRowSkeleton, CdkDrag, ChunkListRow, CdkDropList, LaneIcon, NgTemplateOutlet, ReorderGrip],
   templateUrl: './board-list.html',
   styleUrl: './board-list.css',
 })
@@ -73,6 +75,13 @@ export class BoardList {
 
   protected readonly readyDropId = listDropId('ready');
   protected readonly backlogDropId = listDropId('notready');
+
+  /** Each row's card as the fleet row draws it, by chunk id. */
+  protected readonly views = computed(() => {
+    const groups = this.groups();
+    const entries = [...groups.live, ...groups.ready, ...groups.backlog, ...groups.done];
+    return new Map(entries.map((entry) => [entry.card.chunkId, boardCardView(entry.card)]));
+  });
 
   /** Whether any row renders at all. */
   protected readonly hasRows = computed(() => {

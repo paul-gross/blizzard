@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type ChunkStatus, LANES, STATUS_TONE, toneColor, UNKNOWN_LANE } from 'fleet';
-import { finishedWord } from '../board-card/board-card.model';
+import { type ChunkStatus, finishedWord, LANES, STATUS_TONE, toneColor, UNKNOWN_LANE } from 'fleet';
 
 /** The drawings the icon carries: one per board lane, plus the two statuses that read
  * differently from the lane they share — `paused` beside WAIT/HUMAN's waits, `stopped`

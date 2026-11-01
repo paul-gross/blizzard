@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { BoardCard } from './board-card';
-import { BoardCardComponent } from './board-card';
+import { ChunkCard } from 'fleet';
+import { type BoardCard, boardCardView } from './board-card-view.model';
 
 const BASE: BoardCard = {
   chunkId: 'ch_01done0000000000000000000',
@@ -25,11 +25,11 @@ const BASE: BoardCard = {
 
 async function renderFixture(card: BoardCard, gated = false, canControl = false) {
   await TestBed.configureTestingModule({
-    imports: [BoardCardComponent],
+    imports: [ChunkCard],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
+  const fixture = TestBed.createComponent(ChunkCard);
+  fixture.componentRef.setInput('card', boardCardView(card));
   fixture.componentRef.setInput('gated', gated);
   fixture.componentRef.setInput('canControl', canControl);
   await fixture.whenStable();
@@ -46,7 +46,7 @@ const items = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `hub#
 const titlesOf = (el: HTMLElement) =>
   [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
 
-describe('BoardCardComponent work item titles', () => {
+describe('ChunkCard work item titles', () => {
   const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null };
 
   it('keeps the work-ref chips once the title arrives, with the title beneath them', async () => {
@@ -132,7 +132,7 @@ describe('BoardCardComponent work item titles', () => {
 });
 
 
-describe('BoardCardComponent completion stamp (issue #173)', () => {
+describe('ChunkCard completion stamp (issue #173)', () => {
   it('renders the completion time on a done-lane card', async () => {
     const el = await render(BASE);
 
@@ -162,7 +162,7 @@ describe('BoardCardComponent completion stamp (issue #173)', () => {
   });
 });
 
-describe('BoardCardComponent DONE-column layout (issue #215)', () => {
+describe('ChunkCard DONE-column layout (issue #215)', () => {
   it('shows "done" once, in the step slot, and no status word', async () => {
     const el = await render(BASE);
 
@@ -185,7 +185,7 @@ describe('BoardCardComponent DONE-column layout (issue #215)', () => {
   });
 });
 
-describe('BoardCardComponent work-ref chips (issue #176)', () => {
+describe('ChunkCard work-ref chips (issue #176)', () => {
   it('renders one chip per pointer label, in order, each carrying its own title', async () => {
     const el = await render({
       ...BASE,
@@ -220,7 +220,7 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
   });
 });
 
-describe('BoardCardComponent cost figure', () => {
+describe('ChunkCard cost figure', () => {
   it('renders an entirely estimated card as the estimate alone, marked ~', async () => {
     const el = await render({ ...BASE, costUsd: 0, costPartial: false, estimatedCostUsd: 0.07 });
 
@@ -246,7 +246,7 @@ describe('BoardCardComponent cost figure', () => {
   });
 });
 
-describe('BoardCardComponent blocked marking (issue #461)', () => {
+describe('ChunkCard blocked marking (issue #461)', () => {
   it('renders nothing when the card carries no blockedOn', async () => {
     const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: null, blockedCount: 0 });
 
@@ -321,7 +321,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
   });
 });
 
-describe('BoardCardComponent delivery block', () => {
+describe('ChunkCard delivery block', () => {
   const PR = { repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' };
   const LANDED = { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' };
 
@@ -351,7 +351,7 @@ describe('BoardCardComponent delivery block', () => {
   });
 });
 
-describe('BoardCardComponent gate marker', () => {
+describe('ChunkCard gate marker', () => {
   const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', terminal: false, node: 'approve-gate', completedAt: null };
 
   it('marks a card `gate` when its chunk has an open decision, beside the unchanged status', async () => {
@@ -368,7 +368,7 @@ describe('BoardCardComponent gate marker', () => {
   });
 });
 
-describe('BoardCardComponent open control', () => {
+describe('ChunkCard open control', () => {
   const PR = { repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' };
   const DELIVERING: BoardCard = {
     ...BASE,
@@ -418,7 +418,7 @@ describe('BoardCardComponent open control', () => {
   });
 });
 
-describe('BoardCardComponent Promote gate', () => {
+describe('ChunkCard Promote gate', () => {
   it('offers Promote on a paused, never-promoted card the hub flags promotable', async () => {
     const el = await render({ ...BASE, status: 'paused', terminal: false, promotable: true, completedAt: null }, false, true);
 
@@ -442,7 +442,7 @@ describe('BoardCardComponent Promote gate', () => {
   });
 });
 
-describe('BoardCardComponent done-lane membership', () => {
+describe('ChunkCard done-lane membership', () => {
   it("renders the completion stamp off the hub's terminal flag, not the status value", async () => {
     const flagged = await render({ ...BASE, status: 'running', terminal: true });
 
@@ -458,7 +458,7 @@ describe('BoardCardComponent done-lane membership', () => {
   });
 });
 
-describe('BoardCardComponent project tint', () => {
+describe('ChunkCard project tint', () => {
   it("tints the card by its project's palette color, titled with the project's name", async () => {
     const el = await render({ ...BASE, projectColor: 'teal', projectName: 'blizzard' });
 

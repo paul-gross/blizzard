@@ -1,18 +1,18 @@
 :host {
   display: block;
 }
-/* The columns line up across every row of the list: the work takes the slack, every
-   other column a fixed track. `board-list.css`'s column header uses the same tracks. */
+/* The columns line up across every row of the list on the container's `--list-columns` tracks,
+   which its column header shares. */
 .row {
   position: relative;
   display: grid;
   grid-template-columns: var(--list-columns);
   align-items: start;
   gap: 12px;
-  /* The left inset clears room for an armed row's reorder grip (`board-list.css`), on every row
-     so the columns line up whether or not a row is armed. */
+  /* The left inset clears room for an armed row's reorder grip, on every row so the columns line
+     up whether or not a row is armed. */
   padding: 7px 10px 7px 18px;
-  border-left: 3px solid var(--status-color);
+  border-left: 3px solid var(--edge);
   border-bottom: 1px solid var(--line);
   --bg-resting: var(--surface-resting);
   --bg-hover: var(--surface-hover);
@@ -43,24 +43,18 @@
   pointer-events: none;
 }
 .row a,
-.row .fold,
-.row .lane {
+.row .fold {
   pointer-events: auto;
 }
 .row:has(.row-open:focus-within) {
   outline: 1px solid var(--cyan);
   outline-offset: -1px;
 }
-.row.selected[data-status] {
+.row.selected {
   border-left-color: var(--cyan);
   background: var(--bg-selected);
 }
 
-/* The lane icon, centred in its fixed track on the row's first line. */
-.lane {
-  justify-self: center;
-  margin-top: 1px;
-}
 .work {
   display: flex;
   flex-direction: column;
@@ -69,7 +63,7 @@
 }
 /* The chunk's id heads the work, ahead of the items it carries. */
 .id {
-  color: var(--amber);
+  color: var(--edge);
   font-size: var(--fs-xs);
   letter-spacing: 0.04em;
 }
@@ -106,9 +100,7 @@
   align-items: center;
   gap: 6px;
   font-size: var(--fs-xs);
-}
-.finished-icon {
-  --lane-icon-size: 12px;
+  color: var(--edge);
 }
 .title.untitled {
   color: var(--label);
@@ -216,10 +208,23 @@
 .merge-wait {
   color: var(--amber-hi);
 }
-.cost {
+.end {
   text-align: right;
+}
+.cost {
   color: var(--amber-hi);
+}
+.state-word {
+  color: var(--edge);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 .done-at {
   color: var(--label);
+}
+/* A phone's list drops the holder cell under the work, its container's two tracks. */
+:host-context(.stacked) .holder {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }

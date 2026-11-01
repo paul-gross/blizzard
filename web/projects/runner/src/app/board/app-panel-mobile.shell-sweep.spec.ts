@@ -156,7 +156,7 @@ async function render(asks: unknown = { items: [] }) {
 }
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
- * injected so the tone colours the chunk cards' badges bind resolve. */
+ * injected so the tone colours the chunk cards bind resolve. */
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
   const styleEl = document.createElement('style');
@@ -196,10 +196,15 @@ describe('runner mobile board shell sweep (web:shell-sweep)', () => {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const card = root.querySelector<HTMLElement>('[data-testid="chunk-row"]');
+        const card = root.querySelector<HTMLElement>('[data-testid="chunk-card"]');
         expect(card, `width ${width}: no chunk card in the DOM`).not.toBeNull();
 
-        const lines = card!.querySelectorAll<HTMLElement>('[data-testid="chunk-row-title"] .item');
+        // Past three items the card folds to its first two; opened, every item shows.
+        card!.querySelector<HTMLElement>('[data-testid="chunk-title-fold"]')?.click();
+        await fixture.whenStable();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const lines = card!.querySelectorAll<HTMLElement>('.items .item');
         expect(lines.length, `width ${width}: expected 5 work-item lines`).toBe(5);
 
         const tops = Array.from(lines).map((line) => line.getBoundingClientRect().top);
@@ -207,10 +212,10 @@ describe('runner mobile board shell sweep (web:shell-sweep)', () => {
 
         // Every card — its worker line and its long-named runner's step row included — stays
         // inside its own box, and the stacked lanes inside the shell.
-        for (const each of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="chunk-row"]'))) {
+        for (const each of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="chunk-card"]'))) {
           expect(
             each.scrollWidth,
-            `width ${width}: chunk card ${each.dataset['chunkId']} overflows horizontally (${each.scrollWidth} > ${each.clientWidth})`,
+            `width ${width}: chunk card ${each.dataset['chunk']} overflows horizontally (${each.scrollWidth} > ${each.clientWidth})`,
           ).toBeLessThanOrEqual(each.clientWidth);
         }
         const lanes = Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="lane-"]'));
@@ -286,7 +291,7 @@ describe('runner mobile board shell sweep (web:shell-sweep)', () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const worker = root.querySelector<HTMLElement>('[data-testid="lane-progress"] [data-testid="worker-state"] .badge');
-      const askStatus = root.querySelector<HTMLElement>('[data-testid="lane-needs"] [data-testid="chunk-row-status"] .badge');
+      const askStatus = root.querySelector<HTMLElement>('[data-testid="lane-needs"] [data-testid="chunk-status"]');
       expect(worker?.textContent?.trim()).toBe('RUNNING');
       expect(getComputedStyle(worker!).color).toBe(tokenColor('--amber'));
       expect(askStatus?.textContent?.trim()).toBe('WAITING · ASK');

@@ -45,7 +45,7 @@
   color: var(--green);
 }
 /* The DONE column keeps its green head accent; its cards' own accent is
-   BoardCardComponent's own, keyed off the card's status
+   the fleet card's, drawn in the card's status tone
    rather than reaching down from here. */
 :host([data-col='done']) .b-col-head {
   border-bottom-color: var(--green-dim);

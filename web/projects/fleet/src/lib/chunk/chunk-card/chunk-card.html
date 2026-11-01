@@ -8,6 +8,7 @@
   data-testid="chunk-card"
   [attr.data-status]="card().status"
   [attr.data-chunk]="card().chunkId"
+  [style.--edge]="edge()"
   [class.selected]="selected()"
   [class.tinted]="projectTint() !== null"
   [style.--project-tint]="projectTint()"
@@ -18,16 +19,16 @@
   <fleet-kit-select-row class="card-open" bare [ariaLabel]="'Open chunk ' + card().shortId" [selected]="selected()" />
   <!-- Each work item is its work-ref label over its title, the title held by a one-line
        skeleton until it is read. The labels are plain text, not links: the detail panel owns
-       the link out to the work source. A grouped chunk names every item it carries; past
-       three, the first two show until the fold beneath them is opened. -->
+       the link out to the work source. Past three, the first two show until the fold beneath
+       them is opened. -->
   @if (fold().shown.length) {
-    <span class="items" [class.group]="lines().length > 1">
+    <span class="items" [class.group]="card().workLines.length > 1">
       @for (line of fold().shown; track $index) {
         <span class="item">
           @if (line.label; as label) {
             <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
           }
-          @if (titlesPending()) {
+          @if (!card().itemsRead) {
             <fleet-kit-skeleton class="title-skeleton" data-testid="chunk-title-skeleton" [rows]="1" />
           } @else if (line.title; as title) {
             <span class="title" data-testid="chunk-title" [title]="title">{{ title }}</span>
@@ -42,20 +43,19 @@
       {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
     </button>
   }
-  <!-- The blocked marking, in the status's engraved style. Non-link pinned by
-       `board-card.spec.ts`'s "references the prerequisite rather than reaching it…" case. -->
-  @if (card().blockedOn) {
-    <span class="st blk" data-testid="chunk-blocked-by" [title]="card().blockedOn">
-      blocked by <span class="blk-ref" [class.blk-count]="card().blockedCount > 1">{{ blockedLabel(card()) }}</span
-      >@if (blockedOnStatus(card()); as blockerStatus) {
+  <ng-content select="[chunkCardWorker]" />
+  @if (card().blocked; as blocked) {
+    <span class="st blk" data-testid="chunk-blocked-by" [title]="blocked.title">
+      blocked by <span class="blk-ref" [class.blk-count]="blocked.counted">{{ blocked.label }}</span
+      >@if (blocked.state; as blockerStatus) {
         <span class="blk-state" data-testid="chunk-blocked-by-state"> ({{ blockerStatus }})</span>
       }
     </span>
   }
-  @if (showsDelivery(card())) {
+  @if (card().showsDelivery) {
     <div class="delivery-links" data-testid="card-delivery">
-      @for (place of card().flowPlaces ?? []; track place.flowId) {
-        <span class="flow-place" data-testid="card-flow-place" [style.color]="toneColor(place.tone)" [title]="place.flowId">{{ place.text }}</span>
+      @for (place of card().places ?? []; track place.key) {
+        <span class="flow-place" data-testid="card-flow-place" [style.color]="toneColor(place.tone)" [title]="place.title">{{ place.text }}</span>
       }
       @if (card().awaitingExternalMerge) {
         <span class="merge-wait" data-testid="card-merge-wait">Awaiting your merge</span>
@@ -65,27 +65,25 @@
       }
     </div>
   }
-  <!-- The cost row, flush right — pinned by `board-card-cost.shell-sweep.spec.ts`. -->
-  @if (completedStamp(card()) || hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
+  @if (card().completedAt || card().cost) {
     <span class="row cost-row" data-testid="card-cost-row">
-      @if (completedStamp(card()); as completedAt) {
+      @if (card().completedAt; as completedAt) {
         <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
       }
-      @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
-        <span class="cost" data-testid="card-cost">{{
-          formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial)
-        }}</span>
+      @if (card().cost; as cost) {
+        <span class="cost" data-testid="card-cost">{{ cost }}</span>
       }
     </span>
   }
   <!-- The step row: where the chunk is, left, and its id flush right. -->
   <span class="row step-row">
-    <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
-    <!-- The status names only what its column does not: the DONE lane's step slot already
-         reads "done"/"stopped", and a card drops it wherever the lane holds that one status
-         alone. -->
-    @if (showsStatus(card())) {
-      <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
+    <span class="nd" data-testid="chunk-node" [attr.title]="stepTitle()"
+      >@if (showHolder() && card().holder; as holder) {
+        <span class="runner" data-testid="card-runner">{{ holder.name }}</span> ·
+      }{{ card().step }}</span
+    >
+    @if (card().statusWord; as word) {
+      <span class="st" data-testid="chunk-status" [title]="card().status">{{ word }}</span>
     }
     @if (gated()) {
       <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>

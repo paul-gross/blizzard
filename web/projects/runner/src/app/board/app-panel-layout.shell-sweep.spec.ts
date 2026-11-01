@@ -242,7 +242,7 @@ describe('runner desktop board shell sweep (web:shell-sweep)', () => {
           expect(lanes[2].right, `${label}: the lanes overflow the board column`).toBeLessThanOrEqual(center.right + 1);
 
           // Every card stays inside its own box — its long-named runner and environment included.
-          for (const card of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="chunk-row"]'))) {
+          for (const card of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="chunk-card"]'))) {
             expect(card.scrollWidth, `${label}: card ${card.dataset['chunkId']} overflows (${card.scrollWidth} > ${card.clientWidth})`).toBeLessThanOrEqual(
               card.clientWidth,
             );

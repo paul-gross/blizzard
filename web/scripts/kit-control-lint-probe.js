@@ -4,7 +4,7 @@ const { ESLint } = require('eslint');
 
 async function main() {
   const eslint = new ESLint();
-  const appPath = 'projects/hub/src/app/board/board-card/board-card.html';
+  const appPath = 'projects/hub/src/app/board/board-shell/board-column.html';
   const kitPath = 'projects/fleet/src/lib/kit/kit-button.html';
   for (const tag of ['button', 'select', 'input']) {
     const html = tag === 'input' ? '<input />' : `<${tag}></${tag}>`;

@@ -6,13 +6,26 @@
     <span class="r">Cost</span>
   </div>
   <ng-template #row let-entry>
-    <app-board-list-row
-      [card]="entry.card"
-      [lane]="entry.lane"
-      [selected]="entry.card.chunkId === selectedChunkId()"
-      [gated]="gatedChunkIds().has(entry.card.chunkId)"
-      (selectChunk)="selectChunk.emit($event)"
-    />
+    @if (views().get(entry.card.chunkId); as view) {
+      <fleet-chunk-list-row
+        [card]="view"
+        [selected]="entry.card.chunkId === selectedChunkId()"
+        [gated]="gatedChunkIds().has(entry.card.chunkId)"
+        (selectChunk)="selectChunk.emit($event)"
+      >
+        <!-- The icon takes the pointer for its tooltip, so a click on it opens the chunk itself, as the
+             row's select row beneath would. -->
+        <app-lane-icon
+          chunkRowLead
+          class="lane"
+          data-testid="list-row-lane"
+          [lane]="entry.lane"
+          [status]="entry.card.status"
+          (click)="selectChunk.emit(entry.card.chunkId)"
+        />
+        <app-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.status" />
+      </fleet-chunk-list-row>
+    }
   </ng-template>
   <ng-template #ranked let-entries="entries" let-list="list" let-dropId="dropId" let-testid="testid">
     <!-- The drop list is armed only for an identity holding queue:reorder; anyone else gets the

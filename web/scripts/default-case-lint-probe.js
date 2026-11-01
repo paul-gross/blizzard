@@ -13,7 +13,7 @@ const DEFAULTED = "export function label(state: string): string {\n  switch (sta
 async function main() {
   // Rooted at `web/`, so the probe reads the workspace's own config from any working directory.
   const eslint = new ESLint({ cwd: path.resolve(__dirname, '..') });
-  for (const filePath of ['projects/hub/src/app/board/board-card/board-card.model.ts', 'projects/fleet/src/lib/core/chunk-lanes.ts']) {
+  for (const filePath of ['projects/hub/src/app/board/board-card/board-card-view.model.ts', 'projects/fleet/src/lib/core/chunk-lanes.ts']) {
     const [bare] = await eslint.lintText(BARE, { filePath });
     assert(bare.messages.some((message) => message.ruleId === 'default-case'), `a switch with no default must be refused in ${filePath}`);
     const [commented] = await eslint.lintText(COMMENTED, { filePath });

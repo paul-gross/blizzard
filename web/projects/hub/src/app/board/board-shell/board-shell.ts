@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
-import type { BoardCard } from '../board-card/board-card';
-import { workLines } from '../board-card/board-card.model';
+import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../flows/flow-place.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
