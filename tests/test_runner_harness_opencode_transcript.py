@@ -61,8 +61,7 @@ class FakeExporter:
         return script
 
 
-def _conforms(x: FakeExporter) -> IOpenCodeExporter:
-    return x
+_exporter: type[IOpenCodeExporter] = FakeExporter
 
 
 # --- export fixture builders (src/blizzard/runner/harness/contracts/opencode/1.18.25/child_session.json's own shapes) ---

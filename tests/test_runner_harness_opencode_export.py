@@ -11,9 +11,20 @@ from typing import IO, Any
 
 import pytest
 
-from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError, SubprocessOpenCodeExporter
+from blizzard.runner.harness.opencode.transcript.export import (
+    DEFAULT_EXPORT_TIMEOUT_SECONDS,
+    OpenCodeExportError,
+    SubprocessOpenCodeExporter,
+)
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
-from blizzard.runner.process.child_processes import ChildRun, ShellCommand
+from blizzard.runner.process.child_processes import (
+    ChildRun,
+    IPtyChild,
+    ISpawnedChild,
+    ShellCommand,
+    Stream,
+    StreamTarget,
+)
 
 
 class _ScriptedChildren:
@@ -37,6 +48,33 @@ class _ScriptedChildren:
         self.calls.append({"command": command, "cwd": cwd, "env": env.variables, "input": input, "stdout": stdout})
         return self.reply(stdout)
 
+    def spawn(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | str | None,
+        env: ChildEnv,
+        stdin: StreamTarget = Stream.DEVNULL,
+        stdout: StreamTarget = Stream.DEVNULL,
+        stderr: StreamTarget = Stream.DEVNULL,
+        child_setup: Callable[[], None] | None = None,
+        pass_fds: tuple[int, ...] = (),
+    ) -> ISpawnedChild:
+        raise NotImplementedError
+
+    def spawn_pty(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | str,
+        env: ChildEnv,
+        child_setup: Callable[[], None] | None = None,
+    ) -> IPtyChild:
+        raise NotImplementedError
+
+    def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
+        raise NotImplementedError
+
 
 def _writes(text: str, *, exit_code: int = 0, stderr: str = "") -> Callable[[IO[bytes] | None], ChildRun]:
     def reply(stdout: IO[bytes] | None) -> ChildRun:
@@ -47,9 +85,14 @@ def _writes(text: str, *, exit_code: int = 0, stderr: str = "") -> Callable[[IO[
     return reply
 
 
-def _exporter(children: _ScriptedChildren, worker_env: AllowlistedEnv | None = None, **kw: Any) -> Any:
+def _exporter(
+    children: _ScriptedChildren,
+    worker_env: AllowlistedEnv | None = None,
+    *,
+    timeout: float = DEFAULT_EXPORT_TIMEOUT_SECONDS,
+) -> SubprocessOpenCodeExporter:
     env = (worker_env or AllowlistedEnv.of(())).tool()
-    return SubprocessOpenCodeExporter(binary="opencode", children=children, env=env, **kw)  # type: ignore[arg-type]
+    return SubprocessOpenCodeExporter(binary="opencode", children=children, env=env, timeout=timeout)
 
 
 @pytest.mark.unit

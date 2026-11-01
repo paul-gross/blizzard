@@ -746,10 +746,6 @@ def test_a_child_step_with_its_own_cost_adds_into_cost_usd(spawn_executor: Execu
 # --- the transcript fallback path ---------------------------------------------
 
 
-def _lines(output: str) -> list[str]:
-    return output.splitlines()
-
-
 def test_the_transcript_fallback_folds_descendants_from_root_export_lines(spawn_executor: Executor) -> None:
     exporter, _ = _synthetic()
     root_message = json.dumps(

@@ -7,6 +7,7 @@ and an unknown id raising ``ChunkNotFoundError`` at every reader without a repea
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import FactPushAck, PushedFact
 from blizzard.runner.hub.node_steps import completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases.model import NewLease
@@ -155,13 +157,13 @@ class _WriteReactingHub(FakeHub):
     scripted status — standing in for the hub's own reaction to the write landing, the
     signal a reader after invalidation must see and a stale cache would have missed."""
 
-    def push_facts(self, facts):
+    def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         ack = super().push_facts(facts)
         self.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, route_runner_id="r1")
         return ack
 
-    def submit_completion(self, chunk_id, submission):  # type: ignore[no-untyped-def]
-        response = super().submit_completion(chunk_id, submission)
+    def submit_completion(self, chunk_id: str, completion: Completion) -> ApplyReply:
+        response = super().submit_completion(chunk_id, completion)
         if chunk_id == "ch_b":
             self.chunks["ch_b"] = ChunkState(
                 chunk_id="ch_b",

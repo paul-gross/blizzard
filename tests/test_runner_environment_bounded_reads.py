@@ -49,7 +49,7 @@ def _seed(store: SqlAlchemyRunnerStore, chunks: list[str], depth: int) -> None:
 @pytest.mark.parametrize("read", ["chunk_project_ids", "newest_bindings_for"])
 def test_rows_read_equal_the_chunk_count_at_two_rebind_depths(tmp_path: Path, read: str) -> None:
     chunks = ["ch_1", "ch_2", "ch_3"]
-    measured = []
+    measured: list[int] = []
     for depth in (1, 4):
         directory = tmp_path / str(depth)
         directory.mkdir()

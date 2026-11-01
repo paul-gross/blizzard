@@ -6,7 +6,7 @@ real hub holding two tenants."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,7 +63,7 @@ _HOST_TENANT_REQUIRED = HostAddRefused(
 class _Log:
     """Every hub and store call one join makes, in order."""
 
-    calls: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list[str])
     stored: str | None = None
 
     def stored_runner_id(self) -> str | None:
@@ -176,7 +176,7 @@ def test_the_operators_tenants_are_read_from_me_under_their_session() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         assert (request.method, request.url.path) == ("GET", "/api/me")
         assert request.headers.get("Authorization") == "Bearer op-session"
-        tenants = [
+        tenants: list[dict[str, object]] = [
             {"tenant_id": t.tenant_id, "name": t.name, "role": "admin", "permissions": []} for t in (_ALPHA, _BRAVO)
         ]
         return httpx2.Response(200, json={"user_id": "u", "username": "op", "tenants": tenants})
@@ -277,7 +277,7 @@ def _real_hub_clients(app: FastAPI) -> InitCollaborators:
     the runner's token, the add and the listing under no credential, as on a hub without sign-in."""
 
     @contextmanager
-    def clients(_hub_url: str, runner_token: str, operator_token: str | None) -> Iterator[InitHubClients]:
+    def clients(_hub_url: str, runner_token: str, operator_token: str | None) -> Generator[InitHubClients]:
         bearer = {"Authorization": f"Bearer {runner_token}"} if runner_token else {}
         yield (
             HttpHubClient(TestClient(app, headers=bearer)),
@@ -285,7 +285,7 @@ def _real_hub_clients(app: FastAPI) -> InitCollaborators:
         )
 
     @contextmanager
-    def host_clients(_hub_url: str) -> Iterator[HostClients]:
+    def host_clients(_hub_url: str) -> Generator[HostClients]:
         yield lambda token: HttpHostHubClient(TestClient(app), token=token)
 
     return InitCollaborators(clients, host_clients)

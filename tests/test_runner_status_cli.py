@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -94,7 +94,7 @@ def serve_local_api(
     trace_status: bool = True,
     refusing: tuple[str, str] | None = None,
     version_refused: str | None = None,
-) -> Iterator[tuple[Path, str]]:
+) -> Generator[tuple[Path, str]]:
     config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
@@ -629,7 +629,7 @@ def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path) -> No
 
 
 @contextmanager
-def _serve_host_of_halted_runners(root: Path) -> Iterator[Path]:
+def _serve_host_of_halted_runners(root: Path) -> Generator[Path]:
     """The real host composition over ``root``: each runner its file declares is built or left halted, and the app
     is the one a host with none built serves."""
     config = load_host_config(root, port=0)
@@ -679,7 +679,11 @@ def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_an
         transport=httpx2.MockTransport(lambda request: httpx2.Response(answered, json={"detail": "refused"})),
         base_url="http://host",
     )
-    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(lambda cls, *_args: RunnerDaemon("status", client, "host")))
+
+    def reach(cls: type[RunnerDaemon], *_args: object) -> RunnerDaemon:
+        return RunnerDaemon("status", client, "host")
+
+    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
 
     result = CliRunner().invoke(runner_group, ["status", "--dir", str(tmp_path)])
 

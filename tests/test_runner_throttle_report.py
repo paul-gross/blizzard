@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import DecliningDeclaration
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -35,6 +36,8 @@ from tests.runner_fakes import (
 
 pytestmark = pytest.mark.unit
 
+_IDLE_HANDLE = WorkerHandle(session_id="sess-idle", pid=100, process_start_time="start-100", pgid=100)
+
 _NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 _SLUG = "team-plan"
 _FREE = RunnerBrakes(local=False, hub=False)
@@ -52,7 +55,7 @@ def _ctx(*, subscription: str | None = _SLUG) -> tuple[Any, FakeHub, LoopContext
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         config=LoopConfig(

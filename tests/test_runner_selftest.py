@@ -11,7 +11,7 @@ import json
 import stat
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from concurrent.futures import Executor
 from contextlib import contextmanager
 from dataclasses import replace
@@ -306,7 +306,7 @@ class _StubScratchGit:
         self._workdir = workdir
 
     @contextmanager
-    def new_scratch_repo(self) -> Iterator[ScratchRepo]:
+    def new_scratch_repo(self) -> Generator[ScratchRepo]:
         yield ScratchRepo(workdir=str(self._workdir))
 
     def commit_count(self, workdir: str) -> int:
@@ -732,7 +732,7 @@ def _init_runner_with_binary(tmp_path: Path, binary: str) -> Path:
 
 
 @contextmanager
-def _serve_local_api(root: Path) -> Iterator[Path]:
+def _serve_local_api(root: Path) -> Generator[Path]:
     """A live runner daemon's local API on its real unix socket.
 
     The CLI verb is a pure client of this API, driven against a real server over a

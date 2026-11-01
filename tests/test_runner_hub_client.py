@@ -46,7 +46,7 @@ from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
-def _client(handler) -> HttpHubClient:
+def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpHubClient:
     transport = httpx2.MockTransport(handler)
     return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=transport))
 
@@ -287,7 +287,7 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
 def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None:
     """`push_transcripts` sends its own short read timeout, while other routes keep the
     shared client's default."""
-    seen_timeouts = []
+    seen_timeouts: list[object] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         seen_timeouts.append(request.extensions["timeout"]["read"])
@@ -728,7 +728,11 @@ def test_identity_carries_a_refusal_reason_it_does_not_know_raw() -> None:
 @pytest.mark.unit
 def test_an_incompatible_claim_carries_a_denial_reason_it_does_not_know_raw() -> None:
     body = {"chunk_id": "ch_1", "incompatible_runner_id": "r1", "detail": "why", "reason": "gained"}
-    outcome = _client(lambda request: httpx2.Response(409, json=body)).claim_route(
+
+    def incompatible(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(409, json=body)
+
+    outcome = _client(incompatible).claim_route(
         ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert outcome.denied_incompatible is not None and outcome.denied_incompatible.reason == Unrecognized("gained")

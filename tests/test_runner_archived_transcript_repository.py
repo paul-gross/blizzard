@@ -5,6 +5,8 @@ pins that the request carries the runner's own auth header — AC3's transport-l
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx2
 import pytest
 
@@ -14,7 +16,7 @@ from blizzard.runner.transcripts.internal.http_archived_transcript_repository im
 )
 
 
-def _repo(handler) -> HttpArchivedTranscriptRepository:
+def _repo(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpArchivedTranscriptRepository:
     transport = httpx2.MockTransport(handler)
     client = httpx2.Client(base_url="http://hub.test", transport=transport, headers={"Authorization": "Bearer tok"})
     return HttpArchivedTranscriptRepository(client)

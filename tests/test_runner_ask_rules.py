@@ -125,7 +125,10 @@ def test_each_derived_state_change_is_one_the_transition_table_declares(timeline
     for minute, (event, question_id) in enumerate(timeline):
         if event == "ask":
             asks.insert(0, _ask(question_id, minutes=minute))
-        (forwarded if event == "park" else answered if event == "resume" else set()).add(question_id)
+        if event == "park":
+            forwarded.add(question_id)
+        elif event == "resume":
+            answered.add(question_id)
         now = ask_states(asks, forwarded=forwarded, answered=answered)
         for asked, state in now.items():
             before = states.get(asked, AskState.UNFORWARDED)
@@ -147,7 +150,7 @@ def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tm
 
     at = datetime(2026, 7, 16, tzinfo=UTC)
 
-    def at_depth(depth: int, path):
+    def at_depth(depth: int, path: Path):
         path.mkdir()
         store = make_store(f"sqlite:///{path / 'runner.db'}")
         for n in range(depth):

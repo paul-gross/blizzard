@@ -7,11 +7,11 @@ import dataclasses
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import func, select
@@ -76,10 +76,10 @@ def _reachable_runner_owned(root: object) -> list[str]:
             found.append(path)
             return
         if isinstance(value, (list, tuple, set, frozenset)):
-            for index, item in enumerate(value):
+            for index, item in enumerate(cast("Iterable[object]", value)):
                 walk(item, f"{path}[{index}]")
         elif isinstance(value, dict):
-            for key, item in value.items():
+            for key, item in cast("dict[object, object]", value).items():
                 walk(item, f"{path}[{key!r}]")
         elif dataclasses.is_dataclass(value) and not isinstance(value, type):
             for member in dataclasses.fields(value):
@@ -419,7 +419,12 @@ def test_a_runner_closes_its_host_only_when_it_was_built_over_a_host_of_one(tmp_
     host = _host(_config(tmp_path), "rn_a")
     disposed: list[bool] = []
     dispose = host.engine.dispose
-    host.engine.dispose = lambda *a, **k: (disposed.append(True), dispose(*a, **k))[1]
+
+    def tracked_dispose(close: bool = True) -> None:
+        disposed.append(True)
+        dispose(close)
+
+    host.engine.dispose = tracked_dispose
     [runner] = host.runners
 
     dataclasses.replace(runner, closes_host=False).close()

@@ -483,7 +483,7 @@ def test_pause_park_settled() -> None:
     )
     assert park_names_elicitation(park, named)
     assert not park_names_elicitation(park, None)
-    other = PendingElicitation(**{**named.__dict__, "id": 8})
+    other = replace(named, id=8)
     assert not park_names_elicitation(park, other)
     unnamed = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
     assert not park_names_elicitation(unnamed, named)
@@ -727,24 +727,33 @@ def test_reap_move_table() -> None:
 
 
 def test_resumable_exclusions() -> None:
-    def ok(lease: Lease, **sets: set[str]) -> bool:
-        base: dict[str, set[str]] = {
-            "parked": set(),
-            "pending_submission": set(),
-            "eliciting": set(),
-            "backing_off": set(),
-        }
-        return resumable(lease, **{**base, **sets}, taken_over=False)
+    def ok(lease: Lease, excluded_by: str | None = None) -> bool:
+        def holding(name: str) -> set[str]:
+            return {"lease_1"} if name == excluded_by else set()
+
+        return resumable(
+            lease,
+            parked=holding("parked"),
+            pending_submission=holding("pending_submission"),
+            eliciting=holding("eliciting"),
+            backing_off=holding("backing_off"),
+            taken_over=False,
+        )
 
     assert ok(_lease())
     assert not ok(_lease(spawned=False))
     for name in ("parked", "pending_submission", "eliciting", "backing_off"):
-        assert not ok(_lease(), **{name: {"lease_1"}})
+        assert not ok(_lease(), name)
 
 
 def test_takeover_chunk_never_resumed() -> None:
     assert not resumable(
-        _lease(), parked=set(), pending_submission=set(), eliciting=set(), backing_off=set(), taken_over=True
+        _lease(),
+        parked=set[str](),
+        pending_submission=set[str](),
+        eliciting=set[str](),
+        backing_off=set[str](),
+        taken_over=True,
     )
 
 
@@ -756,8 +765,12 @@ def test_crash_orphaned() -> None:
 
 
 def test_lease_reconcile_move() -> None:
-    def move(view: ChunkState, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False):
-        return lease_reconcile_move(view, lease or _lease(), runner_id=_ME, pause_parked=parked or set(), fenced=fenced)
+    def move(
+        view: ChunkState, *, lease: Lease | None = None, parked: set[str] | None = None, fenced: bool = False
+    ) -> LeaseReconcileMove:
+        return lease_reconcile_move(
+            view, lease or _lease(), runner_id=_ME, pause_parked=parked or set[str](), fenced=fenced
+        )
 
     assert move(_view(ChunkStatus.STOPPED)) is LeaseReconcileMove.ABANDON
     assert move(_view(route="r2"), fenced=True) is LeaseReconcileMove.ABANDON
@@ -770,7 +783,7 @@ def test_lease_reconcile_move() -> None:
 def test_park_paused_skips_unspawned() -> None:
     assert (
         lease_reconcile_move(
-            _view(pause=_PAUSE), _lease(spawned=False), runner_id=_ME, pause_parked=set(), fenced=False
+            _view(pause=_PAUSE), _lease(spawned=False), runner_id=_ME, pause_parked=set[str](), fenced=False
         )
         is LeaseReconcileMove.NONE
     )
@@ -818,9 +831,7 @@ def test_free_slots_never_read_below_zero() -> None:
 
 
 def test_resume_inherits_stamps() -> None:
-    lease = _lease().__class__(
-        **{**_lease().__dict__, "resolved_model": "opus", "resolved_effort": "high", "resolved_compaction_window": "1m"}
-    )
+    lease = replace(_lease(), resolved_model="opus", resolved_effort="high", resolved_compaction_window="1m")
     resumed = ResumedSession(session=SessionReference("cc", "sess-a"), lease=lease)
     assert resumed.inherited_stamps() == ("opus", "high", "1m")
     assert ResumedSession(session=SessionReference("cc", "sess-a"), lease=None).inherited_stamps() == (None, None, None)

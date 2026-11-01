@@ -158,12 +158,15 @@ def test_effective_config_requires_selected_model_input(
         del limit["input"]
     else:
         limit["input"] = input_value
-    monkeypatch.setattr(probe, "_invoke", lambda *args, **kwargs: OpenCodeProcessResult(0, json.dumps(payload), ""))
-    monkeypatch.setattr(
-        probe,
-        "_command_denial_observation",
-        lambda *args, **kwargs: ProbeObservation.observed(CompatibilityProbe.CONFIGURATION_ISOLATION, "denied"),
-    )
+
+    def invoke(*args: object, **kwargs: object) -> OpenCodeProcessResult:
+        return OpenCodeProcessResult(0, json.dumps(payload), "")
+
+    def command_denial_observation(*args: object, **kwargs: object) -> ProbeObservation:
+        return ProbeObservation.observed(CompatibilityProbe.CONFIGURATION_ISOLATION, "denied")
+
+    monkeypatch.setattr(probe, "_invoke", invoke)
+    monkeypatch.setattr(probe, "_command_denial_observation", command_denial_observation)
     observation = probe.configuration_observation(workdir, written.path, env, roots)
 
     assert observation.state is (EvidenceState.OBSERVED if input_value == COMPACTION_INPUT else EvidenceState.FAILED)
@@ -176,7 +179,7 @@ def test_compatibility_probe_requires_an_injected_compactor(tmp_path: Path) -> N
     binary = _stub_binary(tmp_path / "bin")
 
     with pytest.raises(TypeError, match="compactor"):
-        OpenCodeCompatibilityProbe(
+        OpenCodeCompatibilityProbe(  # pyright: ignore[reportCallIssue]  # the omitted compactor is the refusal under test
             binary=binary,
             model=MODEL,
             variant=VARIANT,
@@ -186,7 +189,7 @@ def test_compatibility_probe_requires_an_injected_compactor(tmp_path: Path) -> N
             attach_proxy_factory=LoopbackAttachProxyFactory(UrllibLoopbackTransport()),
             auth_source=None,
             allow_live_provider=True,
-        )  # type: ignore[call-arg]
+        )
 
 
 @pytest.mark.parametrize(

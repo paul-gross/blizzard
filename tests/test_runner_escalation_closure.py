@@ -17,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
@@ -33,11 +34,13 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
+def _seed_escalated(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1, at: datetime = _NOW
+) -> None:
     """A lease minted, spawned, then closed ``escalated`` — the parked needs-human shape,
     with no later mint to supersede it."""
     store.record_lease(
@@ -62,7 +65,7 @@ def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=at)
 
 
-def _chunk(chunk="ch_1", *, status: ChunkStatus):
+def _chunk(chunk: str = "ch_1", *, status: ChunkStatus) -> ChunkState:
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -71,7 +74,7 @@ def _chunk(chunk="ch_1", *, status: ChunkStatus):
     )
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, clock: FixedClock | None = None) -> LoopContext:
     return make_context(
         store,
         hub=hub,

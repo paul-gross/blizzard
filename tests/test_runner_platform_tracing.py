@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict, Unpack, cast
+from typing import NotRequired, TypedDict, Unpack, cast
 
 import httpx2
 import pytest
@@ -28,11 +29,13 @@ from opentelemetry.sdk._logs import ReadableLogRecord
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, LogRecordExporter, LogRecordExportResult
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
+    Gauge,
     Metric,
     MetricExporter,
     MetricExportResult,
     MetricsData,
     NumberDataPoint,
+    Sum,
 )
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan
@@ -43,6 +46,7 @@ from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
+from blizzard.foundation.platform_tracing.received import ReceivedSpan
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
@@ -53,6 +57,7 @@ from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_tel
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.model import Lease, NewLease
+from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick
@@ -72,7 +77,7 @@ from blizzard.runner.tracing.received_export import (
     IReceivedTelemetryExport,
     build_received_telemetry_export,
 )
-from blizzard.runner.tracing.receiver import MAX_BODY_BYTES
+from blizzard.runner.tracing.receiver import MAX_BODY_BYTES, Admission, Allowlist
 from blizzard.runner.tracing.receiver_limits import (
     ReceiverBounds,
     ReceiverCount,
@@ -359,12 +364,12 @@ class _CallingHub:
         self._inner = inner
         self._client = client
 
-    def __getattr__(self, name: str):
-        attr = getattr(self._inner, name)
+    def __getattr__(self, name: str) -> object:
+        attr: object = getattr(self._inner, name)
         if not callable(attr):
             return attr
 
-        def call(*args, **kwargs):
+        def call(*args: object, **kwargs: object) -> object:
             self._client.get(f"http://hub.local/{name}")
             return attr(*args, **kwargs)
 
@@ -379,13 +384,15 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     handle.instrument_client(client)
     ctx = make_context(
         store,
-        hub=_CallingHub(FakeHub(), client),  # type: ignore[arg-type]
+        hub=cast(FakeHub, _CallingHub(FakeHub(), client)),
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict=None
+        ),
         probe=FakeProbe(alive=set()),
     )
     handle.instrument_engine(store.engine)
-    ctx = type(ctx)(**{**ctx.__dict__, "tracer": handle.tracer})
+    ctx = dataclasses.replace(ctx, tracer=handle.tracer)
     tick(ctx)
     spans = _finished(handle, exporter)
     roots = [s for s in spans if s.name == "tick"]
@@ -418,21 +425,65 @@ _TOKEN = {"X-Blizzard-Lease-Token": _LEASE_TOKEN}
 _SPAN = 0x00F067AA0BA902B7
 
 
-def _export(trace: int, *, scope: str = "blizzard.cli", extra: dict[str, object] | None = None) -> dict[str, object]:
-    attributes = [
+class _Value(TypedDict):
+    stringValue: NotRequired[str]
+    intValue: NotRequired[str]
+
+
+class _KeyValue(TypedDict):
+    key: str
+    value: _Value
+
+
+class _Span(TypedDict):
+    traceId: str
+    spanId: str
+    name: str
+    kind: int
+    startTimeUnixNano: str
+    endTimeUnixNano: str
+    attributes: list[_KeyValue]
+
+
+class _Scope(TypedDict):
+    name: str
+    version: str
+
+
+class _ScopeSpans(TypedDict):
+    scope: _Scope
+    spans: list[_Span]
+
+
+class _Resource(TypedDict):
+    attributes: list[_KeyValue]
+
+
+class _ResourceSpans(TypedDict):
+    resource: _Resource
+    scopeSpans: list[_ScopeSpans]
+
+
+class _ExportDocument(TypedDict):
+    """An OTLP/JSON trace export request body."""
+
+    resourceSpans: list[_ResourceSpans]
+
+
+def _export(trace: int, *, scope: str = "blizzard.cli", attributes: list[_KeyValue] | None = None) -> _ExportDocument:
+    default: list[_KeyValue] = [
         {"key": "blizzard.cli.command", "value": {"stringValue": "artifact create"}},
         {"key": "blizzard.caller", "value": {"stringValue": "operator"}},
         {"key": "secret", "value": {"stringValue": "s3cret"}},
     ]
-    span = {
+    span: _Span = {
         "traceId": f"{trace:032x}",
         "spanId": f"{_SPAN:016x}",
         "name": "blizzard artifact create",
         "kind": 3,
         "startTimeUnixNano": "1000",
         "endTimeUnixNano": "2000",
-        "attributes": attributes,
-        **(extra or {}),
+        "attributes": default if attributes is None else attributes,
     }
     return {
         "resourceSpans": [
@@ -448,18 +499,18 @@ def _own_trace() -> int:
     return trace_id(StepKey.attempt("ch_1", 1))
 
 
-def _protobuf(document: dict[str, object]) -> bytes:
+def _protobuf(document: _ExportDocument) -> bytes:
     import base64
 
-    for resource in document["resourceSpans"]:  # type: ignore[attr-defined]
+    for resource in document["resourceSpans"]:
         for scope in resource["scopeSpans"]:
             for span in scope["spans"]:
-                for key in ("traceId", "spanId"):
-                    span[key] = base64.b64encode(bytes.fromhex(span[key])).decode()
+                span["traceId"] = base64.b64encode(bytes.fromhex(span["traceId"])).decode()
+                span["spanId"] = base64.b64encode(bytes.fromhex(span["spanId"])).decode()
     return Parse(json.dumps(document), ExportTraceServiceRequest()).SerializeToString()
 
 
-def _post_json(client: TestClient, document: dict[str, object], headers: dict[str, str] | None = None):
+def _post_json(client: TestClient, document: _ExportDocument, headers: dict[str, str] | None = None):
     return client.post(
         "/v1/traces",
         content=json.dumps(document),
@@ -584,7 +635,7 @@ def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_ano
             _export(
                 _own_trace(),
                 scope="some.library",
-                extra={"attributes": [{"key": "db.system", "value": {"stringValue": "sqlite"}}]},
+                attributes=[{"key": "db.system", "value": {"stringValue": "sqlite"}}],
             ),
         )
         assert "partialSuccess" not in ours.json()
@@ -605,21 +656,21 @@ def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_a
     admitted: list[list[str]] = []
     real_admit = otlp_receiver.admit
 
-    def spy(spans, lease, allowlist, *, runner):
+    def spy(
+        spans: list[ReceivedSpan], lease: Lease, allowlist: Allowlist, *, runner: RunnerIdentity
+    ) -> Admission[ReceivedSpan]:
         admitted.append([span.scope_name for span in spans])
         return real_admit(spans, lease, allowlist, runner=runner)
 
     monkeypatch.setattr(otlp_receiver, "admit", spy)
-    filler = [{"key": f"filler.{i:03d}", "value": {"stringValue": "x"}} for i in range(70)]
-    declared = [
+    filler: list[_KeyValue] = [{"key": f"filler.{i:03d}", "value": {"stringValue": "x"}} for i in range(70)]
+    declared: list[_KeyValue] = [
         {"key": "blizzard.cli.command", "value": {"stringValue": "artifact create"}},
         {"key": "process.exit.code", "value": {"intValue": "0"}},
     ]
-    document = _export(_own_trace(), scope="blizzard.cli", extra={"attributes": filler + declared})
-    document["resourceSpans"][0]["scopeSpans"].append(  # type: ignore[index]
-        _export(_own_trace(), scope="some.library", extra={"attributes": filler + declared})["resourceSpans"][0][  # type: ignore[index]
-            "scopeSpans"
-        ][0]
+    document = _export(_own_trace(), scope="blizzard.cli", attributes=filler + declared)
+    document["resourceSpans"][0]["scopeSpans"].append(
+        _export(_own_trace(), scope="some.library", attributes=filler + declared)["resourceSpans"][0]["scopeSpans"][0]
     )
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
@@ -647,9 +698,8 @@ def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(t
     app = _app(tmp_path, handle, [], worker_programs=True, services={"winter_cli": "winter-blizzard"})
     scopes = ("winter_cli", "some.library", "blizzard.cli")
     document = _export(_own_trace(), scope=scopes[0])
-    document["resourceSpans"][0]["scopeSpans"] += [  # type: ignore[index]
-        _export(_own_trace(), scope=scope)["resourceSpans"][0]["scopeSpans"][0]  # type: ignore[index]
-        for scope in scopes[1:]
+    document["resourceSpans"][0]["scopeSpans"] += [
+        _export(_own_trace(), scope=scope)["resourceSpans"][0]["scopeSpans"][0] for scope in scopes[1:]
     ]
     with runner_client(app) as client:
         assert "partialSuccess" not in _post_json(client, document).json()
@@ -699,7 +749,7 @@ def test_a_request_past_the_span_rate_is_refused_429_and_counted(tmp_path: Path)
     counter = ReceiverCounter()
     limiter = SpanRateLimiter(FixedClock(_NOW), capacity=1, refill_per_second=0.001)
     document = _export(_own_trace())
-    document["resourceSpans"][0]["scopeSpans"][0]["spans"] *= 2  # type: ignore[index]
+    document["resourceSpans"][0]["scopeSpans"][0]["spans"] *= 2
     with runner_client(_app(tmp_path, handle, [], counter, limiter)) as client:
         assert _post_json(client, document).status_code == 429
         assert counter.count().dropped == 2
@@ -751,7 +801,7 @@ def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(
     with runner_client(_app(tmp_path, handle, []), raise_server_exceptions=False) as client:
         assert _post_json(client, _export(_own_trace()), {"X-Blizzard-Lease-Token": "unknown"}).status_code == 403
 
-        def failing(self, lease_id):
+        def failing(self: RunnerWiring, lease_id: str) -> WorkerLease:
             raise HTTPException(status_code=503, detail="down")
 
         monkeypatch.setattr(RunnerWiring, "worker_lease_standing", failing)
@@ -779,7 +829,7 @@ def _ticked(
         ),
         probe=FakeProbe(alive=set()),
     )
-    ctx = type(ctx)(**{**ctx.__dict__, "tracer": handle.tracer})
+    ctx = dataclasses.replace(ctx, tracer=handle.tracer)
     seed(ctx)
     run(ctx)
     return _finished(handle, exporter)
@@ -943,7 +993,8 @@ class _CapturingMetricExporter(MetricExporter):
             for resource_metrics in data.resource_metrics
             for scope_metrics in resource_metrics.scope_metrics
             for metric in scope_metrics.metrics
-            for point in metric.data.data_points  # type: ignore[union-attr]
+            if isinstance(metric.data, Sum | Gauge)
+            for point in metric.data.data_points
         ]
 
 
@@ -1070,7 +1121,8 @@ def test_claude_code_metrics_export_stamped_under_its_service_name(tmp_path: Pat
         assert resource.attributes["service.name"] == _CLAUDE_SERVICE
         assert scope == _CLAUDE_METRICS_SCOPE
         assert {key: (point.attributes or {})[key] for key in _STAMPS} == _STAMPS
-        assert metric.data.aggregation_temporality == AggregationTemporality.DELTA  # type: ignore[union-attr]
+        assert isinstance(metric.data, Sum)
+        assert metric.data.aggregation_temporality == AggregationTemporality.DELTA
     first = exported[0][3]
     assert (first.start_time_unix_nano, first.time_unix_nano, first.value) == (
         1791055936556000000,

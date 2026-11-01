@@ -42,7 +42,9 @@ def _host_write_only_members() -> set[str]:
     for protocol in typing.get_type_hints(HostStores).values():
         if not protocol.__name__.startswith("IWrite"):
             continue
-        reads = set().union(*(_reachable_members(b) for b in protocol.__mro__ if b.__name__.startswith("IRead")))
+        reads: set[str] = set[str]().union(
+            *(_reachable_members(b) for b in protocol.__mro__ if b.__name__.startswith("IRead"))
+        )
         members |= _reachable_members(protocol) - reads
     return members
 

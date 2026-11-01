@@ -115,17 +115,19 @@ def test_settle_seconds_delays_closing_stdin_past_the_write(monkeypatch: pytest.
     closing_at: list[float] = []
     open_at_close: list[bool] = []
     write = subprocess_child_processes.write_unclosed
-    communicate = subprocess.Popen.communicate
+    communicate = subprocess.Popen[str].communicate
 
     def record_write(process: subprocess.Popen[str], text: str) -> None:
         write(process, text)
         written_at.append(time.monotonic())
 
-    def record_close(process: subprocess.Popen[str], *args, **kwargs):
+    def record_close(
+        process: subprocess.Popen[str], input: str | None = None, timeout: float | None = None
+    ) -> tuple[str, str]:
         assert process.stdin is not None
         open_at_close.append(not process.stdin.closed)
         closing_at.append(time.monotonic())
-        return communicate(process, *args, **kwargs)
+        return communicate(process, input, timeout)
 
     monkeypatch.setattr(subprocess_child_processes, "write_unclosed", record_write)
     monkeypatch.setattr(subprocess.Popen, "communicate", record_close)

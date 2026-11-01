@@ -287,7 +287,13 @@ _SAME = RunnerReport(
 )
 
 
-def _changes(report: RunnerReport, *, held: RunnerRegistration = _SEEN, served=None, judgement=_JUDGED) -> bool:
+def _changes(
+    report: RunnerReport,
+    *,
+    held: RunnerRegistration = _SEEN,
+    served: tuple[ServedEntry, ...] | None = None,
+    judgement: VersionJudgement = _JUDGED,
+) -> bool:
     return held.registration_changes(report, served=served, judgement=judgement, now=_AT, threshold=STALE_AFTER)
 
 

@@ -87,13 +87,18 @@ def _jsonl(events: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(event) for event in events)
 
 
+def _which_on_usr_bin(binary: str, path: object = None) -> str:
+    """Stands in for ``shutil.which``, resolving every binary under ``/usr/bin``."""
+    return f"/usr/bin/{binary}"
+
+
 @pytest.fixture(autouse=True)
 def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mirrors ``tests/test_runner_harness_adapter.py``'s fixture of the same shape: a unit
     test's fake spawn must not depend on whether ``opencode`` is really installed on this
     machine's ``PATH`` — `ensure_executable`'s `shutil.which` lookup runs before the
     faked ``subprocess.Popen`` ever sees the call."""
-    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
 
 
 def _adapter(spawn_executor: Executor, **kwargs: Any) -> OpenCodeAdapter:
@@ -158,7 +163,7 @@ def test_relative_companions_resolve_in_content_from_snapshot_not_worker_cwd(
     (effective / "prompts").mkdir(parents=True)
     (effective / "prompts" / "agent.txt").write_text("snapshot prompt")
     config = effective / "opencode.json"
-    document = {
+    document: dict[str, object] = {
         "permission": {"question": "deny"},
         "plugin": [],
         "agent": {"x": {"prompt": "{file:./prompts/agent.txt}"}},
@@ -1138,9 +1143,9 @@ _EXPECTED_USABLE: dict[str, bool] = {
 }
 
 # (input, output — reasoning folded in, cache_read, cache_create, cost_usd)
-_EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None]] = {
+_EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None] | None] = {
     "success": (120, 45 + 18, 30, 15, 0.0123),
-    "provider_error": None,  # type: ignore[dict-item]  # no completed step at all
+    "provider_error": None,  # no completed step at all
     "permission_denial": (40, 8, 0, 0, None),  # cost 0 reads as unknown, never free
     "interrupted_tool": None,
     "compaction": (200, 25 + 10, 90, 5, None),
@@ -1210,8 +1215,9 @@ def test_verdict_body_never_carries_tool_output_or_child_session_text(spawn_exec
     for fixture_name, fixture_payload in _fixtures():
         fixture_output = _jsonl(fixture_payload["events"])
         for event in fixture_payload["events"]:
-            part = event.get("part") or {}
-            tool_output = (part.get("state") or {}).get("output")
+            part: dict[str, Any] = event.get("part") or {}
+            state: dict[str, Any] = part.get("state") or {}
+            tool_output = state.get("output")
             if tool_output:
                 verdict = adapter.parse_verdict(fixture_output) or ""
                 assessment = adapter.parse_assessment(fixture_output)
@@ -1352,8 +1358,7 @@ class _FakePriceCatalog:
         return self.prices.get((provider, model))
 
 
-def _conforms_fake_catalog(x: _FakePriceCatalog) -> IOpenCodePriceCatalog:
-    return x
+_fake_catalog_conforms: type[IOpenCodePriceCatalog] = _FakePriceCatalog
 
 
 def _luna_catalog(**price_kwargs: Any) -> _FakePriceCatalog:

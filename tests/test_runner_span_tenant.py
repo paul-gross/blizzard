@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES
-from blizzard.foundation.platform_tracing.received import ReceivedLogRecord, ReceivedSpan
+from blizzard.foundation.platform_tracing.received import ReceivedLogRecord, ReceivedSpan, Scalar
 from blizzard.foundation.trace_ids import chunk_trace_id
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases.model import Lease
@@ -49,7 +49,7 @@ def _lease() -> Lease:
     )
 
 
-def _span(attributes: dict[str, object]) -> ReceivedSpan:
+def _span(attributes: dict[str, Scalar]) -> ReceivedSpan:
     return ReceivedSpan(
         trace_id=chunk_trace_id("ch_1"),
         span_id=0x00F067AA0BA902B7,
@@ -61,11 +61,11 @@ def _span(attributes: dict[str, object]) -> ReceivedSpan:
         status_code=1,
         scope_name=SCOPE_NAME,
         scope_version="1",
-        attributes=attributes,  # type: ignore[arg-type]
+        attributes=attributes,
     )
 
 
-def _log(attributes: dict[str, object]) -> ReceivedLogRecord:
+def _log(attributes: dict[str, Scalar]) -> ReceivedLogRecord:
     return ReceivedLogRecord(
         time_ns=1_000,
         observed_time_ns=1_000,
@@ -77,7 +77,7 @@ def _log(attributes: dict[str, object]) -> ReceivedLogRecord:
         trace_flags=0,
         scope_name="com.anthropic.claude_code.events",
         scope_version="1",
-        attributes=attributes,  # type: ignore[arg-type]
+        attributes=attributes,
     )
 
 

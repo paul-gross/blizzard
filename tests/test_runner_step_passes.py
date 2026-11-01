@@ -163,7 +163,11 @@ def test_a_requested_runner_pass_runs_one_trace_sweep_after_its_tick_when_tracin
 ) -> None:
     order: list[str] = []
     sweep = _TraceSweep()
-    monkeypatch.setattr(loop_wiring, "tick", lambda _: order.append("tick"))
+
+    def tick(_: LoopContext) -> None:
+        order.append("tick")
+
+    monkeypatch.setattr(loop_wiring, "tick", tick)
     config = _config(tmp_path)
     with loop_graph(config) as graph:
         traced = dataclasses.replace(graph, trace_sweep=sweep)
@@ -362,14 +366,22 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
 ) -> None:
     ticked: list[object] = []
     monkeypatch.setattr(loop_wiring, "tick", ticked.append)
-    monkeypatch.setattr(signal, "signal", lambda *_: None)
+
+    def install_no_handler(*_: object) -> None:
+        return None
+
+    monkeypatch.setattr(signal, "signal", install_no_handler)
     monkeypatch.setenv(ENV_TICK_SECONDS, "3600")
     config = _config(tmp_path)
     built = [BuiltRunner(FIXTURE_RUNNER_ID, config, ResolvedToken())]
     host = build_host_process(host_config_of(config), built)
     registration = _Registration()
     host.host_tick = HostTick(registration=cast(Any, registration))
-    cast(Any, host).listeners = SimpleNamespace(bound=lambda: [])
+
+    def no_listeners() -> list[object]:
+        return []
+
+    cast(Any, host).listeners = SimpleNamespace(bound=no_listeners)
     resume = _Resume()
     seen: dict[str, object] = {}
 
@@ -379,7 +391,10 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         if loop is LoopMode.STEPPED:
             seen["result"] = hosted.steppers[0].request()
 
-    monkeypatch.setattr(runtime, "build_early_shutdown_server", lambda *_, **__: _ServingNothing(serving))
+    def build_server(*_: object, **__: object) -> _ServingNothing:
+        return _ServingNothing(serving)
+
+    monkeypatch.setattr(runtime, "build_early_shutdown_server", build_server)
     hosted = dataclasses.replace(build_hosted_app(config, host), resumes=(resume,))
     try:
         cast(Any, runtime)._serve_host(config, host, hosted, loop=loop)

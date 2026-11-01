@@ -28,6 +28,7 @@ from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, HostRegistrationStatus
 from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.route_paths import is_api_path
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
@@ -82,7 +83,7 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
 
 def _runner(
     tmp_path: Path, runner_id: str, name: str, *, bindings: tuple[ProjectBinding, ...]
-) -> tuple[RunnerConfig, RunnerStores]:
+) -> tuple[RunnerConfig, SqlAlchemyRunnerStore, RunnerStores]:
     db_url = f"sqlite:///{tmp_path / 'host.db'}"
     config = RunnerConfig(
         root=tmp_path,
@@ -93,7 +94,8 @@ def _runner(
         bindings=bindings,
         agents=sum(b.agents or 0 for b in bindings),
     )
-    return config, make_stores(make_store(db_url, runner_id))
+    store = make_store(db_url, runner_id)
+    return config, store, make_stores(store)
 
 
 def _two_runner_app(
@@ -104,20 +106,25 @@ def _two_runner_app(
     registration: HostRegistrationHolder | None = None,
     host_identity: HostIdentityHolder | None = None,
 ) -> tuple[FastAPI, RunnerStores, RunnerStores]:
-    a_config, a_stores = _runner(tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),))
-    b_config, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1", 1),))
+    a_config, a_store, a_stores = _runner(
+        tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),)
+    )
+    b_config, b_store, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1", 1),))
     clock = FixedClock(_NOW)
     seams = tuple(
         runner_seams(
             config,
             clock=clock,
-            process=None,  # type: ignore[arg-type]
+            process=LinuxProcessProbe(),
             children=CHILDREN,
             runner_stores=stores,
-            runner_status=_status(stores.lease_record, config),  # type: ignore[arg-type]
+            runner_status=_status(store, config),
             identity_verdict=verdict,
         )
-        for config, stores, verdict in ((a_config, a_stores, verdicts[0]), (b_config, b_stores, verdicts[1]))
+        for config, store, stores, verdict in (
+            (a_config, a_store, a_stores, verdicts[0]),
+            (b_config, b_store, b_stores, verdicts[1]),
+        )
     )
     host_store = make_store(f"sqlite:///{tmp_path / 'host.db'}", None)
     app = create_runner_app(

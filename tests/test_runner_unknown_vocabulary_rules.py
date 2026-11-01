@@ -152,7 +152,7 @@ def test_a_held_chunk_on_an_unknown_status_holds() -> None:
 
 def test_a_lease_on_an_unknown_status_is_kept_unless_a_route_pause_or_fence_moves_it() -> None:
     def move(view: ChunkState, *, fenced: bool = False) -> LeaseReconcileMove:
-        return lease_reconcile_move(view, _lease(), runner_id=_ME, pause_parked=set(), fenced=fenced)
+        return lease_reconcile_move(view, _lease(), runner_id=_ME, pause_parked=set[str](), fenced=fenced)
 
     assert move(_view()) is LeaseReconcileMove.NONE
     assert move(_view(route="r2")) is LeaseReconcileMove.ABANDON
