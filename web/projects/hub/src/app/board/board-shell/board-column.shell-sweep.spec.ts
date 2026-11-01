@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
 import type { BoardCard } from '../board-card/board-card-view.model';
-import type { Lane } from 'fleet';
+import { LANES, type Lane, laneTone, toneColor } from 'fleet';
 import { BoardColumn } from './board-column';
 
 /** The board column's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
@@ -37,7 +37,7 @@ async function loadDesignTokens(): Promise<void> {
   document.head.appendChild(style);
 }
 
-async function render(column: Lane, reorderControls: boolean, canReorder: boolean): Promise<HTMLElement> {
+async function render(column: Lane, reorderControls: boolean, canReorder: boolean, count: number | null = null): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BoardColumn],
@@ -48,6 +48,7 @@ async function render(column: Lane, reorderControls: boolean, canReorder: boolea
   fixture.componentRef.setInput('cards', [CARD]);
   fixture.componentRef.setInput('reorderControls', reorderControls);
   fixture.componentRef.setInput('canReorder', canReorder);
+  fixture.componentRef.setInput('count', count);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   root.style.width = '240px';
@@ -102,6 +103,43 @@ describe('board-column reorder grip shell sweep (web:shell-sweep)', () => {
       try {
         expect(root.querySelector('[data-testid="board-reorder-grip"]')).toBeNull();
         expect(root.querySelector('[cdkdrag]')).toBeNull();
+      } finally {
+        root.remove();
+      }
+    }
+  });
+});
+
+/** The computed color a bare token expression resolves to under the loaded design tokens. */
+function resolvedColor(value: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = value;
+  document.body.appendChild(probe);
+  try {
+    return getComputedStyle(probe).color;
+  } finally {
+    probe.remove();
+  }
+}
+
+describe('board-column count tone shell sweep (web:shell-sweep)', () => {
+  it("draws each lane's count, and the beacon of each live lane, in its lane tone's token", async () => {
+    await loadDesignTokens();
+    for (const column of LANES) {
+      const root = await render(column, false, false, 7);
+      try {
+        const count = root.querySelector<HTMLElement>('[data-testid="lane-count"]');
+        expect(count, `${column.label}: fixture defect — count did not render`).not.toBeNull();
+        const expected = resolvedColor(toneColor(laneTone(column.key)));
+        expect(getComputedStyle(count!).color, `${column.label}: count color`).toBe(expected);
+
+        const beacon = root.querySelector<HTMLElement>('[data-testid="lane-blink"] .beacon');
+        if (['running', 'waiting', 'needs'].includes(column.key)) {
+          expect(beacon, `${column.label}: beacon did not render`).not.toBeNull();
+          expect(beacon!.getAttribute('style'), `${column.label}: beacon color`).toContain(toneColor(laneTone(column.key)));
+        } else {
+          expect(beacon, `${column.label}: a quiet lane beacons`).toBeNull();
+        }
       } finally {
         root.remove();
       }

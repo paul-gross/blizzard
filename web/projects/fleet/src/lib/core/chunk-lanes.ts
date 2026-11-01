@@ -108,3 +108,21 @@ export const STATUS_TONE = openLookup<ChunkStatus, Tone>(
   },
   () => 'idle',
 );
+
+/** Each board lane's {@link Tone}, keyed by {@link Lane.key}. */
+const LANE_TONE: Readonly<Record<string, Tone>> = {
+  notready: 'idle',
+  ready: 'idle',
+  waiting: 'waiting',
+  needs: 'needs',
+  running: 'running',
+  [DONE_LANE]: 'done',
+};
+
+/**
+ * A board lane folded onto the shared {@link Tone} vocabulary — the color its count, beacon and
+ * vitals read in. BACKLOG, READY and {@link UNKNOWN_LANE} read `idle`.
+ */
+export function laneTone(key: string): Tone {
+  return Object.hasOwn(LANE_TONE, key) ? LANE_TONE[key] : 'idle';
+}

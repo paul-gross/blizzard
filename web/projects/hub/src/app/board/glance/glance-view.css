@@ -37,20 +37,11 @@
   font-size: var(--fs-lg);
   color: var(--snow);
 }
-.v-n.hot {
-  color: var(--red);
-}
-.v-n.live {
-  color: var(--cyan);
-}
 .v-cap {
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--label);
-}
-.v-n.done {
-  color: var(--green);
 }
 .empty {
   color: var(--label-dim);

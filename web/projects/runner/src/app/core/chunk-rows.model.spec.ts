@@ -38,11 +38,11 @@ function lease(overrides: Partial<PanelLease> = {}): PanelLease {
 }
 
 describe('BOARD_LANES', () => {
-  it('lays out needs human, in progress, then done', () => {
+  it('lays out needs human, in progress, then done, each in its tone', () => {
     expect(BOARD_LANES).toEqual([
-      { key: 'needs', label: 'Needs human' },
-      { key: 'progress', label: 'In progress' },
-      { key: 'done', label: 'Done' },
+      { key: 'needs', label: 'Needs human', tone: 'needs' },
+      { key: 'progress', label: 'In progress', tone: 'running' },
+      { key: 'done', label: 'Done', tone: 'done' },
     ]);
   });
 });

@@ -73,7 +73,7 @@
                migration reads its verdict as the choice that hopped graphs and
                routes to the target graph's landing node. -->
           <span class="jg">
-            <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
+            <span class="verdict" data-testid="history-choice" [style.color]="toneColor(verdictTone(rowChoice(row)))">{{ row.verdict ?? '·' }}</span>
             @if (row.toName !== null) {
               <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
             }
@@ -138,7 +138,7 @@
           <span class="att">{{ a.epoch ?? '·' }}</span>
           <span class="nd" [attr.title]="a.nodeId">{{ a.nodeName }}</span>
           <span class="jg">
-            <span class="verdict" data-testid="history-active-verb">{{ a.label }}</span>
+            <span class="verdict" data-testid="history-active-verb" [style.color]="toneColor(verdictTone(a.choice))">{{ a.label }}</span>
           </span>
         </div>
       </li>

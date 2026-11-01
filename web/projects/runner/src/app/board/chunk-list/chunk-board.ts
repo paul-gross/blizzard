@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption, toneColor } from 'fleet';
 
 import { BOARD_LANES, type BoardLane, type MachineChunkRow } from '../../core/chunk-rows.model';
 import { rankedRows } from '../app-panel.model';
@@ -56,6 +56,7 @@ export class ChunkBoard {
 
   protected readonly layoutTabs = LAYOUT_TABS;
   protected readonly lanes = BOARD_LANES;
+  protected readonly toneColor = toneColor;
 
   /** The rows by lane, each lane in the container's order. */
   private readonly byLane = computed(() => {

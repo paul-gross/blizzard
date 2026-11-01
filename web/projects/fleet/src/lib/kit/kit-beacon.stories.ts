@@ -23,6 +23,8 @@ export const Inactive: Story = {};
 export const Amber: Story = { args: { active: true } };
 export const Red: Story = { args: { active: true, tone: 'red' } };
 export const Green: Story = { args: { active: true, tone: 'green' } };
+/** A derived-status `Tone`, colored through `toneColor` — WAIT/HUMAN's amber-hi. */
+export const StatusTone: Story = { args: { active: true, tone: 'waiting' } };
 export const Step: Story = { args: { active: true, blink: 'step' } };
 export const Hold: Story = {
   args: { active: true, tone: 'green', blink: 'hold' },

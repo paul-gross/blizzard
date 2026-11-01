@@ -62,11 +62,11 @@
 <div class="glance" data-testid="glance-board">
   <div class="vitals" data-testid="glance-vitals">
     <div class="vital" data-testid="vital-needs-you">
-      <span class="v-n" [class.hot]="vitals().needsYou > 0">{{ vitals().needsYou }}</span>
+      <span class="v-n" [style.color]="vitals().needsYou > 0 ? laneColor('needs') : null">{{ vitals().needsYou }}</span>
       <span class="v-cap">needs you</span>
     </div>
     <div class="vital" data-testid="vital-running">
-      <span class="v-n live">{{ vitals().running }}</span>
+      <span class="v-n" [style.color]="laneColor('running')">{{ vitals().running }}</span>
       <span class="v-cap">running</span>
     </div>
     <div class="vital" data-testid="vital-ready">
@@ -74,7 +74,7 @@
       <span class="v-cap">ready</span>
     </div>
     <div class="vital" data-testid="vital-done-today">
-      <span class="v-n done">{{ vitals().doneToday }}</span>
+      <span class="v-n" [style.color]="laneColor(DONE_LANE)">{{ vitals().doneToday }}</span>
       <span class="v-cap">done today</span>
     </div>
     <div class="vital" data-testid="vital-runners-up">

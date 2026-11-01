@@ -91,22 +91,9 @@ a.gr:focus-visible {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+/* The verdict's color is bound from its choice's tone (`verdictTone`). */
 .line2 .verdict {
-  color: var(--amber);
   white-space: nowrap;
-}
-.step[data-choice='fail'] .verdict,
-.step[data-choice='conflict'] .verdict,
-.step[data-choice='needs-human'] .verdict {
-  color: var(--red);
-}
-.step[data-choice='run'] .verdict,
-.step[data-choice='migrated'] .verdict {
-  color: var(--cyan);
-}
-.step[data-choice='waiting'] .verdict,
-.step[data-choice='paused'] .verdict {
-  color: var(--amber-hi);
 }
 .line2 .jg-to {
   color: var(--label-dim);
@@ -135,14 +122,6 @@ a.gr:focus-visible {
 }
 .line3 .cost {
   white-space: nowrap;
-}
-/* A bounce is a refused result — alarm red; a restart is an operator's deliberate
-   move — amber-hi, the same tone a parked operator verb reads. */
-.step[data-choice='bounced'] .verdict {
-  color: var(--red);
-}
-.step[data-choice='restarted'] .verdict {
-  color: var(--amber-hi);
 }
 /* Who restarted the chunk — attribution, so it reads dim like the routed-to column. */
 .line2 .jg-by {

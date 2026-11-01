@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import type { runnerApi, Tone } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { type PanelLease, type PanelProject, projectColorFor } from './panel-reads.model';
@@ -26,11 +26,11 @@ export interface MachineChunkRow {
 /** The board's three lanes, in the order the board lays them out and the list ranks them. */
 export type BoardLane = 'needs' | 'progress' | 'done';
 
-/** The board's lanes with their headings. */
-export const BOARD_LANES: readonly { readonly key: BoardLane; readonly label: string }[] = [
-  { key: 'needs', label: 'Needs human' },
-  { key: 'progress', label: 'In progress' },
-  { key: 'done', label: 'Done' },
+/** The board's lanes with their headings, and the {@link Tone} each lane's count reads in. */
+export const BOARD_LANES: readonly { readonly key: BoardLane; readonly label: string; readonly tone: Tone }[] = [
+  { key: 'needs', label: 'Needs human', tone: 'needs' },
+  { key: 'progress', label: 'In progress', tone: 'running' },
+  { key: 'done', label: 'Done', tone: 'done' },
 ];
 
 /**
