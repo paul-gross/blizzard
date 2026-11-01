@@ -71,9 +71,8 @@ async function readWorkItemsBatch(
       continue;
     }
     const items: WorkItemsView = { items: view };
-    queryClient.setQueryData(hubBoardChunkWorkItemsKey(chunkId), items, {
-      updatedAt: now,
-    });
+    // The hold is written by a fetch that already has its answer, not by a direct cache write.
+    await queryClient.fetchQuery({ queryKey: hubBoardChunkWorkItemsKey(chunkId), queryFn: () => items, staleTime: 0 });
     found.set(chunkId, items);
   }
   return found;
