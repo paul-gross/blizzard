@@ -44,6 +44,37 @@ describe('chunk delivery in both detail views', () => {
     });
   }
 
+  for (const component of [ChunkGeneralTab, ChunkDetailPanel]) {
+    it(`${component.name} reads a parked chunk as awaiting merge since its start, with its PR linked`, async () => {
+      const fixture = TestBed.createComponent(component as Type<ChunkDetailPanel | ChunkGeneralTab>);
+      fixture.componentRef.setInput('detail', {
+        ...DETAIL,
+        landed_repos: [],
+        awaiting_external_merge: false,
+        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: '2026-10-30T12:00:00Z' },
+      });
+      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent).toContain('Awaiting merge since');
+      expect(el.querySelector<HTMLAnchorElement>('[data-testid="delivery-pr-link"]')?.href).toBe('https://forge.example/widget/pull/42');
+    });
+
+    it(`${component.name} shows the delivery section for a parked wait with nothing opened yet`, async () => {
+      const fixture = TestBed.createComponent(component as Type<ChunkDetailPanel | ChunkGeneralTab>);
+      fixture.componentRef.setInput('detail', {
+        ...DETAIL,
+        open_prs: [],
+        landed_repos: [],
+        awaiting_external_merge: false,
+        pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: null },
+      });
+      if (component === ChunkDetailPanel) fixture.componentRef.setInput('renderedStatus', DETAIL.status);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="delivery-park-wait"]')?.textContent?.trim()).toBe('Awaiting merge');
+    });
+  }
+
   it('combines a repo\'s PR and landed commit into one row, with the sha cut to seven characters', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', {

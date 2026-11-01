@@ -1,9 +1,10 @@
 <div class="delivery" data-testid="chunk-delivery">
   @if (detail().pending?.kind === 'awaiting-merge') {
     <p class="wait" data-testid="delivery-park-wait">
-      Awaiting merge
       @if (detail().pending?.since; as since) {
-        · Waiting since <fleet-when [iso]="since" />
+        Awaiting merge since <fleet-when [iso]="since" />
+      } @else {
+        Awaiting merge
       }
     </p>
   } @else if (detail().awaiting_external_merge) {

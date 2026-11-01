@@ -2,11 +2,15 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   getRepositoryApiRepositoriesRepositoryGet,
+  hubApi,
+  hubConfigKey,
   hubConfigListKey,
   hubConfigRecordKey,
   listRepositoriesApiRepositoriesGet,
   type RepositorySummary,
 } from 'fleet';
+
+import { landingPolicies, type LandingPolicyNeeds } from './repositories.model';
 
 const NOUN = 'repositories';
 
@@ -46,4 +50,18 @@ export function injectRepositoryQuery(key: () => string | null) {
       },
     };
   });
+}
+
+/** `GET /api/config/schema/repositories` — the landing policies it lists, with the forge
+ * capabilities each requires; `null` when the schema lists them malformed. Freshness:
+ * `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+export function injectRepositorySchemaQuery() {
+  return injectQuery(() => ({
+    queryKey: [...hubConfigKey, 'schema', NOUN],
+    queryFn: async (): Promise<readonly LandingPolicyNeeds[] | null> => {
+      const { data, error } = await hubApi.getSchemaApiConfigSchemaKindGet({ path: { kind: NOUN }, throwOnError: false });
+      if (error) throw error;
+      return landingPolicies(data);
+    },
+  }));
 }

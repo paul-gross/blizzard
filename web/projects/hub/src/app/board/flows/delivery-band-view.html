@@ -24,23 +24,28 @@
 </section>
 
 <ng-template #chunkTpl let-chunk let-testid="testid">
-  <!-- eslint-disable-next-line no-restricted-syntax -- A chunk chip opens the chunk in the dock as a card does; the kit button's bordered chrome would crowd the lane. -->
-  <button
-    type="button"
-    class="chunk"
-    [attr.data-testid]="testid"
-    [attr.data-chunk]="chunk.chunkId"
-    [attr.data-state]="chunk.state"
-    [title]="chunk.title ?? chunk.chunkId"
-    (click)="selectChunk.emit(chunk.chunkId)"
-  >
-    <span class="chunk-id">{{ chunk.shortId }}</span>
-    @if (chunk.title; as title) {
-      <span class="chunk-title">{{ title }}</span>
+  <span class="chip">
+    <!-- eslint-disable-next-line no-restricted-syntax -- A chunk chip opens the chunk in the dock as a card does; the kit button's bordered chrome would crowd the lane. -->
+    <button
+      type="button"
+      class="chunk"
+      [attr.data-testid]="testid"
+      [attr.data-chunk]="chunk.chunkId"
+      [attr.data-state]="chunk.state"
+      [title]="chunk.title ?? chunk.chunkId"
+      (click)="selectChunk.emit(chunk.chunkId)"
+    >
+      <span class="chunk-id">{{ chunk.shortId }}</span>
+      @if (chunk.title; as title) {
+        <span class="chunk-title">{{ title }}</span>
+      }
+      <fleet-kit-badge variant="pill" data-testid="delivery-state" [tone]="chunk.tone">{{ chunk.stateLabel }}</fleet-kit-badge>
+      @if (chunk.pollAt; as pollAt) {
+        <span class="poll-at" data-testid="delivery-poll-at" [title]="chunk.pollAtTitle">{{ pollAt }}</span>
+      }
+    </button>
+    @if (chunk.change; as change) {
+      <a class="change" data-testid="delivery-change" [href]="change.url" target="_blank" rel="noopener noreferrer" [title]="change.label">{{ change.label }}</a>
     }
-    <fleet-kit-badge variant="pill" data-testid="delivery-state" [tone]="chunk.tone">{{ chunk.stateLabel }}</fleet-kit-badge>
-    @if (chunk.pollAt; as pollAt) {
-      <span class="poll-at" data-testid="delivery-poll-at" [title]="chunk.pollAtTitle">{{ pollAt }}</span>
-    }
-  </button>
+  </span>
 </ng-template>

@@ -23,6 +23,11 @@ describe('ordinal', () => {
 });
 
 describe('placeText', () => {
+  it('says a parked chunk is awaiting merge on the branch, not its position', () => {
+    expect(placeText(place({ state: 'awaiting-merge', position: 2 }))).toBe('awaiting merge on blizzard/master');
+    expect(placeLines([place({ state: 'awaiting-merge' })])[0]).toEqual({ flowId: 'flw_1', text: 'awaiting merge on blizzard/master', tone: 'idle' });
+  });
+
   it('says a chunk whose turn is open is landing on the branch', () => {
     expect(placeText(place({ state: 'landing', position: 1 }))).toBe('landing on blizzard/master');
   });
@@ -60,8 +65,11 @@ describe('place state look', () => {
   it('reads a state this build does not know raw, in the idle tone', () => {
     expect(placeStateLabel('future-state')).toBe('future-state');
     expect(placeStateTone('future-state')).toBe('idle');
+  });
+
+  it('reads an awaiting-merge place in the passed-over tone, not as one in line', () => {
     expect(placeStateLabel('awaiting-merge')).toBe('awaiting merge');
-    expect(placeStateTone('awaiting-merge')).toBe('waiting');
+    expect(placeStateTone('awaiting-merge')).toBe(placeStateTone('passed-over'));
   });
 });
 

@@ -4,16 +4,24 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import {
   createProjectApiProjectsPost,
   hubConfigKey,
+  hubProjectLinksKey,
   linkRepositoryApiProjectsProjectRepositoryLinksRepositoryPut,
   linkSourceApiProjectsProjectSourceLinksSourcePut,
   patchProjectApiProjectsProjectPatch,
+  positionRepositoryApiProjectsProjectLandingOrderPositionPost,
   type ProjectCreateRequest,
   type ProjectPatchRequest,
   type ProjectView,
   unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
 } from 'fleet';
-import { createProjectMutationKey, editProjectMutationKey, projectLinkMutationKey } from '../../core/mutation-keys';
+import {
+  createProjectMutationKey,
+  editProjectMutationKey,
+  landingPositionMutationKey,
+  projectLinkMutationKey,
+} from '../../core/mutation-keys';
+import type { LandingPositionVars } from './project-landing-order.model';
 
 /** A project edit — the sparse patch against the shown `revision`. */
 export interface ProjectEditVars {
@@ -82,6 +90,25 @@ export function injectProjectLinkMutation() {
       if (error) throw error;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: hubConfigKey }),
+  }));
+}
+
+/** `POST /api/projects/{project}/landing-order/position` — one repository placed in the project's landing order, or
+ * unranked. Settles on the refetch of the project's links, which carry the positions. */
+export function injectLandingPositionMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: landingPositionMutationKey,
+    mutationFn: async (vars: LandingPositionVars): Promise<void> => {
+      const { error } = await positionRepositoryApiProjectsProjectLandingOrderPositionPost({
+        path: { project: vars.projectId },
+        body: vars.body,
+        throwOnError: false,
+      });
+      if (error) throw error;
+    },
+    onSettled: (_data, _error, vars) =>
+      queryClient.invalidateQueries({ queryKey: hubProjectLinksKey(vars.projectId, 'repository') }),
   }));
 }
 

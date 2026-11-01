@@ -1,7 +1,7 @@
 <main class="main">
   <div class="col col-center">
     <app-unserved-banner />
-    <app-delivery-band [workItems]="workItems()" (selectChunk)="select($event)" (selectFlow)="selectFlow($event)" />
+    <app-delivery-band [workItems]="workItems()" [openPrs]="openPrs()" (selectChunk)="select($event)" (selectFlow)="selectFlow($event)" />
     <app-board-shell
       class="board"
       [chunks]="boardChunks()"

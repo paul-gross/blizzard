@@ -130,6 +130,37 @@ describe('ConfigFormDialog', () => {
     expect(emitted).toEqual([{ name: 'renamed-elsewhere', owner: 'ana', value: '' }]);
   });
 
+  it('shows a gated number field only while its gate holds, and holds off a non-whole number', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [
+      { key: 'policy', label: 'Policy', kind: 'select', options: [
+        { value: 'merge', label: 'merge' },
+        { value: 'park', label: 'park' },
+        { value: 'ff', label: 'ff — forge lacks ref-update', disabled: true },
+      ] },
+      { key: 'hours', label: 'Hours', kind: 'number', shownWhen: { key: 'policy', value: 'park' } },
+    ]);
+    await fixture.whenStable();
+    const values: ConfigFormValues[] = [];
+    fixture.componentInstance.valuesChange.subscribe((v) => values.push(v));
+    expect(el(fixture, 'dlg-field-hours')).toBeNull();
+
+    (el(fixture, 'dlg-field-policy') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    const options = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(options[2].getAttribute('aria-disabled')).toBe('true');
+    expect(options[2].getAttribute('title')).toContain('lacks ref-update');
+    options[1].click();
+    await fixture.whenStable();
+    expect(values.at(-1)).toMatchObject({ policy: 'park' });
+    expect(el(fixture, 'dlg-field-hours')).not.toBeNull();
+
+    await type(fixture, 'dlg-field-hours', '1.5');
+    expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(true);
+    await type(fixture, 'dlg-field-hours', '2');
+    expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('shows the failed write inline', async () => {
     const fixture = await mount('edit', 'stale revision');
     expect(el(fixture, 'dlg-submit-error')!.textContent).toContain('stale revision');

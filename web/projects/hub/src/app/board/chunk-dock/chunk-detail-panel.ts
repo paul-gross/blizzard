@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, type WorkItemsState } from 'fleet';
+import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, hasDelivery, type WorkItemsState } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
@@ -129,6 +129,9 @@ export class ChunkDetailPanel {
 
   /** The chunk's work ref count — legible before the forge read lands, for the
    * work-item column's own heading. */
+  /** Whether the delivery section shows — `hasDelivery`. */
+  protected readonly showDelivery = computed(() => hasDelivery(this.detail()));
+
   protected readonly pointerCount = computed<number>(() => this.detail().work_refs?.length ?? 0);
 
 }

@@ -207,6 +207,7 @@ export {
   listRepositoryLinksApiProjectsProjectRepositoryLinksGet,
   listSourceLinksApiProjectsProjectSourceLinksGet,
   patchProjectApiProjectsProjectPatch,
+  positionRepositoryApiProjectsProjectLandingOrderPositionPost,
   unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
 } from './lib/api/hub';
@@ -314,7 +315,13 @@ export {
   wontFixFindingsApiFindingsWontFixPost,
 } from './lib/api/hub';
 export type { ChunkDetail, ChunkWorkItemsView, WorkItemsView } from './lib/api/hub';
-export type { ProjectCreateRequest, ProjectPatchRequest, RepositoryLinkView, SourceLinkView } from './lib/api/hub';
+export type {
+  LandingPositionRequest,
+  ProjectCreateRequest,
+  ProjectPatchRequest,
+  RepositoryLinkView,
+  SourceLinkView,
+} from './lib/api/hub';
 // A project's garden: its nested reads and its scopes' by-slug verbs, each addressed inside the project.
 export {
   editProjectScopeApiProjectsProjectScopesSlugPatch,

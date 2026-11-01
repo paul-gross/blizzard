@@ -14,7 +14,7 @@ describe('ChunkDelivery', () => {
     }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent).toContain('Waiting since');
+    expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent).toContain('Awaiting merge since');
     expect(el.querySelector('fleet-when')?.getAttribute('title')).toBeTruthy();
     expect(el.querySelector<HTMLAnchorElement>('[data-testid="delivery-pr-link"]')?.href).toBe(pr.url);
     expect(el.querySelector('[data-testid="delivery-merge-wait"]')).toBeNull();
@@ -34,6 +34,6 @@ describe('ChunkDelivery', () => {
       pending: { node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind: 'awaiting-merge', since: null },
     }));
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent).not.toContain('Waiting since');
+    expect(el.querySelector('[data-testid="delivery-park-wait"]')?.textContent?.trim()).toBe('Awaiting merge');
   });
 });

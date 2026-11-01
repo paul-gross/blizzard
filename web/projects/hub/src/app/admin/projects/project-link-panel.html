@@ -19,33 +19,68 @@
       [emptyText]="emptyText()"
       [emptyTestid]="testid() + '-empty'"
     >
-      <ul class="rows" [attr.data-testid]="testid() + '-rows'">
-        @for (row of rows(); track row.name) {
-          <li class="row" [attr.data-testid]="testid() + '-row-' + row.name">
-            <span class="name">{{ row.name }}</span>
-            <span class="detail">{{ row.detail }}</span>
-            <span class="right">
-              @if (row.builtIn) {
-                <fleet-kit-badge tone="idle" variant="soft">built-in</fleet-kit-badge>
-              } @else {
-                @if (row.revision !== null) {
-                  <span class="rev">r{{ row.revision }}</span>
-                }
-                @if (canEdit()) {
-                  <fleet-kit-button
-                    variant="danger"
-                    [disabled]="pendingKeys().has(row.key)"
-                    [testid]="testid() + '-unlink-' + row.name"
-                    (click)="unlink.emit(row)"
-                  >
-                    Unlink
-                  </fleet-kit-button>
-                }
+      @if (sections(); as order) {
+        @for (section of sectionOrder; track section.key) {
+          <h3 class="section" [attr.data-testid]="testid() + '-' + section.key + '-heading'">{{ section.label }}</h3>
+          @if (canEdit()) {
+            <ul
+              class="rows drop"
+              cdkDropList
+              [id]="testid() + '-' + section.key"
+              [cdkDropListData]="section.key"
+              [cdkDropListConnectedTo]="[testid() + '-' + section.other]"
+              [attr.data-testid]="testid() + '-' + section.key"
+              (cdkDropListDropped)="dropped(section.key, $event)"
+            >
+              @for (row of order[section.key]; track row.key) {
+                <li class="row armed" cdkDrag [cdkDragData]="row.key" [attr.data-testid]="testid() + '-row-' + row.name">
+                  <ng-container *ngTemplateOutlet="rowBody; context: { $implicit: row }" />
+                </li>
               }
-            </span>
-          </li>
+            </ul>
+          } @else {
+            <ul class="rows" [attr.data-testid]="testid() + '-' + section.key">
+              @for (row of order[section.key]; track row.key) {
+                <li class="row" [attr.data-testid]="testid() + '-row-' + row.name">
+                  <ng-container *ngTemplateOutlet="rowBody; context: { $implicit: row }" />
+                </li>
+              }
+            </ul>
+          }
         }
-      </ul>
+      } @else {
+        <ul class="rows" [attr.data-testid]="testid() + '-rows'">
+          @for (row of rows(); track row.name) {
+            <li class="row" [attr.data-testid]="testid() + '-row-' + row.name">
+              <ng-container *ngTemplateOutlet="rowBody; context: { $implicit: row }" />
+            </li>
+          }
+        </ul>
+      }
     </fleet-kit-async-state>
   </div>
 </fleet-kit-panel>
+
+<ng-template #rowBody let-row>
+  <span class="name">{{ row.name }}</span>
+  <span class="detail">{{ row.detail }}</span>
+  <span class="right">
+    @if (row.builtIn) {
+      <fleet-kit-badge tone="idle" variant="soft">built-in</fleet-kit-badge>
+    } @else {
+      @if (row.revision !== null) {
+        <span class="rev">r{{ row.revision }}</span>
+      }
+      @if (canEdit()) {
+        <fleet-kit-button
+          variant="danger"
+          [disabled]="pendingKeys().has(row.key)"
+          [testid]="testid() + '-unlink-' + row.name"
+          (click)="unlink.emit(row)"
+        >
+          Unlink
+        </fleet-kit-button>
+      }
+    }
+  </span>
+</ng-template>

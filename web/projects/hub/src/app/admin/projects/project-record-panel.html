@@ -93,9 +93,11 @@
           [canEdit]="canEdit()"
           [pendingKeys]="pendingRepositoryKeys()"
           [error]="repositoryError()"
+          [sections]="landingOrder()"
           testid="admin-projects-repositories"
           (link)="link.emit('repository')"
           (unlink)="unlink.emit({ kind: 'repository', row: $event })"
+          (reposition)="reposition.emit($event)"
         />
       }
       @default {}

@@ -13,7 +13,7 @@ const PLACE_STATES = openLookup<hubApi.FlowPlaceState, PlaceStateLook>(
     next: { label: 'next', tone: 'spawning' },
     waiting: { label: 'waiting', tone: 'waiting' },
     polling: { label: 'polling', tone: 'waiting' },
-    'awaiting-merge': { label: 'awaiting merge', tone: 'waiting' },
+    'awaiting-merge': { label: 'awaiting merge', tone: 'idle' },
     'passed-over': { label: 'passed over', tone: 'idle' },
   },
   (raw) => ({ label: raw, tone: 'idle' }),
@@ -52,16 +52,18 @@ export function flowPath(flow: {
 /** One of a chunk's places as a card or a list row says it. */
 export interface FlowPlaceLine {
   readonly flowId: string;
-  /** `landing on blizzard/master`, `3rd on blizzard/master`, or `passed over on blizzard/master`. */
+  /** `landing on blizzard/master`, `3rd on blizzard/master`, `passed over on blizzard/master`, or
+   * `awaiting merge on blizzard/master`. */
   readonly text: string;
   readonly tone: Tone;
 }
 
-/** How a chunk's place on one flow reads: landing on it, passed over on it, or its position in line. */
+/** How a chunk's place on one flow reads: landing on it, passed over on it, awaiting its change's merge on it, or its position in line. */
 export function placeText(place: ChunkFlowPlaceView): string {
   const path = flowPath(place);
   if (place.state === 'landing') return `landing on ${path}`;
   if (place.state === 'passed-over') return `passed over on ${path}`;
+  if (place.state === 'awaiting-merge') return `awaiting merge on ${path}`;
   return `${ordinal(place.position)} on ${path}`;
 }
 

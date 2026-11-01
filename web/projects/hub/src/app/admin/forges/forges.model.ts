@@ -1,4 +1,4 @@
-import { RecordKind, type ForgeCreateRequest, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { hubApi, RecordKind, type ForgeCreateRequest, type ForgeDetail, type ForgeSummary } from 'fleet';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { factText, recordLink } from '../config-links.model';
@@ -34,6 +34,17 @@ export function forgeRows(forges: readonly ForgeSummary[], filter: LifecycleFilt
   }));
 }
 
+/** One fact per budget reading — bucket, the secret it spends if any, what remains of
+ * its limit, and when it resets. The hub keeps readings since it started, so none may
+ * have been taken yet. */
+export function budgetFacts(budgets: readonly hubApi.ForgeBudgetView[]): readonly { label: string; value: string }[] {
+  if (budgets.length === 0) return [{ label: 'Budgets', value: 'no reading yet' }];
+  return budgets.map((budget) => ({
+    label: budget.secret_name ? `Budget ${budget.bucket} · ${budget.secret_name}` : `Budget ${budget.bucket}`,
+    value: `${budget.remaining}/${budget.limit} remaining, resets ${budget.reset}`,
+  }));
+}
+
 export function forgeRecordVm(forge: ForgeDetail | undefined): ConfigRecordVm | null {
   if (!forge) return null;
   return {
@@ -43,6 +54,8 @@ export function forgeRecordVm(forge: ForgeDetail | undefined): ConfigRecordVm | 
       { label: 'API base', value: forge.api_base }, { label: 'Web base', value: factText(forge.web_base) },
       { label: 'Web origin', value: forge.web_origin },
       { label: 'Created by', value: forge.created_by_name ?? forge.created_by },
+      { label: 'Capabilities', value: forge.offered.length === 0 ? 'none' : forge.offered.join(', ') },
+      ...budgetFacts(forge.budgets),
     ],
     note: forge.retired ? 'Retired — unavailable for new records.' : null,
     links: {

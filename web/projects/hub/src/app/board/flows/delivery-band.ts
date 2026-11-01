@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { injectNowSignal, type WorkItemsView } from 'fleet';
+import { injectNowSignal, type PrView, type WorkItemsView } from 'fleet';
 import { DeliveryBandView } from './delivery-band-view';
 import { deliveryLanes } from './delivery-band.model';
 import { injectActiveFlowsQuery } from './flows.query';
+import { injectLaneRepositoriesQuery } from './repositories.query';
 
 /**
  * The board's Delivery band **container**: reads the tenant's active flows and renders one lane per flow above the
@@ -21,6 +22,9 @@ export class DeliveryBand {
   /** The board's work items by chunk id, which a lane's chunks take their titles from. */
   readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
 
+  /** The board's chunks' open PRs by chunk id, which a parked chunk's chip links its change from. */
+  readonly openPrs = input<ReadonlyMap<string, readonly PrView[]>>(new Map());
+
   /** Emitted with a chunk id when a lane's chunk is clicked. */
   readonly selectChunk = output<string>();
 
@@ -28,7 +32,13 @@ export class DeliveryBand {
   readonly selectFlow = output<string>();
 
   private readonly flowsQuery = injectActiveFlowsQuery();
+  private readonly repositoriesQuery = injectLaneRepositoriesQuery();
   private readonly now = injectNowSignal();
 
-  protected readonly lanes = computed(() => deliveryLanes(this.flowsQuery.data() ?? [], this.workItems(), this.now()));
+  protected readonly lanes = computed(() =>
+    deliveryLanes(this.flowsQuery.data() ?? [], this.workItems(), this.now(), {
+      openPrs: this.openPrs(),
+      repositories: this.repositoriesQuery.data() ?? [],
+    }),
+  );
 }
