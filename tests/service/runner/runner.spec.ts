@@ -517,8 +517,9 @@ test.describe('a host under a hub offering an IdP', () => {
 });
 
 test('test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream', async ({ runnerHosts, runnerStream }) => {
-  const host = await runnerHosts.create({ runnerLoop: 'timed', runnerEnv: { BZ_RUNNER_TICK_SECONDS: '1' } });
-  // A pass has ended, so shutdown joins no startup pass: the stream's drain is the subject.
+  // The interval outlasts the test, so once the first pass has ended no tick is ever in flight for shutdown to join:
+  // the stream's drain is the subject.
+  const host = await runnerHosts.create({ runnerLoop: 'timed', runnerEnv: { BZ_RUNNER_TICK_SECONDS: '600' } });
   await expect.poll(async () => (await host.runners[RUNNER]!.status()).body.last_tick_at, { timeout: 30_000 }).not.toBeNull();
   const parked = await runnerStream(host.url, { reconnect: false });
 

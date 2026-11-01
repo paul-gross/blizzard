@@ -174,7 +174,8 @@ def check_delta(
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
     :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
-    every transformation's id, one op per id, and a `gone` op's non-empty note. `exited_ids`
+    every `add` op's non-blank class, locus and summary, every transformation's id, one op per id, and a
+    `gone` op's non-empty note. `exited_ids`
     only distinguishes an exited id from an unknown one in the message. Returns every
     `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
@@ -190,6 +191,11 @@ def check_delta(
     seen_ids: set[str] = set()
     for op in delta.findings:
         if isinstance(op, FindingAddOp):
+            for value, field_name in ((op.class_, "class"), (op.locus, "locus"), (op.summary, "summary")):
+                if not value.strip():
+                    raise GardenDeliveryRejected(
+                        f"a finding addition has a blank {field_name}", GardenDeliveryFault.DELTA
+                    )
             if op.ref is not None and is_finding_id_shaped(op.ref):
                 # Otherwise the shape rule a proposal's citation is discriminated on
                 # could be gamed into rebinding an existing finding id.

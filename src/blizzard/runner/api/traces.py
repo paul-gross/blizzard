@@ -14,12 +14,11 @@ from blizzard.runner.tracing.replay import ReplayUnavailable, ReplayWindowRefuse
 from blizzard.wire.runner_traces import (
     HarnessSignalStatus,
     HarnessTelemetryStatus,
-    ReceiverStatus,
     RunnerTraceReplayFailure,
     RunnerTraceReplayResponse,
     RunnerTraceStatusResponse,
-    TraceReplayRequest,
 )
+from blizzard.wire.traces import ReceiverStatus, TraceReplayRequest
 
 router = APIRouter(prefix="/api/traces", tags=["traces"])
 

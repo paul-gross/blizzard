@@ -299,6 +299,17 @@ def test_check_proposal_refs_accepts_distinct_refs() -> None:
     check_proposal_refs("docket", proposals)  # does not raise
 
 
+@pytest.mark.parametrize("field", ["class_", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_check_delta_rejects_an_add_with_a_blank_field_whatever_door_built_it(field: str, blank: str) -> None:
+    op = FindingAddOp(**{"class_": "c", "locus": "a.py:1", "summary": "s", field: blank})
+    delta = DeliveredDelta(scope="runner", findings=[op])
+
+    with pytest.raises(GardenDeliveryRejected, match="blank") as exc:
+        _check(delta, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.DELTA
+
+
 # --- submission-local finding refs --------------------------------------------------
 
 
