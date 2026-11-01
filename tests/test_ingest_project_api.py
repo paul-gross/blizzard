@@ -48,7 +48,8 @@ def ingest_project(hub: HubHarness, *tokens: str, project: str | None = None) ->
     if project is not None:
         body["project"] = project
     resp = hub.client.post("/api/chunks", json=body)
-    return resp.status_code, resp.json()
+    decoded: dict[str, Any] = resp.json()
+    return resp.status_code, decoded
 
 
 def _project_of(hub: HubHarness, chunk_id: str) -> ProjectId | None:

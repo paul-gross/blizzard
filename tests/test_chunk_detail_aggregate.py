@@ -16,6 +16,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkVerb, WorkRef, decide_close_enqueue, verb_legal_from
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from tests.support import (
     FakeWorkSource,
     HubHarness,
@@ -192,7 +193,7 @@ def test_a_repository_on_an_unhandled_forge_has_no_github_shaped_branch_link(
     forges = hub.services.forge_records
     get_many = forges.get_many
 
-    def other_kind(ids):
+    def other_kind(ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
         return {key: replace(forge, kind="other") for key, forge in get_many(ids).items()}
 
     monkeypatch.setattr(forges, "get_many", other_kind)

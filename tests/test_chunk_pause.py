@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 from structlog.testing import capture_logs
+from structlog.typing import EventDict
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -29,7 +30,7 @@ from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
@@ -37,7 +38,7 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.spawn import Spawner
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
@@ -70,7 +71,14 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100"):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+) -> None:
     """A build lease spawned into env e1, plus its binding. The probe decides liveness."""
     store.record_lease(
         NewLease(
@@ -105,7 +113,9 @@ class _ExitingProbe(FakeProbe):
         self.groups_alive.discard(pgid)
 
 
-def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):
+def _paused_chunk(
+    chunk: str = "ch_1", *, runner_id: str = "r1", status: ChunkStatus = ChunkStatus.PAUSED
+) -> ChunkState:
     """A chunk the operator paused, still routed to us. ``status`` is overridable: the
     runner must key on the pause fact, not the derived status, since a paused+asked chunk
     derives ``waiting_on_human`` while still carrying ``pause``.
@@ -119,7 +129,7 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):
     )
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):
+def _running_chunk(chunk: str = "ch_1", *, runner_id: str = "r1") -> ChunkState:
     """The same chunk unpaused — no ``pause`` view."""
     return ChunkState(
         chunk_id=chunk,
@@ -129,15 +139,31 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):
     )
 
 
-def _closure_reasons(store: SqlAlchemyRunnerStore, lease_id="lease_1"):
+def _closure_reasons(store: SqlAlchemyRunnerStore, lease_id: str = "lease_1") -> list[str]:
     return [c.reason for c in store.list_closed_leases(10) if c.lease.lease_id == lease_id]
 
 
-def _make_ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, harness, probe, **kw):
-    return make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, **kw)
+def _make_ctx(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub,
+    harness: FakeHarness,
+    probe: FakeProbe,
+    *,
+    clock: FixedClock | None = None,
+    config: LoopConfig | None = None,
+) -> LoopContext:
+    return make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=probe,
+        clock=clock,
+        config=config,
+    )
 
 
-def _pause_locally(store: SqlAlchemyRunnerStore, ctx, *, paused: bool):
+def _pause_locally(store: SqlAlchemyRunnerStore, ctx: LoopContext, *, paused: bool) -> None:
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
     The twin of `tests/test_runner_paused.py`'s helper, kept local rather than imported across
@@ -644,9 +670,9 @@ def _usage_payloads(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
-def _sample(kind: str, *, cost_usd: float | None) -> UsageSample:
+def _sample(kind: UsageKind, *, cost_usd: float | None) -> UsageSample:
     return UsageSample(
-        kind=kind,  # type: ignore[arg-type]
+        kind=kind,
         model="fake-model",
         input_tokens=7,
         output_tokens=3,
@@ -660,8 +686,14 @@ class _EnvelopeWritingProbe(_ExitingProbe):
     """A worker that answers its SIGINT the way Claude Code does: it writes its result
     envelope to its generation's stdout file, then exits."""
 
-    def __init__(self, stdout_path, **kw):
-        super().__init__(**kw)
+    def __init__(
+        self,
+        stdout_path: Path,
+        *,
+        alive: set[tuple[int, str | None]] | None = None,
+        groups_alive: set[int] | None = None,
+    ) -> None:
+        super().__init__(alive=alive, groups_alive=groups_alive)
         self._stdout_path = stdout_path
 
     def interrupt_group(self, pgid: int) -> None:
@@ -816,8 +848,8 @@ def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_tear
 
 @pytest.mark.parametrize(("session", "resume_from"), [(None, None), (SessionMode.RESUME, "sess-a")])
 def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpaused(
-    tmp_path: Path, session, resume_from
-):
+    tmp_path: Path, session: SessionMode | None, resume_from: str | None
+) -> None:
     """A paused chunk starts no worker on the apply arm: the binding is held, and FILL's adopt of
     the running chunk at the runner's own epoch enters the node once the pause lifts — through the
     node's declared session, so a resuming node continues the chunk's session."""
@@ -848,7 +880,7 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
 # The spawn gate reads the chunk's own pause: a paused chunk starts no worker by any path.
 
 
-def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max=2):
+def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max: int = 2) -> None:
     """A lease minted but never spawned (no pid/session) — REAP's orphan case."""
     store.record_lease(
         NewLease(
@@ -865,7 +897,7 @@ def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max=2):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _suppressed_chunk_paused(logs, *, via):
+def _suppressed_chunk_paused(logs: list[EventDict], *, via: str) -> list[EventDict]:
     return [
         entry
         for entry in logs

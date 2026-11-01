@@ -47,7 +47,7 @@ def _ids(entries: list[dict[str, Any]]) -> list[str]:
 def _ingest_tied(hub: HubHarness, n: int) -> list[str]:
     """Ingest and promote ``n`` chunks with no clock advance, so the ``chunk_id``
     tiebreak, not clock order, decides the ready queue's order."""
-    ids = []
+    ids: list[str] = []
     for i in range(n):
         pointer = {"source": "default", "ref": f"tied-{i}"}
         resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
@@ -61,7 +61,7 @@ def _ingest_tied(hub: HubHarness, n: int) -> list[str]:
 def _ingest_backlog_tied(hub: HubHarness, n: int) -> list[str]:
     """Ingest ``n`` chunks with no clock advance, left ``not_ready``, so only the
     ``chunk_id`` tiebreak makes their order total."""
-    ids = []
+    ids: list[str] = []
     for i in range(n):
         pointer = {"source": "default", "ref": f"tied-backlog-{i}"}
         resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -11,6 +13,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import (
     FakeWorkSource,
+    HubHarness,
     build_hub,
     chunk_stores,
     default_project,
@@ -240,8 +243,10 @@ def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) 
     assert resp.status_code == 422, resp.text  # no configured source claims it
 
 
-def pass_node(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:
-    return hub.client.post(
+def pass_node(
+    hub: HubHarness, chunk_id: str, node_id: str, epoch: int, *, artifacts: Sequence[Mapping[str, str]]
+) -> dict[str, Any]:
+    body: dict[str, Any] = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
@@ -251,6 +256,7 @@ def pass_node(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[d
             "artifacts": artifacts,
         },
     ).json()
+    return body
 
 
 def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
