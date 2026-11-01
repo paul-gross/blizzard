@@ -3,6 +3,8 @@ stubbed)."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 import httpx2
 import pytest
 
@@ -16,7 +18,7 @@ def _ok(body: object) -> httpx2.Response:
     return httpx2.Response(200, json=body, request=httpx2.Request("GET", "http://hub.test"))
 
 
-def _decision(checks: list[dict[str, object]]) -> dict[str, object]:
+def _decision(checks: Sequence[Mapping[str, object]]) -> dict[str, object]:
     return {
         "decision_id": "dec_1",
         "chunk_id": "ch_1",
@@ -29,7 +31,11 @@ def _decision(checks: list[dict[str, object]]) -> dict[str, object]:
 def test_the_list_summarizes_a_decisions_red_checks() -> None:
     checks = [{"command": "a", "passed": True}, {"command": "b", "passed": False}]
     body = {"decisions": [_decision(checks), {**_decision([]), "decision_id": "dec_2"}]}
-    bound = bind_stubs(get=lambda url, **_: _ok(body))
+
+    def get(url: str, **_: object) -> httpx2.Response:
+        return _ok(body)
+
+    bound = bind_stubs(get=get)
 
     result = bound.runner.invoke(hub_group, ["decision", "list"])
 
@@ -41,7 +47,11 @@ def test_the_list_summarizes_a_decisions_red_checks() -> None:
 @pytest.mark.parametrize(("overrode", "suffix"), [(True, " — overrode red checks"), (False, "")])
 def test_resolve_reports_an_override(overrode: bool, suffix: str) -> None:
     body = {"decision_id": "dec_1", "choice": "pass", "resolved_by": "operator", "overrode_red_checks": overrode}
-    bound = bind_stubs(post=lambda url, **_: _ok(body))
+
+    def post(url: str, **_: object) -> httpx2.Response:
+        return _ok(body)
+
+    bound = bind_stubs(post=post)
 
     result = bound.runner.invoke(hub_group, ["decision", "resolve", "dec_1", "pass"])
 

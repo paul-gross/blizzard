@@ -27,7 +27,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 def _patch_response(chunk_id: str, intended_migration: object | None) -> _FakeResponse:
@@ -768,10 +771,10 @@ def test_chunk_list_marks_a_blocked_chunk() -> None:
                         "chunk_id": "ch_1",
                         "status": "not_ready",
                         "current_node_id": "nd_1",
-                        "cost": {},
+                        "cost": dict[str, float](),
                         "blocked": {"prerequisite_chunk_id": "ch_prereq"},
                     },
-                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": dict[str, float]()},
                 ],
                 "next_cursor": None,
             },
@@ -817,22 +820,22 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure() -> None:
 
 @pytest.mark.unit
 def test_chunk_list_drains_every_page() -> None:
-    page_1 = {
+    page_1: dict[str, object] = {
         "chunks": [
             {"chunk_id": "ch_1", "status": "ready", "current_node_id": "nd_1", "cost": {}},
             {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
         ],
         "next_cursor": "cursor-1",
     }
-    page_2 = {
+    page_2: dict[str, object] = {
         "chunks": [
             {"chunk_id": "ch_3", "status": "ready", "current_node_id": "nd_1", "cost": {}},
         ],
         "next_cursor": None,
     }
 
-    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
-        if isinstance(params, dict) and params.get("cursor") is not None:
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        if params is not None and params.get("cursor") is not None:
             return _FakeResponse(200, page_2)
         return _FakeResponse(200, page_1)
 

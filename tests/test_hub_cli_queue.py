@@ -23,7 +23,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 def _queue_response(chunk_ids: list[str]) -> _FakeResponse:
@@ -69,13 +72,13 @@ def _queue_page_response(chunk_ids: list[str], *, next_cursor: str | None) -> _F
 
 def _stub_two_pages(
     first_page: list[str], second_page: list[str], *, cursor: str = "cur_2"
-) -> tuple[Bound, list[tuple[str, object]]]:
+) -> tuple[Bound, list[tuple[str, dict[str, str]]]]:
     """``GET /api/queue`` split across two pages, ``fake_get`` branching on the drain's
     own ``cursor`` param — proves the CLI's paging loop, not a canned whole-order response."""
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, dict[str, str]]] = []
 
-    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
-        assert isinstance(params, dict)
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        assert params is not None
         # `cli.get_all` mutates and reuses one `params` dict across pages — capture a
         # copy per call, or every recorded call would end up sharing its final state.
         calls.append((url, dict(params)))
@@ -83,7 +86,7 @@ def _stub_two_pages(
             return _queue_page_response(second_page, next_cursor=None)
         return _queue_page_response(first_page, next_cursor=cursor)
 
-    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _queue_page_response(first_page + second_page, next_cursor=None)
 
@@ -101,8 +104,8 @@ def test_queue_move_drains_a_multi_page_ready_order_before_anchoring() -> None:
     assert result.exit_code == 0, result.output
     get_calls = [call for call in calls if call[0].endswith("/api/queue")]
     assert len(get_calls) == 2
-    assert get_calls[0][1].get("cursor") is None  # type: ignore[union-attr]
-    assert get_calls[1][1].get("cursor") == "cur_2"  # type: ignore[union-attr]
+    assert get_calls[0][1].get("cursor") is None
+    assert get_calls[1][1].get("cursor") == "cur_2"
     assert calls[-1] == (
         "http://127.0.0.1:8421/api/queue/position",
         {"chunk_id": "ch_a", "after_chunk_id": "ch_d"},

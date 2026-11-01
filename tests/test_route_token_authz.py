@@ -87,8 +87,13 @@ def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token:
     return body
 
 
-def _submit(hub: HubHarness, chunk_id: str, **kwargs) -> httpx2.Response:
-    return hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(**kwargs))
+def _submit(
+    hub: HubHarness, chunk_id: str, *, node_id: str, epoch: int, runner_id: str = "r1", route_token: str | None
+) -> httpx2.Response:
+    return hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion(node_id, epoch=epoch, runner_id=runner_id, route_token=route_token),
+    )
 
 
 # Completion apply — token match/mismatch, runner mismatch (AC 2, 4)

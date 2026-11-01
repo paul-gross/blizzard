@@ -12,11 +12,11 @@ import pytest
 import yaml
 from sqlalchemy import select, update
 
-from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import GraphDoc
-from blizzard.hub.domain.graph.validation import Validator
+from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
 from tests.support import TEST_CATALOGUE, HubHarness, build_hub, hub_scoped, pointer_token, report_lease
@@ -131,7 +131,7 @@ def _escalations(hub: HubHarness, chunk_id: str) -> list[tuple[int, str, str]]:
     return [(row.epoch, row.cause, row.detail) for row in rows]
 
 
-def _events(hub: HubHarness, chunk_id: str, kind: str) -> list[object]:
+def _events(hub: HubHarness, chunk_id: str, kind: str) -> list[OperationalEvent]:
     return [e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == kind]
 
 
@@ -146,7 +146,7 @@ def _assert_escalated_once(hub: HubHarness, chunk_id: str, *, naming: str) -> No
     assert (epoch, cause) == (2, "hub-action-missing")
     assert naming in detail
     (event,) = _events(hub, chunk_id, "hub-action-missing")
-    assert event.severity == "critical"  # type: ignore[attr-defined]
+    assert event.severity == "critical"
     detail_json = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail_json["status"] == "needs_human"
     assert detail_json["escalation"]["cause"] == "hub-action-missing"
@@ -251,7 +251,11 @@ def test_an_unrouted_answer_escalates_at_once_naming_the_choice_and_takes_no_sec
     """A carried-over version may never route an answer its action gives; mint refuses one now, so the stored
     version is minted past validation."""
     assert Validator.of(GraphDoc.of(yaml.safe_load(_UNROUTED_YAML)), TEST_CATALOGUE).result.errors
-    monkeypatch.setattr(Validator, "require_valid", lambda self: self.result)
+
+    def require_valid(self: Validator) -> ValidationResult:
+        return self.result
+
+    monkeypatch.setattr(Validator, "require_valid", require_valid)
     hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph_id = _claimed(hub, _UNROUTED_YAML)
 

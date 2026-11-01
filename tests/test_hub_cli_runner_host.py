@@ -19,7 +19,12 @@ from tests.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 _ENV = {"BZ_HUB_URL": _HUB_URL}
-_ADDED = {"host_id": "hs_01JC4Z8Q3XKQ1V5W2M7N9P0R6T", "host_name": "box", "token": "sekrit-token", "adopted": []}
+_ADDED: dict[str, object] = {
+    "host_id": "hs_01JC4Z8Q3XKQ1V5W2M7N9P0R6T",
+    "host_name": "box",
+    "token": "sekrit-token",
+    "adopted": [],
+}
 
 
 def _respond(status_code: int, payload: object) -> httpx2.Response:

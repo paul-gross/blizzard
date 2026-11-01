@@ -8,7 +8,7 @@ row under any dialect (static proof, no live postgres), and sqlite never duplica
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,7 +41,7 @@ class _CapturingConn:
         self.statements: list[object] = []
         self.get_execution_options = scoped.get_execution_options
 
-    def execute(self, stmt: object):
+    def execute(self, stmt: object) -> _FakeResult:
         self.statements.append(stmt)
         return _FakeResult()
 
@@ -52,7 +52,7 @@ class _FakeResult:
 
 
 @contextmanager
-def _scoped_connection() -> Iterator[Connection]:
+def _scoped_connection() -> Generator[Connection]:
     """A connection a scoped read yields over an empty in-memory store — what the allocator's
     statements recover their scope from; nothing runs on it."""
     connections = ScopedConnections(
@@ -66,7 +66,7 @@ def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
-        next_route_seq(conn, "ch_1")  # type: ignore[arg-type]
+        next_route_seq(conn, "ch_1")  # pyright: ignore[reportArgumentType]  # a recording stand-in for the concrete Connection, which has no protocol to satisfy
 
     assert len(conn.statements) == 4  # the lock, then the three per-table max reads
     lock_stmt = conn.statements[0]
@@ -84,7 +84,7 @@ def test_lock_chunk_row_compiles_to_the_same_row_scoped_statement_on_both_dialec
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
-        lock_chunk_row(conn, "ch_1")  # type: ignore[arg-type]
+        lock_chunk_row(conn, "ch_1")  # pyright: ignore[reportArgumentType]  # a recording stand-in for the concrete Connection, which has no protocol to satisfy
 
     assert len(conn.statements) == 1
     lock_stmt = conn.statements[0]

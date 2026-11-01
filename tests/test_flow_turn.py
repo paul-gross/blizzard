@@ -28,7 +28,7 @@ from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
-from blizzard.hub.forge.landing import VisitForges
+from blizzard.hub.forge.landing import CommitPresence, Comparison, VisitForges
 from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -341,13 +341,31 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
             calls.append(branch)
             return None
 
+        async def compare(self, base: str, head: str) -> Comparison:
+            raise AssertionError("not called")
+
+        async def commit_exists(self, revision: str) -> CommitPresence:
+            raise AssertionError("not called")
+
+        async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+            raise AssertionError("not called")
+
+        async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+            raise AssertionError("not called")
+
+        async def create_ref(self, branch: str, revision: str) -> None:
+            raise AssertionError("not called")
+
+        async def delete_ref(self, branch: str) -> None:
+            raise AssertionError("not called")
+
     flag = TurnCutOff()
     gate = BudgetGate(
         ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))),
         BudgetKey("frg_fixture", None),
         ForgePriority.LANDING,
     )
-    refs = RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)  # type: ignore[arg-type]
+    refs = RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)
     flag.set()
 
     with pytest.raises(ForgeCallRefused):

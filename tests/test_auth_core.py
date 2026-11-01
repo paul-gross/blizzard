@@ -162,13 +162,13 @@ def test_a_membership_carries_guest_contributor_or_admin_only() -> None:
 
 @pytest.mark.parametrize("role", [*MEMBERSHIP_ROLES, None])
 def test_permissions_for_a_non_hub_admin_is_the_role_bundle_alone(role: Role | None) -> None:
-    expected = frozenset() if role is None else expand(role)
+    expected = frozenset[Permission]() if role is None else expand(role)
     assert permissions_for(role, hub_admin=False) == expected
 
 
 @pytest.mark.parametrize("role", [*MEMBERSHIP_ROLES, None])
 def test_permissions_for_a_hub_admin_adds_the_hub_permissions(role: Role | None) -> None:
-    bundle = frozenset() if role is None else expand(role)
+    bundle = frozenset[Permission]() if role is None else expand(role)
     assert permissions_for(role, hub_admin=True) == bundle | HUB_PERMISSIONS
 
 

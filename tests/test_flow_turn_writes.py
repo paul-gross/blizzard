@@ -328,7 +328,7 @@ def test_ending_a_turn_twice_writes_nothing_the_second_time(world: _World) -> No
         kind="hub-action-overran", chunk_id=submission.chunk_id, node_name="deliver", message="", detail={}
     )
 
-    ends = []
+    ends: list[tuple[FlowFactWritten, ...] | None] = []
     for _ in range(2):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
             ends.append(
@@ -456,7 +456,7 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     turning = world.submit(world.chunk("13"), _OTHER)
     assert world.take(turning) is not None
 
-    reported = []
+    reported: list[tuple[FlowFactWritten, ...]] = []
     for submission in (waiting, turning):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
             written = world.chunks.movement.record_restart_locked(

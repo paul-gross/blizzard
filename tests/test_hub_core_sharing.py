@@ -12,7 +12,9 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core
 from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal.chunk_exclusive_store import ChunkExclusiveWrites
 from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from tests.support import add_tenant, build_hub, default_tenant, tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -28,7 +30,9 @@ def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     assert services.delete is services.garden_proposal_closure.items.delete
     assert services.registry is services.claim.registry
     assert services.registry is services.fleet.registry
-    assert services.registry is services.claim.exclusive.registry  # type: ignore[attr-defined]
+    exclusive = services.claim.exclusive
+    assert isinstance(exclusive, ChunkExclusiveWrites)
+    assert services.registry is exclusive.registry
 
 
 def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(tmp_path: Path) -> None:
@@ -37,7 +41,8 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     hub_editor = hub.work_sources.editor("hub")
     assert hub_editor is not None
 
-    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # type: ignore[attr-defined]
+    assert isinstance(hub_editor, HubWorkSource)
+    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # pyright: ignore[reportPrivateUsage]  # the sharing under test is private wiring
 
 
 def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:

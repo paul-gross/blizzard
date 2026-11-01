@@ -153,7 +153,8 @@ def test_the_resolved_tenant_joins_every_log_line_and_the_requests_span() -> Non
         identity=implicit_operator(tenant),
         scope=StoreScope(tenant),
         name="acme",
-        services=None,  # type: ignore[arg-type]
+        # tenant_bound reads only the scope and name; wiring a whole tenant would make this a component test.
+        services=None,  # pyright: ignore[reportArgumentType]
     )
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
