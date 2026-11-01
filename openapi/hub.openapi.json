@@ -1007,7 +1007,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.",
+        "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp;\n``produced_at`` is the stored production time, including the time used for park expiry.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -1077,6 +1077,17 @@
             "title": "Node Name",
             "type": "string"
           },
+          "produced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Produced At"
+          },
           "recorded_at": {
             "anyOf": [
               {
@@ -1108,6 +1119,7 @@
           "node_name",
           "epoch",
           "recorded_at",
+          "produced_at",
           "content",
           "repo",
           "branch_name",

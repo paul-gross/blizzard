@@ -601,7 +601,8 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
  * append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
  * verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
- * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.
+ * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp;
+ * ``produced_at`` is the stored production time, including the time used for park expiry.
  */
 export type ArtifactView = {
     /**
@@ -641,6 +642,10 @@ export type ArtifactView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Produced At
+     */
+    produced_at: string | null;
     /**
      * Recorded At
      */
