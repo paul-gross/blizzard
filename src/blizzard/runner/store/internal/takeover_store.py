@@ -8,13 +8,21 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, Row, Select, and_, or_
 
+from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository, OpenTakeover
-from blizzard.runner.store.internal.base import Unclosed, lease_select, row_to_lease
-from blizzard.runner.store.schema import leases, takeover_ends, takeovers
+from blizzard.runner.store.internal.base import Unclosed, insert_outbox_row, lease_select, row_to_lease
+from blizzard.runner.store.schema import (
+    lease_tokens,
+    leases,
+    outbound_buffer,
+    takeover_ends,
+    takeover_entries,
+    takeovers,
+)
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
@@ -83,7 +91,13 @@ class TakeoverStore:
         opened_at: datetime,
         session: SessionReference,
         hold_epoch: int | None = None,
-    ) -> None:
+        fence_payload: str | None = None,
+        lease_token_hash: str | None = None,
+        entered_at: datetime | None = None,
+    ) -> int | None:
+        # The whole decision commits together or not at all: the takeover, its fence fact, the re-minted
+        # token and — when nothing is left to kill — the entry itself.
+        seq: int | None = None
         with self._store.begin() as conn:
             conn.execute(
                 self._store.insert(takeovers).values(
@@ -98,7 +112,44 @@ class TakeoverStore:
                     opened_at=opened_at,
                 )
             )
+            if fence_payload is not None:
+                seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    outbound_buffer,
+                    kind=LEASE_MINTED,
+                    chunk_id=chunk_id,
+                    lease_id=None,
+                    payload=fence_payload,
+                    created_at=opened_at,
+                )
+            if lease_token_hash is not None and lease_id is not None:
+                conn.execute(self._store.delete(lease_tokens).where(lease_tokens.c.lease_id == lease_id))
+                conn.execute(
+                    self._store.insert(lease_tokens).values(
+                        lease_id=lease_id, token_hash=lease_token_hash, minted_at=opened_at
+                    )
+                )
+            if entered_at is not None:
+                conn.execute(
+                    self._store.insert(takeover_entries).values(takeover_id=takeover_id, entered_at=entered_at)
+                )
         _log.info("takeover opened", takeover_id=takeover_id, chunk_id=chunk_id, lease_id=lease_id, forced=fence_epoch)
+        return seq
+
+    def record_takeover_entry(self, *, takeover_id: str, entered_at: datetime) -> None:
+        # Idempotent: an entry already recorded is the desired state.
+        with self._store.begin() as conn:
+            held = conn.execute(
+                self._store.select(takeover_entries, takeover_entries.c.takeover_id).where(
+                    takeover_entries.c.takeover_id == takeover_id
+                )
+            ).first()
+            if held is None:
+                conn.execute(
+                    self._store.insert(takeover_entries).values(takeover_id=takeover_id, entered_at=entered_at)
+                )
+        _log.info("takeover entered", takeover_id=takeover_id)
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
         with self._store.begin() as conn:
@@ -121,9 +172,15 @@ class TakeoverStore:
     def _takeover_select(store: RunnerStoreConnections) -> Select[Any]:
         # The reference lease's own epoch rides along, so the takeover's hold is scoped to it.
         return store.select(
-            store.scope_join(takeovers, leases, leases.c.lease_id == takeovers.c.lease_id, isouter=True),
+            store.scope_join(
+                store.scope_join(takeovers, leases, leases.c.lease_id == takeovers.c.lease_id, isouter=True),
+                takeover_entries,
+                takeover_entries.c.takeover_id == takeovers.c.takeover_id,
+                isouter=True,
+            ),
             takeovers,
             leases.c.epoch.label("reference_epoch"),
+            takeover_entries.c.entered_at.label("entered_at"),
         )
 
     @staticmethod
@@ -139,6 +196,7 @@ class TakeoverStore:
             harness_id=str(r.harness_id) if r.harness_id is not None else None,
             reference_epoch=int(r.reference_epoch) if r.reference_epoch is not None else None,
             hold_epoch=int(r.hold_epoch) if r.hold_epoch is not None else None,
+            entered=r.entered_at is not None,
         )
 
 

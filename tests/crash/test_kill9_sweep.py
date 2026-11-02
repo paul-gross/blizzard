@@ -37,11 +37,12 @@ from blizzard.hub.tenancy import TenantId
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings, UtilizationSettings
 from blizzard.tools.invariants import Invariants
@@ -129,6 +130,7 @@ _DEDICATED_PREFIXES = (
     "policy.",
     "escalate.",
     "answer.",
+    "takeover.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -189,6 +191,7 @@ _ESCALATE_POINTS = [p for p in _ALL_POINTS if p.startswith("escalate.")]
 # `answer.*` fires in the RUNNER's `_wake` when ON_ANSWER reaches it. Swept by
 # `test_kill9_at_answer_crash_point`.
 _ANSWER_POINTS = [p for p in _ALL_POINTS if p.startswith("answer.")]
+_TAKEOVER_POINTS = [p for p in _ALL_POINTS if p.startswith("takeover.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -280,6 +283,7 @@ _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
 # The release CI subset: the between-steps window; the full sweep runs the usage-limited one too.
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
+_TAKEOVER_CI_SUBSET = ("takeover.after-open.before-kill",)
 _POLICY_CI_SUBSET = ("policy.after-advance.before-marker", "policy.after-open-change.before-marker")
 
 # The escalate CI subset: the later window, where the closure and its escalation are durable together.
@@ -325,6 +329,7 @@ _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 _POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
 _ESCALATE_SWEEP = _select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET)
 _ANSWER_SWEEP = _select(_ANSWER_POINTS, _ANSWER_CI_SUBSET)
+_TAKEOVER_SWEEP = _select(_TAKEOVER_POINTS, _TAKEOVER_CI_SUBSET)
 
 
 def test_policy_sweep_covers_all_six_windows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -370,6 +375,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
         | set(_select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET))
         | set(_select(_ANSWER_POINTS, _ANSWER_CI_SUBSET))
+        | set(_select(_TAKEOVER_POINTS, _TAKEOVER_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -3467,6 +3473,96 @@ def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
+# --- The takeover entry — a forced entry over a live worker, killed between its decision and its entry fact ---
+
+_TAKEOVER_CHUNK = "ch_takeover"
+_TAKEOVER_LEASE = "lease_takeover"
+_TAKEOVER_NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("point", _TAKEOVER_SWEEP)
+def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` inside a forced takeover entry, after its decision committed, recovers on an unarmed restart:
+    the displaced worker is dead, the interrupted takeover is ended, a fresh forced entry is admitted, and the
+    invariant checker passes."""
+    runner_dir = tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    write_runner_config(
+        runner_dir,
+        workspace=crash_env.workspace,
+        bin_dir=crash_env.bin_dir,
+        hub_port=hub_port,
+        port=runner_port,
+        join=False,
+    )
+    db_url = load_runner_config(runner_dir).db_url
+    # The "live worker": a real process in its own group, whose recorded identity the entry kills by.
+    worker = subprocess.Popen(["sleep", "600"], start_new_session=True)
+    runner_proc = None
+    try:
+        start_time = LinuxProcessProbe().start_time(worker.pid)
+        assert start_time is not None
+        engine = create_engine_from_url(db_url)
+        store = registered_fixture_store(engine)
+        store.record_lease(
+            NewLease(
+                lease_id=_TAKEOVER_LEASE,
+                chunk_id=_TAKEOVER_CHUNK,
+                graph_id="gr_takeover",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_TAKEOVER_NOW,
+            )
+        )
+        store.record_spawn(
+            _TAKEOVER_LEASE,
+            pid=worker.pid,
+            process_start_time=start_time,
+            pgid=worker.pid,
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-takeover"),
+            spawned_at=_TAKEOVER_NOW,
+        )
+        store.record_binding(
+            chunk_id=_TAKEOVER_CHUNK,
+            environment_id="e1",
+            workdir=str(tmp_path),
+            bound_at=_TAKEOVER_NOW,
+            workspace_id=DEFAULT_WORKSPACE_ID,
+        )
+        engine.dispose()
+
+        runner = runner_api(runner_dir, runner_port)
+        runner_proc = start_runner(runner_dir, crash_point=point)
+        await_host(runner_port, runner_proc)
+
+        # The runner records the entry's decision, then self-SIGKILLs inside the entry: the client sees the
+        # killed connection, never a 201.
+        with pytest.raises(httpx2.HTTPError):
+            runner.post(f"/api/chunks/{_TAKEOVER_CHUNK}/takeovers", json={"force": True})
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        violations = Invariants(runner_db_url=db_url).run()
+        assert not violations, "invariant violations after the takeover crash:\n" + "\n".join(map(str, violations))
+
+        # Restart UNARMED: startup recovery finishes the displacement and ends the interrupted entry.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        await_host(runner_port, runner_proc)
+        assert _poll(lambda: not runner.get("/api/takeovers").json()["items"], 30), "the takeover was never ended"
+        worker.wait(timeout=30)  # the worker is dead, killed by the entry or by the recovery
+        assert worker.returncode is not None
+
+        # A fresh forced entry is admitted.
+        reopened = runner.post(f"/api/chunks/{_TAKEOVER_CHUNK}/takeovers", json={"force": True})
+        assert reopened.status_code == 201, reopened.text
+        violations = Invariants(runner_db_url=db_url).run()
+        assert not violations, "invariant violations after recovery:\n" + "\n".join(map(str, violations))
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait()
+        terminate(runner_proc)
 
 
 # --- The close-intent outbox — driven through the built-in `hub` work source, whose closer is ---

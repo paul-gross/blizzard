@@ -51,6 +51,10 @@ it, and starts no session. After that the loop may touch the chunk's session aga
 a takeover. With nothing open it says so and exits 0, so it is safe to repeat. `--end` and `--force` are mutually
 exclusive. `blizzard runner status` lists every open takeover.
 
+A runner crash during `blizzard runner takeover --force` can cut the entry short, after the runner recorded it but
+before it handed you the session. On restart the runner finishes what the entry began, killing the displaced worker, and
+ends that takeover. Enter again; the retry is admitted as a fresh entry. A takeover you were already in is left open.
+
 ## The verb versus the raw resume string
 
 For a runner-composed escalation the takeover verb, not the escalation record's raw resume string, is the supported way

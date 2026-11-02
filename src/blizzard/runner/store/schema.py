@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Float,
+    ForeignKey,
     Index,
     Integer,
     MetaData,
@@ -525,6 +526,17 @@ takeover_ends = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("takeover_id", String, nullable=False),
     Column("ended_at", UtcDateTime, nullable=False),
+    Column("runner_id", String, nullable=False),
+    info={"scope": "runner"},
+)
+
+# One row per takeover whose entry completed: the commands that displace a live worker ran and the person was
+# handed the session. An open takeover with no row here was interrupted mid-entry (startup recovery ends it).
+takeover_entries = Table(
+    "takeover_entries",
+    metadata,
+    Column("takeover_id", String, ForeignKey("takeovers.takeover_id"), primary_key=True),
+    Column("entered_at", UtcDateTime, nullable=False),
     Column("runner_id", String, nullable=False),
     info={"scope": "runner"},
 )

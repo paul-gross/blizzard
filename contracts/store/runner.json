@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261026_1000_fact_append_sequence",
+  "head_revision": "20261029_1000_takeover_entries",
   "store": "runner",
   "tables": {
     "asks": {
@@ -2754,6 +2754,47 @@
       "foreign_keys": [],
       "primary_key": [
         "id"
+      ],
+      "unique": []
+    },
+    "takeover_entries": {
+      "checks": [],
+      "columns": {
+        "entered_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "takeover_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "takeover_id"
+          ],
+          "references": {
+            "columns": [
+              "takeover_id"
+            ],
+            "table": "takeovers"
+          }
+        }
+      ],
+      "primary_key": [
+        "takeover_id"
       ],
       "unique": []
     },

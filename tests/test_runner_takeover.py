@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -41,6 +42,7 @@ from blizzard.runner.lifecycle.takeover import (
     TakeoverCloseScope,
     TakeoverEndedElsewhere,
     TakeoverOpenScope,
+    TakeoverRecovery,
     TakeoverService,
 )
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume
@@ -859,3 +861,118 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(
 def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: set[str]) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids
+
+
+# The entry: one decision transaction, an entry fact, and startup recovery of an interrupted entry
+# --------------------------------------------------------------------------- #
+
+
+def _interrupted_forced_entry(store: SqlAlchemyRunnerStore) -> None:
+    """The durable state a crash right after a forced entry's decision transaction leaves: the takeover, its fence
+    and the re-minted token — the worker not yet killed, no entry fact."""
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=2,
+        hold_epoch=1,
+        opened_at=_NOW,
+        fence_payload='{"chunk_id": "ch_1", "epoch": 2}',
+        lease_token_hash="new-token-hash",
+    )
+
+
+def _recovery(store: SqlAlchemyRunnerStore, probe: FakeProbe) -> TakeoverRecovery:
+    return TakeoverRecovery(
+        takeover=store, leases=store, elicitations=store, process=probe, clock=FixedClock(_NOW + timedelta(minutes=1))
+    )
+
+
+def test_the_decision_transaction_is_all_or_none(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_lease_token("lease_1", "prior-token-hash", _NOW)
+
+    with pytest.raises(SQLAlchemyError):
+        store.record_takeover(
+            takeover_id="tko_1",
+            chunk_id="ch_1",
+            lease_id="lease_1",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+            workdir="/ws/e1",
+            fence_epoch=2,
+            opened_at=_NOW,
+            fence_payload="{}",
+            lease_token_hash="new-token-hash",
+            entered_at="not an instant",  # type: ignore[arg-type]  # the last write fails
+        )
+
+    assert store.open_takeover_for_chunk("ch_1") is None
+    assert store.pending_outbound() == []
+    assert store.lease_token_hash("lease_1") == "prior-token-hash"
+
+
+def test_a_successful_open_writes_its_entry_fact(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    probe = FakeProbe(alive={(100, "start-100")})
+
+    _service(store, probe=probe).open(_open_scope(store), force=True)
+
+    record = store.open_takeover_for_chunk("ch_1")
+    assert record is not None
+    assert record.entered
+    assert not record.interrupted()
+    assert probe.killed == [100]
+
+
+def test_an_entry_over_nothing_to_kill_writes_its_entry_in_the_decision(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    _service(store).open(_open_scope(store), force=False)
+
+    record = store.open_takeover_for_chunk("ch_1")
+    assert record is not None
+    assert record.entered
+
+
+def test_startup_recovery_kills_the_worker_and_ends_every_unentered_takeover(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    _interrupted_forced_entry(store)
+    probe = FakeProbe(alive={(100, "start-100")})
+    interrupted = store.open_takeover_for_chunk("ch_1")
+    assert interrupted is not None
+    assert interrupted.interrupted()
+
+    ended = _recovery(store, probe).run()
+
+    assert ended == 1
+    assert probe.killed == [100]
+    assert store.open_takeover_for_chunk("ch_1") is None
+    # The fence stands and the lease stays open: the state of "entered, then left".
+    assert store.latest_epoch("ch_1") == 2
+    assert store.active_lease("lease_1") is not None
+    # The operator's retry is admitted as a fresh entry.
+    reopened = _service(store, probe=probe).open(_open_scope(store), force=True)
+    assert reopened.takeover_id != "tko_1"
+    # A repeat finds nothing to do.
+    assert _recovery(store, probe).run() == 0
+
+
+def test_startup_recovery_leaves_an_entered_takeover_untouched(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    probe = FakeProbe(alive={(100, "start-100")})
+    _service(store, probe=probe).open(_open_scope(store), force=True)
+    probe.killed.clear()
+
+    ended = _recovery(store, probe).run()
+
+    assert ended == 0
+    assert probe.killed == []
+    assert store.open_takeover_for_chunk("ch_1") is not None
