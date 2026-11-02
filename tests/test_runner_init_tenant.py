@@ -70,6 +70,12 @@ class _Log:
     def stored_runner_id(self) -> str | None:
         return self.stored
 
+    def is_set_aside(self) -> bool:
+        return False
+
+    def sharing(self) -> tuple[str, ...]:
+        return ()
+
     def set_aside(self) -> None:
         self.calls.append("set_aside")
 

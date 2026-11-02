@@ -29,7 +29,6 @@ import blizzard.runner as runner_pkg
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.composition import build_identity_forgetter
 from blizzard.runner.environments.repository import BindingCompletion, IWriteEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -57,7 +56,8 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGit
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
+from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
     FloorClear,
@@ -572,8 +572,8 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         )
     ),
     # Last: it deletes runner A's identity row, which no recipe above may depend on afterwards.
-    (IWriteRetiredRunnerIdentity, "forget_runner_identity"): lambda w: build_identity_forgetter(
-        w.engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id=RUNNER_A
+    (IWriteRetiredRunnerIdentity, "forget_runner_identity"): lambda w: RunnerIdentityStore(
+        RunnerStoreConnections(w.engine, RunnerStoreErrorFactory(get_logger("test")), RUNNER_A)
     ).forget_runner_identity(),
 }
 

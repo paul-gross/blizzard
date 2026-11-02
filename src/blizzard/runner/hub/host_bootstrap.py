@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.hub.bootstrap import HeldToken, IRunnerStoreAside, ITokenWriter
+from blizzard.runner.hub.bootstrap import HeldToken, IStoreSetAside, ITokenWriter
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
     HostAddRefused,
@@ -111,7 +111,7 @@ class HostBootstrap:
         host_client: Callable[[str], IHostRecordReader],
         admin: IHubRunnerAdmin,
         tokens: ITokenWriter,
-        store: IRunnerStoreAside,
+        store: IStoreSetAside,
     ) -> None:
         self._host_client = host_client
         self._admin = admin

@@ -26,7 +26,7 @@ from blizzard.runner.composition import (
     DotenvTokenFiles,
     RunnerBoundStoreFiles,
     build_host_stores,
-    build_identity_writer,
+    build_stores,
 )
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_file import HostFileEditor, append_workspace
@@ -288,7 +288,7 @@ def test_ingest_is_refused_for_a_runner_this_hosts_store_holds_from_no_ingest(
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     engine = _engine(hosts.here)
-    build_identity_writer(engine, errors=_errors(), runner_id=MOVING_ID).record_runner_identity(
+    build_stores(engine, errors=_errors(), runner_id=MOVING_ID).identity.record_runner_identity(
         RunnerIdentity(runner_id=MOVING_ID, runner_name=MOVING, registered_at=T0)
     )
     engine.dispose()

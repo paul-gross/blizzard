@@ -3,19 +3,23 @@ host's own credential, or take one in from another store."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import click
 
+from blizzard.cli.collaborators import CliCollaborators
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import InitCollaborators, forget_identity, write_runner_token
-from blizzard.runner.composition import build_runner_ingest
-from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
+from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
+from blizzard.runner.cli.store_guard import named_runners, store_write_guard
+from blizzard.runner.composition import build_identity_service, build_runner_ingest
+from blizzard.runner.config import SCAFFOLD_AGENTS
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
     SCAFFOLD_SUBSCRIPTION,
@@ -91,10 +95,10 @@ def add(
     token = _host_token(config)
     try:
         config.check_new_runner(name)
+        bindings = config.bindings_for(projects, workspaces)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     token_env = hub_token_variable(name)
-    bindings = _bindings(config, projects, workspaces)
     runner_agents = _runner_agents(projects, agents)
     hub = config.hub_url
     collaborators = InitCollaborators.of(ctx)
@@ -148,54 +152,127 @@ def add(
         click.echo(f"{running}: it starts runner {name} at its next start")
 
 
+@dto
+@dataclass(frozen=True)
+class _Retiring:
+    """The runner ``retire`` acts on: its name and hub id, and whether the host file still configures it."""
+
+    name: str
+    runner_id: str
+    configured: bool
+
+
+class _HostRunning(Exception):
+    """A host holds the directory the runner is retired from."""
+
+    def __init__(self, held: HostHeld) -> None:
+        super().__init__(str(held))
+
+
 @click.command("retire")
 @_DIR_OPTION
-@click.option("--runner", "runner", required=True, help="The host's runner to retire, by name or id.")
+@click.option(
+    "--runner",
+    "runner",
+    required=True,
+    help="The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store "
+    "still names.",
+)
 @click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
 @click.pass_context
 def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
     """Retire one of this registered host's runners at its hub, forget its identity here, and remove its
-    `[[runner]]` from the host file. A running host stops running it shortly after.
+    `[[runner]]` from the host file. With the host stopped, this forgets the identity; a running host forgets it itself
+    when it halts the runner at its next tick.
 
     Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
     releases them."""
     config = load_host(directory)
     token = _host_token(config)
+    clock = CliCollaborators.of(ctx).wall_clock
+    target = _retiring(config, runner, clock)
+    try:
+        with store_write_guard(
+            config,
+            action=f"retire runner {target.name}",
+            door=Door.of(ctx),
+            clock=clock,
+            runners={},
+            configured=(),
+            refuse_foreign=False,
+            held=_HostRunning if target.configured else None,
+        ):
+            released = _retire_at_hub(ctx, config, token, target, force=force)
+            with build_identity_service(config.db_url, runner_id=target.runner_id, clock=clock) as identities:
+                identities.forget()
+            _remove_entry(config, target, released)
+            click.echo(_retired(config, target, released))
+    except _HostRunning as exc:
+        released = _retire_at_hub(ctx, config, token, target, force=force)
+        _remove_entry(config, target, released)
+        click.echo(_retired(config, target, released))
+        click.echo(f"a running host holds {config.root} ({exc}): it halts runner {target.name} at its next tick")
+
+
+def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
+    """The runner ``runner`` names: one the host file configures, by name or id, else one only the store's identity
+    rows still name, by id."""
     try:
         entry = config.sole_runner(runner)
     except ConfigError as exc:
+        if runner in _named_runners(config, clock):
+            return _Retiring(name=runner, runner_id=runner, configured=False)
         raise click.ClickException(str(exc)) from exc
     if entry.id is None:
         raise click.ClickException(
             f"runner {entry.name} has no id in {config.config_path}, so the hub holds no runner of it to retire; "
             "remove its [[runner]] by hand"
         )
+    return _Retiring(name=entry.name, runner_id=entry.id, configured=True)
+
+
+def _named_runners(config: HostConfig, clock: IClock) -> tuple[str, ...]:
+    """The runners the store's identity rows name — none when the host has no store file yet. A store that exists but
+    cannot be read raises, so the cause is not hidden behind a "no such runner" refusal."""
+    if not HostLayout(config.root).store_path.exists():
+        return ()
+    return named_runners(config, clock)
+
+
+def _retire_at_hub(ctx: click.Context, config: HostConfig, token: str, target: _Retiring, *, force: bool) -> str:
+    """Retire ``target`` at the hub under the host's credential, and the chunks it released, in words."""
     hub = config.hub_url
     with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
         try:
-            answer = host_clients(token).retire_runner(entry.id, force=force)
+            answer = host_clients(token).retire_runner(target.runner_id, force=force)
         except HostRunnerRetireRefused as exc:
             raise click.ClickException(
-                f"runner {entry.name} ({entry.id}) still holds chunks, so nothing was retired: {exc.detail}. Re-run "
-                "with --force to release them"
+                f"runner {target.name} ({target.runner_id}) still holds chunks, so nothing was retired: {exc.detail}. "
+                "Re-run with --force to release them"
             ) from exc
         except HubClientError as exc:
-            raise click.ClickException(f"cannot retire runner {entry.name} at the hub at {hub}: {exc}") from exc
+            raise click.ClickException(f"cannot retire runner {target.name} at the hub at {hub}: {exc}") from exc
     if isinstance(answer, HostRefused):
-        raise click.ClickException(_host_refused(answer, hub, f"retire runner {entry.name} ({entry.id})"))
-    released = f", releasing {', '.join(answer.released_chunk_ids)}" if answer.released_chunk_ids else ""
-    forget_identity(config, entry.id)
+        raise click.ClickException(_host_refused(answer, hub, f"retire runner {target.name} ({target.runner_id})"))
+    return f", releasing {', '.join(answer.released_chunk_ids)}" if answer.released_chunk_ids else ""
+
+
+def _remove_entry(config: HostConfig, target: _Retiring, released: str) -> None:
+    """Remove ``target``'s ``[[runner]]`` from the host file, when the file holds one."""
+    if not target.configured:
+        return
     try:
-        remove_runner(config.layout, entry.name, strict=config.strict)
+        remove_runner(config.layout, target.name, strict=config.strict)
     except ConfigError as exc:
         raise click.ClickException(
-            f"runner {entry.name} ({entry.id}) was retired at {hub}{released}, but its [[runner]] was not removed: "
-            f"{exc}. Remove it by hand"
+            f"runner {target.name} ({target.runner_id}) was retired at {config.hub_url}{released}, but its "
+            f"[[runner]] was not removed: {exc}. Remove it by hand"
         ) from exc
-    click.echo(f"retired runner {entry.name} ({entry.id}) at {hub}{released}, and removed its [[runner]]")
-    running = _running(ctx, config.layout)
-    if running is not None:
-        click.echo(f"{running}: it halts runner {entry.name} at its next tick")
+
+
+def _retired(config: HostConfig, target: _Retiring, released: str) -> str:
+    done = "and removed its [[runner]]" if target.configured else "and forgot its identity here"
+    return f"retired runner {target.name} ({target.runner_id}) at {config.hub_url}{released}, {done}"
 
 
 @click.command("ingest")
@@ -250,27 +327,6 @@ def _host_token(config: HostConfig) -> str:
     return config.host_token.value
 
 
-def _bindings(config: HostConfig, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
-    """One binding per project, each to its workspace; refused when a --workspace is not one the host declares, or
-    when it is given neither once nor once per --project."""
-    declared = [workspace.id for workspace in config.workspaces]
-    if not workspaces:
-        if len(declared) != 1:
-            raise click.ClickException(
-                f"this host declares {len(declared)} workspaces ({', '.join(declared) or 'none'}); name the one each "
-                "--project runs in with --workspace"
-            )
-        workspaces = (declared[0],)
-    for workspace in workspaces:
-        if workspace not in declared:
-            raise click.ClickException(
-                f"--workspace {workspace!r} is not a workspace this host declares ({', '.join(declared)})"
-            )
-    return tuple(
-        ProjectBinding(project, _nth(workspaces, i, "--workspace", projects)) for i, project in enumerate(projects)
-    )
-
-
 def _runner_agents(projects: tuple[str, ...], agents: tuple[int, ...]) -> int:
     """The runner's agent count: the one --agents, or the sum of one per --project."""
     if not agents:
@@ -280,15 +336,6 @@ def _runner_agents(projects: tuple[str, ...], agents: tuple[int, ...]) -> int:
     if len(agents) != len(projects):
         raise click.ClickException(f"give --agents once, or once per --project ({len(projects)})")
     return sum(agents)
-
-
-def _nth[T](values: tuple[T, ...], index: int, option: str, projects: tuple[str, ...]) -> T:
-    """The ``index``-th of ``values`` when one is given per project, or the only one."""
-    if len(values) == 1:
-        return values[0]
-    if len(values) != len(projects):
-        raise click.ClickException(f"give {option} once, or once per --project ({len(projects)})")
-    return values[index]
 
 
 def _host_refused(answer: HostRefused, hub: str, act: str) -> str:

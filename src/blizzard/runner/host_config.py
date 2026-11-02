@@ -468,6 +468,32 @@ class HostConfig:
                 )
             )
 
+    def bindings_for(self, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
+        """One binding per project of ``projects``, each to its workspace. Raises :class:`HostConfigError` when a
+        workspace of ``workspaces`` is not one the host declares, or when they are given neither once nor once per
+        project — and, with none given, when the host does not declare exactly one."""
+        declared = [workspace.id for workspace in self.workspaces]
+        if not workspaces:
+            if len(declared) != 1:
+                raise HostConfigError(
+                    (
+                        f"this host declares {len(declared)} workspaces ({', '.join(declared) or 'none'}); name the "
+                        "one each --project runs in with --workspace",
+                    )
+                )
+            workspaces = (declared[0],)
+        for workspace in workspaces:
+            if workspace not in declared:
+                raise HostConfigError(
+                    (f"--workspace {workspace!r} is not a workspace this host declares ({', '.join(declared)})",)
+                )
+        if len(workspaces) != 1 and len(workspaces) != len(projects):
+            raise HostConfigError((f"give --workspace once, or once per --project ({len(projects)})",))
+        return tuple(
+            ProjectBinding(project, workspaces[0] if len(workspaces) == 1 else workspaces[index])
+            for index, project in enumerate(projects)
+        )
+
     def runner_config(self, environ: Mapping[str, str] | None = None, *, runner: str | None = None) -> RunnerConfig:
         """The config of the runner :meth:`sole_runner` picks, for an offline verb: projected whether or not it has
         joined its hub — no id, no token — and refused only for the errors its own entry holds."""

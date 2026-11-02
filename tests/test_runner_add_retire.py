@@ -16,7 +16,8 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.composition import RunnerProcess
-from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.host_config import BuiltRunner, HostConfigError
+from blizzard.runner.host_file import remove_runner
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile
@@ -286,3 +287,87 @@ def test_add_gives_the_new_runner_the_hosts_tool_profile_so_the_host_still_loads
     assert runners[1]["worker"]["env_passthrough"] == ["SSH_AUTH_SOCK"]
     assert runners[1]["worker"]["path_prepend"] == runners[0]["worker"]["path_prepend"]
     assert len(load_host_config(root).runners) == 2
+
+
+def test_add_refuses_a_workspace_the_host_does_not_declare_with_nothing_added(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+
+    result = _run(fake_init_hub, "add", "r4", "--project", "default", "--workspace", "nope", "--dir", str(root))
+
+    assert result.exit_code != 0
+    assert "--workspace 'nope' is not a workspace this host declares (workspace-local)" in result.output
+    assert len(fake_init_hub.admin.added) == 1
+
+
+@pytest.mark.unit
+def test_the_host_binds_each_project_to_its_workspace_or_refuses_by_value(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    config = load_host_config(_registered(tmp_path, fake_init_hub))
+
+    assert [(b.project, b.workspace) for b in config.bindings_for(("p", "q"), ())] == [
+        ("p", "workspace-local"),
+        ("q", "workspace-local"),
+    ]
+    with pytest.raises(HostConfigError, match="give --workspace once, or once per --project \\(2\\)"):
+        config.bindings_for(("p", "q"), ("workspace-local", "workspace-local", "workspace-local"))
+    with pytest.raises(HostConfigError, match="is not a workspace this host declares"):
+        config.bindings_for(("p",), ("nope",))
+
+
+def _row_ids(root: Path) -> tuple[str, ...]:
+    return named_runners(load_host_config(root), SystemClock())
+
+
+def test_retire_under_a_running_host_writes_nothing_to_the_store_and_leaves_the_forget_to_the_host(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "init", str(root), "--hub", _HUB).exit_code == 0
+    store = HostLayout(root).store_path
+    before = (_row_ids(root), store.read_bytes())
+
+    with HostLock.acquire(HostLayout(root)):
+        result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert "it halts runner r2 at its next tick" in result.output
+    assert (_row_ids(root), store.read_bytes()) == before
+    assert _runner_names(root) == ["runner-local"]
+
+
+def test_retire_of_a_runner_only_the_store_names_retires_it_at_the_hub_and_forgets_the_row(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "init", str(root), "--hub", _HUB).exit_code == 0
+    remove_runner(HostLayout(root), "r2", strict=False)
+    assert set(_row_ids(root)) == {"rn_init1", "rn_init2"}
+
+    result = _run(fake_init_hub, "retire", "--runner", "rn_init2", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1"]}
+    assert _row_ids(root) == ("rn_init1",)
+    assert _runner_names(root) == ["runner-local"]
+
+
+def test_retire_of_a_runner_only_the_store_names_is_refused_while_a_host_runs(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "init", str(root), "--hub", _HUB).exit_code == 0
+    remove_runner(HostLayout(root), "r2", strict=False)
+
+    with HostLock.acquire(HostLayout(root)):
+        result = _run(fake_init_hub, "retire", "--runner", "rn_init2", "--dir", str(root))
+
+    assert result.exit_code != 0
+    assert "stop it first" in result.output
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1", "rn_init2"]}
+    assert set(_row_ids(root)) == {"rn_init1", "rn_init2"}

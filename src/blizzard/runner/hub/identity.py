@@ -18,7 +18,8 @@ from typing import Protocol
 from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
-from blizzard.runner.hub.client import ITokenIdentityReader
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.runner.hub.client import ITokenIdentityReader, TokenIdentity, TokenRefusal
 
 
 @domain_model
@@ -47,6 +48,17 @@ def answered_tenant(
     return None, None
 
 
+def proves_retired(answer: TokenIdentity | TokenRefusal, runner_id: str) -> bool:
+    """Whether the hub's ``answer`` about a token proves runner ``runner_id`` retired: only a refusal as ``retired``
+    that names that runner. A runner merely not held under its host, or a token unknown, revoked or of another runner,
+    proves nothing."""
+    return (
+        isinstance(answer, TokenRefusal)
+        and answer.reason is RunnerTokenRefusalReason.RETIRED
+        and answer.runner_id == runner_id
+    )
+
+
 class IReadRunnerIdentityRepository(Protocol):
     """Read the runner store's single identity row."""
 
@@ -57,7 +69,7 @@ class IReadRunnerIdentityRepository(Protocol):
 
 
 class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
-    """Read-write access to the identity row — held only by the registration step."""
+    """Read-write access to the identity row — held by the registration step and the runner identity service."""
 
     def record_runner_identity(self, identity: RunnerIdentity) -> None:
         """Replace the single identity row with ``identity``, in one transaction."""
@@ -65,7 +77,7 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
 
 
 class IWriteRetiredRunnerIdentity(Protocol):
-    """Forget a retired runner's identity row — held only by ``runner retire``."""
+    """Forget a retired runner's identity row — held only by the runner identity service."""
 
     def forget_runner_identity(self) -> None:
         """Delete the bound runner's identity row, so the host's store no longer names a runner the hub retired and
