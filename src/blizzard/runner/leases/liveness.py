@@ -106,13 +106,16 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         harness_version: str | None = None,
         pgid: int | None = None,
         spawn_cwd: str | None = None,
+        park_resume_question_id: str | None = None,
     ) -> None:
         """Fill a lease's spawn-return facts in one shot: pid, process start time, process
         group, session id — for identity known at spawn time (a fresh mint instead splits
         this across :meth:`record_provisional_spawn`/:meth:`record_identified_spawn`).
         ``pgid`` defaults to ``None`` when the launch's owned group is unknown. ``spawned_at``
         appends the lease's spawn generation, distinguishing this fact from a stale one.
-        ``spawn_cwd`` is the worker's working directory, frozen onto the opened transcript segment."""
+        ``spawn_cwd`` is the worker's working directory, frozen onto the opened transcript segment.
+        ``park_resume_question_id`` resumes the lease's park on that question, stamped
+        ``spawned_at``, in the same transaction — the woken pid and the answered park are one fact."""
         ...
 
     def record_provisional_spawn(

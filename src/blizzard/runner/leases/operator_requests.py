@@ -33,7 +33,7 @@ class IWriteRequeueRepository(IReadRequeueRepository, Protocol):
     def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
         """Append the clearing fact for a chunk's local needs_human hold.
 
-        Recorded before anything else runs (``bzh:crash-correctness``): the fact alone is
+        Recorded before anything else runs (``bzh:crash-exemptions-runner``): the fact alone is
         durable the instant this returns, and is read back via
         :meth:`pending_requeue_chunk_ids` — this call never spawns anything itself."""
         ...

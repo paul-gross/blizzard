@@ -457,7 +457,7 @@ class InterruptedClaims:
     def _resume_requeued(self, chunk_id: str, latest_epoch: int | None) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
 
-        The hold-clearing fact is already durable when this runs (``bzh:crash-correctness``). The
+        The hold-clearing fact is already durable when this runs (``bzh:crash-exemptions-runner``). The
         retry budget is **carried, not reset** — an ordinary mint against the node's existing
         ``retries_max``, so a requeue buys exactly one more try."""
         bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)

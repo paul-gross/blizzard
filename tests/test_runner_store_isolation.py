@@ -47,7 +47,7 @@ from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository, IWriteRequeueRepository
 from blizzard.runner.leases.overload import IWriteOverloadRepository
-from blizzard.runner.leases.record import IWriteLeaseRecordRepository
+from blizzard.runner.leases.record import ClosureFact, IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IWriteGraphArtifactRepository
@@ -253,8 +253,7 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         node_id=w.node_a,
         reason="transitioned",
         closed_at=_at(2),
-        event_kind="lease.closed",
-        event_payload="{}",
+        facts=[ClosureFact(kind="lease.closed", payload="{}")],
     ),
     (IWriteLeaseLivenessRepository, "record_heartbeat"): lambda w: w.stores.liveness.record_heartbeat(
         lease_id=w.lease_2, beat_at=_at(3)

@@ -1,7 +1,7 @@
 """The operator requeue — ``blizzard runner requeue <chunk-id>``.
 
 The explicit hand-back after a human worked a needs_human chunk interactively. Appends the clearing fact
-only (``bzh:crash-correctness``); the route is never released and the retry budget is **carried, not
+only (``bzh:crash-exemptions-runner``); the route is never released and the retry budget is **carried, not
 reset**: a requeue buys exactly one more try. Legal only from :attr:`RequeueStanding.REQUEUEABLE`; a
 requeue over a pending one changes nothing and writes no mark."""
 

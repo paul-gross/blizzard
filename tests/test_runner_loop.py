@@ -15,6 +15,7 @@ from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, select
@@ -3538,7 +3539,7 @@ def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a
         config=config,
     )
 
-    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
+    Attempt(ctx, lease).close_escalated(_NOW, cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3635,7 +3636,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
         config=config,
     )
 
-    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
+    Attempt(ctx, lease).close_escalated(_NOW, cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3685,7 +3686,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
         config=config,
     )
 
-    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
+    Attempt(ctx, lease).close_escalated(_NOW, cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3738,7 +3739,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path: P
     )
 
     with capture_logs() as logs:
-        Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
+        Attempt(ctx, lease).close_escalated(_NOW, cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -3810,6 +3811,41 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path: Path):
     assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir --runner r1"
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
+
+
+@pytest.mark.unit
+def test_cost_cap_buffers_its_escalation_inside_the_escalated_closure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The spend-cap park closes the lease and buffers its escalation in one transaction, so
+    no crash between the two can leave a closed-escalated lease the hub never hears about."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+    closures: list[tuple[str, list[str]]] = []
+    real = store.record_closure
+
+    def spy(**kwargs: Any) -> list[int]:
+        closures.append((kwargs["reason"], [fact.kind for fact in kwargs.get("facts", ())]))
+        return real(**kwargs)
+
+    monkeypatch.setattr(store, "record_closure", spy)
+
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Pull(ctx).run()
+
+    assert closures == [("escalated", [ESCALATION_RECORDED])]
 
 
 @pytest.mark.unit

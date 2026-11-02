@@ -56,7 +56,7 @@ _CP_CHECKS_AFTER_MARKER = crashpoint(
 )
 
 # Verify -> elicit verdict -> buffer completion. Verify is read-only, so it needs no crash
-# point of its own (`bzh:crash-correctness` exemption). Usage recording sits
+# point of its own (`bzh:crash-exemptions-runner` exemption). Usage recording sits
 # between the verdict and the buffer: a crash there finds this attempt's usage facts already
 # durable, or neither — never a double-count.
 _CP_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")

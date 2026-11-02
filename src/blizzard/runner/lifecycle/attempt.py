@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -11,7 +11,7 @@ from typing import Protocol
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
-from blizzard.foundation.fact_kinds import EVENT_RECORDED
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_event_types import LeaseChangeCause
@@ -21,8 +21,10 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.hub.outbound_buffer import escalation_payload
 from blizzard.runner.leases.closure import NO_ACCEPTABLE_HARNESS_MINT
 from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.record import ClosureFact
 from blizzard.runner.lifecycle.model import (
     FailureMove,
     OwnerUnresolvableMove,
@@ -60,6 +62,21 @@ _CP_PAUSE_PARK_AFTER_INTERRUPT = crashpoint(
 # is active behind a dead pid; the hub's fence is what makes the next PULL re-derive the move.
 _CP_PREEMPT_AFTER_KILL = crashpoint(
     "preempt.after-kill.before-closure", "restarted chunk's worker killed; the preempted closure not yet durable"
+)
+
+# ESCALATE — the one escalating close every escalation site goes through. The payload is
+# composed from reads still valid before the close, so the closure, its event, and its
+# `escalation.recorded` fact commit in one transaction: a crash on either side of it leaves
+# either an open lease the next pass re-escalates, or a durable escalation.
+_CP_ESCALATE_AFTER_COMPOSE = crashpoint(
+    "escalate.after-compose.before-close", "escalation payload composed; the escalating closure not yet durable"
+)
+# After the closing transaction commits: the closure, its event, and its escalation are all
+# durable; the inline resume-intent clear the owner-unresolvable and no-acceptable-harness
+# sites ask for is not yet written (the other sites write nothing further).
+_CP_ESCALATE_AFTER_CLOSE = crashpoint(
+    "escalate.after-close.before-resume-clear",
+    "escalating closure and its escalation durable; the resume-intent clear not yet written",
 )
 
 #: The classification each :meth:`Attempt.fail` branch surfaces. The
@@ -157,15 +174,13 @@ class Attempt:
             session, exc = owner_block
             self._escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return
-        self.close(
-            LeaseClosureReason.ESCALATED,
+        self.close_escalated(
             now,
-            self._event(_WORKER_LOST, f"worker lost — retries exhausted ({reason}, via {via})", reason, via, tail),
-            escalation_cause=EscalationCause.RETRIES_EXHAUSTED,
-        )
-        self.escalate(
             cause=EscalationCause.RETRIES_EXHAUSTED,
             detail=f"retries {retried} of {lease.retries_max} used; last failure: {reason} (via {via})",
+            event=self._event(
+                _WORKER_LOST, f"worker lost — retries exhausted ({reason}, via {via})", reason, via, tail
+            ),
         )
 
     def requeue(self) -> None:
@@ -212,12 +227,52 @@ class Attempt:
             harness_id=lease.harness_id,
         )
 
-    def escalate(self, *, cause: EscalationCause, detail: str) -> None:
-        """Park the chunk needs-human at the hub, envs held for takeover, recording why.
+    def close_escalated(
+        self,
+        at: datetime,
+        *,
+        cause: EscalationCause,
+        detail: str,
+        event: dict[str, object] | None = None,
+        closure_reason: str | None = None,
+        clear_resume_intent: bool = False,
+    ) -> None:
+        """Close this lease ``escalated`` and park the chunk needs-human at the hub, envs held for
+        takeover — the one escalating close every escalation site goes through.
 
-        Reached only after the closure is already durable (:meth:`fail` closes first), so an
-        unresolvable owner cannot un-escalate it — it only costs the takeover command, which
-        the "no takeover command" branch below already covers."""
+        The escalation payload is composed first, from reads still valid while the lease is open,
+        so the closure, its optional ``event``, and the ``escalation.recorded`` fact commit in one
+        transaction, in that buffer order. An unresolvable owner cannot un-escalate it — it only
+        costs the takeover command, which the "no takeover command" branch below covers.
+        ``clear_resume_intent`` resolves the lease's resume intent inline once the close is durable."""
+        lease = self.lease
+        escalation, takeover, wrapped = self._compose_escalation(cause=cause, detail=detail)
+        _CP_ESCALATE_AFTER_COMPOSE.reached()
+        self.close(
+            LeaseClosureReason.ESCALATED,
+            at,
+            event,
+            closure_reason=closure_reason,
+            escalation_cause=cause,
+            escalation=escalation,
+        )
+        _CP_ESCALATE_AFTER_CLOSE.reached()
+        if clear_resume_intent:
+            # Resolved inline, same as `abandon`/`park_paused`/`preempt` — escalated is a third
+            # resolution `record_resume_clear` closes here, not a fourth pending state.
+            self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=at)
+        _log.info(
+            "escalated to needs-human",
+            cause=str(cause),
+            detail=detail,
+            chunk_id=lease.chunk_id,
+            takeover=takeover,
+            wrapped=wrapped,
+        )
+
+    def _compose_escalation(self, *, cause: EscalationCause, detail: str) -> tuple[dict[str, object], str, str]:
+        """The ``escalation.recorded`` payload, with the raw and wrapped takeover commands it
+        carries — read-only, so it runs before the escalating close."""
         lease = self.lease
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         session = lease.session
@@ -249,17 +304,15 @@ class Attempt:
                 bound_envs=len(bindings),
                 harness_unresolved=session is not None and harness is None,
             )
-        OutboundFacts(self.ctx).escalation(
-            lease, takeover=takeover, wrapped_takeover=wrapped, cause=cause, detail=detail, at=self.ctx.clock.now()
-        )
-        _log.info(
-            "escalated to needs-human",
-            cause=str(cause),
-            detail=detail,
-            chunk_id=lease.chunk_id,
+        payload = escalation_payload(
+            lease,
             takeover=takeover,
-            wrapped=wrapped,
+            wrapped_takeover=wrapped,
+            cause=cause,
+            detail=detail,
+            route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
         )
+        return payload, takeover, wrapped
 
     def escalate_owner_unresolvable(
         self, *, session: SessionReference, exc: UnknownHarnessError | UnavailableHarnessError, via: str
@@ -300,9 +353,8 @@ class Attempt:
         self, *, session: SessionReference, exc: UnknownHarnessError | UnavailableHarnessError, via: str
     ) -> None:
         """The actual close: :meth:`escalate_owner_unresolvable`'s own body, reached once its
-        detached/paused precedence has cleared. Unlike :meth:`escalate` (reached only after
-        ``fail`` has already closed the lease), this closes it itself, so a crash right after
-        leaves nothing to redo — the next pass reads a closed lease."""
+        detached/paused precedence has cleared. The escalating close carries its escalation, so
+        a crash right after leaves nothing to redo — the next pass reads a closed lease."""
         lease = self.lease
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; nothing is live behind it
@@ -319,19 +371,13 @@ class Attempt:
             "message": message,
             "detail": {"via": via, "harness_id": session.harness_id, "owner_status": status},
         }
-        self.close(
-            LeaseClosureReason.ESCALATED,
+        self.close_escalated(
             now,
-            event,
-            closure_reason=closure.closure_reason,
-            escalation_cause=EscalationCause.OWNER_UNRESOLVABLE,
-        )
-        # Resolved inline, same as `abandon`/`park_paused`/`preempt` — escalated is a third
-        # resolution `record_resume_clear` closes here, not a fourth pending state.
-        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-        self.escalate(
             cause=EscalationCause.OWNER_UNRESOLVABLE,
             detail=f"recorded harness owner {session.harness_id!r} is {status} (via {via})",
+            event=event,
+            closure_reason=closure.closure_reason,
+            clear_resume_intent=True,
         )
 
     def escalate_no_acceptable_harness(
@@ -356,19 +402,15 @@ class Attempt:
                 "skipped": [{"harness_id": s.harness_id, "reason": s.reason} for s in skipped],
             },
         }
-        self.close(
-            LeaseClosureReason.ESCALATED,
-            now,
-            event,
-            closure_reason=NO_ACCEPTABLE_HARNESS_MINT,
-            escalation_cause=EscalationCause.NO_ACCEPTABLE_HARNESS,
-        )
-        # Same resolve-inline shape as `_escalate_owner_unresolvable`.
-        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         tried = ", ".join(f"{s.harness_id}: {s.reason}" for s in skipped) or "none skipped"
-        self.escalate(
+        # Same resolve-inline shape as `_escalate_owner_unresolvable`.
+        self.close_escalated(
+            now,
             cause=EscalationCause.NO_ACCEPTABLE_HARNESS,
             detail=f"attempted {', '.join(attempted) or 'none'} — {tried} (via {via})",
+            event=event,
+            closure_reason=NO_ACCEPTABLE_HARNESS_MINT,
+            clear_resume_intent=True,
         )
 
     def abandon(self, *, killed: bool = False, via: str) -> None:
@@ -544,25 +586,31 @@ class Attempt:
         *,
         closure_reason: str | None = None,
         escalation_cause: EscalationCause | None = None,
+        escalation: Mapping[str, object] | None = None,
     ) -> None:
-        """Close this lease. An ``event`` lands in the outbound buffer in the same transaction as the
-        closure it describes. Every closure path funnels through here — the one place to pump this lease's
-        open transcript segment(s) before ``record_closure`` finalizes them. ``closure_reason`` overrides
-        what is recorded, never the published cause; ``escalation_cause`` records why it escalated."""
+        """Close this lease. An ``event``, then an ``escalation`` payload, land in the outbound buffer
+        in that order, in the same transaction as the closure they describe. Every closure path funnels
+        through here — the one place to pump this lease's open transcript segment(s) before
+        ``record_closure`` finalizes them. ``closure_reason`` overrides what is recorded, never the
+        published cause; ``escalation_cause`` records why it escalated."""
         self._pump_lease_before_close()
         # Every open invocation boundary closes here too, BEFORE
         # `record_closure` — a crash between the two just retries this idempotent path.
         self.ctx.stores.invocation_boundaries.close_boundaries_for_lease(
             self.lease.lease_id, reason=closure_reason if closure_reason is not None else reason, at=at
         )
-        event_seq = self.ctx.stores.lease_record.record_closure(
+        facts: list[ClosureFact] = []
+        if event:
+            facts.append(ClosureFact(kind=EVENT_RECORDED, payload=json.dumps(event)))
+        if escalation is not None:
+            facts.append(ClosureFact(kind=ESCALATION_RECORDED, payload=json.dumps(escalation)))
+        seqs = self.ctx.stores.lease_record.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
             node_id=self.lease.node_id,
             reason=closure_reason if closure_reason is not None else reason,
             closed_at=at,
-            event_kind=EVENT_RECORDED if event else None,
-            event_payload=json.dumps(event) if event else None,
+            facts=facts,
             escalation_cause=escalation_cause,
         )
         # After the closure commits, never before (decision: a crash between the two leaves at
@@ -581,12 +629,12 @@ class Attempt:
                 # `open_escalations()`'s derivation — a closed-`escalated` lease not yet
                 # superseded — begins reading open at exactly this instant.
                 self.ctx.events.publish_escalation_changed(self.lease.chunk_id, cause="opened", lease_id=lease_id)
-            if event_seq is not None:
-                # The optional operational event `record_closure` buffered alongside the
-                # closure — its own fact-log row, distinct from the lease-changed frame above.
+            for fact, seq in zip(facts, seqs, strict=True):
+                # Each fact `record_closure` buffered alongside the closure — its own
+                # fact-log row, distinct from the lease-changed frame above.
                 self.ctx.events.publish_fact_changed(
-                    seq=event_seq,
-                    kind=EVENT_RECORDED,
+                    seq=seq,
+                    kind=fact.kind,
                     chunk_id=self.lease.chunk_id,
                     lease_id=lease_id,
                 )

@@ -6,6 +6,7 @@ cross-concept write keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import and_, func
@@ -15,7 +16,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
-from blizzard.runner.leases.record import IWriteLeaseRecordRepository
+from blizzard.runner.leases.record import ClosureFact, IWriteLeaseRecordRepository
 from blizzard.runner.store.internal.base import (
     Unclosed,
     encode_work_refs,
@@ -248,13 +249,12 @@ class LeaseRecordStore:
         node_id: str,
         reason: str,
         closed_at: datetime,
-        event_kind: str | None = None,
-        event_payload: str | None = None,
+        facts: Sequence[ClosureFact] = (),
         escalation_cause: str | None = None,
-    ) -> int | None:
-        # The closure and its operational event land in ONE transaction, so a `kill -9`
-        # can neither surface an event for a closure that never happened nor drop one (#125).
-        event_seq: int | None = None
+    ) -> list[int]:
+        # The closure and every fact it carries land in ONE transaction, so a `kill -9` can
+        # neither surface a fact for a closure that never happened nor drop one.
+        seqs: list[int] = []
         with self._store.begin() as conn:
             conn.execute(
                 self._store.insert(lease_closures).values(
@@ -266,16 +266,18 @@ class LeaseRecordStore:
                     escalation_cause=escalation_cause,
                 )
             )
-            if event_kind is not None and event_payload is not None:
-                event_seq = insert_outbox_row(
-                    self._store,
-                    conn,
-                    outbound_buffer,
-                    kind=event_kind,
-                    chunk_id=chunk_id,
-                    lease_id=lease_id,
-                    payload=event_payload,
-                    created_at=closed_at,
+            for fact in facts:
+                seqs.append(
+                    insert_outbox_row(
+                        self._store,
+                        conn,
+                        outbound_buffer,
+                        kind=fact.kind,
+                        chunk_id=chunk_id,
+                        lease_id=lease_id,
+                        payload=fact.payload,
+                        created_at=closed_at,
+                    )
                 )
             # Segments are final by step close — finalized atomically here, on
             # the transcript lane's OWN buffer, never `outbound_buffer` above.
@@ -298,7 +300,7 @@ class LeaseRecordStore:
             reason=reason,
             transcript_segments_finalized=len(open_segments),
         )
-        return event_seq
+        return seqs
 
 
 _lease_record_store_conforms: type[IWriteLeaseRecordRepository] = LeaseRecordStore

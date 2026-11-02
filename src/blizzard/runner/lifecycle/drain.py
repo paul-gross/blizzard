@@ -46,8 +46,10 @@ _CP_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the 
 _CP_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
 _CP_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
 
-# The between-attempts boundary the per-chunk spend cap checks at: a crash here
-# leaves no active lease and no escalation, recovered by FILL's interrupted-claim reconcile.
+# The between-attempts boundary the per-chunk spend cap checks at: a crash here leaves no
+# active lease. On the ordinary close-and-apply path there is no escalation, and FILL's
+# interrupted-claim reconcile recovers it; on the spend-cap path the escalating close has
+# already committed its `escalation.recorded` fact beside the closure, so nothing is owed.
 _CP_AFTER_CLOSURE = crashpoint(
     "advance.after-closure.before-cost-cap-check", "attempt closed; cap check and next-step decision not yet made"
 )
@@ -191,11 +193,10 @@ class OutboundDrain:
             return
         if move is CompletionMove.ESCALATE_SPEND_CAP and breach is not None:
             cost, cap = breach
-            closure = COMPLETION_CLOSURES[move]
-            attempt = Attempt(self.ctx, lease)
-            attempt.close(closure.reason, self.ctx.clock.now(), escalation_cause=closure.escalation_cause)
+            Attempt(self.ctx, lease).close_escalated(
+                self.ctx.clock.now(), cause=EscalationCause.SPEND_CAP, detail=spend_cap_detail(cost, cap)
+            )
             _CP_AFTER_CLOSURE.reached()
-            attempt.escalate(cause=EscalationCause.SPEND_CAP, detail=spend_cap_detail(cost, cap))
             return
         Attempt(self.ctx, lease).close(COMPLETION_CLOSURES[CompletionMove.CLOSE_AND_APPLY].reason, self.ctx.clock.now())
         _CP_AFTER_CLOSURE.reached()

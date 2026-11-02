@@ -7,8 +7,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.crash import CrashPoint, crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSessions
@@ -62,18 +63,60 @@ UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where y
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _OVERLOAD_BACKOFF_MESSAGE = "# The provider was overloaded; retrying automatically."
 
+
+@collaborator
+@dataclass(frozen=True)
+class WakePoints:
+    """The three crash points one :meth:`DormantSession._wake` reaches, chosen by its caller
+    so each point is named for the scenario family that reaches it."""
+
+    after_boundary: CrashPoint
+    after_launch: CrashPoint
+    after_record: CrashPoint
+
+    def boundary_recorded(self) -> None:
+        """The resume invocation boundary is durable; the session is not yet resumed."""
+        self.after_boundary.reached()
+
+    def launched(self) -> None:
+        """The resumed process exists; nothing about it is durable yet."""
+        self.after_launch.reached()
+
+    def recorded(self) -> None:
+        """The resumed pid is durably recorded; the launch is not yet disarmed."""
+        self.after_record.reached()
+
+
 # The restart re-attach. `_wake`'s own middle (a resumed process launched but not yet
 # durably recorded) is armed exactly like SPAWN's two-phase mint, below; recovery
 # re-runs RESUME idempotently regardless of which of these four windows a crash lands in.
+# The restart, unpause, overload and nudge wakes all reach `_wake` under these names.
 _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
-_CP_WAKE_AFTER_LAUNCH = crashpoint(
-    "resume.wake.after-launch.before-record", "resumed process exists; pid not yet durable"
+_RESUME_WAKE_POINTS = WakePoints(
+    # The transcript invocation boundary: a plain resume's own new pre-launch write.
+    after_boundary=crashpoint(
+        "resume.wake.after-boundary-record.before-launch",
+        "resume invocation boundary durable; session not yet resumed",
+    ),
+    after_launch=crashpoint("resume.wake.after-launch.before-record", "resumed process exists; pid not yet durable"),
+    after_record=crashpoint("resume.wake.after-record", "resumed pid durably recorded; launch not yet disarmed"),
 )
-_CP_WAKE_AFTER_RECORD = crashpoint("resume.wake.after-record", "resumed pid durably recorded; launch not yet disarmed")
-# The transcript invocation boundary: a plain resume's own new pre-launch write.
-_CP_WAKE_AFTER_BOUNDARY = crashpoint(
-    "resume.wake.after-boundary-record.before-launch", "resume invocation boundary durable; session not yet resumed"
+
+# The answer wake. The park resume rides the pid record's own transaction, so a crash before
+# it leaves the park open (the trampoline kills the launch; ON_ANSWER re-wakes once) and a
+# crash after it leaves the park resumed with the pid owned — an ordinary recorded generation.
+_ANSWER_WAKE_POINTS = WakePoints(
+    after_boundary=crashpoint(
+        "answer.wake.after-boundary-record.before-launch",
+        "answer-wake invocation boundary durable; session not yet resumed with the answer",
+    ),
+    after_launch=crashpoint(
+        "answer.wake.after-launch.before-record", "answer-resumed process exists; pid and park resume not yet durable"
+    ),
+    after_record=crashpoint(
+        "answer.wake.after-record", "answer-resumed pid and park resume durable; launch not yet disarmed"
+    ),
 )
 
 
@@ -226,8 +269,13 @@ class DormantSession:
         # The human framing rides a leading `#` comment line and the answer itself is the
         # payload; the exact prose is unpinned.
         who = question.answered_by or "operator"
-        pid, now = self._wake(f"# Answer from {who}. Continue.\n{question.answer}", bindings, harness=harness)
-        self.ctx.stores.asks.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+        pid, now = self._wake(
+            f"# Answer from {who}. Continue.\n{question.answer}",
+            bindings,
+            harness=harness,
+            points=_ANSWER_WAKE_POINTS,
+            park_resume_question_id=park.question_id,
+        )
         if self.ctx.events is not None:
             self.ctx.events.publish_ask_changed(
                 lease.lease_id,
@@ -634,12 +682,16 @@ class DormantSession:
         *,
         harness: IHarnessWorkerLifecycle,
         at: datetime | None = None,
+        points: WakePoints = _RESUME_WAKE_POINTS,
+        park_resume_question_id: str | None = None,
     ) -> tuple[int, datetime]:
         """Deliver ``message`` into the dormant session and record the new pid under the same
         lease, returning that pid with the instant it was stamped — an omitted ``at`` reads the
         clock *after* the resume returns. ``harness`` is the caller's already-resolved owner, so
         this method can never be reached with an unresolvable one. Opens a `resume` boundary
-        unless :meth:`_worker_boundary_already_open` finds one open already."""
+        unless :meth:`_worker_boundary_already_open` finds one open already. ``points`` names the
+        crash points it reaches; ``park_resume_question_id`` resumes that park in the pid
+        record's own transaction."""
         lease = self.lease
         spawner = Spawner(self.ctx)
         session = lease.session
@@ -661,7 +713,7 @@ class DormantSession:
                 start_unreadable=start_unreadable,
                 opened_at=at if at is not None else self.ctx.clock.now(),
             )
-            _CP_WAKE_AFTER_BOUNDARY.reached()
+            points.boundary_recorded()
         # Observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
@@ -679,7 +731,7 @@ class DormantSession:
             # Reasserted, not sticky either — mirrors effort's treatment.
             compaction_window=lease.resolved_compaction_window,
         )
-        _CP_WAKE_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
+        points.launched()  # the process exists; nothing about it is durable yet
         stamped = at if at is not None else self.ctx.clock.now()
         assert lease.session is not None
         try:
@@ -696,13 +748,14 @@ class DormantSession:
                 spawned_at=stamped,
                 harness_version=version,
                 spawn_cwd=spawn_cwd,
+                park_resume_question_id=park_resume_question_id,
             )
         except Exception:
             # A plain raise here never disarms the trampoline on its own — kill it
             # explicitly instead (`Spawner.spawn`'s own guard, mirrored here).
             self.ctx.process.kill_group(resumed.pgid)
             raise
-        _CP_WAKE_AFTER_RECORD.reached()  # ownership durable; not yet disarmed
+        points.recorded()  # ownership durable; not yet disarmed
         # Disarm only now this record is durable — a later REAP/ADVANCE pass can
         # re-adopt this exact process past here.
         resumed.confirm_durable()

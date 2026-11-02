@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.crash import CrashPoint
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -203,6 +204,34 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path: Path):
 
 
 @pytest.mark.unit
+def test_the_restart_wake_reaches_the_resume_wake_points(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The restart wake keeps the `resume.wake.*` names; only the answer wake names its own."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+    reached: list[str] = []
+
+    def record(self: CrashPoint) -> None:
+        reached.append(self.name)
+
+    monkeypatch.setattr(CrashPoint, "reached", record)
+
+    Resume(ctx).run()
+
+    assert [p for p in reached if ".wake." in p] == [
+        "resume.wake.after-boundary-record.before-launch",
+        "resume.wake.after-launch.before-record",
+        "resume.wake.after-record",
+    ]
+
+
+@pytest.mark.unit
 def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(tmp_path: Path):
     """`_wake` carries the resumed launch's own recorded `process_start_time`
     straight through into `record_spawn` — never re-probing `/proc` a second time, which
@@ -255,6 +284,7 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
         harness_version: str | None = None,
         pgid: int | None = None,
         spawn_cwd: str | None = None,
+        park_resume_question_id: str | None = None,
     ) -> None:
         raise RuntimeError("durable write failed")
 
