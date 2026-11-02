@@ -23,6 +23,12 @@ describe('selftestRows', () => {
     ]);
   });
 
+  it('is not busy when the first read of a started run failed', () => {
+    const started = new Map([['a', run('a', 'running')]]);
+    const rows = selftestRows([health('a')], started, new Map([['a', { run: null, error: 'read failed' }]]), null, new Map());
+    expect(rows[0].busy).toBe(false);
+  });
+
   it('prefers the start failure over the run read failure', () => {
     const rows = selftestRows([health('a')], new Map(), new Map([['a', { run: null, error: 'read failed' }]]), null, new Map([['a', 'boom']]));
     expect(rows[0].error).toBe('boom');

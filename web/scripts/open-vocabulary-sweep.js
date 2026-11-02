@@ -16,8 +16,8 @@
  * directly or through its namespace (`ChunkStatus`, `hubApi.EventLogSeverity`), a generated type's
  * vocabulary field (`HostRegistrationView['state']`), or a type alias declared in the same file as
  * either. The vocabularies and fields are read at run time from `fleet/src/lib/api/{hub,runner}/
- * types.gen.ts`. A table written inside an `openLookup(…)` call, or declared by an unexported `const` this file reads only
- * inside `openLookup(…)` calls, is the helper's own table and passes. Scope is every `.ts` under
+ * types.gen.ts`. A table written inside an `openLookup(…)` call, or declared by an unexported
+ * `const` this file reads only inside `openLookup(…)` calls, is the helper's own table and passes. Scope is every `.ts` under
  * `projects/` except specs, stories, and the generated `fleet/src/lib/api/`.
  *
  * Run through `npm run structural-gate`; this module only exports.

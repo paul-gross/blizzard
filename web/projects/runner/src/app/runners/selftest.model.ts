@@ -14,7 +14,8 @@ export interface SelftestRow {
 
 /**
  * One row per `harness_health` item, in its order. A harness's run is its latest read, else the
- * run its start answered; `busy` holds while its start is pending or its run is `running`. The
+ * run its start answered; `busy` holds while its start is pending or its run is `running`, unless the run's read failed
+ * with nothing read — then its state is unknown and Run stays available. The
  * error is the start's failure, else the run read's.
  */
 export function selftestRows(
@@ -27,11 +28,12 @@ export function selftestRows(
   return health.map((item) => {
     const read = reads.get(item.harness_id);
     const run = read?.run ?? started.get(item.harness_id) ?? null;
+    const unreadable = read !== undefined && read.run === null && read.error !== null;
     return {
       harness: item.harness_id,
       available: item.available,
       run,
-      busy: starting === item.harness_id || run?.status === 'running',
+      busy: starting === item.harness_id || (!unreadable && run?.status === 'running'),
       error: startErrors.get(item.harness_id) ?? read?.error ?? null,
     };
   });
