@@ -37,6 +37,7 @@ from blizzard.hub.domain.graph.model import (
     SessionDecl,
 )
 from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     graph_artifacts,
@@ -280,7 +281,11 @@ class LockedGraphName:
 
 
 class GraphStore:
-    """Read-write graph adapter over the hub store engine."""
+    """Read-write graph adapter over the hub store engine.
+
+    Writers changing enabled-name resolution take the config-authoring key before the graph-name key, so an apply's
+    graph guard remains valid through its transaction and default-graph decisions retain a consistent lock order.
+    """
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
@@ -288,6 +293,7 @@ class GraphStore:
     @contextmanager
     def locked_name(self, name: str) -> Generator[ILockedGraphNameRead, None, None]:
         with self._store.write("locked_graph_name") as conn:
+            lock_config_authoring(conn)
             lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
             yield LockedGraphName(conn, self)
 
@@ -296,6 +302,7 @@ class GraphStore:
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         with self._store.write("mint") as conn:
+            lock_config_authoring(conn)
             lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [graph.name])
             self._mint_conn(conn, graph, definition_yaml=definition_yaml, at=at)
 
@@ -577,6 +584,7 @@ class GraphStore:
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins."""
         with self._store.write("record_lifecycle") as conn:
+            lock_config_authoring(conn)
             # Names are immutable. Resolve the key before taking the same lock that
             # protects the default graph's enabled-by-name decision.
             name = conn.execute(

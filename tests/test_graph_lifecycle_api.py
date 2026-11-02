@@ -270,6 +270,6 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
             hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
 
     # The pre-lock get_enabled_by_name, the cross-graph warning read (none for a graph with no
-    # cross-graph target), the name lock's own statements, the write's open-tenant check, and
+    # cross-graph target), the config and name locks' statements, the write's open-tenant check, and
     # the locked get_enabled_by_name + any_minted — flat, never a query per other graph the hub holds.
-    assert count_queries(hub.engine, _retry) == 7
+    assert count_queries(hub.engine, _retry) == 9

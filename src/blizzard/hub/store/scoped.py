@@ -247,6 +247,12 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
             raise ValueError(f"connections scoped to {self.scope.tenant} cannot be rescoped to {scope.tenant}")
         return self
 
+    def borrow(self, conn: Connection) -> ScopedConnections:
+        """Read through this scope on an already-owned connection."""
+        from blizzard.hub.store.borrowed import BorrowedScopedConnections
+
+        return BorrowedScopedConnections(conn, self._errors, self.scope)
+
     def _bind(self, conn: Connection) -> Connection:
         conn.execution_options(**{_SCOPE_OPTION: self.scope})
         if not event.contains(conn, "before_execute", _check_execute_time_keys):

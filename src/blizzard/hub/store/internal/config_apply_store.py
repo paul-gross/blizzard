@@ -91,19 +91,23 @@ class ConfigApplyStore:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
                 lock_config_authoring(conn)
-                for write in writes:
-                    try:
-                        self._run(conn, write)
-                    except IntegrityError as exc:  # a concurrent create won the race
-                        cause = _taken(write.record)
-                        raise ApplyEntryRefused(write.section, write.index, cause) from exc
-                    except _REFUSALS as exc:
-                        raise ApplyEntryRefused(write.section, write.index, exc) from exc
-                _append_positions(conn, positions)
+                self.apply_on(conn, writes, positions=positions)
                 if dry_run:
                     raise _DryRunRollback
         except _DryRunRollback:
             return
+
+    @staticmethod
+    def apply_on(conn: Connection, writes: Sequence[PlannedWrite], *, positions: Sequence[PlannedPosition]) -> None:
+        """Execute a plan on the already locked apply transaction."""
+        for write in writes:
+            try:
+                ConfigApplyStore._run(conn, write)
+            except IntegrityError as exc:
+                raise ApplyEntryRefused(write.section, write.index, _taken(write.record)) from exc
+            except _REFUSALS as exc:
+                raise ApplyEntryRefused(write.section, write.index, exc) from exc
+        _append_positions(conn, positions)
 
     @staticmethod
     def _run(conn: Connection, write: PlannedWrite) -> None:
@@ -279,3 +283,15 @@ def _run_link(conn: Connection, record: LinkRecord, from_revision: int | None, c
 
 
 _config_apply_store_conforms: type[IConfigApplyWriter] = ConfigApplyStore
+
+
+class BorrowedConfigApplyWriter:
+    """The apply writer participating in an already locked transaction."""
+
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def apply(
+        self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
+    ) -> None:
+        ConfigApplyStore.apply_on(self._conn, writes, positions=positions)

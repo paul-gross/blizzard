@@ -211,6 +211,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.secrets import StoreSecretReader, secret_cipher
+from blizzard.hub.store.apply_participants import ApplyParticipants
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -1274,17 +1275,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         config_authoring=config_authoring,
         config_application=ConfigApplication(
             authoring=config_authoring,
-            repositories=stores.repository_records,
-            work_sources=stores.work_source_records,
-            forges=stores.forge_records,
-            projects=stores.projects,
-            links=stores.project_links,
-            scopes=scope_store,
-            routines=routine_store,
-            routine_scopes=routine_scope_store,
-            graphs=graph_store,
-            secrets=stores.secrets,
-            pick=parts.color_pick,
+            participants=ApplyParticipants(
+                stores.connections,
+                imports=stores.config_import,
+                cipher=parts.secret_cipher,
+                offers=forges,
+                pick=parts.color_pick,
+            ),
             clock=clock,
         ),
         work_source_records=stores.work_source_records,

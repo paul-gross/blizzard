@@ -4,7 +4,9 @@ the instant they write under, plans the ``projects`` section, and hands the whol
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -128,7 +130,27 @@ class _WorkSources:
         return (*(r.ref() for r in self.stored.values()), *created), {s: r.ref() for s, r in self.former.items()}
 
 
+class IApplyParticipants(Protocol):
+    """Open the locked participants for one apply, rolling back a dry run."""
+
+    def open(self, *, dry_run: bool, clock: IClock) -> AbstractContextManager[ApplySession]: ...
+
+
 class ConfigApplication:
+    def __init__(self, *, participants: IApplyParticipants, authoring: ConfigAuthoring, clock: IClock) -> None:
+        self._participants = participants
+        self._authoring = authoring
+        self._clock = clock
+
+    def apply(self, entries: DocumentEntries, *, actor: str, dry_run: bool) -> ApplyResult:
+        with self._participants.open(dry_run=dry_run, clock=self._clock) as session:
+            result = session.apply(entries, actor=actor, dry_run=dry_run)
+        if result.apply_id is not None:
+            self._authoring.record_old_fields(result.warnings, record=f"config apply {result.apply_id}")
+        return result
+
+
+class ApplySession:
     """Reconciles a document's entries against the tenant's stored records in one transaction, or rolls the same
     transaction back for a dry run."""
 
@@ -182,8 +204,6 @@ class ConfigApplication:
             ctx,
             dry_run=dry_run,
         )
-        if apply_id is not None:
-            self._authoring.record_old_fields(warnings, record=f"config apply {apply_id}")
         return ApplyResult(apply_id, tuple(outcomes), warnings)
 
     def _held_forges(

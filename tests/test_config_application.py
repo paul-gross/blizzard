@@ -8,7 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import event
 
+import blizzard.hub.store.apply_participants as composition
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
@@ -48,17 +50,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
     services = hub.services
     return ConfigApplication(
         authoring=services.config_authoring,
-        repositories=services.repository_records,
-        work_sources=services.work_source_records,
-        forges=services.forge_records,
-        projects=services.projects,
-        links=services.project_links,
-        scopes=services.scopes,
-        routines=services.routines,
-        routine_scopes=services.routine_scopes,
-        graphs=services.graphs,
-        secrets=services.secret_catalog,
-        pick=services.color_pick,
+        participants=services.config_application._participants,
         clock=clock,
     )
 
@@ -99,3 +91,37 @@ def test_a_dry_run_mints_no_apply_id_and_rolls_back(hub: HubHarness) -> None:
     assert hub.services.repository_records.list_all(include_retired=True) == []
     assert hub.services.forge_records.list_all(include_retired=True) == []
     assert hub.services.config_changes.count(record_kind=None, record_key=None, project_id=None) == before
+
+
+@pytest.mark.parametrize("dry_run,entries", [(False, DocumentEntries()), (True, _ENTRIES), (False, _ENTRIES)])
+def test_apply_locks_before_reads_and_uses_one_connection(hub: HubHarness, monkeypatch, dry_run, entries) -> None:
+    locked = []
+    pre_lock = []
+    acquiring = []
+    statements = []
+    original = composition.lock_config_authoring
+
+    def lock(conn):
+        acquiring.append(True)
+        original(conn)
+        locked.append(conn)
+
+    def before_execute(conn, cursor, statement, parameters, context, executemany):
+        if not acquiring:
+            pre_lock.append(statement.lower())
+        if locked and locked[0].in_transaction():
+            statements.append((conn, statement.lower()))
+
+    monkeypatch.setattr(composition, "lock_config_authoring", lock)
+    event.listen(hub.engine, "before_cursor_execute", before_execute)
+    try:
+        _application(hub, FixedClock(_AT)).apply(entries, actor="operator", dry_run=dry_run)
+    finally:
+        event.remove(hub.engine, "before_cursor_execute", before_execute)
+
+    assert len(locked) == 1
+    assert not any(sql.lstrip().startswith("select") for sql in pre_lock)
+    reads = [(conn, sql) for conn, sql in statements if sql.lstrip().startswith("select")]
+    assert reads and all(conn is locked[0] for conn, _ in reads)
+    if entries is _ENTRIES:
+        assert any(conn is locked[0] and sql.lstrip().startswith("insert") for conn, sql in statements)
