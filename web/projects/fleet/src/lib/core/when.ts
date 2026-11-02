@@ -184,11 +184,25 @@ export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boo
   return `seen ${agoUnits(delta)} ago`;
 }
 
-/** "[12s]" — {@link formatSeenAgo}'s age alone, bracketed, for a row too dense for the words;
- * "[—]" where that label would fall back to online/offline. */
+/** A two-unit age — "42s", "53m 20s", "1h 53m", "1d 4h" — the largest unit (up to days) and the one
+ * beneath it, each floored, so the pair always sums to no more than the true age. Under a minute
+ * there is no smaller unit to pair, so seconds stand alone. */
+export function formatAgeTwoUnit(deltaMs: number): string {
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
+/** "[53m 20s]" — an age tag, bracketed, for a row too dense for the words: {@link formatAgeTwoUnit}'s
+ * two units, so every bracketed age on every surface reads the same. "[—]" where the instant is
+ * absent or unreadable. */
 export function formatSeenTag(lastSeenAt: string | null | undefined, now: number): string {
   const delta = ageMs(lastSeenAt, now);
-  return delta === null ? '[—]' : `[${agoUnits(delta)}]`;
+  return delta === null ? '[—]' : `[${formatAgeTwoUnit(delta)}]`;
 }
 
 /** "4s ago" / "12m ago" / "3h ago" — a bare rounded age, for a label that names its own
