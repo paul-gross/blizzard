@@ -24,9 +24,10 @@ import {
   chunkPauseMutationKey,
   resolveDecisionMutationKey,
 } from '../../core/mutation-keys';
-import { openDetail, openProjectColor, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
+import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 import { ChunkDetailSkeleton } from './chunk-detail-skeleton';
+import { injectShowProjectColors, openProjectColor } from '../../core/project-lens-colors';
 
 /**
  * The chunk detail **container** (`bzh:frontend-container-presentational`) — owns the
@@ -52,9 +53,6 @@ export class ChunkDetail {
   /** The graphs view's path segments, forwarded to {@link ChunkDetailPanel.graphLinkBase};
    * `null` withholds the graph links. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
-
-  /** The board's path segments, forwarded to {@link ChunkDetailPanel.flowLinkBase}; `null` withholds the flow links. */
-  readonly flowLinkBase = input<readonly string[] | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
@@ -170,7 +168,10 @@ export class ChunkDetail {
   protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
 
   /** The open chunk's project's color — {@link openProjectColor}. */
-  protected readonly projectColor = computed(() => openProjectColor(this.detail(), this.projectsQuery.data()));
+  private readonly showProjectColors = injectShowProjectColors();
+  protected readonly projectColor = computed(() =>
+    openProjectColor(this.showProjectColors(), this.detail(), this.projectsQuery.data()),
+  );
 
   /**
    * The detail read's async state. Read only once a chunk is open: the query is

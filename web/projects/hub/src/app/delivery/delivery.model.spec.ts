@@ -3,12 +3,14 @@ import { bounceView, chunkSummary, FIXTURE_NOW, fixtureInstant, landedRepoView, 
 import { describe, expect, it } from 'vitest';
 
 import {
+  cardStageColor,
+  cardStageLabel,
   chunkLine,
+  deliveredRecently,
   deliveryChunkIds,
-  deliveryDetailIds,
-  deliveryGraphIds,
   type DeliveryInputs,
   deliveryList,
+  deliveryState,
   deliveryWhen,
   findRow,
   toggledSelection,
@@ -24,6 +26,10 @@ const flow = (id: string, repositoryId: string): FlowView =>
 
 const repository = (id: string, name: string): RepositorySummary => ({ repository_id: id, name, owner: 'paul-gross', repo: name }) as RepositorySummary;
 
+/** The verdict the hub sends a `turn-ended` fact for these fixtures' outcomes: `landed`, none for a wait, else `bounced`. */
+const verdictOf = (kind: FlowFactView['kind'], outcome: string | null): FlowFactView['verdict'] =>
+  kind !== 'turn-ended' || outcome === null || outcome === 'pending' ? null : outcome === 'landed' ? 'landed' : 'bounced';
+
 let factId = 0;
 /** A flow fact `secondsAgo` before the fixture's now. */
 const fact = (flowId: string, chunkId: string, kind: FlowFactView['kind'], secondsAgo: number, outcome: string | null = null): FlowFactView => ({
@@ -35,6 +41,7 @@ const fact = (flowId: string, chunkId: string, kind: FlowFactView['kind'], secon
   outcome,
   revision: null,
   submission_id: `sub-${chunkId}`,
+  verdict: verdictOf(kind, outcome),
 });
 
 const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state'] = 'waiting', fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView => ({
@@ -58,11 +65,9 @@ function inputs(chunks: readonly ChunkSummary[], fields: Partial<Omit<DeliveryIn
   for (const each of [...(fields.facts ?? [])].sort((a, b) => b.at.localeCompare(a.at))) facts.set(each.flow_id, [...(facts.get(each.flow_id) ?? []), each]);
   return {
     flows: FLOWS,
-    bounces: new Map(),
     repositories: REPOSITORIES,
     workItems: new Map(),
     projects: [],
-    graphNames: new Map(),
     runnerHosts: new Map(),
     now: FIXTURE_NOW,
     ...fields,
@@ -88,24 +93,17 @@ describe('the chunks the page reads', () => {
   ];
 
   it('reads titles for every chunk that can hold a row, and every running chunk', () => {
-    const facts = new Map([['fl_a', [fact('fl_a', 'ch_bounced', 'turn-ended', MIN, 'failure')]]]);
-    const chunks = [...CHUNKS, chunk('ch_run'), chunk('ch_bounced', { status: 'needs_human' })];
-    expect(deliveryChunkIds(chunks, facts)).toEqual(['ch_pr', 'ch_place', 'ch_merge', 'ch_landed', 'ch_run', 'ch_bounced']);
+    const facts = new Map([['fl_a', [fact('fl_a', 'ch_onflow', 'turn-ended', MIN, 'failure')]]]);
+    const chunks = [...CHUNKS, chunk('ch_run'), chunk('ch_onflow', { status: 'needs_human' }), chunk('ch_bounced', { status: 'needs_human', latest_bounce: bounceView() })];
+    expect(deliveryChunkIds(chunks, facts)).toEqual(['ch_pr', 'ch_place', 'ch_merge', 'ch_landed', 'ch_run', 'ch_onflow', 'ch_bounced']);
   });
 
   it('reads the titles of every chunk the list draws a row for', () => {
-    const chunks = [...CHUNKS, chunk('ch_bounced', { status: 'needs_human' })];
-    const read = inputs(chunks, { facts: [fact('fl_a', 'ch_bounced', 'turn-ended', MIN, 'failure')] });
+    const chunks = [...CHUNKS, chunk('ch_bounced', { status: 'needs_human', latest_bounce: bounceView({ recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })];
+    const read = inputs(chunks);
     const rows = [...deliveryList(read).delivering, ...deliveryList(read).delivered].map((row) => row.chunk.chunkId);
+    expect(rows).toContain('ch_bounced');
     expect(deliveryChunkIds(chunks, read.facts)).toEqual(expect.arrayContaining(rows));
-  });
-
-  it('reads the detail of only the unlanded chunks with a footprint', () => {
-    expect(deliveryDetailIds(CHUNKS)).toEqual(['ch_pr', 'ch_place', 'ch_merge']);
-  });
-
-  it('reads the graph of every chunk', () => {
-    expect(deliveryGraphIds(CHUNKS.slice(1, 3))).toEqual(['gr_1', 'gr_2']);
   });
 });
 
@@ -126,57 +124,98 @@ describe('a row\'s stage', () => {
     expect(deliveryList(inputs([chunk('ch_1', { landed_repos: [landedRepoView()] })])).delivering).toHaveLength(1);
   });
 
+  it('reads a turn the hub judged landed as landed, though it left no landed repository', () => {
+    const row = only(inputs([chunk('ch_1', { open_prs: [prView()] })], { facts: [fact('fl_a', 'ch_1', 'turn-ended', MIN, 'landed')] }));
+    expect(row.stage).toBe(3);
+  });
+
   it('lists no row for a chunk with no footprint and no bounce', () => {
     expect(deliveryList(inputs([chunk('ch_1')]))).toEqual({ delivering: [], delivered: [] });
   });
 });
 
 describe('a row\'s bounce', () => {
-  const ENVELOPE = JSON.stringify({ detail: 'pre-push checks failed', step: { name: 'lint', exit_code: 1 } });
+  const ENVELOPE = JSON.stringify({ cause: 'failure', detail: 'pre-push checks failed in `lint`', unlanded: [] });
+  const bounced = (minutesAgo: number, fields: Partial<ChunkSummary> = {}) =>
+    chunk('ch_1', { latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-minutesAgo * MIN) }), bounce_count: 2, ...fields });
 
-  it('reads the chunk\'s own latest bounce, with its reason, count and age, while it holds no place', () => {
-    const bounces = [bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN) }), bounceView({ cause: 'conflict', recorded_at: fixtureInstant(-3 * HOUR) })];
-    const row = only(inputs([chunk('ch_1', { open_prs: [prView()] })], { bounces: new Map([['ch_1', bounces]]) }));
-    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed', count: 2, age: '[50m 0s]', at: fixtureInstant(-50 * MIN) });
-    expect(row.bounce?.title.split('\n')[0]).toBe('pre-push checks failed');
+  it('reads the hub\'s latest bounce, its reason without code ticks, and the chunk\'s bounce count', () => {
+    const row = only(inputs([bounced(50, { open_prs: [prView()] })]));
+    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 2, at: fixtureInstant(-50 * MIN) });
+    expect(row.bounce?.title.split('\n')[0]).toBe('pre-push checks failed in lint');
     expect(row.statusColor).toBe(toneColor('stale'));
   });
 
-  it('drops the bounce once the chunk is back in line — resubmitted, the bounce is history', () => {
-    const row = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 1)] })], { bounces: new Map([['ch_1', [bounceView()]]]) }));
-    expect(row.bounce).toBeNull();
-    expect(row.statusColor).toBe(toneColor(STATUS_TONE('running')));
+  it('reads the bounce, not the turn that wrote it a moment later, as the row\'s one bounce', () => {
+    const turnEnd = { ...fact('fl_a', 'ch_1', 'turn-ended', 0, 'failure'), at: new Date(Date.parse(fixtureInstant(-50 * MIN)) + 3).toISOString() };
+    const row = only(inputs([bounced(50, { bounce_count: 1, open_prs: [prView()] })], { facts: [turnEnd] }));
+    expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 1 });
+    expect(row.bounce?.title).not.toContain('No bounce recorded');
   });
 
-  it('falls back to the flow record\'s recent bounce while the chunk\'s own record is unread', () => {
-    const row = only(inputs([chunk('ch_1')], { facts: [fact('fl_a', 'ch_1', 'turn-started', 20 * MIN), fact('fl_a', 'ch_1', 'turn-ended', 10 * MIN, 'failure')] }));
-    expect(row.bounce).toMatchObject({ cause: 'failure', reason: null, count: 1, age: '[10m 0s]' });
-    expect(row.stage).toBe(-1);
-  });
-
-  it('reads no flow bounce older than a day, on a flow the chunk is back in line on, or after a landing turn', () => {
-    expect(delivering(inputs([chunk('ch_1')], { facts: [fact('fl_a', 'ch_1', 'turn-ended', 25 * HOUR, 'failure')] }))).toEqual([]);
-    const placed = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 1)] })], { facts: [fact('fl_a', 'ch_1', 'turn-ended', MIN, 'failure')] }));
+  it('drops the bounce once the chunk is back in line — resubmitted, the bounce is history — or has landed', () => {
+    const placed = only(inputs([bounced(5, { flow_places: [place('fl_a', 1)] })]));
     expect(placed.bounce).toBeNull();
-    expect(delivering(inputs([chunk('ch_1')], { facts: [fact('fl_a', 'ch_1', 'turn-ended', 2 * MIN, 'failure'), fact('fl_a', 'ch_1', 'turn-ended', MIN, 'landed')] }))).toEqual([]);
+    expect(placed.statusColor).toBe(toneColor(STATUS_TONE('running')));
+    expect(only(inputs([bounced(5, { landed: true, status: 'done' })])).bounce).toBeNull();
   });
 
-  it('skips a pending poll to the turn that settled before it', () => {
-    const row = only(inputs([chunk('ch_1')], { facts: [fact('fl_a', 'ch_1', 'turn-ended', 2 * MIN, 'conflict'), fact('fl_a', 'ch_1', 'turn-ended', MIN, 'pending')] }));
-    expect(row.bounce?.cause).toBe('conflict');
+  it('keeps a footprintless chunk\'s bounce for a day, and one with an open change however old', () => {
+    expect(only(inputs([bounced(23 * 60)])).stage).toBe(-1);
+    expect(delivering(inputs([bounced(25 * 60)]))).toEqual([]);
+    expect(only(inputs([bounced(25 * 60, { open_prs: [prView()] })])).bounce?.cause).toBe('failure');
   });
 
-  it('prefers a later flow bounce over the chunk\'s own, counting it on top', () => {
-    const own = new Map([['ch_1', [bounceView({ cause: 'failure', recorded_at: fixtureInstant(-2 * HOUR) })]]]);
-    const row = only(inputs([chunk('ch_1', { open_prs: [prView()] })], { bounces: own, facts: [fact('fl_a', 'ch_1', 'turn-ended', 5 * MIN, 'conflict')] }));
-    expect(row.bounce).toMatchObject({ cause: 'conflict', count: 2, age: '[5m 0s]' });
-    expect(row.bounce?.title).toContain('No bounce recorded on the chunk for this turn');
+  it('names the bounce withdrawn when the record\'s next fact on that flow withdraws its turn\'s submission, by record order not instant', () => {
+    const turn = fact('fl_a', 'ch_1', 'turn-ended', 50 * MIN, 'failure');
+    const withdrawal = { ...fact('fl_a', 'ch_1', 'withdrawn', 50 * MIN, 'failure'), verdict: null, at: turn.at };
+    const row = only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn, withdrawal] }));
+    expect(row.bounce?.withdrawn).toBe(true);
+    expect(cardStageLabel(row)).toBe('failure · withdrawn');
+    const other = { ...withdrawal, submission_id: 'sub-other' };
+    expect(only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn, other] })).bounce?.withdrawn).toBe(false);
+    expect(only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn] })).bounce?.withdrawn).toBe(false);
   });
 
-  it('keeps the chunk\'s own bounce over an earlier flow bounce', () => {
-    const own = new Map([['ch_1', [bounceView({ cause: 'failure', recorded_at: fixtureInstant(-MIN) })]]]);
-    const row = only(inputs([chunk('ch_1', { open_prs: [prView()] })], { bounces: own, facts: [fact('fl_a', 'ch_1', 'turn-ended', HOUR, 'conflict')] }));
-    expect(row.bounce).toMatchObject({ cause: 'failure', count: 1 });
+  it('reads no bounce from a turn the hub judged bounced with no bounce recorded', () => {
+    expect(delivering(inputs([chunk('ch_1')], { facts: [fact('fl_a', 'ch_1', 'turn-ended', MIN, 'failure')] }))).toEqual([]);
+  });
+});
+
+describe('the list\'s read state', () => {
+  const settled = { isPending: () => false, isError: () => false };
+  const list = deliveryList(inputs([chunk('ch_1', { open_prs: [prView()] })]));
+  const read = (size: number, pending: boolean) => ({ facts: new Map(Array.from({ length: size }, (_, i) => [`fl_${i}`, []])), pending });
+
+  it('loads until the first of the flows\' records is read, and not again when another flow\'s record is', () => {
+    expect(deliveryState([settled], read(0, true), list)).toBe('loading');
+    expect(deliveryState([settled], read(1, true), list)).toBe('ready');
+  });
+
+  it('answers the reads\' own pending and error, and empty for a list with no row', () => {
+    expect(deliveryState([{ isPending: () => true, isError: () => false }], read(1, false), list)).toBe('loading');
+    expect(deliveryState([{ isPending: () => false, isError: () => true }], read(1, false), list)).toBe('error');
+    expect(deliveryState([settled], read(0, false), { delivering: [], delivered: [] })).toBe('empty');
+  });
+});
+
+describe('the phone\'s cards', () => {
+  it('keeps the delivered rows within the board\'s done window', () => {
+    const list = deliveryList(
+      inputs([
+        chunk('ch_new', { landed: true, status: 'done', completed_at: fixtureInstant(-2 * HOUR) }),
+        chunk('ch_old', { landed: true, status: 'done', completed_at: fixtureInstant(-49 * HOUR) }),
+      ]),
+    );
+    expect(deliveredRecently(list, FIXTURE_NOW).map((row) => row.chunk.chunkId)).toEqual(['ch_new']);
+  });
+
+  it('names a bounce, a place in line, or the furthest stage, and colours it', () => {
+    const bounce = only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'conflict', recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })]));
+    const inLine = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 2)] })]));
+    const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done' })]));
+    expect([bounce, inLine, landed].map(cardStageLabel)).toEqual(['conflict', 'in line #2', 'landed']);
+    expect([bounce, inLine, landed].map(cardStageColor)).toEqual(['var(--red)', 'var(--cyan)', toneColor('done')]);
   });
 });
 
@@ -240,8 +279,8 @@ describe('a row\'s line, links, step and icon', () => {
   });
 
   it('writes the step as graph/node · host/runner, the runner only while one holds it', () => {
-    const held = chunk('ch_1', { open_prs: [prView()], current_node_name: 'deliver', runner_id: 'rn_1', runner_name: 'r-claude' });
-    expect(only(inputs([held], { graphNames: new Map([['gr_1', 'adv-dwf']]), runnerHosts: new Map([['rn_1', 'xps']]) })).step).toBe('adv-dwf/deliver · xps/r-claude');
+    const held = chunk('ch_1', { open_prs: [prView()], current_node_name: 'deliver', graph_name: 'adv-dwf', runner_id: 'rn_1', runner_name: 'r-claude' });
+    expect(only(inputs([held], { runnerHosts: new Map([['rn_1', 'xps']]) })).step).toBe('adv-dwf/deliver · xps/r-claude');
     expect(only(inputs([chunk('ch_1', { open_prs: [prView()], current_node_name: 'deliver' })])).step).toBe('deliver');
     expect(only(inputs([chunk('ch_1', { open_prs: [prView()] })])).step).toBeNull();
   });

@@ -47,8 +47,22 @@ export const VIEW_ROUTES: Routes = [
     path: 'board/chunk/:chunkId',
     loadChildren: () => import('../board/chunk/chunk-page.routes').then((m) => m.CHUNK_PAGE_ROUTES),
   },
-  // The Delivery tab: every flow's line, open changes, bounces, and recent landings, full width.
+  // The Delivery tab is **one URL, two shells**, like `board`: the phone's card list first, guarded by
+  // `matchesMobileViewport`, then the desktop list and drawer: every flow's line, open changes, bounces, and recent
+  // landings, full width.
+  {
+    path: 'delivery',
+    canMatch: [matchesMobileViewport],
+    loadComponent: () => import('../delivery/delivery-glance').then((m) => m.DeliveryGlance),
+  },
   { path: 'delivery', loadComponent: () => import('../delivery/delivery-page').then((m) => m.DeliveryPage) },
+  // The phone's drill-down from a Delivery card. Unguarded, as the chunk page is, so a shared link still resolves.
+  {
+    path: 'delivery/chunk/:chunkId',
+    loadComponent: () => import('../delivery/delivery-chunk-page').then((m) => m.DeliveryChunkPage),
+  },
+  // The phone's project lens picker, opened from the titlebar's lens name; `?from=` names the view it returns to.
+  { path: 'lens', loadComponent: () => import('./lens-picker/lens-picker').then((m) => m.LensPicker) },
   { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },

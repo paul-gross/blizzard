@@ -3,18 +3,12 @@
   flex-direction: column;
   min-height: 0;
 }
-/* Key left; the recency stamp and kind cluster right (.a-when's auto margin). */
+/* Key then its kind, dimmed; the recency stamp right (.a-when's auto margin). */
 .a-head {
   flex: none;
   display: flex;
   align-items: baseline;
   gap: 6px;
-}
-.a-head .a-kind {
-  margin-left: auto;
-}
-.a-head .a-when + .a-kind {
-  margin-left: 0;
 }
 .a-key {
   color: var(--cyan);
@@ -24,8 +18,6 @@
 .a-kind {
   color: var(--label-dim);
   font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 /* When the artifact was attached (ULID-decoded) — recency, dim like the kind. */
 .a-when {

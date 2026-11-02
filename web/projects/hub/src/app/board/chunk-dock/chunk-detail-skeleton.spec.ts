@@ -26,10 +26,17 @@ describe('ChunkDetailSkeleton', () => {
     expect(el.querySelectorAll('.head .controls fleet-kit-skeleton')).toHaveLength(2);
     const columns = [...el.querySelectorAll('.body > .col')];
     expect(columns).toHaveLength(3);
-    expect(columns.map((col) => col.querySelector(':scope > .label') !== null)).toEqual([true, true, true]);
-    expect(columns[0].querySelectorAll('.fact')).toHaveLength(6);
-    expect(columns[1].querySelectorAll('.line')).toHaveLength(4);
-    expect(columns[2].querySelectorAll('.line')).toHaveLength(3);
+    // The work-item column: the Work item box with its two dependency sides (2 + 3 edges), then the issue rows.
+    expect(columns[0].classList).toContain('col--work');
+    expect(columns[0].querySelectorAll(':scope > .box')).toHaveLength(2);
+    expect(columns[0].querySelectorAll('.edges > .edge-col')).toHaveLength(2);
+    expect(columns[0].querySelectorAll('.edge')).toHaveLength(5);
+    expect(columns[0].querySelectorAll(':scope > .acc')).toHaveLength(3);
+    // The node-history and artifacts columns: a heading each over their rows.
+    expect(columns.slice(1).map((col) => col.querySelector(':scope > .s-head') !== null)).toEqual([true, true]);
+    expect(columns[1].querySelectorAll('.timeline > .step')).toHaveLength(6);
+    expect(columns[1].querySelectorAll('.step')[0].querySelectorAll('.cell')).toHaveLength(3);
+    expect(columns[2].querySelectorAll(':scope > .art')).toHaveLength(5);
   });
 
   it('carries no text, only bars', async () => {

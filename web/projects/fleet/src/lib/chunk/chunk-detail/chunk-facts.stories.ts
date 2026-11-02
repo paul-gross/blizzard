@@ -24,12 +24,11 @@ const meta: Meta<ChunkFacts> = {
       cost: chunkUsageTotalView(),
       work_refs: [workRefView(), workRefView({ ref: '1275', label: 'blizzard#1275' })],
     }),
-    graphLinkBase: null,
     chunkLinkBase: ['/board', 'chunk'],
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-facts [detail]="detail" [graphLinkBase]="graphLinkBase" [chunkLinkBase]="chunkLinkBase" />`,
+    template: `<fleet-chunk-detail-facts [detail]="detail" [chunkLinkBase]="chunkLinkBase" />`,
   }),
 };
 export default meta;
@@ -70,5 +69,7 @@ export const NeighborsBlockingAndBlocked: Story = {
     }),
   },
 };
-/** The graph read-only, linked to its graph page. */
-export const GraphLinked: Story = { args: { graphLinkBase: ['/graphs'] } };
+/** A step-free chunk — the efficiency figure reads its cost alone. */
+export const NoUsage: Story = {
+  args: { detail: chunkDetail({ cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }) }) },
+};

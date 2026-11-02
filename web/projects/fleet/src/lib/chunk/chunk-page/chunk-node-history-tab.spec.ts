@@ -77,12 +77,14 @@ async function render(options: RenderOptions = {}) {
 }
 
 describe('ChunkNodeHistoryTab', () => {
-  it('renders the selection timeline with its own visible/labelled region', async () => {
+  it('renders the shared timeline, its rows picking buttons, in its own visible/labelled region', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="selection-step"]');
-    expect(row?.getAttribute('role')).toBe('button');
+    const row = el.querySelector('[data-testid="history-step"]');
+    expect(row?.tagName).toBe('BUTTON');
+    // The tab names its own region; the timeline's own heading stays off.
+    expect(el.querySelector('#chunk-timeline-heading')).toBeNull();
 
     const region = el.querySelector('[role="region"]');
     expect(region?.textContent).toContain('Timeline');
@@ -95,7 +97,7 @@ describe('ChunkNodeHistoryTab', () => {
     const fixture = await render({ selectedKey: 'nd_build:1' });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="selection-step"]')?.classList.contains('selected')).toBe(true);
+    expect(el.querySelector('[data-testid="history-step"]')?.classList.contains('selected')).toBe(true);
   });
 
   it("forwards the timeline's own pickStep straight through, unchanged", async () => {
@@ -104,7 +106,7 @@ describe('ChunkNodeHistoryTab', () => {
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     const el = fixture.nativeElement as HTMLElement;
 
-    (el.querySelector('[data-testid="selection-step"]') as HTMLElement).click();
+    (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
     expect(emitted).toEqual(['nd_build:1']);
   });
 
@@ -119,7 +121,7 @@ describe('ChunkNodeHistoryTab', () => {
   it('opts into phone drill-down as timeline-only until a URL step is selected', async () => {
     const fixture = await render({ drilldown: true });
     let el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="history-step"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')?.classList.contains('kmd-pane--hidden')).toBe(true);
 
     fixture.componentRef.setInput('selectedKey', 'nd_build:1');

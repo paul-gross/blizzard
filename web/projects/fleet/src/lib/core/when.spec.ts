@@ -12,6 +12,7 @@ import {
   formatSeenTag,
   formatUtcYmd,
   formatWhen,
+  formatWhenParts,
   ageMs,
 } from './when';
 
@@ -297,5 +298,27 @@ describe('formatAgeTwoUnit', () => {
   it('pairs days with hours from a day on', () => {
     expect(formatAgeTwoUnit(86_400 * S)).toBe('1d 0h');
     expect(formatAgeTwoUnit((30 * 86_400 + 5 * 3600) * S)).toBe('30d 5h');
+  });
+});
+
+describe('formatWhenParts', () => {
+  it('leaves the day empty for a same-day instant, the time zero-padded', () => {
+    expect(formatWhenParts(new Date(2026, 6, 18, 9, 5).toISOString(), NOW)).toEqual({ day: '', time: '09:05' });
+  });
+
+  it('reads `Yesterday` over the time for the previous local day', () => {
+    expect(formatWhenParts(new Date(2026, 6, 17, 23, 59).toISOString(), NOW)).toEqual({ day: 'Yesterday', time: '23:59' });
+  });
+
+  it('reads the full local date over the time further back', () => {
+    expect(formatWhenParts(new Date(2026, 6, 16, 8, 0).toISOString(), NOW)).toEqual({ day: '2026/07/16', time: '08:00' });
+  });
+
+  it('leaves the day empty for a future instant', () => {
+    expect(formatWhenParts(new Date(2026, 6, 19, 1, 0).toISOString(), NOW).day).toBe('');
+  });
+
+  it('returns both parts empty for an unparseable input', () => {
+    expect(formatWhenParts('not-a-date', NOW)).toEqual({ day: '', time: '' });
   });
 });

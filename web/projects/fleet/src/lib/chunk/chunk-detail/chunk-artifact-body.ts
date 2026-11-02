@@ -57,7 +57,7 @@ export class ChunkArtifactBody {
 
   /** `full` (default) renders an asset's content verbatim; `summary` omits it —
    * a `git_commit`'s ref line renders either way, since it carries nothing to
-   * summarize away. */
+   * summarize away, but only `full` links its branch out: a summary sits inside its row's own link. */
   readonly body = input<'full' | 'summary'>('full');
 
   /** The root every handle this component renders derives from. Defaults to
@@ -70,6 +70,8 @@ export class ChunkArtifactBody {
   protected readonly refTestid = computed(() => `${this.testid()}-ref`);
   protected readonly branchTestid = computed(() => `${this.testid()}-branch`);
 
+  /** The commit's first eight characters; the full hash rides the element's title. */
+  protected readonly shortHash = computed(() => (this.artifact().commit_hash ?? '').slice(0, 8));
   protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
 
   /** The asset's content, parsed as a `FindingDelta` — `null` when there is no

@@ -1,15 +1,17 @@
 import {
   ageMs,
+  type AsyncStateQuery,
+  asyncStateOf,
+  bounceReason,
   type ChunkStatus,
   chunkLane,
   type ChunkSummary,
   compactRef,
   formatAbsolute,
   formatLocalClockWithDay,
-  formatSeenTag,
   formatWhen,
-  type hubApi,
   type FlowFactView,
+  type KitAsyncStateValue,
   type FlowView,
   type PrView,
   type RepositorySummary,
@@ -23,11 +25,12 @@ import {
   workLines,
 } from 'fleet';
 
-import { ordinal } from '../board/flows/flow-place.model';
-import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../board/node-strip/node-strip.model';
-import { bounceReason, parseBounceEnvelope } from './delivery-bounce.model';
+import { withinDoneWindow } from '../core/done-window';
+import { ordinal } from '../core/flow-place.model';
+import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../core/step-label';
+import { withdrawnAfter } from './delivery-history.model';
 
-/** How far back a turn that bounced still counts as delivery activity. */
+/** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;
 
 /** The delivery pipeline's stages, in order. */
@@ -47,8 +50,6 @@ export interface DeliveryChunkRef {
 /** Everything the page reads, handed whole to the joins below. */
 export interface DeliveryInputs {
   readonly flows: readonly FlowView[];
-  /** Each in-flight chunk's own bounce record, by chunk id — absent while its detail is still unread. */
-  readonly bounces: ReadonlyMap<string, readonly hubApi.BounceView[]>;
   /** The tenant's repositories, which name each flow's repository. */
   readonly repositories: readonly RepositorySummary[];
   readonly chunks: readonly ChunkSummary[];
@@ -56,9 +57,9 @@ export interface DeliveryInputs {
   readonly facts: ReadonlyMap<string, readonly FlowFactView[]>;
   readonly workItems: ReadonlyMap<string, WorkItemsView>;
   readonly projects: readonly { readonly project_id: string; readonly color: string }[];
-  readonly graphNames: ReadonlyMap<string, string>;
   /** Each runner's host name by runner id. */
   readonly runnerHosts: ReadonlyMap<string, string>;
+  /** The clock the list is judged against — a coarse one, since only the bounce window reads it. */
   readonly now: number;
 }
 
@@ -106,16 +107,16 @@ function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
   return HUMAN_LANES.has(lane) ? { lane, status: chunk.status } : { lane: 'running', status: 'running' };
 }
 
-/** A turn that ended without landing. */
+/** The chunk's latest recorded bounce, as a row names it. */
 export interface DeliveryBounce {
-  /** `failure`, `conflict`, `poll-timeout`. */
+  /** `failure`, `conflict`, `poll-timeout` — the answer that bounced it. */
   readonly cause: string;
-  /** The envelope's own account — its `detail`, else the failed step's exit — or `null` for none. */
+  /** Whether the chunk's latest bounced turn had its submission withdrawn right after it. */
+  readonly withdrawn: boolean;
+  /** The envelope's own account, or `null` for none. */
   readonly reason: string | null;
-  /** How many bounces the chunk has had; `1` while only the flow record has been read. */
+  /** How many bounces the chunk has had. */
   readonly count: number;
-  /** How long ago, bracketed as the fleet registry tags an age: `[50m]`. */
-  readonly age: string;
   /** The full reason and the absolute instant, for the hover. */
   readonly title: string;
   /** When it happened. */
@@ -133,13 +134,12 @@ export interface DeliveryLine {
 /** One chunk's row in the Delivery list. */
 export interface DeliveryRow {
   readonly chunk: DeliveryChunkRef;
-  /** When it landed, else its latest flow fact; `null` when no instant is known. */
+  /** When it landed, else its latest flow fact; `null` when no instant is known. The view draws it with
+   * {@link deliveryWhen} against the live clock. */
   readonly at: string | null;
-  /** {@link at} as the date column draws it, or `null`. */
-  readonly when: DeliveryWhen | null;
   /** The furthest stage reached, an index into {@link STAGES}; `-1` for none. */
   readonly stage: number;
-  /** The chunk's latest turn's bounce — its outcome and when — or `null` when its latest turn did not bounce. */
+  /** The chunk's latest recorded bounce while it stands out of line ({@link chunkBounce}), else `null`. */
   readonly bounce: DeliveryBounce | null;
   /** Its places in line, or `null` when it holds none. */
   readonly line: DeliveryLine | null;
@@ -159,33 +159,21 @@ export function flowIds(flows: readonly FlowView[]): readonly string[] {
 }
 
 /** The chunk ids whose titles the page reads: every chunk that can hold a row — any delivery footprint, an awaited
- * merge, or a fact on a flow, where a bounce is read from — and every running chunk, the next to reach a flow. */
+ * merge, a fact on a flow, or a recorded bounce — and every running chunk, the next to reach a flow. */
 export function deliveryChunkIds(chunks: readonly ChunkSummary[], facts: DeliveryInputs['facts']): readonly string[] {
   const onFlow = new Set([...facts.values()].flat().map((fact) => fact.chunk_id));
   return chunks
     .filter(
       (chunk) =>
         chunk.landed ||
-        (chunk.open_prs ?? []).length > 0 ||
-        (chunk.flow_places ?? []).length > 0 ||
+        chunk.open_prs.length > 0 ||
+        chunk.flow_places.length > 0 ||
         chunk.awaiting_external_merge ||
         onFlow.has(chunk.chunk_id) ||
+        chunk.latest_bounce !== null ||
         chunk.status === 'running',
     )
     .map((chunk) => chunk.chunk_id);
-}
-
-/** The chunks whose own detail the page reads for their bounce record: every unlanded chunk with a delivery
- * footprint. */
-export function deliveryDetailIds(chunks: readonly ChunkSummary[]): readonly string[] {
-  return chunks
-    .filter((chunk) => !chunk.landed && ((chunk.open_prs ?? []).length > 0 || (chunk.flow_places ?? []).length > 0 || chunk.awaiting_external_merge))
-    .map((chunk) => chunk.chunk_id);
-}
-
-/** The graph ids the rows name a step in. */
-export function deliveryGraphIds(chunks: readonly ChunkSummary[]): readonly string[] {
-  return chunks.flatMap((chunk) => (chunk.graph_id ? [chunk.graph_id] : []));
 }
 
 function chunkRef(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryChunkRef {
@@ -194,70 +182,50 @@ function chunkRef(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryChunkRef
   return {
     chunkId: chunk.chunk_id,
     shortId: compactRef(chunk.chunk_id),
-    lines: workLines(chunk.work_refs ?? [], view),
+    lines: workLines(chunk.work_refs, view),
     titlesPending: view === undefined,
     tint: projectTint(color),
-    projectName: chunk.project_name ?? null,
+    projectName: chunk.project_name,
   };
 }
 
-function isBounce(fact: FlowFactView): boolean {
-  return fact.kind === 'turn-ended' && fact.outcome !== null && fact.outcome !== 'pending' && fact.outcome !== 'landed';
-}
-
-/** The chunk's latest settled turn on this flow, when it bounced recently and the chunk holds no place there since. */
-function bounceOn(flow: FlowView, chunk: ChunkSummary, inputs: DeliveryInputs): FlowFactView | null {
-  if ((chunk.flow_places ?? []).some((place) => place.flow_id === flow.flow_id)) return null;
-  const latest = (inputs.facts.get(flow.flow_id) ?? []).find((fact) => fact.chunk_id === chunk.chunk_id && fact.kind === 'turn-ended' && fact.outcome !== 'pending');
-  if (!latest || !isBounce(latest)) return null;
-  const age = ageMs(latest.at, inputs.now);
-  return age !== null && age < BOUNCE_WINDOW_MS ? latest : null;
-}
-
 /**
- * A chunk's current bounce, from its own bounce record: its latest bounce, while the chunk holds no place on any flow
- * and has not landed. A place means it was resubmitted after the bounce and is back in line, so the bounce is history.
+ * A chunk's current bounce, from the hub's record of it: its latest bounce, while the chunk holds no place on any flow
+ * and has not landed — a place means it was resubmitted after the bounce and is back in line, so the bounce is
+ * history. A chunk with no other delivery footprint keeps it only for {@link BOUNCE_WINDOW_MS}.
  */
-function chunkBounce(chunk: ChunkSummary, bounces: readonly hubApi.BounceView[], now: number): DeliveryBounce | null {
-  if (chunk.landed || (chunk.flow_places ?? []).length > 0) return null;
-  const latest = [...bounces].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0];
-  if (!latest) return null;
-  const reason = bounceReason(parseBounceEnvelope(latest.envelope));
+function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounce | null {
+  const latest = chunk.latest_bounce;
+  if (latest === null || chunk.landed || chunk.flow_places.length > 0) return null;
+  const footprint = chunk.open_prs.length > 0 || chunk.awaiting_external_merge;
+  const age = ageMs(latest.recorded_at, inputs.now);
+  if (!footprint && (age === null || age >= BOUNCE_WINDOW_MS)) return null;
+  const reason = bounceReason(latest.envelope);
+  const turn = chunkFacts(chunk.chunk_id, inputs.facts).find((fact) => fact.verdict === 'bounced');
   return {
     cause: latest.cause,
+    withdrawn: turn !== undefined && withdrawnAfter(inputs.facts.get(turn.flow_id) ?? [], turn),
     reason,
-    count: bounces.length,
-    age: formatSeenTag(latest.recorded_at, now),
+    count: chunk.bounce_count,
     at: latest.recorded_at,
-    title: [reason, formatAbsolute(latest.recorded_at)].filter((part) => part).join('\n'),
+    title: [reason, formatAbsolute(latest.recorded_at)].join('\n'),
   };
 }
 
-/** A chunk's current bounce while its own record is unread: the flow record's latest recent bounce of it. */
-function flowBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounce | null {
-  const latest = inputs.flows.flatMap((flow) => bounceOn(flow, chunk, inputs) ?? []).sort((a, b) => b.at.localeCompare(a.at))[0];
-  if (!latest) return null;
-  return { cause: latest.outcome ?? 'bounced', reason: null, count: 1, age: formatSeenTag(latest.at, inputs.now), at: latest.at, title: formatAbsolute(latest.at) };
+/** The chunk's latest turn that judged its submission, on any flow, or `undefined` for none. */
+function latestVerdict(chunk: ChunkSummary, inputs: DeliveryInputs): FlowFactView | undefined {
+  return chunkFacts(chunk.chunk_id, inputs.facts).find((fact) => fact.verdict !== null);
 }
 
-/**
- * The bounce a row shows: the chunk's own latest bounce, with its reason — unless the flow record holds a later turn
- * that bounced (a turn can end in failure with no bounce recorded on the chunk), then that turn's outcome and time,
- * carrying the chunk's bounce count. While the chunk's own record is unread, the flow record's alone.
- */
-function currentBounce(own: DeliveryBounce | null, flow: DeliveryBounce | null): DeliveryBounce | null {
-  if (own === null) return flow;
-  if (flow === null || flow.at <= own.at) return own;
-  return { ...flow, count: own.count + 1, title: `${flow.title}\nNo bounce recorded on the chunk for this turn; its last: ${own.cause} ${own.title}` };
-}
-
-/** The furthest pipeline stage a chunk has reached across its repositories. */
-function chunkStage(chunk: ChunkSummary): number {
-  const places = chunk.flow_places ?? [];
-  if ((chunk.landed_repos ?? []).length > 0) return 3;
+/** The furthest pipeline stage a chunk has reached across its repositories — a turn that landed with nothing to merge
+ * counts as landed, though it leaves no landed repository behind. */
+function chunkStage(chunk: ChunkSummary, inputs: DeliveryInputs): number {
+  const places = chunk.flow_places;
+  if (chunk.landed_repos.length > 0) return 3;
+  if (latestVerdict(chunk, inputs)?.verdict === 'landed') return 3;
   if (places.some((place) => place.state === 'landing')) return 2;
   if (places.length > 0) return 1;
-  if ((chunk.open_prs ?? []).length > 0 || chunk.awaiting_external_merge) return 0;
+  if (chunk.open_prs.length > 0 || chunk.awaiting_external_merge) return 0;
   return -1;
 }
 
@@ -275,7 +243,7 @@ function flowRepoName(flowId: string, fallback: string, inputs: DeliveryInputs):
 
 /** A chunk's places in line — every place that is neither landing nor parked off the line — or `null` for none. */
 export function chunkLine(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryLine | null {
-  const places = (chunk.flow_places ?? [])
+  const places = chunk.flow_places
     .filter((place) => place.state !== 'landing' && place.state !== 'awaiting-merge' && place.state !== 'passed-over')
     .sort((a, b) => a.position - b.position);
   const best = places[0];
@@ -301,34 +269,32 @@ function prLink(pr: PrView): DeliveryLink {
 /** `graph/node · host/runner`, the runner part only while one holds the chunk. */
 function stepLine(chunk: ChunkSummary, inputs: DeliveryInputs): string | null {
   const node = chunk.current_node_name ?? chunk.current_node_id;
-  const graphName = chunk.graph_id ? inputs.graphNames.get(chunk.graph_id) : null;
-  const step = node ? graphStepLabel(graphName, node) : null;
+  const step = node ? graphStepLabel(chunk.graph_name, node) : null;
   const runner = chunk.runner_id ? runnerBoardLabel(runnerBoardParts(chunk.runner_id, chunk.runner_name, inputs.runnerHosts.get(chunk.runner_id))) : null;
   return [step, runner].filter((part) => part !== null).join(STEP_RUNNER_SEP) || null;
 }
 
 function inFlightRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow | null {
-  const own = inputs.bounces.get(chunk.chunk_id);
-  const bounce = currentBounce(own === undefined ? null : chunkBounce(chunk, own, inputs.now), flowBounce(chunk, inputs));
-  const stage = chunkStage(chunk);
+  const bounce = chunkBounce(chunk, inputs);
+  const stage = chunkStage(chunk, inputs);
   if (stage < 0 && !bounce) return null;
   return {
     chunk: chunkRef(chunk, inputs),
     at: chunkFacts(chunk.chunk_id, inputs.facts)[0]?.at ?? null,
-    when: deliveryWhen(chunkFacts(chunk.chunk_id, inputs.facts)[0]?.at ?? null, inputs.now),
     stage,
     bounce,
     line: chunkLine(chunk, inputs),
     step: stepLine(chunk, inputs),
-    links: (chunk.open_prs ?? []).map(prLink),
+    links: chunk.open_prs.map(prLink),
     icon: inFlightIcon(chunk),
     statusColor: toneColor(bounce ? 'stale' : STATUS_TONE(chunk.status)),
   };
 }
 
 function landedRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow {
-  const landedAt = chunkFacts(chunk.chunk_id, inputs.facts).find((fact) => fact.kind === 'landed')?.at;
-  const commits = (chunk.landed_repos ?? []).map((landed) => ({
+  const facts = chunkFacts(chunk.chunk_id, inputs.facts);
+  const landedAt = (facts.find((fact) => fact.kind === 'landed') ?? facts.find((fact) => fact.verdict === 'landed'))?.at;
+  const commits = chunk.landed_repos.map((landed) => ({
     repo: repoName(landed.repo),
     text: shortCommitHash(landed.commit_hash),
     url: landed.url,
@@ -337,12 +303,11 @@ function landedRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow {
   return {
     chunk: chunkRef(chunk, inputs),
     at: landedAt ?? chunk.completed_at ?? null,
-    when: deliveryWhen(landedAt ?? chunk.completed_at ?? null, inputs.now),
     stage: STAGES.length - 1,
     bounce: null,
     line: null,
     step: stepLine(chunk, inputs),
-    links: [...commits, ...(chunk.closed_prs ?? []).map(prLink)],
+    links: [...commits, ...chunk.closed_prs.map(prLink)],
     icon: { lane: 'done', status: 'done' },
     statusColor: toneColor(STATUS_TONE('done')),
   };
@@ -370,6 +335,20 @@ export function deliveryList(inputs: DeliveryInputs): DeliveryList {
   };
 }
 
+/**
+ * The list's read state: loading until the flows, the chunks, and the first of the flows' records are read — a flow
+ * whose record is read later fills in where it stands rather than returning the list to its skeleton — then the
+ * reads' error, else empty for a list with no row.
+ */
+export function deliveryState(
+  queries: readonly AsyncStateQuery[],
+  facts: { readonly facts: ReadonlyMap<string, unknown>; readonly pending: boolean },
+  list: DeliveryList,
+): KitAsyncStateValue {
+  if (facts.pending && facts.facts.size === 0) return 'loading';
+  return asyncStateOf(queries, list.delivering.length + list.delivered.length === 0);
+}
+
 /** The listed row for a chunk id, or `null` when the list holds none. */
 export function findRow(list: DeliveryList, chunkId: string | null): DeliveryRow | null {
   if (chunkId === null) return null;
@@ -379,4 +358,23 @@ export function findRow(list: DeliveryList, chunkId: string | null): DeliveryRow
 /** The selection a row's pick leaves: the row, or nothing when it was already selected. */
 export function toggledSelection(current: string | null, picked: string): string | null {
   return current === picked ? null : picked;
+}
+
+/** The delivered rows a phone lists: those delivered within the board's own done window, rolling with the clock. */
+export function deliveredRecently(list: DeliveryList, now: number): readonly DeliveryRow[] {
+  return list.delivered.filter((row) => withinDoneWindow(row.at, now));
+}
+
+/** The stage a phone's card names: a bounce, its place in line, or the furthest stage reached. */
+export function cardStageLabel(row: DeliveryRow): string {
+  if (row.bounce) return `${row.bounce.cause}${row.bounce.withdrawn ? ' · withdrawn' : ''}`;
+  if (row.stage === 1 && row.line) return `in line ${row.line.best}`;
+  return row.stage >= 0 ? STAGES[row.stage] : 'no stage';
+}
+
+/** The colour a phone's card names its stage in: red for a bounce, done's for a landing, cyan for a stage reached. */
+export function cardStageColor(row: DeliveryRow): string {
+  if (row.bounce) return 'var(--red)';
+  if (row.stage === STAGES.length - 1) return toneColor('done');
+  return row.stage >= 0 ? 'var(--cyan)' : 'var(--label)';
 }

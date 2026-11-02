@@ -8,6 +8,8 @@
      `position: absolute` centers on the browser viewport with no positioned
      ancestor here, the way `.tx-view` below already provides one level down. */
   position: relative;
+  /* The gardening findings/proposals list width, so the segment list's two lines never wrap. */
+  --master-list-col: 640px;
 }
 /* The list slot element: it owns its own scroll inside the kit's list pane. */
 .tx-nav {
@@ -58,4 +60,15 @@
 }
 .seg-body {
   padding: 6px 8px;
+}
+.step-head .dot {
+  color: var(--label-dim);
+}
+.step-head .unmatched {
+  color: var(--amber);
+  text-transform: none;
+}
+.harness {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
 }

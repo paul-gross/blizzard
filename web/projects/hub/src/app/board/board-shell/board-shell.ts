@@ -2,15 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
-import { placeLines } from '../flows/flow-place.model';
+import { placeLines } from '../../core/flow-place.model';
+import { BOARD_DONE_WINDOW_HOURS } from '../../core/done-window';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
 
-/** The DONE window `listChunksApiChunksGet` keeps under `board_window`: chunks finished in the last
- * `BOARD_DONE_WINDOW_HOURS`, plus the newest `BOARD_DONE_FLOOR` however old. */
-const BOARD_DONE_WINDOW_HOURS = 48;
+/** The newest done chunks the hub keeps under `board_window` however old, beside its `BOARD_DONE_WINDOW_HOURS`. */
 const BOARD_DONE_FLOOR = 10;
 /** The two sets the hub keeps are both newest-first, so their union is simply the larger one. */
 const DONE_WINDOW_LABEL = `DONE MAX(${BOARD_DONE_WINDOW_HOURS}H, ${BOARD_DONE_FLOOR})`;
@@ -84,9 +83,6 @@ export class BoardShell {
   /** Every chunk id with an open decision, forwarded to every {@link BoardColumn}. */
   readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
 
-  /** Emitted with a chunk id when a backlog card's Promote is clicked. */
-  readonly promote = output<string>();
-
   /** Emitted when a READY or BACKLOG card is dragged somewhere new — the chunk,
    * the anchor it now sits after (`null` = the very top of that list), and which
    * list it belongs to (forwarded as-is from {@link BoardColumn} or {@link BoardList}). */
@@ -109,9 +105,6 @@ export class BoardShell {
   /** Every chunk's work items read so far, by chunk id — a card fills each work ref's title
    * once its chunk's arrive, and holds a skeleton in its place until then. */
   readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
-
-  /** Each graph's name by graph id, as read so far — a card names its chunk's graph once it is here. */
-  readonly graphNames = input<ReadonlyMap<string, string>>(new Map());
 
   /** How many card skeletons each lane draws while the chunk read loads (`laneSkeletonCounts`). */
   readonly laneSkeletons = input<ReadonlyMap<string, number>>(new Map());
@@ -170,8 +163,8 @@ export class BoardShell {
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
-        graphId: chunk.graph_id ?? null,
-        graphName: (chunk.graph_id && this.graphNames().get(chunk.graph_id)) || null,
+        graphName: chunk.graph_name,
+        graphProgress: chunk.graph_progress,
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,

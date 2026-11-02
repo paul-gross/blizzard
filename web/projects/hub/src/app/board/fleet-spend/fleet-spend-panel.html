@@ -1,0 +1,13 @@
+<fleet-kit-panel aria-label="Fleet spend" data-testid="fleet-spend-panel" label="Fleet spend">
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="—"
+    loadingTestid="fleet-spend-loading"
+    errorText="FAILED TO LOAD"
+    errorTestid="fleet-spend-error"
+  >
+    @if (spend.today.data(); as today) {
+      <app-fleet-spend data-testid="fleet-spend-rows" layout="stacked" [today]="today" [yesterday]="spend.yesterday.data() ?? null" />
+    }
+  </fleet-kit-async-state>
+</fleet-kit-panel>

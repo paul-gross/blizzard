@@ -15,7 +15,7 @@
       >
         <!-- The icon takes the pointer for its tooltip, so a click on it opens the chunk itself, as the
              row's select row beneath would. -->
-        <app-lane-icon
+        <fleet-lane-icon
           chunkRowLead
           class="lane"
           data-testid="list-row-lane"
@@ -24,9 +24,9 @@
           (click)="selectChunk.emit(entry.card.chunkId)"
         />
         @if (showsNodeStrip(entry.card)) {
-          <app-node-strip chunkRowProgress [chunkId]="entry.card.chunkId" [graphId]="entry.card.graphId ?? null" [currentNodeId]="entry.card.nodeId || null" />
+          <app-node-strip chunkRowProgress [progress]="entry.card.graphProgress ?? []" />
         }
-        <app-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.status" />
+        <fleet-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.status" />
       </fleet-chunk-list-row>
     }
   </ng-template>

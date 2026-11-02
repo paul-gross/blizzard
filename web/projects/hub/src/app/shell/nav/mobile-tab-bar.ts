@@ -8,7 +8,7 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
  * mobile screen rather than being a per-page fixture.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar}. This layer builds the hub's
- * {@link MobileTabItem}s: Board, Fleet, Events and Gardening, each routed
+ * {@link MobileTabItem}s: Board, Delivery, Fleet, Gardening and Events, each routed
  * (`routerLink`/`routerLinkActive`).
  */
 @Component({
@@ -20,8 +20,9 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
 export class MobileTabBar {
   protected readonly items: readonly MobileTabItem[] = [
     { testid: 'tab-board', label: 'Board', route: '/board' },
+    { testid: 'tab-delivery', label: 'Delivery', route: '/delivery' },
     { testid: 'tab-fleet', label: 'Fleet', route: '/fleet' },
-    { testid: 'tab-events', label: 'Events', route: '/events' },
     { testid: 'tab-gardening', label: 'Gardening', route: '/gardening' },
+    { testid: 'tab-events', label: 'Events', route: '/events' },
   ];
 }

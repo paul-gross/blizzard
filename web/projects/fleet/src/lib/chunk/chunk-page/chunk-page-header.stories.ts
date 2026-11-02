@@ -1,18 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import { workRefView } from '../../testing/builders/chunk';
+import { chunkDetail, routeView, workRefView } from '../../testing/builders/chunk';
 import { ChunkPageHeader } from './chunk-page-header';
-
-const CHUNK_IDS = [
-  'ch_01blockedby000000000000001',
-  'ch_01blockedby000000000000002',
-  'ch_01blockedby000000000000003',
-  'ch_01blockedby000000000000004',
-  'ch_01blockedby000000000000005',
-  'ch_01blockedby000000000000006',
-  'ch_01blockedby000000000000007',
-  'ch_01blockedby000000000000008',
-];
 
 const meta: Meta<ChunkPageHeader> = {
   title: 'Chunk/Page header',
@@ -22,9 +11,11 @@ const meta: Meta<ChunkPageHeader> = {
     status: 'running',
     tone: 'running',
     pointers: [workRefView()],
-    blockedBy: [],
-    blocking: [],
-    linkBase: ['chunks'],
+    projectName: null,
+    projectColor: null,
+    route: null,
+    detail: null,
+    canControl: false,
   },
 };
 export default meta;
@@ -42,5 +33,7 @@ export const ManyPointers: Story = {
     ],
   },
 };
-export const LongBlockedBy: Story = { args: { status: 'blocked', tone: 'waiting', blockedBy: CHUNK_IDS } };
-export const LongBlocking: Story = { args: { blocking: CHUNK_IDS } };
+/** The full identity line — project swatch, work item, the runner holding the route, status — and the ⋮ menu. */
+export const ProjectRunnerAndMenu: Story = {
+  args: { projectName: 'Blizzard', projectColor: '#4aa3ff', route: routeView(), detail: chunkDetail({ route: routeView() }), canControl: true },
+};

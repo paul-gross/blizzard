@@ -7,8 +7,7 @@ import type {
   TranscriptSegmentIndexEntry,
 } from '../../api/hub';
 import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
-import type { ChunkStepSession } from '../chunk-detail/chunk-step-sessions';
-import { ChunkTimelineSelection } from '../chunk-detail/chunk-timeline-selection';
+import { ChunkTimeline } from '../chunk-detail/chunk-timeline';
 import { KitAccordionSection } from '../../kit/kit-accordion-section';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitMasterDetail } from '../../kit/kit-master-detail';
@@ -16,7 +15,7 @@ import { mergeLateLinks } from '../../transcripts/merge-late-links';
 import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view';
 
 /**
- * The chunk detail page's Node history tab — {@link ChunkTimelineSelection}'s
+ * The chunk detail page's Node history tab — {@link ChunkTimeline}'s
  * three-line rows beside the selected step's own transcript and artifacts, each in its
  * own collapsible {@link KitAccordionSection}: a step can carry more than one transcript
  * segment (a resumed lease), each paged through seam buttons. Presentational
@@ -41,14 +40,14 @@ import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view
 @Component({
   selector: 'fleet-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAccordionSection, KitAsyncState, KitMasterDetail, TranscriptSegmentView],
+  imports: [ChunkArtifactBody, ChunkTimeline, KitAccordionSection, KitAsyncState, KitMasterDetail, TranscriptSegmentView],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })
 export class ChunkNodeHistoryTab {
   readonly detail = input.required<ChunkDetail>();
 
-  /** The raw `?step` URL param — forwarded straight to {@link ChunkTimelineSelection} with
+  /** The raw `?step` URL param — forwarded straight to {@link ChunkTimeline} with
    * no lookup against the timeline's own rows here. */
   readonly selectedKey = input<string | null>(null);
 
@@ -72,7 +71,7 @@ export class ChunkNodeHistoryTab {
   readonly continuedFrom = input<TranscriptSegmentIndexEntry | null>(null);
   readonly continuesIn = input<TranscriptSegmentIndexEntry | null>(null);
 
-  /** Forwarded straight from {@link ChunkTimelineSelection.pickStep}, a row's join key
+  /** Forwarded straight from {@link ChunkTimeline}'s row activation, a row's join key
    * when the operator activates it, or `null` when they clear the selection by
    * re-activating the already-selected row, or by activating {@link KitMasterDetail}'s
    * own Back control. */
@@ -81,12 +80,9 @@ export class ChunkNodeHistoryTab {
   /** A transcript seam button followed — the target segment id to page to. */
   readonly pickSegment = output<string>();
 
-  /** {@link ChunkTimelineSelection.graphLinkBase} — the daemon's graphs view, or `null`
+  /** {@link ChunkTimeline.graphLinkBase} — the daemon's graphs view, or `null`
    * to leave each row's graph badge unlinked where the daemon serves no graphs view. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
-
-  /** {@link ChunkTimelineSelection.stepSessions}, forwarded. */
-  readonly stepSessions = input<ReadonlyMap<string, ChunkStepSession>>(new Map());
 
   protected readonly hasSelection = computed(() => this.selectedKey() !== null);
 

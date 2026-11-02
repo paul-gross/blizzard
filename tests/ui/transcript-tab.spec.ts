@@ -86,7 +86,7 @@ test('test_chunk_transcripts_tab_browser', async ({ fleet, issue, page, wideView
   await expect(page.getByTestId('chunk-transcripts-tab')).toBeVisible();
   // No transition or lease, so both segments' shared `(node_id, epoch)` matches no history row: the unmatched bucket.
   await expect(page.getByTestId('transcript-step')).toHaveCount(1);
-  await expect(page.getByTestId('transcript-step')).toContainText('unmatched');
+  await expect(page.getByTestId('transcript-step')).toContainText('Unmatched');
   await expect(page.getByTestId('transcript-segment-item').nth(0)).toContainText('Segment 1');
   await expect(page.getByTestId('transcript-segment-item').nth(1)).toContainText('Segment 2');
 

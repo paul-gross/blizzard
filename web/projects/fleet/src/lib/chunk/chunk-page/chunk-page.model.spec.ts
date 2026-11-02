@@ -1,6 +1,4 @@
-import type { ChunkNeighborView } from '../../api/hub';
-import { chunkNeighborView } from '../../testing/builders/chunk';
-import { chunkTabOptions, nextFocus, openEdgeIds, preDetailState } from './chunk-page.model';
+import { chunkProjectColor, chunkTabOptions, nextFocus, preDetailState } from './chunk-page.model';
 
 describe('chunkTabOptions', () => {
   it('offers the Transcripts tab last when the identity may read transcripts', () => {
@@ -16,21 +14,6 @@ describe('preDetailState', () => {
   it('is error for a failed read and loading otherwise', () => {
     expect(preDetailState(true)).toBe('error');
     expect(preDetailState(false)).toBe('loading');
-  });
-});
-
-describe('openEdgeIds', () => {
-  it('names every unsatisfied edge, in order, and leaves satisfied ones off', () => {
-    const edges: ChunkNeighborView[] = [
-      chunkNeighborView({ chunk_id: 'ch_a', satisfied: false }),
-      chunkNeighborView({ chunk_id: 'ch_b', satisfied: true }),
-      chunkNeighborView({ chunk_id: 'ch_c', satisfied: false }),
-    ];
-    expect(openEdgeIds(edges)).toEqual(['ch_a', 'ch_c']);
-  });
-
-  it('is empty for no edges', () => {
-    expect(openEdgeIds([])).toEqual([]);
   });
 });
 
@@ -54,5 +37,20 @@ describe('nextFocus', () => {
       request: { kind: 'tab' },
       origin: null,
     });
+  });
+});
+
+describe('chunkProjectColor', () => {
+  const lookup = (projectId: string): string | null => (projectId === 'p1' ? '#123456' : null);
+
+  it("reads the project's color through the lookup", () => {
+    expect(chunkProjectColor('p1', lookup)).toBe('#123456');
+  });
+
+  it('is null for an unknown project, a chunk with no project, or a daemon with no lookup', () => {
+    expect(chunkProjectColor('p2', lookup)).toBeNull();
+    expect(chunkProjectColor(null, lookup)).toBeNull();
+    expect(chunkProjectColor(undefined, lookup)).toBeNull();
+    expect(chunkProjectColor('p1', undefined)).toBeNull();
   });
 });

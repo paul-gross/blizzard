@@ -1,0 +1,149 @@
+@let id = chunkId();
+<section class="drawer" data-testid="delivery-drawer" [attr.aria-label]="'Delivery of ' + id">
+  @if (detail(); as d) {
+    <app-chunk-detail-header
+      [detail]="d"
+      [renderedStatus]="d.status"
+      [projectColor]="projectColor()"
+      [runnerHosts]="runnerHosts()"
+      [closable]="closable()"
+      (dismiss)="dismiss.emit()"
+    />
+  } @else {
+    <!-- Loading: the header, the repositories and the history drawn as bars on their real layout; the close stays real. -->
+    <header class="head" data-testid="delivery-drawer-skeleton">
+      <span class="sk-title">
+        <fleet-kit-skeleton class="sk-id" [rows]="1" />
+        <fleet-kit-skeleton class="sk-sub" [rows]="1" />
+      </span>
+      @if (closable()) {
+        <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
+          <svg class="glyph glyph--x" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
+        </fleet-kit-button>
+      }
+    </header>
+  }
+
+  <fleet-kit-async-state [state]="state()" loadingMode="content" placement="inline" errorText="Couldn't read this chunk's detail." errorTestid="delivery-drawer-error">
+    <div loading class="body">
+      <div class="side">
+        <h3 class="h">Repositories</h3>
+        @for (w of skRepos; track $index) {
+          <div class="repo sk-repo">
+            <fleet-kit-skeleton class="sk-bar" [style.width.%]="w" [rows]="1" />
+            <fleet-kit-skeleton class="sk-bar sk-small" [style.width.%]="w - 20" [rows]="1" />
+            <fleet-kit-skeleton class="sk-bar sk-small" [style.width.%]="35" [rows]="1" />
+          </div>
+        }
+      </div>
+      <div class="main">
+        <h3 class="h">Delivery history</h3>
+        <ol class="history">
+          @for (w of skHistory; track $index) {
+            <li class="entry">
+              <span class="when sk-when">
+                <fleet-kit-skeleton class="sk-bar sk-small sk-day" [rows]="1" />
+                <fleet-kit-skeleton class="sk-bar sk-small sk-time" [rows]="1" />
+              </span>
+              <span class="what sk-what">
+                <fleet-kit-skeleton class="sk-bar" [style.width.%]="w" [rows]="1" />
+                <fleet-kit-skeleton class="sk-bar sk-small sk-dim" [style.width.%]="w / 2" [rows]="1" />
+              </span>
+              <fleet-kit-skeleton class="sk-bar sk-small sk-age" [rows]="1" />
+            </li>
+          }
+        </ol>
+      </div>
+    </div>
+    @if (view(); as v) {
+      <div class="body">
+        <div class="side">
+          <h3 class="h">Repositories</h3>
+          @for (repo of v.repos; track repo.forge) {
+            <div class="repo" data-testid="delivery-drawer-repo" [style.--tone]="toneColor(repo.tone)">
+              <div class="repo-head">
+                <span class="repo-name" [title]="repo.forge">{{ repo.name }}</span>
+                <span class="repo-state">{{ repo.state }}</span>
+              </div>
+              @if (repo.branch; as branch) {
+                <span class="dim mono" [title]="branch">{{ branch }}</span>
+              }
+              <span class="repo-links">
+                @for (pr of repo.prs; track pr.text) {
+                  <a [href]="pr.url" target="_blank" rel="noopener noreferrer">PR {{ pr.text }}</a>
+                }
+                @if (repo.commit; as commit) {
+                  <a class="commit" [href]="commit.url" target="_blank" rel="noopener noreferrer">{{ commit.text }}</a>
+                }
+                @if (repo.lastAttempt; as last) {
+                  <span class="last age" [title]="'last updated ' + last.title">{{ last.age }}</span>
+                }
+              </span>
+            </div>
+          } @empty {
+            <p class="empty">Not delivering to any repository yet.</p>
+          }
+        </div>
+        <div class="main">
+          <h3 class="h">Delivery history</h3>
+          <ol class="history">
+            @for (entry of v.history; track entry.id) {
+              <li class="entry" data-testid="delivery-history-entry" [class.transition]="entry.transition" [style.--tone]="entry.tone ? toneColor(entry.tone) : null">
+                <span class="when" [title]="entry.whenTitle">
+                  @if (entry.whenParts.day) {
+                    <span class="day">{{ entry.whenParts.day }}</span>
+                  }
+                  <span>{{ entry.whenParts.time }}</span>
+                </span>
+                <span class="what">
+                  <span class="summary-line">
+                    @if (entry.move; as move) {
+                      <!-- Each part keeps whole — a name never breaks at its hyphens — and a line breaks only before a separator, which
+                           stays with the part after it. -->
+                      <span class="move"
+                        ><span class="part nd" [title]="(move.graph ? move.graph + '/' : '') + move.from">@if (move.graph; as graph) {<span class="gr">{{ graph }}/</span>}{{ move.from }}</span>
+                        @if (move.choice; as choice) {<span class="part" [title]="choice"><span class="sep">·&nbsp;</span><span class="verdict">{{ choice }}</span></span>}
+                        <span class="part jg-to" [title]="'→ ' + (move.graph ? move.graph + '/' : '') + move.to" [attr.aria-label]="'→ ' + (move.graph ? move.graph + '/' : '') + move.to"
+                          ><svg class="arr" viewBox="0 0 12 8" width="9" height="6" aria-hidden="true"><path d="M0 4h10M7 1l3 3-3 3" /></svg
+                          ><span class="nm">@if (move.graph; as graph) {<span class="gr">{{ graph }}/</span>}{{ move.to }}</span></span
+                        ></span
+                      >
+                    } @else {
+                      <span class="text">{{ entry.text }}</span>
+                    }
+                    @if (entry.logKey; as key) {
+                      <a class="log" [routerLink]="'/board/chunk/' + id + '/artifact/' + key | lensLink">log</a>
+                    }
+                  </span>
+                  @if (entry.repos; as repos) {
+                    <span class="dim repos">
+                      @for (repo of repos.split(' · '); track repo; let first = $first) {
+                        <span class="part" [title]="repo">@if (!first) {·&nbsp;}{{ repo }}</span>
+                      }
+                    </span>
+                  }
+                  @if (entry.detail; as detail) {
+                    <span class="detail" [title]="detail">{{ detail }}</span>
+                  }
+                  @if (entry.step; as step) {
+                    <span class="detail">{{ step.name }} exited {{ step.exitCode ?? '?' }}</span>
+                    @if (step.outputTail) {
+                      <pre class="tail" [class.open]="isUnfolded(entry.id)">{{ tail(entry.id, step) }}</pre>
+                      @if (step.long) {
+                        <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the output, not an action: the kit button's bordered chrome would outweigh it. -->
+                        <button type="button" class="fold" (click)="toggle(entry.id)">{{ isUnfolded(entry.id) ? 'show less' : 'show all' }}</button>
+                      }
+                    }
+                  }
+                </span>
+                <span class="age">{{ entry.age }}</span>
+              </li>
+            } @empty {
+              <li class="empty">No delivery yet.</li>
+            }
+          </ol>
+        </div>
+      </div>
+    }
+  </fleet-kit-async-state>
+</section>

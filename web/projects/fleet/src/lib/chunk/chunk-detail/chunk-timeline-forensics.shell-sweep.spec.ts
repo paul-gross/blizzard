@@ -6,7 +6,6 @@ import { page } from 'vitest/browser';
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
-import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
 /**
  * The node-history timeline's bounce and restart rows, the tooled half of
@@ -68,19 +67,15 @@ describe('chunk timeline bounce and restart rows shell sweep (web:shell-sweep)',
       window.addEventListener('unhandledrejection', onRejection);
 
       await TestBed.configureTestingModule({
-        imports: [ChunkTimeline, ChunkTimelineSelection],
+        imports: [ChunkTimeline],
         providers: [provideZonelessChangeDetection(), provideRouter([])],
       }).compileComponents();
 
-      // One host at a time — mounting a second fixture detaches the first one's root.
-      const hosts = [
-        [ChunkTimeline, 'history'],
-        [ChunkTimelineSelection, 'selection'],
-      ] as const;
+      const hosts = [[ChunkTimeline, 'history']] as const;
       try {
         await page.viewport(width, 800);
         for (const [component, prefix] of hosts) {
-          const fixture = TestBed.createComponent<ChunkTimeline | ChunkTimelineSelection>(component);
+          const fixture = TestBed.createComponent(component);
           fixture.componentRef.setInput('detail', DETAIL);
           await fixture.whenStable();
           const root = fixture.nativeElement as HTMLElement;

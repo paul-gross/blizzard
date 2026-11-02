@@ -1493,6 +1493,11 @@
               }
             ]
           },
+          "bounce_count": {
+            "default": 0,
+            "title": "Bounce Count",
+            "type": "integer"
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -1585,6 +1590,25 @@
             "title": "Graph Id",
             "type": "string"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "graph_progress": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphProgressNodeView"
+            },
+            "title": "Graph Progress",
+            "type": "array"
+          },
           "landed": {
             "default": false,
             "title": "Landed",
@@ -1597,6 +1621,16 @@
             },
             "title": "Landed Repos",
             "type": "array"
+          },
+          "latest_bounce": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BounceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "open_prs": {
             "default": [],
@@ -1722,7 +1756,11 @@
           "flow_places",
           "project_id",
           "project_slug",
-          "project_name"
+          "project_name",
+          "graph_name",
+          "graph_progress",
+          "latest_bounce",
+          "bounce_count"
         ],
         "title": "ChunkSummary",
         "type": "object"
@@ -1867,6 +1905,17 @@
           "output_tokens": {
             "title": "Output Tokens",
             "type": "integer"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
           }
         },
         "required": [
@@ -1882,7 +1931,8 @@
           "cost_partial",
           "harness_id",
           "harness_version",
-          "estimated_cost_usd"
+          "estimated_cost_usd",
+          "runner_id"
         ],
         "title": "ChunkUsageView",
         "type": "object"
@@ -3106,6 +3156,17 @@
           "submission_id": {
             "title": "Submission Id",
             "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowVerdict",
+                "x-blizzard-open": true
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3116,7 +3177,8 @@
           "kind",
           "at",
           "outcome",
-          "revision"
+          "revision",
+          "verdict"
         ],
         "title": "FlowFactView",
         "type": "object"
@@ -3132,6 +3194,15 @@
           "passed-over"
         ],
         "title": "FlowPlaceState",
+        "type": "string"
+      },
+      "FlowVerdict": {
+        "description": "A ``turn-ended`` entry's verdict on its submission.",
+        "enum": [
+          "landed",
+          "bounced"
+        ],
+        "title": "FlowVerdict",
         "type": "string"
       },
       "GardenProposalClosureKind": {
@@ -3425,6 +3496,41 @@
         ],
         "title": "GitCommitDeclarationResponse",
         "type": "object"
+      },
+      "GraphProgressNodeView": {
+        "description": "One node of a chunk's graph, read against the chunk's visits there.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GraphProgressState",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "node_id",
+          "name",
+          "state"
+        ],
+        "title": "GraphProgressNodeView",
+        "type": "object"
+      },
+      "GraphProgressState": {
+        "description": "How a chunk's visits left one node of its graph.",
+        "enum": [
+          "current",
+          "passed",
+          "failed",
+          "unvisited"
+        ],
+        "title": "GraphProgressState",
+        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {

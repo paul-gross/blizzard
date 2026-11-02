@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { RUNNER_HOST_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, runnerBoardParts, runnerDisplayName, runnerTitle } from './runner-display-name';
+import { RUNNER_HOST_NAMES, RUNNER_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, injectRunnerNames, runnerBoardParts, runnerDisplayName, runnerTitle } from './runner-display-name';
 
 describe('runnerDisplayName', () => {
   it('joins the compact id to the name with the separator', () => {
@@ -64,5 +64,20 @@ describe('RUNNER_HOST_NAMES', () => {
     });
     const hosts = TestBed.runInInjectionContext(() => injectRunnerHostNames());
     expect(hosts().get('rn_1')).toBe('atlas');
+  });
+});
+
+describe('RUNNER_NAMES', () => {
+  it('knows no name by default, so an app that provides none keeps the compact-id form', () => {
+    const names = TestBed.runInInjectionContext(() => injectRunnerNames());
+    expect(names().size).toBe(0);
+  });
+
+  it("reads the app's provided map", () => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: RUNNER_NAMES, useValue: () => new Map([['rn_1', 'r-claude']]) }],
+    });
+    const names = TestBed.runInInjectionContext(() => injectRunnerNames());
+    expect(names().get('rn_1')).toBe('r-claude');
   });
 });

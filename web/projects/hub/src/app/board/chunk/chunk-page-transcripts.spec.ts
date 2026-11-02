@@ -133,7 +133,7 @@ describe('Chunk page Transcripts tab', () => {
     expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="transcripts-empty"]')).toBeNull();
     const step = el.querySelector('[data-testid="transcript-step"]');
-    expect(step?.textContent).toContain('build · epoch 1');
+    expect(step?.textContent?.replace(/\s+/g, '')).toContain('build·E1');
     expect(step?.textContent).toContain('No segments.');
   });
 

@@ -10,25 +10,65 @@
     </div>
   </div>
   <div class="body">
-    <div class="col">
-      <fleet-kit-skeleton class="label" [rows]="1" />
-      @for (row of factRows; track row) {
-        <div class="fact">
-          <fleet-kit-skeleton class="fact-label" [rows]="1" />
-          <fleet-kit-skeleton class="fact-value" [rows]="1" />
+    <div class="col col--work">
+      <div class="box">
+        <fleet-kit-skeleton class="tag" [rows]="1" />
+        <fleet-kit-skeleton class="bar w-55" [rows]="1" />
+      </div>
+      <div class="box">
+        <fleet-kit-skeleton class="tag" [rows]="1" />
+        <fleet-kit-skeleton class="bar w-90" [rows]="1" />
+        <div class="edges">
+          @for (side of edgeSides; track side) {
+            <div class="edge-col">
+              <fleet-kit-skeleton class="tag tag--sm" [rows]="1" />
+              @for (w of side; track $index) {
+                <div class="edge">
+                  <fleet-kit-skeleton class="icon" [rows]="1" />
+                  <fleet-kit-skeleton class="bar" [style.width.%]="w" [rows]="1" />
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+      @for (w of issueRows; track $index) {
+        <div class="acc">
+          <fleet-kit-skeleton class="icon" [rows]="1" />
+          <fleet-kit-skeleton class="bar" [style.width.%]="w" [rows]="1" />
         </div>
       }
     </div>
-    <div class="col">
-      <fleet-kit-skeleton class="label" [rows]="1" />
-      @for (row of historyRows; track row) {
-        <fleet-kit-skeleton class="line" [rows]="1" />
-      }
+    <div class="col col--list">
+      <fleet-kit-skeleton class="tag s-head" [rows]="1" />
+      <div class="timeline">
+        @for (r of historyRows; track $index) {
+          <div class="step">
+            <fleet-kit-skeleton class="mark" [rows]="1" />
+            <div class="cell">
+              <fleet-kit-skeleton class="bar" [style.width.%]="r[0]" [rows]="1" />
+              <fleet-kit-skeleton class="bar dim" [style.width.%]="r[1]" [rows]="1" />
+            </div>
+            <div class="cell">
+              <fleet-kit-skeleton class="bar" [style.width.%]="r[2]" [rows]="1" />
+              <fleet-kit-skeleton class="bar dim" [style.width.%]="r[3]" [rows]="1" />
+            </div>
+            <div class="cell time">
+              <fleet-kit-skeleton class="bar t1" [rows]="1" />
+              <fleet-kit-skeleton class="bar dim t2" [rows]="1" />
+            </div>
+          </div>
+        }
+      </div>
     </div>
-    <div class="col">
-      <fleet-kit-skeleton class="label" [rows]="1" />
-      @for (row of artifactRows; track row) {
-        <fleet-kit-skeleton class="line" [rows]="2" />
+    <div class="col col--list">
+      <fleet-kit-skeleton class="tag s-head" [rows]="1" />
+      @for (r of artifactRows; track $index) {
+        <div class="art">
+          <fleet-kit-skeleton class="bar" [style.width.%]="r[0]" [rows]="1" />
+          <fleet-kit-skeleton class="bar dim kind" [style.width.px]="r[1]" [rows]="1" />
+          <fleet-kit-skeleton class="bar dim date" [rows]="1" />
+        </div>
       }
     </div>
   </div>

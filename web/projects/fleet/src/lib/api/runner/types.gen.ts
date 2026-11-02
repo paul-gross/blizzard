@@ -897,6 +897,10 @@ export type ChunkSummary = {
     awaiting_external_merge: boolean;
     blocked: BlockedView | null;
     /**
+     * Bounce Count
+     */
+    bounce_count: number;
+    /**
      * Chunk Id
      */
     chunk_id: string;
@@ -942,6 +946,14 @@ export type ChunkSummary = {
      */
     graph_id: string;
     /**
+     * Graph Name
+     */
+    graph_name: string | null;
+    /**
+     * Graph Progress
+     */
+    graph_progress: Array<GraphProgressNodeView>;
+    /**
      * Landed
      */
     landed: boolean;
@@ -949,6 +961,7 @@ export type ChunkSummary = {
      * Landed Repos
      */
     landed_repos: Array<LandedRepoView>;
+    latest_bounce: BounceView | null;
     /**
      * Open Prs
      */
@@ -1096,6 +1109,10 @@ export type ChunkUsageView = {
      * Output Tokens
      */
     output_tokens: number;
+    /**
+     * Runner Id
+     */
+    runner_id: string | null;
 };
 
 /**
@@ -1822,6 +1839,7 @@ export type FlowFactView = {
      * Submission Id
      */
     submission_id: string;
+    verdict: FlowVerdict | null;
 };
 
 /**
@@ -1844,6 +1862,20 @@ export const FlowPlaceState = {
  * Where an open submission stands on a flow it holds.
  */
 export type FlowPlaceState = typeof FlowPlaceState[keyof typeof FlowPlaceState];
+
+/**
+ * FlowVerdict
+ *
+ * A ``turn-ended`` entry's verdict on its submission.
+ */
+export const FlowVerdict = { LANDED: 'landed', BOUNCED: 'bounced' } as const;
+
+/**
+ * FlowVerdict
+ *
+ * A ``turn-ended`` entry's verdict on its submission.
+ */
+export type FlowVerdict = typeof FlowVerdict[keyof typeof FlowVerdict];
 
 /**
  * GardenProposalClosureKind
@@ -2036,6 +2068,42 @@ export type GitCommitDeclarationResponse = {
      */
     repo: string;
 };
+
+/**
+ * GraphProgressNodeView
+ *
+ * One node of a chunk's graph, read against the chunk's visits there.
+ */
+export type GraphProgressNodeView = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    state: GraphProgressState;
+};
+
+/**
+ * GraphProgressState
+ *
+ * How a chunk's visits left one node of its graph.
+ */
+export const GraphProgressState = {
+    CURRENT: 'current',
+    PASSED: 'passed',
+    FAILED: 'failed',
+    UNVISITED: 'unvisited'
+} as const;
+
+/**
+ * GraphProgressState
+ *
+ * How a chunk's visits left one node of its graph.
+ */
+export type GraphProgressState = typeof GraphProgressState[keyof typeof GraphProgressState];
 
 /**
  * HTTPValidationError

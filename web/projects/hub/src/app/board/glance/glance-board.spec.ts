@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { FLEET_CLOCK, hubClient } from 'fleet';
 import { RUNNER_HOST_NAMES } from 'fleet/shell';
-import { graphView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { vi } from 'vitest';
 
@@ -12,6 +12,9 @@ import { GlanceBoard } from './glance-board';
 
 const NOW = Date.now();
 const completedAt = (ageMs: number) => new Date(NOW - ageMs).toISOString();
+
+/** A fixture chunk carrying the summary fields the hub always sends, at their resting values. */
+const asWire = <T extends object>(chunk: T) => ({ graph_name: null, graph_progress: [], latest_bounce: null, bounce_count: 0, ...chunk });
 
 /**
  * `chunk-lanes.ts`'s lanes decide where in the list a chunk lands — this fixture
@@ -40,6 +43,7 @@ const CHUNKS = [
   {
     chunk_id: 'ch_01running000000000000000000',
     graph_id: 'gr_1',
+    graph_name: 'default',
     status: 'running',
     current_node_id: 'nd_build',
     current_node_name: 'build',
@@ -93,7 +97,7 @@ const CHUNKS = [
     graph_id: 'gr_1',
     status: 'done',
     terminal: true,
-    completed_at: completedAt(25 * 60 * 60 * 1000),
+    completed_at: completedAt(49 * 60 * 60 * 1000),
     current_node_id: null,
     model: 'claude-opus-4-8',
     runner_id: null,
@@ -124,7 +128,7 @@ const CHUNKS = [
     model: 'claude-opus-4-8',
     runner_id: null,
   },
-];
+].map(asWire);
 
 // The backlog's hub order deliberately differs from the chunks list's order.
 const BACKLOG = [
@@ -144,7 +148,13 @@ const DECISIONS = [
   },
 ];
 
-const PROJECTS = { projects: [{ project_id: 'pj_alpha', slug: 'alpha', name: 'Alpha', color: 'teal' }] };
+// Two projects, so the cards carry their project's colour on All.
+const PROJECTS = {
+  projects: [
+    { project_id: 'pj_alpha', slug: 'alpha', name: 'Alpha', color: 'teal' },
+    { project_id: 'pj_beta', slug: 'beta', name: 'Beta', color: 'pink' },
+  ],
+};
 
 // The API's dispatch order deliberately differs from the chunks list's order.
 const QUEUE = [
@@ -202,7 +212,6 @@ describe('GlanceBoard — one list and the vitals', () => {
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
       if (method === 'GET' && path === '/api/spend') return SPEND;
-      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
       return {};
     });
   }
@@ -223,7 +232,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   afterEach(() => stub.restore());
 
-  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, the divider, then done today', async () => {
+  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, the divider, then done in the last 48h', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
 
@@ -321,14 +330,13 @@ describe('GlanceBoard — one list and the vitals', () => {
     expect(el.querySelector('[data-testid="vital-runners-up"]')?.textContent).toContain('2/3');
   });
 
-  it('renders the fleet spend-today total via cost-format/formatTokens', async () => {
+  it('renders the fleet spend today as the session efficiency figure', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="glance-spend-row"]');
-    expect(row?.textContent).toContain('$18.40');
-    expect(row?.textContent).toContain('6.1M tok');
+    const parts = [...el.querySelectorAll('[data-testid="glance-spend-value"] .part')].map((p) => p.textContent?.trim());
+    expect(parts).toEqual(['$18.40', '· 4.00MI', '/ 2.00MO', '× 97.6%']);
   });
 
   it('re-opens the spend-today read on the next day once the minute tick crosses midnight', async () => {
@@ -375,7 +383,7 @@ const ESTIMATE_CHUNKS = [
       cache_create_tokens: 0,
     },
   },
-];
+].map(asWire);
 
 const ESTIMATE_SPEND = {
   cost_usd: 0,
@@ -400,7 +408,6 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
       if (method === 'GET' && path === '/api/spend') return ESTIMATE_SPEND;
-      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
       return {};
     });
     await TestBed.configureTestingModule({
@@ -428,7 +435,7 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="glance-spend-value"] .part')?.textContent?.trim()).toBe('~$0.07');
   });
 });
 
@@ -450,7 +457,7 @@ describe('GlanceBoard — work items', () => {
               runner_id: 'r1',
               work_refs: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4' }],
             },
-          ],
+          ].map(asWire),
           next_cursor: null,
         };
       }
@@ -462,7 +469,7 @@ describe('GlanceBoard — work items', () => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/questions') return [];
-      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
+      if (method === 'GET' && path === '/api/spend') return SPEND;
       return {};
     });
     await TestBed.configureTestingModule({

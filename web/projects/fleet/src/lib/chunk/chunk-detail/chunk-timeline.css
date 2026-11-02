@@ -17,8 +17,30 @@
   color: var(--label);
 }
 .s-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   padding: 0 8px;
   margin-bottom: 6px;
+}
+.graph-sep {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.graph-link {
+  min-width: 0;
+  color: var(--amber);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.graph-link:hover,
+a.graph-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
 }
 /* One row per judged node: the attempt, the node column, and the verdict.
    `<ol>` owns the track sizes; every `<li class="step-item">` adopts them via
@@ -28,10 +50,11 @@
    would size that column differently). `.step`, nested one level inside
    `.step-item`, subgrids a second time so the same alignment
    carries through the extra level. The first track holds the attempt number or a row kind's
-   mark glyph; the row's own padding and border take 10px of it, so 28px, not a digit's width. */
+   mark glyph; the row's own padding and border take 10px of it, so 28px, not a digit's width. The node and
+   verdict columns split what the content-sized time column leaves 40/60, so the verdict's details have room. */
 .timeline {
   display: grid;
-  grid-template-columns: 28px fit-content(160px) minmax(64px, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 2fr) minmax(0, 3fr) auto;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -59,7 +82,6 @@
   border-left: 2px solid transparent;
   font-size: var(--fs-sm);
   line-height: 1.5;
-  position: relative;
 }
 /* Hover is a background step alone — no border of its own. The left-edge
    accent is reserved for `.selected` (below), the same split
@@ -70,49 +92,26 @@
 .step.keyed:hover {
   background: var(--surface-hover);
 }
-.step[role='button'] {
+/* A keyed row is a real link or button filling the whole row box: it takes the row's text, not a link's or a
+   button's own chrome, and the whole box points. */
+a.step,
+button.step {
+  width: 100%;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  text-decoration: none;
+  background: none;
+  border-top: 0;
+  border-right: 0;
   cursor: pointer;
 }
-/* Keyboard focus is its own signal, not a hover stand-in — a mouse user
-   never sees it, so it keeps the ring hover deliberately no longer draws. */
-.step[role='button']:focus-visible {
+/* Keyboard focus is its own signal, not a hover stand-in. */
+.step.keyed:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
-}
-/* A non-activatable keyed row's own link — stretched over the whole `.step`
-   rather than `.step` itself made an anchor, since a multi-graph row already
-   nests its own graph-badge anchor inside `.step` and an anchor cannot nest
-   one (`chunk-timeline.ts`'s own class comment). The same whole-row-link-over-
-   plain-content pattern `glance-view.css`'s `.hit` establishes. */
-.step-link {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  cursor: pointer;
-}
-.step-link:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: -2px;
-}
-/* Every other direct child rides above the stretched link, visually — needed
-   even for the two excluded below, or the link (a positioned z-index:0 sibling
-   painted after in-flow content) would sit over them for hit-testing too, and
-   neither would ever see a hover. */
-.step:has(.step-link) > *:not(.step-link) {
-  position: relative;
-  z-index: 1;
-}
-/* `pointer-events: none` (inherited by descendants) hands every click that
-   isn't otherwise claimed through to the stretched link below. `.nd`/`.ts`
-   are excluded: each carries its own native `title` tooltip
-   (`chunk-timeline.html`), and pointer-events:none would take hover — the
-   thing that tooltip needs — along with the click. A click landing exactly on
-   either still bubbles to `.step`'s click handler, which forwards it to the
-   row's own link (`ChunkTimeline.forwardToLink`). The verdict-routed-to
-   tooltip and the cost tooltip do the same for a nested descendant — see
-   `.jg-to`/`.step-usage .cost` below. */
-.step:has(.step-link) > *:not(.step-link):not(.nd):not(.ts) {
-  pointer-events: none;
 }
 .step.selected {
   border-left-color: var(--cyan);
@@ -138,9 +137,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 84px; /* the node column's floor — see the `.timeline` comment above */
-  /* Excluded from the stretched-link sweep above — keeps this element's own
-     `[title]="row.nodeId"` (`chunk-timeline.html`) reachable by hover. */
-  pointer-events: auto;
 }
 .step .jg {
   display: flex;
@@ -159,19 +155,6 @@
 .step .nd .gr {
   color: var(--label-dim);
 }
-/* Only an `<a>` when `graphLinkBase` is set (a `<span>` otherwise) — the shared rule
-   above already colors either; this just adds the link affordance the `<span>` case
-   never matches. Its own click stays live for the same reason `.nd`'s does (above) —
-   it inherits that ancestor's `pointer-events: auto`, not a stretched-link sweep. */
-a.gr {
-  text-decoration: none;
-}
-a.gr:hover,
-a.gr:focus-visible {
-  color: var(--cyan);
-  text-decoration: underline;
-  outline: none;
-}
 /* Where the verdict routed the chunk — a consequence, so it reads dim. */
 .step .jg-to {
   color: var(--label-dim);
@@ -179,45 +162,48 @@ a.gr:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  /* `.jg` (its own direct-child ancestor) is stretched-link-swept to
-     `pointer-events: none`; opt this one descendant back in the same way
-     `.nd`'s own `[title]` does, so its `[title]="row.toId"` stays reachable. */
-  pointer-events: auto;
 }
-/* When the judgement landed — recency at a glance, right-aligned and dim.
-   Excluded from the stretched-link sweep above (like `.nd`) — keeps this
-   element's own `[title]="row.whenTitle"` reachable by hover. */
-.step-usage .cost {
-  pointer-events: auto;
-}
+/* When the judgement landed — recency at a glance, right-aligned and dim. */
 .step .ts {
   color: var(--label-dim);
   font-size: var(--fs-label);
   white-space: nowrap;
-  pointer-events: auto;
-}
-/* A history step's own usage, on its own full-width row under the step's main
-   cells — pinned by `chunk-timeline-provenance.shell-sweep.spec.ts`'s "gives each
-   step's usage its own full-width row under an unclipped verdict at 390px"/"…320px".
-   The token and cost cells each keep their own nowrap; the pair wraps as a whole. */
-.step-usage {
-  grid-column: 1 / -1;
-  min-width: 0;
+  text-align: right;
+  /* One cell in the last column, spanning every row of the entry (its `grid-row` is bound per entry), the day
+     stacked over the time at the top of the cell. */
+  grid-column: -2 / -1;
+  align-self: start;
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px 6px;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+/* A history step's own usage, on its own row under the step's main cells, beside the stamp's time.
+   The session efficiency cost sits under the node name, the harness under the verdict. */
+.step-usage {
+  grid-column: 1 / -2;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  min-width: 0;
   margin-top: 2px;
   color: var(--label);
   font-size: var(--fs-xs);
 }
-.step-usage .tok {
-  flex: 0 0 70px;
+/* The harness reads as dimmed secondary text, like an artifact's kind. */
+.step-usage .harness {
+  grid-column: 3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--label-dim);
   white-space: nowrap;
 }
-.step-usage .cost {
-  flex: 0 0 56px;
-  text-align: right;
-  white-space: nowrap;
+/* The session efficiency cost clips rather than spill into the harness; its title carries the breakdown, so it keeps
+   its hover. */
+.step-usage .eff {
+  grid-column: 2;
 }
 /* Who restarted the chunk — attribution, so it reads dim like the routed-to column. */
 .step .jg-by {
@@ -245,10 +231,17 @@ a.gr:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* The bounce's reason reads in full, wrapping rather than hiding behind a hover. */
+/* The bounce's reason wraps; past five lines its title carries the rest. */
 .step .bounce-reason {
   color: var(--label-dim);
   font-size: var(--fs-label);
   min-width: 0;
   overflow-wrap: anywhere;
+  /* The verdict column of its own row under the verdict, clamped at five lines. */
+  grid-column: 3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
 }

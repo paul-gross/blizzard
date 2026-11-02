@@ -1,11 +1,10 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { type ChunkStepSession, type DaemonTarget, type KitAsyncStateValue, runnerClient } from 'fleet';
+import { type DaemonTarget, type KitAsyncStateValue, runnerClient } from 'fleet';
 
 import { injectPanelLeases, injectPanelRunners } from '../../core/panel-reads';
 import type { RunnerOwner } from '../../core/panel-reads.model';
-import { stepSessions } from '../../core/worker-session';
 import { chunkReadOwner } from './chunk-owner.model';
 
 /**
@@ -29,14 +28,6 @@ export class ChunkOwner {
   readonly owner = computed<RunnerOwner | null>(() =>
     chunkReadOwner(this.leases.data(), this.chunkId(), this.runners.all(), this.runners.scoped()),
   );
-
-  /** The chunk's sessions across every runner that ran it, keyed by `(node_id, epoch)` — the Node history rows'
-   * enrichment (`CHUNK_STEP_SESSIONS`). A chunk that moved runners keeps its earlier steps' sessions on the runner
-   * that ran them, so they are not narrowed to its current owner. */
-  readonly stepSessions = computed<ReadonlyMap<string, ChunkStepSession>>(() => {
-    const chunkId = this.chunkId();
-    return stepSessions(this.leases.data().filter((lease) => lease.chunk_id === chunkId));
-  });
 
   /** The chunk page's daemon target — the runner client under the chunk's runner — or
    * `null`, holding every read, while no runner serves it. */

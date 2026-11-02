@@ -25,7 +25,8 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, provideFlags } from 'fleet/shell';
+import { type FlagsResponse, IN_APP_LINK, type InAppLink, provideFlags } from 'fleet/shell';
+import { ProjectLens } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
@@ -62,7 +63,7 @@ function stubAuth(
       if (path === '/api/questions' || path === '/api/graphs') return [];
     // `BoardHeader` renders its spend cell whenever the read resolves truthy at all
     // (`{}` included) and calls `.toFixed` on `cost_usd` unconditionally.
-    if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+    if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
     if (path === '/api/projects') return { projects: LENS_PROJECTS };
     return {};
   });
@@ -94,7 +95,7 @@ function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[]
     else if (url.pathname === '/api/questions' || url.pathname === '/api/graphs') body = [];
     else if (url.pathname === '/api/spend') {
       spendUrls.push(input.url);
-      body = { cost_usd: 0, cost_partial: false };
+      body = { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
     }
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
@@ -417,7 +418,9 @@ describe('hub App', () => {
       expect(router.url).toBe('/p/zeta/board');
     });
 
-    it('feeds the mobile submenu from the same read', async () => {
+    it('names the lensed project in the mobile titlebar from the same read, and opens the lens picker from it', async () => {
+      // The app's own lens-keeping link rewrite, as `app.config.ts` provides it.
+      TestBed.overrideProvider(IN_APP_LINK, { useFactory: () => (link: InAppLink) => TestBed.inject(ProjectLens).link(link) });
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -425,16 +428,13 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      el.querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
-      await settle(fixture);
-      document.body.querySelector<HTMLElement>('[data-testid="mobile-titlebar-project"]')?.click();
-      await settle(fixture);
-      const item = (slug: string) => document.body.querySelector<HTMLElement>(`[data-testid="mobile-titlebar-project-${slug}"]`);
+      const lens = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
+      expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('Blizzard');
+      expect(authStub.forRoute('/api/projects', 'GET')).toHaveLength(1);
 
-      expect(item('blizzard')?.getAttribute('aria-checked')).toBe('true');
-      item('all')!.click();
+      lens!.click();
       await settle(fixture);
-      expect(router.url).toBe('/board');
+      expect(router.url).toBe('/p/blizzard/lens?from=%2Fboard');
     });
   });
 

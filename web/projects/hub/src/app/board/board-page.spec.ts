@@ -9,7 +9,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { BoardShell } from './board-shell/board-shell';
 import { compactRef, hubClient, hubQueueKey, lensedKey } from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
-import { graphView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { fleetSpendView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
@@ -146,8 +146,8 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
         ],
       };
     }
+    if (path === '/api/spend') return fleetSpendView();
     if (path.endsWith('/work-items')) return { items: [] };
-    if (path.startsWith('/api/graphs/')) return graphView({ graph_id: path.slice('/api/graphs/'.length), name: 'default' });
     const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
     if (detail !== null) return detail[1] === GONE ? stubError(404, { detail: 'not found' }) : DETAIL(detail[1]);
     return {};
@@ -392,116 +392,6 @@ describe('BoardPage', () => {
     });
   });
 
-  /* A pending promote scopes to the clicked card; a sibling card's Promote stays clickable. */
-  describe('Promote per-card pending scope', () => {
-    /** The Promote button on a backlog card, or `undefined` if the card carries none. */
-    const promoteButton = (el: HTMLElement, chunkId: string): HTMLButtonElement | null | undefined =>
-      card(el, chunkId).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]');
-
-    it("moves only the clicked card into READY while its mutation is pending, restoring it to BACKLOG once settled", async () => {
-      const { el, harness } = await open();
-      const queryClient = TestBed.inject(QueryClient);
-      let resolveInvalidate!: () => void;
-      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
-        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
-      );
-
-      promoteButton(el, BACKLOG)?.click();
-      // Held open by the `invalidateQueries` spy above — `settle()`'s own
-      // `whenStable()` would hang on it, so a bare macrotask tick + a manual
-      // `detectChanges()` stands in.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      harness.fixture.detectChanges();
-
-      // The clicked card moved into READY — it carries no Promote button there…
-      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
-      // …but the sibling backlog card stays put, its own Promote still clickable.
-      expect(card(el, BACKLOG_NEXT).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
-      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
-
-      resolveInvalidate();
-      await settle(harness.fixture);
-
-      // Settled with the fixture's data unchanged (a static stub, no real promote):
-      // the override is gone and the card renders its last real state again.
-      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
-      expect(promoteButton(el, BACKLOG)?.disabled).toBe(false);
-    });
-
-    it("reports a promote failure through the board's visible error slot", async () => {
-      stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === `/api/chunks/${BACKLOG}/promote`) {
-          return stubError(409, { detail: 'chunk already ready' });
-        }
-        return hubRoutes()(method, path);
-      });
-      const { el, harness } = await open();
-
-      promoteButton(el, BACKLOG)?.click();
-      await settle(harness.fixture);
-
-      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk already ready');
-      // Promote's own failure never disables a card that never fired it.
-      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
-    });
-  });
-
-  /*
-   * The board-half pending overrides (`bzh:frontend-pending-override`): a control whose
-   * resulting change is predictable renders it immediately, computed off the in-flight
-   * mutation's own variables — never a cache write — so a rejection reverts to the last real
-   * server state for free the instant `isPending()` flips false.
-   */
-  describe('Promote renders the pending card in the READY lane', () => {
-    /** The chunk ids rendered in a lane, top to bottom. */
-    const laneIds = (el: HTMLElement, column: string): string[] =>
-      [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
-
-    /**
-     * The hub assigns a freshly-promoted chunk a **tail** position
-     * (`src/blizzard/hub/domain/operations/queue.py::resolve_landing` owns it), so the pending
-     * override must not predict a top-of-lane rank: it lands at the *bottom* of READY, behind the real queue order,
-     * via `BoardShell`'s "unranked id" fallback.
-     */
-    it('renders the promoted card at the bottom of READY, behind the real queue order, while its promote is pending', async () => {
-      const { el, harness } = await open();
-      const queryClient = TestBed.inject(QueryClient);
-      let resolveInvalidate!: () => void;
-      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
-        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
-      );
-
-      card(el, BACKLOG).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      harness.fixture.detectChanges();
-
-      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT), compactRef(BACKLOG)]);
-      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG_NEXT)]);
-
-      resolveInvalidate();
-      await settle(harness.fixture);
-    });
-
-    it('reverts the card to BACKLOG when the promote is rejected', async () => {
-      stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === `/api/chunks/${BACKLOG}/promote`) {
-          return stubError(409, { detail: 'chunk already ready' });
-        }
-        return hubRoutes()(method, path);
-      });
-      const { el, harness } = await open();
-
-      card(el, BACKLOG).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
-      await settle(harness.fixture);
-
-      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
-      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG), compactRef(BACKLOG_NEXT)]);
-      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk already ready');
-    });
-  });
-
   describe('a chunk with a pending delete is hidden from the board', () => {
     /** `ChunkDetail`'s dock owns and fires the delete mutation, not `BoardPage` — a
      * `mutationKey`-scoped read is exactly what lets this list surface see another
@@ -736,6 +626,33 @@ describe('BoardPage', () => {
 
       expect(TestBed.inject(Router).url).toBe('/board');
       expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
+    });
+
+    it('closes the dock on Escape, as its close button does', async () => {
+      const { el, harness } = await open(`/board?chunk=${RUNNING}`);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(harness.fixture);
+
+      expect(TestBed.inject(Router).url).toBe('/board');
+      expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
+    });
+
+    it('leaves the dock open on an Escape something else owns — a field being typed in, or a handler that took it', async () => {
+      const { harness } = await open(`/board?chunk=${RUNNING}`);
+      const field = document.createElement('input');
+      document.body.append(field);
+      try {
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const taken = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        taken.preventDefault();
+        document.dispatchEvent(taken);
+        await settle(harness.fixture);
+      } finally {
+        field.remove();
+      }
+
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}`);
     });
 
     it('merges into the URL, leaving query params it does not own alone', async () => {

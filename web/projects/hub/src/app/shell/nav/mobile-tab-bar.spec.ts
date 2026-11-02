@@ -15,11 +15,11 @@ describe('MobileTabBar', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('renders Board, Fleet, Events and Gardening, in that order, and no Asks tab', async () => {
+  it('renders Board, Delivery, Fleet, Gardening and Events, in that order, and no Asks tab', async () => {
     const el = await render();
 
     const tabs = Array.from(el.querySelectorAll('[data-testid^="tab-"]')).map((tab) => tab.getAttribute('data-testid'));
-    expect(tabs).toEqual(['tab-board', 'tab-fleet', 'tab-events', 'tab-gardening']);
+    expect(tabs).toEqual(['tab-board', 'tab-delivery', 'tab-fleet', 'tab-gardening', 'tab-events']);
   });
 
   it('routes every tab', async () => {
@@ -27,9 +27,10 @@ describe('MobileTabBar', () => {
 
     for (const [testid, href] of [
       ['tab-board', '/board'],
+      ['tab-delivery', '/delivery'],
       ['tab-fleet', '/fleet'],
-      ['tab-events', '/events'],
       ['tab-gardening', '/gardening'],
+      ['tab-events', '/events'],
     ]) {
       const tab = el.querySelector(`[data-testid="${testid}"]`);
       expect(tab?.getAttribute('href')).toBe(href);

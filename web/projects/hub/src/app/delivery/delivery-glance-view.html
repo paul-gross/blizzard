@@ -1,0 +1,84 @@
+@let l = list();
+<ng-template #card let-row>
+  <li
+    class="card"
+    data-testid="delivery-card"
+    [attr.data-chunk]="row.chunk.chunkId"
+    [style.--status-color]="row.statusColor"
+    [class.tinted]="row.chunk.tint !== null"
+    [style.--project-tint]="row.chunk.tint"
+  >
+    <a class="hit" [routerLink]="['/delivery', 'chunk', row.chunk.chunkId] | lensLink" [attr.aria-label]="'Open delivery of ' + row.chunk.shortId"></a>
+    <fleet-lane-icon class="lane" [lane]="row.icon.lane" [status]="row.icon.status" />
+    <span class="grow">
+      <span class="head">
+        @if (row.chunk.lines[0]?.label; as label) {
+          <span class="iss">{{ label }}</span>
+        }
+        <span class="cid">{{ row.chunk.shortId }}</span>
+      </span>
+      @if (row.chunk.titlesPending) {
+        <fleet-kit-skeleton class="title-skeleton" [rows]="1" />
+      } @else if (row.chunk.lines[0]?.title; as title) {
+        <span class="title" [title]="title">{{ title }}</span>
+      }
+      <span class="meta">
+        <span class="stage" [style.color]="stageColor(row)">{{ stageLabel(row) }}</span>
+        <span class="age">{{ age(row) }}</span>
+      </span>
+    </span>
+  </li>
+</ng-template>
+
+<div class="glance" data-testid="delivery-glance">
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingMode="content"
+    placement="inline"
+    errorText="Failed to read the hub's flows."
+    errorTestid="delivery-error"
+    emptyText="Nothing delivering or delivered."
+    emptyTestid="delivery-empty"
+  >
+    <fleet-kit-skeleton loading variant="card" [rows]="6" />
+    <div class="vitals" data-testid="delivery-filter">
+      <!-- eslint-disable-next-line no-restricted-syntax -- A filter tile is its own toggle, as the board glance's vitals are: the kit button's chrome would break the strip of counts. -->
+      <button type="button" class="vital" data-testid="delivery-filter-delivering" [class.on]="filter() === 'delivering'" [attr.aria-pressed]="filter() === 'delivering'" (click)="toggle('delivering')">
+        <span class="v-n">{{ l.delivering.length }}</span>
+        <span class="v-cap">delivering</span>
+      </button>
+      <!-- eslint-disable-next-line no-restricted-syntax -- A filter tile is its own toggle, as the board glance's vitals are: the kit button's chrome would break the strip of counts. -->
+      <button type="button" class="vital" data-testid="delivery-filter-recent" [class.on]="filter() === 'recent'" [attr.aria-pressed]="filter() === 'recent'" (click)="toggle('recent')">
+        <span class="v-n">{{ recent().length }}</span>
+        <span class="v-cap">delivered 48h</span>
+      </button>
+    </div>
+    <ul class="cards">
+      @if (filter() !== 'recent') {
+        @for (row of l.delivering; track row.chunk.chunkId) {
+          <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
+        } @empty {
+          @if (filter() === 'delivering') {
+            <li class="empty">Nothing delivering.</li>
+          }
+        }
+      }
+      @if (filter() === null) {
+        <li class="divider" role="separator" aria-label="Delivering above, delivered in the last 48 hours below">
+          <span>▲ Delivering</span>
+          <span class="divider-rule"></span>
+          <span>Delivered 48h ▼</span>
+        </li>
+      }
+      @if (filter() !== 'delivering') {
+        @for (row of recent(); track row.chunk.chunkId) {
+          <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
+        } @empty {
+          @if (filter() === 'recent') {
+            <li class="empty">Nothing delivered in the last 48 hours.</li>
+          }
+        }
+      }
+    </ul>
+  </fleet-kit-async-state>
+</div>

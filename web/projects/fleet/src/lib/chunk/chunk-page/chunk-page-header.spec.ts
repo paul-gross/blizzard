@@ -2,7 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { WorkRefView } from '../../api/hub';
+import type { ChunkDetail, RouteView, WorkRefView } from '../../api/hub';
+import { chunkDetail, routeView } from 'fleet/testing';
 import { ChunkPageHeader } from './chunk-page-header';
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
@@ -12,22 +13,26 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
   imports: [ChunkPageHeader],
   template: `<fleet-chunk-page-header
     [chunkId]="chunkId"
-    [linkBase]="linkBase"
     [status]="status"
     [tone]="tone"
     [pointers]="pointers"
-    [blockedBy]="blockedBy"
-    [blocking]="blocking"
+    [projectName]="projectName"
+    [projectColor]="projectColor"
+    [route]="route"
+    [detail]="detail"
+    [canControl]="canControl"
   />`,
 })
 class TestHost {
   chunkId = CHUNK_ID;
-  linkBase: readonly string[] = ['/board', 'chunk'];
   status = 'running';
   tone: 'running' | 'needs' = 'running';
   pointers: readonly WorkRefView[] = [];
-  blockedBy: readonly string[] = [];
-  blocking: readonly string[] = [];
+  projectName: string | null = null;
+  projectColor: string | null = null;
+  route: RouteView | null = null;
+  detail: ChunkDetail | null = null;
+  canControl = false;
 }
 
 describe('ChunkPageHeader', () => {
@@ -83,31 +88,35 @@ describe('ChunkPageHeader', () => {
     expect(el.querySelectorAll('.cp-sub .sep')).toHaveLength(2);
   });
 
-  it('names no edge for a chunk carrying none', async () => {
-    const el = await render();
+  it('leads the line with the project and its swatch, and names the runner holding the route', async () => {
+    const el = await render({ projectName: 'blizzard', projectColor: '#4af', route: routeView() });
 
-    expect(el.querySelector('[data-testid="mobile-chunk-blocked-by"]')).toBeNull();
-    expect(el.querySelector('[data-testid="mobile-chunk-blocking"]')).toBeNull();
+    const project = el.querySelector('[data-testid="mobile-chunk-project"]');
+    expect(project?.textContent?.trim()).toBe('blizzard');
+    expect(project?.querySelector('fleet-kit-swatch')).not.toBeNull();
+    const runner = el.querySelector('[data-testid="mobile-chunk-runner"]');
+    expect(runner?.textContent?.trim()).toContain('r-claude');
+    expect(runner?.getAttribute('title')).toContain('rn_01fixture000000000000000000');
+    // Project, runner, status: two gaps.
+    expect(el.querySelectorAll('.cp-sub .sep')).toHaveLength(2);
   });
 
-  it('links only the ref it names, not the whole phrase', async () => {
-    const el = await render({
-      blockedBy: ['ch_01prereq00000000000000000'],
-      blocking: ['ch_01dependent000000000000aa'],
-    });
+  it('omits the project and runner facts it is not given', async () => {
+    const el = await render();
 
-    const blockedBy = el.querySelector('[data-testid="mobile-chunk-blocked-by"]')!;
-    const blocking = el.querySelector('[data-testid="mobile-chunk-blocking"]')!;
-    expect(blockedBy.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by C-0000');
-    expect(blocking.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocking C-00aa');
+    expect(el.querySelector('[data-testid="mobile-chunk-project"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunk-runner"]')).toBeNull();
+    expect(el.querySelectorAll('.cp-sub .sep')).toHaveLength(0);
+  });
 
-    // The phrase itself is not the target — only the ref inside it is.
-    expect(blockedBy.tagName).toBe('SPAN');
-    const link = blockedBy.querySelector<HTMLAnchorElement>('a.edge-ref')!;
-    expect(link.getAttribute('href')).toBe('/board/chunk/ch_01prereq00000000000000000');
-    expect(link.textContent?.trim()).toBe('C-0000');
-    expect(blocking.querySelector('a.edge-ref')?.getAttribute('href')).toBe(
-      '/board/chunk/ch_01dependent000000000000aa',
-    );
+  it('draws the ⋮ actions menu only with control and a detail to act on', async () => {
+    expect((await render({ detail: chunkDetail() })).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
+    TestBed.resetTestingModule();
+    expect((await render({ canControl: true })).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
+    TestBed.resetTestingModule();
+    const el = await render({ canControl: true, detail: chunkDetail() });
+    const menu = el.querySelector('[data-testid="chunk-actions-menu"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.querySelector('svg')).not.toBeNull();
   });
 });

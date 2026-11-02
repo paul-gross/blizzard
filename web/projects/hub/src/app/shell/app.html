@@ -42,12 +42,7 @@
                through to projection, so the wrapper names the slot instead. -->
           <ng-container ngProjectAs="[shell-header]">
             @defer (on immediate) {
-              <app-mobile-titlebar
-                [live]="streamLive()"
-                [lensChoices]="lensChoices()"
-                [lensCurrent]="lensCurrent()"
-                (lensChoose)="onChooseLens($event)"
-              />
+              <app-mobile-titlebar [live]="streamLive()" [spendToday]="spendToday.data() ?? null" />
             } @placeholder {
               <!-- Holds the titlebar's box so the routed content below does not
                    shift when the real titlebar arrives. -->

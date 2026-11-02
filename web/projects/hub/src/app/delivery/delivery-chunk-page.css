@@ -1,0 +1,19 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+.dp {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.back-row {
+  flex: none;
+  text-decoration: none;
+}
+app-delivery-drawer {
+  flex: 1;
+  min-height: 0;
+}

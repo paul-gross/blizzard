@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { TransitionView } from '../api/hub';
+import { compactRef } from '../core/compact-ref';
 import { harnessName } from '../core/harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
@@ -146,8 +147,11 @@ export class ChunkTranscriptsTab {
     this.pickSidechain.emit(encodeSidechainPath([...this.parsedSidechainPath(), ...event.path]));
   }
 
-  protected stepLabel(step: TranscriptStep): string {
-    const name = step.nodeName ?? step.nodeId ?? '—';
-    return step.epoch === null ? name : `${name} · epoch ${step.epoch}`;
+  protected stepName(step: TranscriptStep): string {
+    return step.nodeName ?? step.nodeId ?? '—';
+  }
+
+  protected unmatchedRef(step: TranscriptStep): string {
+    return step.nodeId === null ? '—' : compactRef(step.nodeId);
   }
 }

@@ -5,7 +5,6 @@ import { commands, page } from 'vitest/browser';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { LANES, type Lane, laneTone, toneColor } from 'fleet';
 import { BoardColumn } from './board-column';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /** The board column's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const CARD: BoardCard = {
@@ -40,7 +39,6 @@ async function loadDesignTokens(): Promise<void> {
 
 async function render(column: Lane, reorderControls: boolean, canReorder: boolean, count: number | null = null): Promise<HTMLElement> {
   TestBed.resetTestingModule();
-  stubNodeStrip();
   await TestBed.configureTestingModule({
     imports: [BoardColumn],
     providers: [provideZonelessChangeDetection()],

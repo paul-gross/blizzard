@@ -322,3 +322,14 @@ def test_usage_ingest_fires_chunk_changed_over_sse(tmp_path: Path) -> None:
     types = [e["event"] for e in events]
     assert "chunk-changed" in types
     assert any(chunk_id in e["data"] for e in events if e["event"] == "chunk-changed")
+
+
+def test_each_usage_entry_names_the_runner_that_pushed_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert [step["runner_id"] for step in detail["usage"]] == ["r1"]

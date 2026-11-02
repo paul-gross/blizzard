@@ -4,7 +4,6 @@ import { TestBed } from '@angular/core/testing';
 import type { ChunkSummary, KitAsyncStateValue } from 'fleet';
 import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /** The DONE column holds only the hub's recent window, so it counts and names that window rather than all time. */
 describe('BoardShell DONE window', () => {
@@ -20,7 +19,6 @@ describe('BoardShell DONE window', () => {
 
 
   beforeEach(async () => {
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],

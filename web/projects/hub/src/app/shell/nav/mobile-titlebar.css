@@ -1,0 +1,32 @@
+/* The lens name after the wordmark — gold like the dock header's chunk name, the only part of the bar that gives way. */
+.lens {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--amber);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+/* Today's spend, beside the live dot — the desktop TODAY cell's money gold; it holds its width so the lens name gives
+   way first. */
+.spend {
+  flex: none;
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sep {
+  flex: none;
+  color: var(--label-dim);
+}
+.swatch {
+  flex: none;
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,22 +1,29 @@
 <div class="general" data-testid="chunk-general-tab">
+  <!-- Delivery, work item and issues stack in one column, so Delivery always sits
+       directly above Work item at every width. -->
+  <div class="lhs">
   @if (showDelivery()) {
     <fleet-kit-panel class="section" data-testid="section-delivery" label="delivery">
       <fleet-chunk-delivery [detail]="detail()" />
     </fleet-kit-panel>
   }
   <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
-    <fleet-chunk-detail-facts
-      [detail]="detail()"
-      [graphLinkBase]="graphLinkBase()"
-    >
-      <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
-    </fleet-chunk-detail-facts>
+    <fleet-chunk-detail-facts [detail]="detail()" [chunkLinkBase]="chunkLinkBase()" />
   </fleet-kit-panel>
   <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
     <fleet-chunk-detail-issue-pane [workItems]="workItems()" [placement]="issuePanePlacement()" />
   </fleet-kit-panel>
+  </div>
   @if (showNodeHistory()) {
     <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
+      <span fleetKitPanelHeader class="graph-slot">
+        <span class="graph-sep" aria-hidden="true">·</span>
+        @if (graphLinkBase(); as base) {
+          <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | lensLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
+        } @else {
+          <span class="graph-link" data-testid="node-history-graph" [title]="detail().graph_id">{{ graphLabel() }}</span>
+        }
+      </span>
       @if (eventsLinkBase()) {
         <span fleetKitPanelHeader class="events-slot"><ng-container [ngTemplateOutlet]="eventsLink" /></span>
       }
@@ -26,7 +33,6 @@
         [detail]="detail()"
         [heading]="false"
         [activatable]="true"
-        [graphLinkBase]="graphLinkBase()"
         (pickStep)="pickStep.emit($event)"
       />
     </fleet-kit-panel>

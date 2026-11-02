@@ -64,3 +64,18 @@ export const RUNNER_HOST_NAMES = new InjectionToken<Signal<ReadonlyMap<string, s
 export function injectRunnerHostNames(): Signal<ReadonlyMap<string, string>> {
   return inject(RUNNER_HOST_NAMES);
 }
+
+/**
+ * Each runner's name by runner id — the name {@link runnerBoardParts} reads beside its host, for a view that holds only
+ * a runner id. The same neutral seam as {@link RUNNER_HOST_NAMES}: the hub app provides it from its runner registry,
+ * and an app with none provides nothing, so its runners keep the compact-id form.
+ */
+export const RUNNER_NAMES = new InjectionToken<Signal<ReadonlyMap<string, string>>>('fleet.RUNNER_NAMES', {
+  providedIn: 'root',
+  factory: () => signal<ReadonlyMap<string, string>>(new Map()).asReadonly(),
+});
+
+/** Each runner's name by runner id now — {@link RUNNER_NAMES}'s value. */
+export function injectRunnerNames(): Signal<ReadonlyMap<string, string>> {
+  return inject(RUNNER_NAMES);
+}

@@ -60,31 +60,136 @@
   overflow: hidden;
 }
 .col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   min-width: 0;
-  padding: 8px;
+  min-height: 0;
+  overflow: hidden;
   background: var(--panel-deep);
 }
-.label {
-  width: 35%;
-  margin-bottom: 4px;
-  --kit-skeleton-height: 9px;
+/* The work-item column keeps `.d-sec`'s 6px 8px; history and artifacts pad only vertically, rows pad themselves. */
+.col--work {
+  padding: 6px 8px;
 }
-/* A fact row: `kit-fact-list`'s fixed label column, then the value. */
-.fact {
-  display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 8px;
+.col--list {
+  padding: 6px 0;
+}
+fleet-kit-skeleton {
+  display: block;
+  min-width: 0;
+}
+.bar {
   --kit-skeleton-height: 10px;
 }
-.fact-label {
-  width: 70%;
+.dim {
+  --kit-skeleton-height: 8px;
+  opacity: 0.6;
 }
-.fact-value {
-  width: 60%;
+.tag {
+  width: 72px;
+  --kit-skeleton-height: 9px;
 }
-.line {
-  --kit-skeleton-height: 12px;
+.tag--sm {
+  width: 52px;
+  margin-bottom: 2px;
+}
+.s-head {
+  margin: 0 8px 6px;
+}
+.w-55 {
+  width: 55%;
+}
+.w-90 {
+  width: 90%;
+}
+/* `.d-box`: Delivery, then the work item's facts. */
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--bezel);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.edges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.edge-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.edge,
+.acc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.icon {
+  flex: none;
+  width: 10px;
+  --kit-skeleton-height: 10px;
+}
+/* The issue pane's collapsed accordion rows. */
+.acc {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+/* `chunk-timeline.css`'s `.timeline`/`.step` grid, padding, and separator. */
+.timeline {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 2fr) minmax(0, 3fr) auto;
+}
+.step {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  gap: 6px;
+  align-items: start;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  line-height: 1.5;
+}
+.mark {
+  width: 12px;
+  margin-top: 4px;
+  --kit-skeleton-height: 9px;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 0;
+  min-width: 0;
+}
+.time {
+  align-items: flex-end;
+}
+.t1 {
+  width: 34px;
+}
+.t2 {
+  width: 24px;
+}
+/* `chunk-artifacts.css`'s `.artifact-link` row: name, a dim kind, the date at the right. */
+.art {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  min-height: 25px;
+  box-sizing: border-box;
+}
+.kind {
+  flex: none;
+}
+.date {
+  flex: none;
+  width: 44px;
+  margin-left: auto;
 }

@@ -1,0 +1,396 @@
+:host {
+  display: block;
+  min-height: 0;
+}
+.drawer {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface-resting);
+  font-size: var(--fs-xs);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+  flex: none;
+}
+.id {
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.04em;
+}
+.sk-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sk-id {
+  width: 40%;
+  --kit-skeleton-height: 16px;
+}
+.sk-sub {
+  width: 60%;
+  --kit-skeleton-height: 10px;
+}
+.sk-repo {
+  --tone: var(--line);
+  gap: 6px;
+  padding-block: 6px;
+}
+.sk-bar {
+  display: block;
+  --kit-skeleton-height: 12px;
+}
+.sk-small {
+  --kit-skeleton-height: 10px;
+}
+.sk-when {
+  gap: 4px;
+  padding-top: 2px;
+}
+.sk-day {
+  width: 6ch;
+}
+.sk-time {
+  width: 5ch;
+}
+.sk-what {
+  gap: 5px;
+  align-self: stretch;
+  align-items: stretch;
+  padding-top: 2px;
+}
+.sk-dim {
+  opacity: 0.6;
+}
+.sk-age {
+  justify-self: end;
+  width: 6ch;
+  margin-top: 2px;
+}
+/* The close button, as the board dock's header draws it: a 30px square with its X drawn, not typeset. */
+.close ::ng-deep .act {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: var(--fs-lg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.glyph {
+  display: block;
+}
+.glyph--x {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.dim {
+  color: var(--label);
+}
+.mono {
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-links a:hover,
+.log:hover {
+  text-decoration: underline;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+}
+.side,
+.main {
+  min-height: 0;
+  overflow-y: auto;
+  /* No side padding: the repository cards and the history rows run the column's full width, edge to edge, as node
+     history's rows do, each padding itself inside; the headings keep their own inset. */
+  padding: 6px 0 10px;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid var(--line);
+}
+.h {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  font-weight: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.repo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-left: 2px solid var(--tone);
+  background: var(--surface-hover);
+}
+.repo-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.repo-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--snow);
+}
+.repo-state {
+  color: var(--tone);
+  white-space: nowrap;
+}
+.repo-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+/* The last settled attempt closes the PR line, right-aligned: its outcome in its tone, then its age. */
+.last {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.repo-links a,
+.log {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.commit {
+  color: var(--amber-hi);
+}
+/* One grid for the history, each entry a subgrid row, styled as the node history's rows: the stamp, the
+   description, and the age at the right. */
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+}
+.entry {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  column-gap: 10px;
+  align-items: start;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  line-height: 1.5;
+}
+.entry:hover {
+  background: var(--surface-hover);
+}
+.when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--text);
+  white-space: nowrap;
+}
+.day {
+  color: var(--label);
+}
+.age {
+  color: var(--label);
+  white-space: nowrap;
+}
+.what {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.summary-line {
+  min-width: 0;
+  max-width: 100%;
+}
+.text {
+  color: var(--tone, var(--text));
+}
+/* A graph transition framing a delivery event: set as the node history sets a judgement: the node engraved, the choice in amber, where it went dim; its stamp and age dimmed. */
+/* A move or a repo list is a wrapping row of parts on one baseline: a name, or a separator with the part it leads,
+   never breaks inside, a line breaks only between parts, and a part wider than the whole row clips with an ellipsis,
+   its title carrying the whole. */
+.move,
+.repos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.6ch;
+  min-width: 0;
+  max-width: 100%;
+}
+.part {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.move {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.move .nd {
+  color: var(--text);
+  letter-spacing: 0.1em;
+}
+.move .sep {
+  color: var(--label-dim);
+}
+.move .verdict {
+  color: var(--amber);
+  white-space: nowrap;
+}
+/* The graph the move happened in, before each node. */
+.move .gr {
+  color: var(--label-dim);
+}
+/* The arrow into the node the choice routed to: drawn, so it centres on the caps rather than sitting on a glyph's
+   own baseline; the part is a flex row so the name beside it still clips with an ellipsis. */
+.move .jg-to {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6ch;
+}
+.move .arr {
+  flex: none;
+  align-self: center;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--label-dim);
+}
+.move .jg-to .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Where the choice routed the chunk — a consequence, so it reads dim. */
+.move .jg-to {
+  color: var(--label-dim);
+}
+.entry.transition .when,
+.entry.transition .age {
+  opacity: 0.7;
+}
+.log {
+  margin-left: 8px;
+}
+/* A bounce's reason, dim and wrapping, clamped at five lines; its title carries the whole of it. */
+.detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.tail {
+  align-self: stretch;
+  margin: 2px 0;
+  padding: 4px 6px;
+  max-height: calc(12 * 1.35em + 8px);
+  overflow: hidden;
+  background: black;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.tail.open {
+  max-height: none;
+}
+.fold {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.empty {
+  margin: 6px 10px;
+  color: var(--label);
+}
+.history .empty {
+  grid-column: 1 / -1;
+  margin: 2px 8px;
+}
+.side .empty {
+  margin: 2px 10px;
+}
+/* On a phone the drawer is a screen of its own: no frame, the header's facts wrapping, the repositories over the
+   history in one scrolling column, and the history's stamp and age kept narrow. */
+:host(.mobile) .drawer {
+  border: 0;
+  overflow-y: auto;
+}
+:host(.mobile) ::ng-deep .d-sub {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+:host(.mobile) ::ng-deep .d-title .id {
+  font-size: var(--fs-sm);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:host(.mobile) .body {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+:host(.mobile) .side,
+:host(.mobile) .main {
+  overflow: visible;
+  padding: 8px 0;
+}
+:host(.mobile) .side {
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+:host(.mobile) .h {
+  padding-inline: 8px;
+}
+:host(.mobile) .entry {
+  column-gap: 8px;
+}
+:host(.mobile) .tail {
+  max-width: 100%;
+  overflow-x: auto;
+}

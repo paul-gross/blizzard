@@ -1,6 +1,6 @@
 import { expect, stepUntil, test } from '../harness/fixtures';
 
-// The mission-control board driven end to end over a stepped runner host: promote from the board, a grouping landing
+// The mission-control board driven end to end over a stepped runner host: promotions landing live, a grouping landing
 // live, a drag-reorder the claim honours, a parked question answered from the dock, the hub brake set and released from
 // the Fleet tab, and a chunk paused and resumed from the dock, the board loaded once throughout. The graph ends at
 // review rather than delivering: the host's origins are not the hub forge's repositories, so a pushed branch reaches
@@ -105,14 +105,14 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   await expect(backlogGrips.first()).toHaveAttribute('aria-hidden', 'true');
   for (const retired of ['queue-select', 'group-selected', 'queue-move-top', 'backlog-move-top']) await expect(page.getByTestId(retired)).toHaveCount(0);
 
-  // Titles land from a later read than the cards, and Promote renders once permissions are read: settle both first.
+  // Titles land from a later read than the cards: settle them first.
   await expect(col('notready').getByTestId('chunk-title-skeleton')).toHaveCount(0);
   await expect(col('notready').getByTestId('chunk-title')).toHaveCount(3);
-  await expect(col('notready').getByTestId('promote-chunk')).toHaveCount(3);
+  await expect(page.getByTestId('promote-chunk')).toHaveCount(0);
 
-  // Promote order is queue order, so each chunk is promoted by id.
+  // Promote order is queue order, so each chunk is promoted by id through the hub, each landing live in Ready.
   for (const [promoted, chunkId] of [chunkA, chunkB, chunkC].entries()) {
-    await col('notready').locator(`[data-chunk="${chunkId}"]`).getByTestId('promote-chunk').click();
+    expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
     await expect(colCards('notready')).toHaveCount(2 - promoted);
     await expect(colCards('ready')).toHaveCount(promoted + 1);
   }
@@ -198,11 +198,13 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   await firstLink.click();
   await expect(page).toHaveURL(`/board/chunk/${chunkB}?tab=artifacts&artifact=${targetKey}`);
   await expect(page.getByTestId('tab-artifacts')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator(`[data-artifact-key="${targetKey}"]`).getByTestId('artifacts-tab-nav-item')).toHaveClass(/\bselected\b/);
+  await expect(page.locator(`[data-testid="artifacts-tab-nav-item"][data-artifact-key="${targetKey}"]`)).toHaveAttribute('aria-pressed', 'true');
   const artifact = ((await api.get(`/api/chunks/${chunkB}`)).body.artifacts as { key: string; kind: string; content: string; commit_hash: string }[]).find((a) => a.key === targetKey)!;
   const viewer = page.getByTestId('artifacts-tab-artifact');
   await expect(viewer).toBeVisible();
-  await expect(viewer).toContainText(artifact.kind === 'asset' ? artifact.content.slice(0, 40) : artifact.commit_hash);
+  if (artifact.kind === 'asset') await expect(viewer).toContainText(artifact.content.slice(0, 40));
+  // A commit reads by its short hash, the full one its title.
+  else await expect(viewer.locator('.a-commit')).toHaveAttribute('title', artifact.commit_hash);
 
   // The breadcrumb navigates back client-side with B re-selected; a fresh mount of the same URL does too.
   await page.getByTestId('mobile-chunk-back').click();

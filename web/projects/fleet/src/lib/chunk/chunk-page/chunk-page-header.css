@@ -19,6 +19,33 @@
   margin: 8px;
   padding: 0 8px;
 }
+/* The id on the left, the action cluster anchored right — the dock's `.d-head` shape. */
+.cp-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cp-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: none;
+}
+/* The ⋮ trigger: a fixed square target, matching the dock header. */
+.actions ::ng-deep .trigger {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: var(--fs-lg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
 /* The dot-joined run under the id — the same shape as the dock's own `.d-sub`
    (chunk-detail-header.css), wrapping rather than overflowing a phone-width page. */
 .cp-sub {
@@ -39,26 +66,55 @@
   color: var(--label-dim);
   font-size: var(--fs-label);
 }
-/* A dependency edge, reaching the chunk it names — the label engraved like the
-   status beside it, the neighbor's own ref gold, the pairing every surface uses. */
-.cp-sub .edge {
-  color: var(--label);
-  white-space: nowrap;
-}
-/* Only the ref is the link — a plain underlined anchor, the same shape the fact
-   table's own edge rows use. */
-a.edge-ref {
-  color: var(--amber);
-  text-decoration: underline;
-}
-a.edge-ref:hover,
-a.edge-ref:focus-visible {
-  color: var(--amber-hi);
-  outline: none;
-}
 .cid {
   color: var(--amber);
   font-size: var(--fs-md);
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* The project leading the line — swatch beside the name, baseline-aligned like the dock's. */
+.cp-sub .project {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.cp-sub .project-swatch {
+  align-self: center;
+}
+/* The runner holding the chunk; a long name clips, its title carrying the whole name and id. */
+.cp-sub .runner {
+  min-width: 0;
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The glyph is drawn, not typeset, so it centres on its own ink rather than a fallback font's line box. */
+.glyph {
+  display: block;
+}
+.glyph--dots {
+  fill: currentColor;
+}
+.menu-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant, so
+   this caller applies the `--red` token, scoped to this header's own template.
+   The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
+   `:host(:hover)` cyan (equal specificity, one more class) so the danger tint holds
+   under a pointer too. */
+.danger {
+  color: var(--red);
+}
+.danger:hover,
+.danger:focus {
+  color: var(--red);
+}
+

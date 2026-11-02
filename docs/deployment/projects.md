@@ -205,8 +205,8 @@ tenant answers to serves nothing, and is looked up again at every registration, 
 takes that slug. `blizzard-runner status` reads the hub's latest answer from the runner's own store and prints a
 `serves:` line naming each project served, each entry marked `unresolved`, and each not answered yet. On the board a
 runner that serves nothing reads as unassigned, and a project no live runner serves is marked unserved on Admin →
-Projects and under its lens on the board. A runner that is paused, retired, refused on version, or reached only through
-withheld bindings does not count as serving.
+Projects. A runner that is paused, retired, refused on version, or reached only through withheld bindings does not count
+as serving.
 
 [runner-auth.md](./runner-auth.md#adding-a-runner) owns adding a runner.
 
@@ -221,13 +221,13 @@ link keeps it:
 ```
 
 The lens control sits beside the view tabs and shows the project's display name, each project's chip led by its color;
-changing it opens the same view under the other lens. A lensed URL naming a project by id or by a former slug is
-rewritten to the current slug. One naming no project of the tenant opens the same view on All, with a notice.
+changing it opens the same view under the other lens. On a phone the title bar names the lens, and tapping it opens a
+picker of All projects and each project. A lensed URL naming a project by id or by a former slug is rewritten to the
+current slug. One naming no project of the tenant opens the same view on All, with a notice.
 
 | View                                     | On one project                                                               | On All                     |
 | ---------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
 | Board, and the header's counts           | The project's chunks, in the tenant's order                                  | Every chunk                |
-| The board's Delivery band                | Unchanged: every chunk on each branch, since a branch's line is shared       | Every active flow          |
 | Events                                   | Events of the project's chunks, and of runners that serve it                 | Every event                |
 | Gardening                                | The project's scopes, routines, runs, findings and proposals                 | One card per project       |
 | Admin → Projects                         | That project                                                                 | Every project              |

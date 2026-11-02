@@ -206,3 +206,28 @@ def test_the_last_verdict_is_the_newest_turn_whose_outcome_closed_its_submission
 
     assert (verdict["chunk_id"], verdict["kind"], verdict["outcome"]) == (line.first, "turn-ended", "failure")
     assert line.line() == [(line.second, "next", 1)]
+
+
+def test_each_turn_ended_entry_carries_its_verdict_and_a_wait_none(line: Line) -> None:
+    line.world.poll_due()
+    line.world.action.answer = Pass(choice="failure")
+    line.world.tick()
+
+    ended = [f for f in line.world.detail(line.first)["flow_record"] if f["kind"] == "turn-ended"]
+    record = line.client.get(f"/api/flows/{line.flow_id}/record").json()["facts"]
+
+    assert [(f["outcome"], f["verdict"]) for f in ended] == [("pending", None), ("failure", "bounced")]
+    assert {f["verdict"] for f in record if f["kind"] != "turn-ended"} == {None}
+
+
+def test_the_chunk_list_carries_the_latest_bounce_and_the_graph_progress(line: Line) -> None:
+    line.world.poll_due()
+    line.world.action.answer = Pass(choice="failure")
+    line.world.tick()
+
+    row = {r["chunk_id"]: r for r in line.client.get("/api/chunks").json()["chunks"]}[line.first]
+    [bounce] = line.world.detail(line.first)["bounces"]
+
+    assert (row["latest_bounce"], row["bounce_count"]) == (bounce, 1)
+    assert row["graph_name"] == line.world.detail(line.first)["graph_name"]
+    assert [(n["name"], n["state"]) for n in row["graph_progress"]] == [("build", "current"), ("merge", "failed")]

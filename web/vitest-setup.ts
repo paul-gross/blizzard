@@ -27,3 +27,29 @@ import { afterEach, beforeEach } from 'vitest';
 beforeEach(() => localStorage.clear());
 
 afterEach(() => localStorage.clear());
+
+/**
+ * jsdom implements neither `matchMedia`, `ResizeObserver`, nor `scrollIntoView`, which the hub's
+ * scroll-selection-into-view reads on every selection. Inert stand-ins, installed only where jsdom
+ * lacks them, let any page that selects a chunk render; a spec that asserts the reveal spies on them.
+ */
+if (typeof window !== 'undefined') {
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+  const inert = (): void => undefined;
+  globalThis.ResizeObserver ??= class {
+    observe = inert;
+    unobserve = inert;
+    disconnect = inert;
+  };
+  Element.prototype.scrollIntoView ??= inert;
+}

@@ -1,129 +1,57 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import type { ChunkDetail, ChunkNeighborView, RouteView } from '../../api/hub';
+import type { ChunkDetail, ChunkNeighborView } from '../../api/hub';
+import { STATUS_LANE } from '../../core/chunk-lanes';
 import { compactRef } from '../../core/compact-ref';
-import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
-import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
-import { formatUtcYmd } from '../../core/when';
 import { LensLink } from '../../core/lens-link';
+import { type SessionEfficiencyInput } from '../../core/session-efficiency';
+import { SessionEfficiency } from '../../core/session-efficiency-view';
+import { LaneIcon } from '../chunk-card/lane-icon';
 
 /**
- * The chunk's own facts — the fixed-height glance a long issue
- * body must not scroll away: status, node, runner, attempts, and its pinned
- * **graph**.
- *
- * Projects {@link ChunkTokenBreakdown}'s cost/tokens rows into the `[token-breakdown]`
- * slot between Attempts and Graph, so the two components share one continuous
- * `<dl class="kv">`.
+ * The chunk's work-item facts box: its total session efficiency cost, then — only where the
+ * chunk has standing edges — its Depends on / Blocks neighbors side by side, each with the
+ * board's own lane icon for its status and linked to its chunk.
  */
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitFactList, RouterLink, LensLink],
+  imports: [LaneIcon, LensLink, NgTemplateOutlet, RouterLink, SessionEfficiency],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })
 export class ChunkFacts {
-  /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** The graphs view's own path segments, before the graph id — when set, the Graph
-   * row's value links there (`/graphs/:graphId`, `graphs-page.ts`) so the operator can
-   * jump straight from a chunk to its pinned graph's structure. `null` (the default)
-   * withholds the link and renders a plain-text value, for a host with no
-   * graphs route to point at — a consumer that does have one opts in explicitly. */
-  readonly graphLinkBase = input<readonly string[] | null>(null);
-
-  /** The chunk detail route's own path segments, before a neighbor's chunk id — the
-   * Depends on / Blocks rows link each neighbor there. Non-nullable with a default,
-   * since both apps have this route. */
+  /** The chunk detail route's own path segments, before the chunk id — each neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  private readonly runnerHosts = injectRunnerHostNames();
-
-  /** The chunk's live route, read here as a plain fact. */
-  private readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
-
-  /** The display name of the runner holding the chunk's route, or `—` when nothing holds it. */
-  protected readonly runner = computed<string>(() => {
-    const route = this.route();
-    return route ? runnerDisplayName(route.runner_id, route.runner_name, this.runnerHosts().get(route.runner_id)) : '—';
+  /** The chunk's summed usage, in the session efficiency cost's own shape. */
+  protected readonly usage = computed<SessionEfficiencyInput>(() => {
+    const c = this.detail().cost;
+    return {
+      costUsd: c?.cost_usd ?? 0,
+      estimatedCostUsd: c?.estimated_cost_usd ?? null,
+      costPartial: c?.cost_partial ?? false,
+      inputTokens: c?.input_tokens ?? 0,
+      outputTokens: c?.output_tokens ?? 0,
+      cacheReadTokens: c?.cache_read_tokens ?? 0,
+      cacheCreateTokens: c?.cache_create_tokens ?? 0,
+    };
   });
 
-  /**
-   * How many attempts the chunk has taken. The epoch is incremented per work
-   * attempt, so the latest epoch *is* the attempt count — a chunk that has
-   * never been worked has no epoch yet and reads `—` rather than a misleading `0`.
-   */
-  protected readonly attempts = computed<string>(() => {
-    const epoch = this.detail().latest_epoch;
-    return epoch === null || epoch === undefined ? '—' : String(epoch);
-  });
 
-  /** The Graph fact row's label — the pinned graph's {@link compactRef}
-   * (`G-XXXX`), with the graph's `name` and `created_at` (as `YYYYMMDD`) appended as
-   * `#<name>-<YYYYMMDD>` when both are present on the detail *and* `created_at` parses.
-   * Either absent or unparseable (`formatUtcYmd` degrading to `''`)
-   * degrades to the compact ref alone, never a dangling `#`/`-`. The full raw id stays
-   * as the row's `title` tooltip, read straight off `detail().graph_id`. */
-  protected readonly graphLabel = computed<string>(() => {
-    const detail = this.detail();
-    const ref = compactRef(detail.graph_id);
-    if (!detail.graph_name) return ref;
-    const ymd = formatUtcYmd(detail.graph_created_at);
-    if (!ymd) return ref;
-    return `${ref}#${detail.graph_name}-${ymd}`;
-  });
+  protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.prerequisites ?? []);
 
-  /** The chunk's standing dependency edges, each direction its own fact row. Placement
-   * pinned by `chunk-facts-alignment.shell-sweep.spec.ts`'s "keeps a standing-edge row's
-   * value column…" case; the edge-less-direction-renders-no-row behavior by
-   * `chunk-facts.spec.ts`'s "renders the standing edges…" case. */
-  protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(
-    () => this.detail().neighborhood?.prerequisites ?? [],
-  );
+  protected readonly dependents = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.dependents ?? []);
 
-  protected readonly dependents = computed<readonly ChunkNeighborView[]>(
-    () => this.detail().neighborhood?.dependents ?? [],
-  );
-
-  /** A neighbor's compact ref — every surface that names an entity compactly resolves
-   * through {@link compactRef} (`compact-ref.ts`). */
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }
 
-  /** The neighbor's own derived status, or `unknown` for the residual race a neighbor's
-   * facts fail to resolve (`status: null`). */
-  protected statusLabel(neighbor: ChunkNeighborView): string {
-    return neighbor.status ?? 'unknown';
-  }
-
-  /** The node fact's rendered value — the current node's name, falling back to its
-   * bare id, then `—` for a chunk that has not yet reached one. */
-  protected readonly nodeLabel = computed<string>(
-    () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
-  );
-
-  /** The identity table's rows — a method, not a stored computed, since the Graph,
-   * Depends on, and Blocks rows' markup needs the `<ng-template>`s the view declares
-   * for them (`KitFactList`'s own templated-row contract). Depends on / Blocks are
-   * appended only when their direction has an edge. */
-  protected factRows(
-    graphValue: TemplateRef<unknown>,
-    dependsOnValue: TemplateRef<unknown>,
-    blocksValue: TemplateRef<unknown>,
-  ): readonly KitFact[] {
-    const rows: KitFact[] = [
-      { label: 'Status', value: this.detail().status, testid: 'fact-status' },
-      { label: 'Node', value: this.nodeLabel(), testid: 'fact-node' },
-      { label: 'Runner', value: this.runner(), testid: 'fact-runner' },
-      { label: 'Attempts', value: this.attempts(), testid: 'fact-attempts' },
-      { label: 'Graph', template: graphValue, testid: 'fact-graph' },
-    ];
-    if (this.prerequisites().length) rows.push({ label: 'Depends on', template: dependsOnValue, testid: 'fact-depends-on' });
-    if (this.dependents().length) rows.push({ label: 'Blocks', template: blocksValue, testid: 'fact-blocks' });
-    return rows;
+  protected lane(n: ChunkNeighborView): string {
+    return n.status ? STATUS_LANE(n.status) : 'notready';
   }
 }

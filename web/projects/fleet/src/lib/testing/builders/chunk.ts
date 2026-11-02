@@ -274,6 +274,7 @@ export function chunkUsageView(overrides: Partial<ChunkUsageView> = {}): ChunkUs
     estimated_cost_usd: null,
     harness_id: null,
     harness_version: null,
+    runner_id: null,
     ...overrides,
   };
 }

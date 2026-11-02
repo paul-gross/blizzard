@@ -31,6 +31,7 @@ def fact_view(fact: FlowFact) -> FlowFactView:
         at=iso_utc(fact.at),
         outcome=fact.outcome,
         revision=fact.revision,
+        verdict=fact.verdict(),
     )
 
 

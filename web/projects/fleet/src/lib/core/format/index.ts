@@ -7,8 +7,10 @@
 
 export { compactRef } from '../compact-ref';
 export { shortCommitHash } from '../commit-hash';
-export { RUNNER_HOST_NAMES, injectRunnerHostNames, runnerBoardParts, type RunnerBoardParts, runnerDisplayName, runnerTitle } from '../runner-display-name';
+export { RUNNER_HOST_NAMES, RUNNER_NAMES, injectRunnerHostNames, injectRunnerNames, runnerBoardParts, type RunnerBoardParts, runnerDisplayName, runnerTitle } from '../runner-display-name';
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
+export { type SessionEfficiencyInput } from '../session-efficiency';
+export { SessionEfficiency } from '../session-efficiency-view';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
@@ -16,6 +18,7 @@ export { openLookup, unlisted } from '../open-lookup';
 export { DONE_LANE, LANES, STATUS_LANE, STATUS_TONE, UNKNOWN_LANE, chunkLane, laneCounts, laneTone, unknownLane, type Lane } from '../chunk-lanes';
 export {
   formatWhen,
+  formatWhenParts,
   formatClockTime,
   formatRefreshedAgo,
   formatAbsolute,

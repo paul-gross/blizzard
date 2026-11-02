@@ -1,6 +1,7 @@
 <header class="mt-appbar" [attr.data-testid]="testid()">
   <fleet-brand-mark [size]="22" />
   <span class="word">blizzard</span>
+  <ng-content select="[fleetMobileTitle]" />
   @if (caption()) {
     <span class="caption" [attr.title]="caption()" [attr.data-testid]="captionTestid()">{{ caption() }}</span>
   }
@@ -8,6 +9,7 @@
     <span class="detail" [attr.title]="detail()" [attr.data-testid]="detailTestid()">{{ detail() }}</span>
   }
   <span class="spacer"></span>
+  <ng-content select="[fleetMobileStatus]" />
   <span
     class="livedot"
     [class.active]="live()"

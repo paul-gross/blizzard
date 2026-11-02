@@ -7,7 +7,6 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 
 import { client as runnerClient } from '../../api/runner/client.gen';
 import { ViewportService } from '../../core/viewport/viewport-service';
-import { CHUNK_STEP_SESSIONS, type ChunkStepSession } from '../chunk-detail/chunk-step-sessions';
 import { ChunkPage } from './chunk-page';
 import { type ChunkPageActions, provideChunkPageDaemon } from './chunk-page-daemon';
 
@@ -95,7 +94,6 @@ const ROUTES = [
 ];
 
 /** The step sessions this suite's app provides — empty unless a case sets them. */
-const STEP_SESSIONS = signal<ReadonlyMap<string, ChunkStepSession>>(new Map());
 
 /** A hub-shaped actions port, its operator actions off. */
 const ACTIONS: ChunkPageActions = {
@@ -153,7 +151,6 @@ describe('ChunkPage on a runner daemon', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(ROUTES),
-        { provide: CHUNK_STEP_SESSIONS, useValue: STEP_SESSIONS.asReadonly() },
       ],
     });
     TestBed.inject(ViewportService).setOverride('desktop');
@@ -161,7 +158,6 @@ describe('ChunkPage on a runner daemon', () => {
 
   afterEach(() => {
     stub.restore();
-    STEP_SESSIONS.set(new Map());
   });
 
   async function open(url: string): Promise<HTMLElement> {
@@ -215,7 +211,7 @@ describe('ChunkPage on a runner daemon', () => {
 
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('fleet-chunk-artifacts-panel')).not.toBeNull();
-    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key')).toBe(
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.getAttribute('data-artifact-key')).toBe(
       'build.retrospective.1',
     );
     expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
@@ -232,7 +228,7 @@ describe('ChunkPage on a runner daemon', () => {
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.retrospective.1`);
-    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.classList.contains('selected')).toBe(true);
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.closest('li')?.classList.contains('selected')).toBe(true);
   });
 
   it('renders the Node history tab with the shared timeline, row activation on, and no transcript pane before a pick', async () => {
@@ -240,30 +236,12 @@ describe('ChunkPage on a runner daemon', () => {
 
     expect(el.querySelector('[data-testid="tab-node-history"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('[data-testid="chunk-node-history-tab"]')).not.toBeNull();
-    const row = el.querySelector('[data-testid="selection-step"]');
-    expect(row?.getAttribute('role')).toBe('button');
+    const row = el.querySelector('[data-testid="chunk-node-history-tab"] [data-testid="history-step"]');
+    expect(row?.tagName).toBe('BUTTON');
     expect(el.querySelector('[data-testid^="node-history-transcript"]')).toBeNull();
   });
 
-  it("enriches the Node history rows from the app's CHUNK_STEP_SESSIONS, keyed by node-step", async () => {
-    STEP_SESSIONS.set(
-      new Map([
-        ['nd_build:1', { environment: 'env-2', pid: 4242, startedAt: '2026-07-13T00:00:00Z', endedAt: '2026-07-13T00:05:00Z', ending: 'finished' }],
-      ]),
-    );
-    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
 
-    const session = el.querySelector('[data-testid="chunk-node-history-tab"] [data-testid="selection-step-session"]');
-    expect(session?.textContent).toContain('env env-2');
-    expect(session?.querySelector('[data-testid="selection-step-session-ending"]')?.textContent).toBe('finished');
-  });
-
-  it('renders no session line where the app provides no step sessions', async () => {
-    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
-
-    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="selection-step-session"]')).toBeNull();
-  });
 
   it('activating a node-history row writes ?step= and shows that step’s own artifacts', async () => {
     const harness = await RouterTestingHarness.create();
@@ -271,7 +249,7 @@ describe('ChunkPage on a runner daemon', () => {
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"] [data-testid="history-step"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
@@ -334,7 +312,7 @@ describe('ChunkPage on a runner daemon', () => {
     expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
     expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
     const step = el.querySelector('[data-testid="transcript-step"]');
-    expect(step?.textContent).toContain('build \u00b7 epoch 1');
+    expect(step?.querySelector('.step-head')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('build·E1');
     expect(step?.textContent).toContain('No segments.');
   });
 
@@ -358,7 +336,7 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS YET');
   });
 
-  it("renders the hub-sourced cost estimate folded into the one cost figure on the General tab's token breakdown and the Node history tab's timeline", async () => {
+  it("renders the hub-sourced cost estimate folded into the one cost figure on the General tab's work item box and the Node history tab's timeline", async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
       if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
@@ -396,18 +374,18 @@ describe('ChunkPage on a runner daemon', () => {
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="chunk-efficiency"] .part')?.textContent).toBe('~$0.07');
 
     el.querySelector<HTMLButtonElement>('[data-testid="tab-node-history"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="selection-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] [data-testid="history-step-efficiency"] .part')?.textContent).toBe('~$0.07');
   });
 
   it('renders no ~ marker when the hub-sourced detail carries no estimate — exactly as before this field existed', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).not.toContain('~');
+    expect(el.querySelector('[data-testid="chunk-efficiency"] .part')?.textContent).not.toContain('~');
   });
 
   it('renders the open escalation through the shared awaiting-human section', async () => {
@@ -511,7 +489,7 @@ describe('ChunkPage on a runner daemon', () => {
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="graph-value"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="node-history-graph"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
   });
 
@@ -535,7 +513,7 @@ describe('ChunkPage on a runner daemon', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="tab-node-history"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="history-step"]')).not.toBeNull();
     expect(el.querySelector('a[href^="/graphs"]')).toBeNull();
   });
 

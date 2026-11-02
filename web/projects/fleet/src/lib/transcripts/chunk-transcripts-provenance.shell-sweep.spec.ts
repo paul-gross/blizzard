@@ -119,8 +119,8 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       expect(codex).not.toBeNull();
       expect(claude.textContent?.trim()).toBe('claude code');
       expect(codex.textContent?.trim()).toBe('codex');
-      const openBadge = root.querySelector<HTMLElement>('[data-testid="transcript-segment-body"] [data-harness-id="claude_code"]')!;
-      expect(openBadge.textContent?.trim()).toBe('claude code');
+      // The open segment's body no longer repeats the stamp the list already names.
+      expect(root.querySelector('[data-testid="transcript-segment-body"] [data-harness-id]')).toBeNull();
       // Two distinct rows, not overlapping.
       expect(claude.getBoundingClientRect().top).toBeLessThan(codex.getBoundingClientRect().top);
 
@@ -179,14 +179,14 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       );
       const open = pills.get('open')!;
       const truncated = pills.get('truncated')!;
-      const harness = pills.get('claude code')!;
+      const harness = item.querySelector<HTMLElement>('[data-testid="transcript-segment-harness"]')!;
+      expect(harness.closest('fleet-kit-badge'), 'the harness reads as plain text, not a pill').toBeNull();
       expect(getComputedStyle(open).color).toBe(tokenColor('--label-dim'));
       expect(getComputedStyle(open).borderTopColor).toBe(tokenColor('--label-dim'));
       expect(getComputedStyle(truncated).color).toBe(tokenColor('--amber'));
       expect(getComputedStyle(truncated).borderTopColor).toBe(tokenColor('--amber'));
       for (const pill of [open, truncated]) {
         expect(getComputedStyle(pill).borderTopStyle).toBe('solid');
-        expect(getComputedStyle(pill).fontSize).toBe(getComputedStyle(harness).fontSize);
         expect(getComputedStyle(pill).textTransform).toBe('uppercase');
       }
       const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
@@ -196,7 +196,7 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
     }
   });
 
-  it('lays each segment row out on one centred line with the label left of its pills and no whitespace inside the badges at ~390px', async () => {
+  it('lays each segment row out on one centred line with the label left of its harness and pills and no whitespace inside the badges at ~390px', async () => {
     await loadDesignTokens();
     await TestBed.configureTestingModule({
       imports: [ChunkTranscriptsTab],
@@ -220,7 +220,10 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
 
       const row = root.querySelector<HTMLElement>('fleet-kit-select-row[data-segment-id="sg_row"]')!;
       const label = row.querySelector<HTMLElement>('.seg-line > span')!.getBoundingClientRect();
-      const pills = [...row.querySelectorAll<HTMLElement>('fleet-kit-badge')].map((b) => b.getBoundingClientRect());
+      const pills = [...row.querySelectorAll<HTMLElement>('[data-testid="transcript-segment-harness"], fleet-kit-badge')].map((b) =>
+        b.getBoundingClientRect(),
+      );
+      // The plain-text harness, then the open and truncated pills.
       expect(pills).toHaveLength(3);
       const centre = (r: DOMRect) => r.top + r.height / 2;
       for (const pill of pills) {

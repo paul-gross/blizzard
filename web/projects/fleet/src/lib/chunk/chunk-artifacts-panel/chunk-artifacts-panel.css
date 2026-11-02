@@ -1,4 +1,6 @@
 :host {
+  /* The list pane takes gardening's wide master-list width (`gardening-findings-page.css`). */
+  --master-list-col: 640px;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -20,26 +22,35 @@
   margin: 0;
   padding: 0;
 }
+/* Rows match the board dock's artifact list (`chunk-artifacts.css`): the button fills
+   the whole row, flush, with the 2px left edge the selected row's accent recolors. */
 .art-item {
   display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 3px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
 }
-.art-item .key {
-  display: block;
-  color: var(--cyan);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
+.art-item:hover {
+  background: var(--surface-hover);
 }
-.art-item .sub {
-  display: flex;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--label-dim);
+.art-row.selected .art-item {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
 }
-.art-item .sub .kind {
-  margin-left: auto;
+.art-item:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
 }
 .art-view {
   position: relative;

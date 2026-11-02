@@ -6,7 +6,6 @@ import { By } from '@angular/platform-browser';
 import { type ChunkSummary, compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
 import { chunkUsageTotalView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const READY = (suffix: string): ChunkSummary => (chunkSummary({
   chunk_id: `ch_01ready${suffix}`,
@@ -27,7 +26,6 @@ const BACKLOG = (suffix: string): ChunkSummary => (chunkSummary({
 
 describe('BoardShell', () => {
   beforeEach(async () => {
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],
@@ -160,7 +158,7 @@ describe('BoardShell', () => {
     expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'DONE MAX(48H, 10)']);
   });
 
-  it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
+  it('renders a not-ready chunk as a card in the backlog column, with no Promote control', async () => {
     const chunks: ChunkSummary[] = [
       chunkSummary({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] }),
       chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
@@ -169,33 +167,11 @@ describe('BoardShell', () => {
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('canControl', true);
-    let promoted: string | undefined;
-    fixture.componentInstance.promote.subscribe((id) => (promoted = id));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // The not-ready chunk is a card in its own column, distinct from the ready rail and the
-    // running lane; only it carries a Promote button.
     const card = el.querySelector('[data-col="notready"] [data-testid="chunk-card"]');
     expect(card?.getAttribute('data-status')).toBe('not_ready');
-    expect(el.querySelectorAll('[data-testid="promote-chunk"]')).toHaveLength(1);
-    expect(el.querySelector('[data-col="running"] [data-testid="promote-chunk"]')).toBeNull();
-
-    card?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
-    expect(promoted).toBe('ch_01notready00000000000000000');
-  });
-
-  it('withholds Promote without chunk:control', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] }),
-    ];
-    const fixture = TestBed.createComponent(BoardShell);
-    fixture.componentRef.setInput('chunks', chunks);
-    fixture.componentRef.setInput('state', 'ready');
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-col="notready"] [data-testid="chunk-card"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
   });
 
@@ -619,12 +595,14 @@ describe('BoardShell', () => {
     };
 
     it('carries the node strip in a mid-graph card\'s cost row, at its current node, and on no other card', async () => {
-    const running = chunkSummary({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] });
-    const el = (await render([running, READY('a')])).nativeElement as HTMLElement;
-    const strips = [...el.querySelectorAll('[data-testid="node-strip-stub"]')];
-    expect(strips.map((strip) => strip.getAttribute('data-chunk'))).toEqual([running.chunk_id]);
+    const progress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
+    const running = chunkSummary({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [], graph_progress: progress });
+    const ready = chunkSummary({ ...READY('a'), graph_progress: progress });
+    const el = (await render([running, ready])).nativeElement as HTMLElement;
+    const strips = [...el.querySelectorAll('[data-testid="node-strip"]')];
+    expect(strips).toHaveLength(1);
     expect(strips[0].closest('[data-testid="card-cost-row"]')).not.toBeNull();
-    expect(strips[0].getAttribute('data-node')).toBe('nd_build');
+    expect(strips[0].querySelector('.block')?.getAttribute('data-state')).toBe('current');
   });
 
   /** A drop from the other list: distinct containers, the dragged chunk id as the item's data. */

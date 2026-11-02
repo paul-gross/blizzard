@@ -4,13 +4,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { BoardShell, type BoardLayout } from './board-shell/board-shell';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
+import { type ChunkSummary, asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
 import { injectHubDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../runners/runner-panel';
+import { FleetSpendPanel } from './fleet-spend/fleet-spend-panel';
 import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { type DeleteVars } from './chunks/delete.mutations';
@@ -20,15 +21,12 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, openPrsByChunk, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
 import { injectProjectsQuery } from '../core/projects.query';
-import { UnservedBanner } from './unserved/unserved-banner';
-import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
-import { injectHubGraphNamesQuery } from '../graphs/graphs.query';
-import { DeliveryBand } from './flows/delivery-band';
-import { injectDockUrlSelection } from './flows/dock-url-selection';
-import { FlowRecord } from './flows/flow-record';
+import { injectBoardWorkItemsQuery } from '../core/work-items/board-work-items.query';
+import { injectScrollSelectionIntoView } from '../core/scroll-selection-into-view';
+import { injectShowProjectColors } from '../core/project-lens-colors';
 
 /** The random source the board's loading skeletons draw their counts from — `Math.random`, unless
  * a spec pins it. */
@@ -49,14 +47,14 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
  * queue and backlog reads feed each lane's order, and lane-tagged reposition events
  * route to the matching list's mutation (`bzh:ranking-is-per-list`).
  *
- * Above the board, the {@link DeliveryBand} shows each active flow's line. What the dock shows is the URL's
- * `?chunk=…` or `?flow=…` — a chunk or a flow's record, never both — read and written through
- * {@link injectDockUrlSelection}.
+ * What the dock shows is the URL's `?chunk=…`, read and written through
+ * {@link injectChunkUrlSelection}.
  */
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, DeliveryBand, FlowRecord, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner, KitErrorLine],
+  host: { '(document:keydown.escape)': 'onEscape($event)' },
+  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -81,7 +79,7 @@ export class BoardPage {
   private readonly repositionBacklog = injectRepositionBacklogMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
   );
-  private readonly selection = injectDockUrlSelection();
+  private readonly selection = injectChunkUrlSelection();
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`).
@@ -97,7 +95,7 @@ export class BoardPage {
    * {@link canReorder}, so a board without `queue:reorder` never attempts it. */
   private readonly backlogQuery = injectHubBacklogQuery(this.canReorder);
 
-  /** Promote a backlog chunk to ready from its board card. */
+  /** Promote a backlog chunk into READY — a card dropped across the lanes ({@link moveAcrossLanes}). */
   protected readonly promoteChunk = injectPromoteChunkMutation();
 
   /** Every chunk id the shared `promoteChunk` mutation is currently in flight for — scoped
@@ -159,9 +157,6 @@ export class BoardPage {
     withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()),
   );
 
-  /** Each board chunk's open PRs by chunk id — the Delivery band links a parked chunk's change from them. */
-  protected readonly openPrs = computed(() => openPrsByChunk(this.boardChunks()));
-
   /** {@link readyOrder} with pending ready-queue repositions and anchored promotes folded in (`foldRepositions`). */
   protected readonly readyLaneOrder = computed<readonly string[]>(() =>
     foldRepositions(this.readyOrder(), [...this.pendingRepositionQueue(), ...placedMoves(this.pendingPromotes())]),
@@ -197,20 +192,19 @@ export class BoardPage {
     );
   }
 
-  /** Promote a backlog chunk. */
-  protected onPromote(chunkId: string): void {
-    this.actionError.set(null);
-    this.promoteChunk.mutate(
-      { chunkId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Promote failed.')) },
-    );
-  }
-
   /** The selected chunk (`resolveSelectedChunk`). The URL param itself is never
    * rewritten, so a link that is merely early still opens its chunk once a read lands. */
   protected readonly selected = computed<string | null>(() =>
     resolveSelectedChunk(this.selection.chunkId(), this.chunks(), this.linkedDetail.data()?.chunk_id),
   );
+
+  constructor() {
+    // The picked card or list row stays in view as the dock opens beneath the board.
+    injectScrollSelectionIntoView(
+      this.selected,
+      (id) => `[data-testid="chunk-card"][data-chunk="${id}"], [data-testid="list-row"][data-chunk="${id}"]`,
+    );
+  }
 
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -232,7 +226,12 @@ export class BoardPage {
 
   /** The tenant's projects, shared with the shell's own read of them; the cards take their tint from it. */
   private readonly projectsQuery = injectProjectsQuery();
-  protected readonly projectColors = computed(() => projectColorsById(this.projectsQuery.data() ?? []));
+  private readonly showProjectColors = injectShowProjectColors();
+
+  /** The cards' project colours — none unless they tell projects apart ({@link injectShowProjectColors}). */
+  protected readonly projectColors = computed(() =>
+    projectColorsById((this.showProjectColors() && this.projectsQuery.data()) || []),
+  );
 
   /** Each runner's host name, which a list row names its runner by. */
   protected readonly runnerHosts = injectRunnerHostNames();
@@ -240,19 +239,19 @@ export class BoardPage {
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
-  /** Each board chunk's graph name by graph id — the cards name the graph beside the node. */
-  protected readonly graphNames = injectHubGraphNamesQuery(() => this.boardChunks().flatMap((c) => (c.graph_id ? [c.graph_id] : [])));
-
-  /** The flow whose record the dock shows, or `null` — never set while a chunk is open. */
-  protected readonly selectedFlow = computed(() => this.selection.flowId());
-
-  /** Select a chunk — or clear the selection — by writing the URL, closing any flow record. */
+  /** Select a chunk — or clear the selection — by writing the URL. */
   protected select(chunkId: string | null): void {
-    this.selection.selectChunk(chunkId);
+    this.selection.select(chunkId);
   }
 
-  /** Open a flow's record in the dock — or close it — by writing the URL, closing any chunk. */
-  protected selectFlow(flowId: string | null): void {
-    this.selection.selectFlow(flowId);
+  /** Escape closes the dock, as its ✕ does — unless something else owns the key: a handler that already took it (a
+   * kit menu prevents its default), a field being typed in, focus inside an overlay, or an open kit dialog, whose
+   * scrim closes on this same Escape and so must spend it alone. */
+  protected onEscape(event: Event): void {
+    if (!this.selected() || event.defaultPrevented) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), .cdk-overlay-container')) return;
+    if (document.querySelector('fleet-kit-dialog .scrim, dialog[open]')) return;
+    this.select(null);
   }
 }

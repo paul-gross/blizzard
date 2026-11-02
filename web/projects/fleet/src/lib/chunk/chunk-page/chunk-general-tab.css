@@ -13,6 +13,30 @@
 fleet-kit-panel.section {
   flex: none;
 }
+/* The chunk's graph beside the "node history" label — case kept, unlike the engraved label. */
+.graph-slot {
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.graph-sep {
+  color: var(--label-dim);
+}
+.graph-link {
+  color: var(--amber);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.graph-link:hover,
+a.graph-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 /* The link to this chunk's own events — a navigation affordance, so it reads as one. */
 .events-slot {
   margin-left: auto;
@@ -35,36 +59,38 @@ fleet-kit-panel.section {
   text-decoration: underline;
   outline: none;
 }
-/* The two-column General tab, at the same 720px breakpoint the hub's
-   Artifacts tab's nav-beside-viewer split uses — work item and issues
-   stacked in the left column, node history beside them spanning both
-   rows, then asks · decisions spanning the full width below. */
+/* The left-hand stack — delivery, work item, issues, in source order. */
+.lhs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+/* Delivery's own content carries no inset; give it the panel-content padding the
+   work item facts use. */
+fleet-kit-panel[data-testid='section-delivery'] fleet-chunk-delivery {
+  display: block;
+  padding: 8px;
+}
+/* The two-column General tab, at the same 720px breakpoint the hub's Artifacts tab's
+   nav-beside-viewer split uses — delivery, work item and issues stacked in the left
+   column, node history beside them, then asks · decisions full width below. */
 @media (min-width: 720px) {
   .general {
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-content: start;
   }
-  fleet-kit-panel[data-testid='section-work-item'] {
+  .lhs {
     grid-column: 1;
     grid-row: 1;
   }
-  fleet-kit-panel[data-testid='section-delivery'] {
-    grid-column: 1 / -1;
-  }
-  fleet-kit-panel[data-testid='section-issues'] {
-    grid-column: 1;
-    grid-row: 2;
-  }
   fleet-kit-panel[data-testid='section-node-history'] {
     grid-column: 2;
-    grid-row: 1 / 3;
+    grid-row: 1;
   }
-  /* Explicit placement — an unplaced section falls into the grid's next auto-flow
-     slot, which would land it in the work-item/issues column rather than the
-     full-width row it needs, and could displace node history's own explicit span. */
-  fleet-kit-panel[data-testid='section-asks'] {
+  fleet-kit-panel[data-testid='section-asks'],
+  .events-row {
     grid-column: 1 / -1;
-    grid-row: 3;
   }
 }

@@ -57,7 +57,7 @@ describe('the board route (route-table mobile/desktop fork)', () => {
       // See `app.spec.ts`'s `stubAuth` for why these need their real empty shape.
       if (path === '/api/chunks') return { chunks: [], next_cursor: null };
       if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -157,7 +157,7 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
       if (path === '/api/questions' || path === '/api/graphs') return [];
       if (path === '/api/runners') return { runners: [] };
       if (path === '/api/hosts') return { hosts: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -246,7 +246,7 @@ describe('the public pages (sign-in refusals and invitations)', () => {
       if (path === '/api/auth/providers') return GITHUB;
       if (path === '/api/chunks') return { chunks: [], next_cursor: null };
       if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -340,7 +340,7 @@ describe('the admin members route', () => {
       if (path === '/api/chunks') return { chunks: [], next_cursor: null };
       if (path === '/api/questions' || path === '/api/graphs') return [];
       if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -415,7 +415,7 @@ describe('the views under the project lens', () => {
       if (path === '/api/questions' || path === '/api/graphs' || path === '/api/routines') return [];
       if (path === '/api/runs' || path === '/api/scopes') return [];
       if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
       return {};
     });
     await TestBed.configureTestingModule({

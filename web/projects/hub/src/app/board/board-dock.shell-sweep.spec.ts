@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { graphView, OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { BoardPage } from './board-page';
@@ -29,6 +29,16 @@ import { BoardPage } from './board-page';
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYNDOCK';
 const CHUNK = { chunk_id: CHUNK_ID, graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] };
 
+const NO_SPEND = {
+  cost_usd: 0,
+  estimated_cost_usd: null,
+  cost_partial: false,
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_tokens: 0,
+  cache_create_tokens: 0,
+};
+
 function answer(_method: string, path: string): unknown {
   switch (path) {
     case '/api/me':
@@ -36,14 +46,14 @@ function answer(_method: string, path: string): unknown {
     case '/api/chunks':
       return { chunks: [CHUNK], next_cursor: null };
     case `/api/chunks/${CHUNK_ID}`:
-      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [], open_prs: [], closed_prs: [], landed_repos: [] };
-    case '/api/graphs/gr_1':
-      return graphView({ graph_id: 'gr_1', name: 'default' });
+      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, cost: NO_SPEND, history: [], artifacts: [], open_prs: [], closed_prs: [], landed_repos: [] };
     case `/api/chunks/${CHUNK_ID}/work-items`:
       return { items: [] };
     case '/api/queue':
     case '/api/backlog':
       return { entries: [], next_cursor: null };
+    case '/api/spend':
+      return NO_SPEND;
     case '/api/questions':
       return [];
     case '/api/decisions':

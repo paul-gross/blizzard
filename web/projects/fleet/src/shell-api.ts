@@ -10,7 +10,7 @@ export { FleetLiveUpdates } from './lib/sse/fleet-live';
 export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
 export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filter';
-export { RUNNER_HOST_NAMES } from './lib/core/runner-display-name';
+export { RUNNER_HOST_NAMES, RUNNER_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';
 export { IN_APP_LINK, LensLink, type InAppLink } from './lib/core/lens-link';
@@ -42,6 +42,7 @@ export {
   hubProjectLinksKey,
   hubProjectsKey,
   hubQuestionsKey,
+  hubRunnersKey,
   lensedKey,
   type ProjectKeyPart,
 } from './lib/core/query-keys';
@@ -58,6 +59,7 @@ export {
   listOpenQuestionsApiQuestionsGet,
   listProjectsApiProjectsGet,
   listProvidersApiAuthProvidersGet,
+  listRunnersApiRunnersGet,
   logoutApiAuthLogoutPost,
   meApiMeGet,
 } from './lib/api/hub/sdk.gen';
@@ -73,4 +75,5 @@ export type {
   ProjectView,
   ProviderSummary,
   QuestionView,
+  RunnerRegistryView,
 } from './lib/api/hub/types.gen';

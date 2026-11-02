@@ -1,0 +1,25 @@
+<div class="lp" data-testid="lens-picker">
+  <a class="back-row" [routerLink]="from() | lensLink" data-testid="lens-picker-back">
+    <fleet-kit-back-bar label="Project lens" />
+  </a>
+  <ul class="choices">
+    @for (choice of choices(); track choice.slug) {
+      <li>
+        <!-- eslint-disable-next-line no-restricted-syntax -- A lens choice is a full-width list row with its swatch, not a kit button's chrome. -->
+        <button
+          type="button"
+          class="choice"
+          [class.selected]="choice.slug === current()"
+          [attr.aria-pressed]="choice.slug === current()"
+          [attr.data-testid]="'lens-picker-' + (choice.slug ?? 'all')"
+          (click)="choose(choice.slug)"
+        >
+          @if (choice.color; as color) {
+            <fleet-kit-swatch [color]="color" />
+          }
+          <span class="name">{{ choice.slug === null ? 'All projects' : choice.label }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+</div>

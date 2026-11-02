@@ -1,20 +1,20 @@
 import {
+  bounceReason,
   type ChunkDetail,
   type FlowFactView,
   type FlowView,
   formatAbsolute,
   formatSeenTag,
   formatWhen,
+  formatWhenParts,
   type hubApi,
+  parseBounceEnvelope,
   type RepositorySummary,
   shortCommitHash,
   type Tone,
 } from 'fleet';
 
-import { ordinal, placeStateLabel, placeStateTone } from '../board/flows/flow-place.model';
-
-/** The graph nodes whose visits the history reads as delivery: the push, the delivery itself, and the resolve loop. */
-const DELIVERY_NODES = /deliver|pre-push|resolve/i;
+import { ordinal, placeStateLabel, placeStateTone } from '../core/flow-place.model';
 
 /** The lines of a failed step's output the history shows before its expander. */
 export const OUTPUT_TAIL_LINES = 12;
@@ -36,7 +36,7 @@ export interface DrawerRepo {
   readonly branch: string | null;
   readonly commit: DrawerLink | null;
   /** The last settled attempt on the repo's flow: its outcome and age, or `null` for none. */
-  readonly lastAttempt: { readonly outcome: string; readonly age: string; readonly title: string } | null;
+  readonly lastAttempt: { readonly outcome: string; readonly tone: Tone; readonly age: string; readonly title: string } | null;
 }
 
 /** A failed step a bounce names. */
@@ -54,17 +54,24 @@ export interface HistoryEntry {
   readonly at: string;
   /** The short stamp — `13:25`, `Yesterday 23:52`, a date. */
   readonly when: string;
+  /** The instant split for a two-line stamp: the day (empty today) over the `HH:MM`. */
+  readonly whenParts: { readonly day: string; readonly time: string };
   readonly whenTitle: string;
   readonly age: string;
-  /** The repositories it happened on, `blizzard, blizzard-context`, or `null` for a chunk-wide entry. */
+  /** The repositories it happened on, `blizzard · blizzard-context`, or `null` for a chunk-wide entry. */
   readonly repos: string | null;
   readonly text: string;
-  readonly tone: Tone;
+  /** {@link HistoryTone}: `null` reads in the default text colour. */
+  readonly tone: HistoryTone;
   /** A bounce's full account. */
   readonly detail: string | null;
   readonly step: DrawerStep | null;
   /** The key of the bounce's log artifact, or `null`. */
   readonly logKey: string | null;
+  /** Whether this is a graph transition stitched in beside a delivery event, drawn secondary to the events. */
+  readonly transition: boolean;
+  /** A transition's parts — the node it left, the choice that moved it, the node it reached; `null` for an event. */
+  readonly move: { readonly graph: string | null; readonly from: string; readonly choice: string | null; readonly to: string } | null;
 }
 
 export interface DrawerSummary {
@@ -83,31 +90,16 @@ export interface DeliveryDrawerView {
   readonly summary: DrawerSummary;
 }
 
-/** A bounce envelope's fields the drawer reads. */
-interface Envelope {
-  readonly detail: string | null;
-  readonly step: { readonly name: string; readonly exit_code?: number | null; readonly output_tail?: string | null } | null;
-  readonly unlanded: readonly { readonly repo: string; readonly branch?: string; readonly pr?: { readonly number: number; readonly url: string } }[];
-  readonly logArtifact: string | null;
+/** Whether a settled turn's submission was withdrawn right after it: the flow's next fact in record order (by `id`,
+ * never by instant) is a withdrawal of the same submission. `facts` is one flow's facts in any order. */
+export function withdrawnAfter(facts: readonly FlowFactView[], turn: FlowFactView): boolean {
+  const next = facts.filter((fact) => fact.id > turn.id).sort((a, b) => a.id - b.id)[0];
+  return next?.kind === 'withdrawn' && next.submission_id === turn.submission_id;
 }
 
-function parseEnvelope(raw: string): Envelope {
-  try {
-    const parsed = JSON.parse(raw) as {
-      detail?: string | null;
-      step?: Envelope['step'];
-      unlanded?: Envelope['unlanded'];
-      action?: { log_artifact?: string | null } | null;
-    };
-    return {
-      detail: parsed.detail || null,
-      step: parsed.step && typeof parsed.step.name === 'string' ? parsed.step : null,
-      unlanded: Array.isArray(parsed.unlanded) ? parsed.unlanded : [],
-      logArtifact: parsed.action?.log_artifact ?? null,
-    };
-  } catch {
-    return { detail: null, step: null, unlanded: [], logArtifact: null };
-  }
+/** The repositories a bounce left unlanded, by forge-side `owner/repo` — none for an envelope that does not parse. */
+function unlandedOf(envelope: hubApi.BounceEnvelope | null): readonly hubApi.BounceUnlandedRepo[] {
+  return envelope?.unlanded ?? [];
 }
 
 function shortName(forge: string): string {
@@ -124,15 +116,38 @@ function flowForges(flows: readonly FlowView[], repositories: readonly Repositor
   );
 }
 
-function stamp(at: string, now: number): Pick<HistoryEntry, 'at' | 'when' | 'whenTitle' | 'age'> {
-  return { at, when: formatWhen(at, new Date(now)), whenTitle: formatAbsolute(at), age: formatSeenTag(at, now) };
+function stamp(at: string, now: number): Pick<HistoryEntry, 'at' | 'when' | 'whenParts' | 'whenTitle' | 'age'> {
+  return { at, when: formatWhen(at, new Date(now)), whenParts: formatWhenParts(at, new Date(now)), whenTitle: formatAbsolute(at), age: formatSeenTag(at, now) };
 }
 
-function outcomeTone(outcome: string | null): Tone {
-  if (outcome === 'landed') return 'done';
-  if (outcome === 'conflict') return 'waiting';
-  if (outcome === 'pending' || outcome === null) return 'idle';
-  return 'stale';
+/** A history entry's colour, by meaning alone: success green (`done`), a problem red (`needs`), passive waiting and
+ * context grey (`idle`), and neutral progress the default text colour (`null`). */
+export type HistoryTone = 'done' | 'needs' | 'idle' | null;
+
+/** The tone of a delivery event: a landing succeeds; a turn the hub judged bounced, a bounce, and a withdrawal not
+ * from a landing are problems; a turn that judged nothing is waiting; anything else is neutral progress. */
+function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition', outcome: string | null = null): HistoryTone {
+  switch (kind) {
+    case 'landed':
+      return 'done';
+    case 'bounced':
+      return 'needs';
+    case 'turn-ended':
+      return outcome === 'landed' ? 'done' : outcome === null ? 'idle' : 'needs';
+    case 'withdrawn':
+      return outcome === 'landed' ? null : 'needs';
+    case 'polls':
+    case 'transition':
+      return 'idle';
+    default:
+      return null;
+  }
+}
+
+/** A settled turn's tone: a landing done, a conflict waiting on its resolution, any other bounce stale. */
+function verdictTone(turn: FlowFactView): Tone {
+  if (turn.verdict === 'landed') return 'done';
+  return turn.outcome === 'conflict' ? 'waiting' : 'stale';
 }
 
 /** `HH:MM` of an instant. */
@@ -144,13 +159,13 @@ interface Draft extends Omit<HistoryEntry, 'repos'> {
   readonly repos: readonly string[];
 }
 
-function draft(id: string, at: string, now: number, repo: string | null, text: string, tone: Tone): Draft {
-  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, tone, detail: null, step: null, logKey: null };
+function draft(id: string, at: string, now: number, repo: string | null, text: string, tone: HistoryTone): Draft {
+  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, tone, detail: null, step: null, logKey: null, transition: false, move: null };
 }
 
 /**
- * One flow's facts as history entries, oldest first. A run of polls — a turn started and ended `pending`, again and
- * again — folds into one `waiting on checks` entry; a turn that settles reads as its outcome, the turn's start folded
+ * One flow's facts as history entries, oldest first. A run of polls — a turn started and ended judging nothing, again
+ * and again — folds into one `waiting on checks` entry; a turn that settles reads as its outcome, the turn's start folded
  * in; a withdrawal right after the turn that caused it joins that entry.
  */
 function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: number): Draft[] {
@@ -162,39 +177,39 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     if (first && last) {
       const count = polls.filter((fact) => fact.kind === 'turn-ended').length;
       const span = clock(first.at) === clock(last.at) ? clock(first.at) : `${clock(first.at)}–${clock(last.at)}`;
-      out.push({ ...draft(`poll-${first.id}`, last.at, now, repo, `waiting on checks · ${count} poll${count === 1 ? '' : 's'} · ${span}`, 'idle') });
+      out.push({ ...draft(`poll-${first.id}`, last.at, now, repo, `waiting on checks · ${count} poll${count === 1 ? '' : 's'} · ${span}`, historyTone('polls')) });
     }
     polls = [];
   };
   facts.forEach((fact, index) => {
     const next = facts[index + 1];
     if (fact.kind === 'turn-started') {
-      if (next?.kind === 'turn-ended' && next.outcome !== 'pending') return;
+      if (next?.kind === 'turn-ended' && next.verdict !== null) return;
       if (next?.kind === 'turn-ended' || polls.length > 0) {
         polls.push(fact);
         return;
       }
       flushPolls();
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', 'running'));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', historyTone('started')));
       return;
     }
-    if (fact.kind === 'turn-ended' && fact.outcome === 'pending') {
+    if (fact.kind === 'turn-ended' && fact.verdict === null) {
       polls.push(fact);
       return;
     }
     flushPolls();
-    if (fact.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', 'spawning'));
-    else if (fact.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', 'done'));
-    else if (fact.kind === 'turn-ended' && fact.outcome === 'landed') return;
+    if (fact.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', historyTone('submitted')));
+    else if (fact.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', historyTone('landed')));
+    else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') return;
     else if (fact.kind === 'turn-ended') {
-      const withdrawn = next?.kind === 'withdrawn' && next.submission_id === fact.submission_id;
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, outcomeTone(fact.outcome)));
+      const withdrawn = withdrawnAfter(facts, fact);
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.verdict)));
     } else if (fact.kind === 'withdrawn') {
       const prev = facts[index - 1];
-      if (prev?.kind === 'turn-ended' && prev.submission_id === fact.submission_id && prev.outcome !== 'landed') return;
+      if (prev?.kind === 'turn-ended' && prev.submission_id === fact.submission_id && prev.verdict !== 'landed') return;
       if (fact.outcome === 'landed') return;
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `withdrawn${fact.outcome ? ` (${fact.outcome})` : ''}`, 'idle'));
-    } else out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.kind, 'idle'));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `withdrawn${fact.outcome ? ` (${fact.outcome})` : ''}`, historyTone('withdrawn', fact.outcome ?? null)));
+    } else out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.kind, null));
   });
   flushPolls();
   return out;
@@ -220,31 +235,41 @@ function logKey(detail: ChunkDetail, name: string | null, at: string): string | 
 }
 
 function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: number, now: number): Draft {
-  const envelope = parseEnvelope(bounce.envelope);
-  const step = envelope.step;
+  const envelope = parseBounceEnvelope(bounce.envelope);
+  const step = envelope?.step ?? null;
   const tail = step?.output_tail ?? null;
   return {
-    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, outcomeTone(bounce.cause)),
-    repos: envelope.unlanded.map((each) => shortName(each.repo)),
-    detail: envelope.detail,
-    step: step ? { name: step.name, exitCode: step.exit_code ?? null, outputTail: tail, long: (tail?.split('\n').length ?? 0) > OUTPUT_TAIL_LINES } : null,
-    logKey: logKey(detail, envelope.logArtifact, bounce.recorded_at),
+    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced')),
+    repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
+    detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
+    step: step ? { name: step.name, exitCode: step.exit_code, outputTail: tail, long: (tail?.split('\n').length ?? 0) > OUTPUT_TAIL_LINES } : null,
+    logKey: logKey(detail, envelope?.action?.log_artifact ?? null, bounce.recorded_at),
   };
 }
 
 function transitionText(transition: hubApi.TransitionView): string {
-  const choice = transition.choice_name ? ` (${transition.choice_name})` : '';
-  if (transition.to_node_name && /resolve/i.test(transition.to_node_name)) return `sent back to ${transition.to_node_name}${choice}`;
-  return `${transition.from_node_name ?? 'start'} → ${transition.to_node_name ?? 'end'}${choice}`;
+  const choice = transition.choice_name ? ` · ${transition.choice_name}` : '';
+  return `${transition.from_node_name ?? 'start'}${choice} → ${transition.to_node_name ?? 'end'}`;
 }
 
-function transitionTone(transition: hubApi.TransitionView): Tone {
-  if (transition.to_node_name && /resolve/i.test(transition.to_node_name)) return 'waiting';
-  return 'running';
+/**
+ * The graph transitions that frame the delivery events: for each anchor instant, the latest transition at or before it
+ * and the earliest after it, each once — the chunk's route into and out of every delivery event, whatever its graph
+ * names its nodes. `transitions` must be sorted by `recorded_at`.
+ */
+function framingTransitions(transitions: readonly hubApi.TransitionView[], anchors: readonly string[]): readonly hubApi.TransitionView[] {
+  const picked = new Set<number>();
+  for (const at of anchors) {
+    const after = transitions.findIndex((transition) => transition.recorded_at > at);
+    const before = (after === -1 ? transitions.length : after) - 1;
+    if (before >= 0) picked.add(before);
+    if (after !== -1) picked.add(after);
+  }
+  return [...picked].sort((a, b) => a - b).map((index) => transitions[index]);
 }
 
-/** The chunk's delivery history, newest first: its facts on every flow, its bounces, and its visits to the delivery
- * nodes. */
+/** The chunk's delivery history, newest first: its facts on every flow, its bounces, and the graph transitions
+ * immediately before and after each of them. */
 export function deliveryHistory(detail: ChunkDetail, forges: ReadonlyMap<string, string>, now: number): readonly HistoryEntry[] {
   const byFlow = new Map<string, FlowFactView[]>();
   for (const fact of [...detail.flow_record].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id)) {
@@ -256,37 +281,38 @@ export function deliveryHistory(detail: ChunkDetail, forges: ReadonlyMap<string,
       return flowEntries(facts, forge ? shortName(forge) : null, now);
     }),
   );
-  const transitions = detail.history
-    .filter((transition) => DELIVERY_NODES.test(transition.from_node_name ?? '') || DELIVERY_NODES.test(transition.to_node_name ?? ''))
-    .map((transition, index) => draft(`t-${index}`, transition.recorded_at, now, null, transitionText(transition), transitionTone(transition)));
   const bounces = detail.bounces.map((bounce, index) => bounceEntry(detail, bounce, index, now));
+  const sorted = [...detail.history].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+  const transitions = framingTransitions(sorted, [...flowDrafts, ...bounces].map((entry) => entry.at)).map((transition, index) => ({
+    ...draft(`t-${index}`, transition.recorded_at, now, null, transitionText(transition), historyTone('transition')),
+    transition: true,
+    move: { graph: transition.graph_name ?? null, from: transition.from_node_name ?? 'start', choice: transition.choice_name ?? null, to: transition.to_node_name ?? 'end' },
+  }));
   return [...flowDrafts, ...transitions, ...bounces]
     .sort((a, b) => b.at.localeCompare(a.at))
-    .map((entry) => ({ ...entry, repos: entry.repos.length ? [...new Set(entry.repos)].join(', ') : null }));
+    .map((entry) => ({ ...entry, repos: entry.repos.length ? [...new Set(entry.repos)].join(' · ') : null }));
 }
 
 /** Every repository the chunk touches, by forge-side `owner/repo`, in first-seen order. */
 function chunkForges(detail: ChunkDetail, forges: ReadonlyMap<string, string>): readonly string[] {
   const seen = [
     ...detail.flow_record.flatMap((fact) => forges.get(fact.flow_id) ?? []),
-    ...(detail.flow_places ?? []).flatMap((place) => forges.get(place.flow_id) ?? []),
-    ...(detail.open_prs ?? []).map((pr) => pr.repo),
-    ...(detail.closed_prs ?? []).map((pr) => pr.repo),
-    ...(detail.landed_repos ?? []).map((landed) => landed.repo),
+    ...detail.flow_places.flatMap((place) => forges.get(place.flow_id) ?? []),
+    ...detail.open_prs.map((pr) => pr.repo),
+    ...detail.closed_prs.map((pr) => pr.repo),
+    ...detail.landed_repos.map((landed) => landed.repo),
   ];
   return [...new Set(seen)];
 }
 
 function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<string, string>, now: number): DrawerRepo {
   const flowIds = new Set([...forges.entries()].filter(([, each]) => each === forge).map(([flowId]) => flowId));
-  const landed = (detail.landed_repos ?? []).find((each) => each.repo === forge);
-  const place = (detail.flow_places ?? []).find((each) => flowIds.has(each.flow_id));
-  const settled = detail.flow_record
-    .filter((fact) => flowIds.has(fact.flow_id) && fact.kind === 'turn-ended' && fact.outcome !== null && fact.outcome !== 'pending')
-    .sort((a, b) => b.at.localeCompare(a.at))[0];
-  const openPrs = (detail.open_prs ?? []).filter((pr) => pr.repo === forge);
-  const closedPrs = (detail.closed_prs ?? []).filter((pr) => pr.repo === forge);
-  const unlanded = detail.bounces.flatMap((bounce) => parseEnvelope(bounce.envelope).unlanded).filter((each) => each.repo === forge);
+  const landed = detail.landed_repos.find((each) => each.repo === forge);
+  const place = detail.flow_places.find((each) => flowIds.has(each.flow_id));
+  const settled = detail.flow_record.filter((fact) => flowIds.has(fact.flow_id) && fact.verdict !== null).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const openPrs = detail.open_prs.filter((pr) => pr.repo === forge);
+  const closedPrs = detail.closed_prs.filter((pr) => pr.repo === forge);
+  const unlanded = detail.bounces.flatMap((bounce) => unlandedOf(parseBounceEnvelope(bounce.envelope))).filter((each) => each.repo === forge);
   const committed = detail.artifacts
     .filter((artifact) => artifact.kind === 'git_commit' && artifact.name === forge && artifact.branch_name)
     .sort((a, b) => (b.recorded_at ?? '').localeCompare(a.recorded_at ?? ''))[0];
@@ -294,8 +320,10 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
   let state: string;
   let tone: Tone;
   if (landed) [state, tone] = ['landed', 'done'];
+  // A turn that landed with nothing to merge leaves no landed repository behind.
+  else if (settled?.verdict === 'landed') [state, tone] = ['landed · no changes', 'done'];
   else if (place) [state, tone] = [place.state === 'landing' || place.state === 'awaiting-merge' || place.state === 'passed-over' ? placeStateLabel(place.state) : `in line · ${ordinal(place.position)}`, placeStateTone(place.state)];
-  else if (settled && settled.outcome !== 'landed') [state, tone] = [`bounced · ${settled.outcome}`, outcomeTone(settled.outcome)];
+  else if (settled) [state, tone] = [`bounced · ${settled.outcome}`, verdictTone(settled)];
   else if (openPrs.length) [state, tone] = [detail.awaiting_external_merge ? 'awaiting merge' : 'PR open', 'idle'];
   else [state, tone] = ['not submitted', 'idle'];
 
@@ -307,7 +335,7 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
     prs: [...openPrs, ...closedPrs].map((pr) => ({ text: `#${pr.number}`, url: pr.url })),
     branch: unlanded[unlanded.length - 1]?.branch ?? committed?.branch_name ?? null,
     commit: landed ? { text: shortCommitHash(landed.commit_hash), url: landed.url } : null,
-    lastAttempt: settled ? { outcome: settled.outcome ?? '', age: formatSeenTag(settled.at, now), title: formatAbsolute(settled.at) } : null,
+    lastAttempt: settled ? { outcome: settled.outcome ?? '', tone: verdictTone(settled), age: formatSeenTag(settled.at, now), title: formatAbsolute(settled.at) } : null,
   };
 }
 

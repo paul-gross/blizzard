@@ -1,4 +1,3 @@
-import type { ChunkNeighborView } from '../../api/hub';
 import type { KitAsyncStateValue } from '../../kit/kit-async-state';
 import type { KitTabOption } from '../../kit/kit-tabs';
 
@@ -44,8 +43,11 @@ export function preDetailState(isError: boolean): KitAsyncStateValue {
   return isError ? 'error' : 'loading';
 }
 
-/** The chunk ids of every edge not yet satisfied — a satisfied edge blocks nothing
- * and is left off. */
-export function openEdgeIds(edges: readonly ChunkNeighborView[]): readonly string[] {
-  return edges.filter((n) => !n.satisfied).map((n) => n.chunk_id);
+/** The chunk's project color through the daemon's lookup — `null` with no project or no lookup, or when the lookup
+ * knows no color. */
+export function chunkProjectColor(
+  projectId: string | null | undefined,
+  lookup: ((projectId: string) => string | null) | undefined,
+): string | null {
+  return projectId ? (lookup?.(projectId) ?? null) : null;
 }

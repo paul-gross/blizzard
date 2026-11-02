@@ -590,6 +590,8 @@ class UsageFact:
     harness_version: str | None = None
     #: A runner-side subscription estimate, kept apart from ``cost_usd``; ``None`` when none was reported.
     estimated_cost_usd: float | None = None
+    #: The runner that ran the invocation — ``None`` when the row recorded none.
+    runner_id: str | None = None
 
     def cost_partial(self) -> bool:
         """Whether this row lacks both ``cost_usd`` and ``estimated_cost_usd``: :class:`UsageTotal`'s per-row test."""

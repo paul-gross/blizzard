@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
 import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
@@ -17,10 +17,10 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
-import { chunkTabOptions, type FocusRequest, nextFocus, openEdgeIds, preDetailState } from './chunk-page.model';
+import { chunkProjectColor, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
-import { LensLink } from '../../core/lens-link';
+import { IN_APP_LINK, LensLink } from '../../core/lens-link';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons,
@@ -69,6 +69,8 @@ export class ChunkPage {
   private readonly route = inject(ActivatedRoute);
   private readonly viewport = inject(ViewportService);
   private readonly element = inject(ElementRef<HTMLElement>);
+  private readonly router = inject(Router);
+  private readonly inAppLink = inject(IN_APP_LINK);
 
   /** The daemon this page reads from — its `target` is exposed to the
    * template for {@link ChunkTranscriptsContainer}'s own seam. */
@@ -77,8 +79,8 @@ export class ChunkPage {
   /** The board view this page's back link and edge links lead to. */
   protected readonly boardLinkBase = computed(() => this.daemon.boardLinkBase());
 
-  /** The chunk page's own path segments under {@link boardLinkBase} — a blocked-by or
-   * blocking edge links there. */
+  /** The chunk page's own path segments under {@link boardLinkBase} — the General tab's
+   * dependency neighbors link there. */
   protected readonly chunkLinkBase = computed(() => [...this.boardLinkBase(), 'chunk']);
 
   /** The daemon's operator-action port for this visit, or `null` — read-only. */
@@ -221,14 +223,35 @@ export class ChunkPage {
   /** The chunk's related work-source items, in the shape the issue pane reads. */
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
-  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status ?? 'ready'));
-  /** Every prerequisite this chunk still waits on, and every chunk it still holds up —
-   * the whole edge set the identity line names. */
-  protected readonly blockedBy = computed<readonly string[]>(() =>
-    openEdgeIds(this.detail()?.neighborhood?.prerequisites ?? []),
+  /** The chunk's project color via the daemon's lookup — `null` where the daemon has none. */
+  protected readonly projectColor = computed<string | null>(() =>
+    chunkProjectColor(this.detail()?.project_id, this.daemon.projectColor?.bind(this.daemon)),
   );
+  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status ?? 'ready'));
+  /** The daemon's chunk-control port, or `null` — the header hides its ⋮ menu. */
+  private readonly control = this.actions?.control ?? null;
+  protected readonly canControl = computed(() => this.control?.canControl() ?? false);
+  protected readonly pausePending = computed(() => this.control?.pausePending(this.chunkId() ?? '') ?? false);
+  protected readonly detachPending = computed(() => this.control?.detachPending(this.chunkId() ?? '') ?? false);
+  protected readonly completePending = computed(() => this.control?.completePending(this.chunkId() ?? '') ?? false);
+  protected readonly deletePending = computed(() => this.control?.deletePending(this.chunkId() ?? '') ?? false);
 
-  protected readonly blocking = computed<readonly string[]>(() => openEdgeIds(this.detail()?.neighborhood?.dependents ?? []));
+  protected onPause(chunkId: string): void {
+    this.control?.pause(chunkId);
+  }
+  protected onResume(chunkId: string): void {
+    this.control?.resume(chunkId);
+  }
+  protected onDetach(chunkId: string): void {
+    this.control?.detach(chunkId);
+  }
+  protected onComplete(chunkId: string): void {
+    this.control?.complete(chunkId);
+  }
+  /** A deleted chunk has no page left to show — back to the board, with nothing selected. */
+  protected onDelete(chunkId: string): void {
+    this.control?.delete(chunkId, () => void this.router.navigate(this.inAppLink(this.boardLinkBase()) as unknown[]));
+  }
 
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.actions?.answer(event);

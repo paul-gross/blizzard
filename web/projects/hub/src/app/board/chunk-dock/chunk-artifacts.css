@@ -5,7 +5,7 @@
    zero-padded) both get breathing room around the artifact list. */
 :host {
   display: block;
-  padding: 6px 8px;
+  padding: 6px 0;
 }
 .tag {
   font-size: var(--fs-label);
@@ -17,36 +17,38 @@
   margin-bottom: 8px;
 }
 .s-head {
+  padding: 0 8px;
   margin-bottom: 6px;
 }
 .artifacts {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
-.artifact {
-  border: 1px solid var(--line);
-  background: var(--overlay-20);
-  padding: 4px 5px;
-}
+/* Rows read like node history's (`chunk-timeline.css`'s `.step`) and tile with no dead space: the link fills the
+   whole row box — padding, separator and the reserved transparent left edge all sit on it, not on the `<li>` — so
+   every pixel of a row is the link. The selected row's accent recolors that edge without shifting the row. */
 .artifact-link {
   display: block;
+  box-sizing: border-box;
   width: 100%;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
   color: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
   text-decoration: none;
+  cursor: pointer;
 }
-.artifact-link:hover,
+.artifact-link:hover {
+  background: var(--surface-hover);
+}
+.artifact.selected .artifact-link {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
 .artifact-link:focus-visible {
-  color: var(--cyan);
-  outline: none;
-}
-/* The activatable-row hover wash, shared with board-card and node-history —
-   on the row's own bordered box, not the plain-text color change above. */
-.artifact:has(.artifact-link:hover),
-.artifact:has(.artifact-link:focus-visible) {
-  border-color: var(--cyan);
-  background: var(--tint-hover);
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
 }
