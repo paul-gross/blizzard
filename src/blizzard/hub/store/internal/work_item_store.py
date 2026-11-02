@@ -46,6 +46,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
+from blizzard.hub.store.internal.queue_lock import lock_queue_positions
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -59,7 +60,7 @@ class WorkItemStore:
         self._store = store
 
     def _admit_chunk(self, conn: Connection, chunk: Chunk, at: datetime) -> None:
-        # Same first lock as group and ingest; the guard must run in this transaction.
+        # The queue key is already held; serialize pointer admission with group and ingest.
         lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
         clock = FixedClock(at)
         refs = ChunkWorkRefsStore(self._store, clock, facts=ChunkFactsStore(self._store))
@@ -123,6 +124,7 @@ class WorkItemStore:
         :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.create_with_chunk`'s
         atomicity contract."""
         with self._store.write("create_with_chunk") as conn:
+            lock_queue_positions(conn)
             self._admit_chunk(conn, chunk, at)
             work_item_id = self._insert_item(
                 conn,
@@ -168,6 +170,7 @@ class WorkItemStore:
         the item's run columns, on one ``engine.begin()`` connection — a routine run's own
         one-act mint. No promote rows are written: the chunk rests ``not_ready``."""
         with self._store.write("create_run_with_chunk") as conn:
+            lock_queue_positions(conn)
             self._admit_chunk(conn, chunk, at)
             work_item_id = self._insert_item(
                 conn,
@@ -317,6 +320,7 @@ class WorkItemStore:
         :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
         already-closed proposal mints nothing."""
         with self._store.write("accept_create") as conn:
+            lock_queue_positions(conn)
             lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
             if not insert_garden_proposal_closure_row(
                 conn,

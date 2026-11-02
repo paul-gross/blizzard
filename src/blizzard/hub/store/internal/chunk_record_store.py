@@ -39,6 +39,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
+from blizzard.hub.store.internal.queue_lock import lock_queue_positions
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
@@ -294,6 +295,7 @@ class ChunkRecordStore:
     def mint(self, chunk: Chunk) -> None:
         """Insert a chunk's rows with no pointer lock held."""
         with self._store.write("mint") as conn:
+            lock_queue_positions(conn)
             insert_chunk_rows(conn, chunk)
 
     def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:

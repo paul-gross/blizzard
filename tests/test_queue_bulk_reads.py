@@ -25,6 +25,7 @@ from tests.support import (
     HubHarness,
     build_hub,
     capture_statements,
+    chunk_stores,
     count_queries,
     hub_store_connections,
     ingest,
@@ -34,6 +35,29 @@ from tests.support import (
 pytestmark = pytest.mark.component
 
 _PEEKS = [("/api/queue", True), ("/api/backlog", False)]
+
+
+@pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
+@pytest.mark.parametrize("move", [False, True], ids=["replace", "move"])
+def test_mutation_response_uses_locked_roster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str, move: bool
+) -> None:
+    hub = build_hub(tmp_path)
+    promoted = path == "/api/queue"
+    a = ingest(hub, [{"source": "default", "ref": "1"}], promote=promoted)
+    b = ingest(hub, [{"source": "default", "ref": "2"}], promote=promoted)
+    stale = hub.services.chunks.facts.load_live_statuses()
+    del stale[b]
+    monkeypatch.setattr(hub.services.chunks.facts, "load_live_statuses", lambda: stale)
+
+    response = (
+        hub.client.post(f"{path}/position", json={"chunk_id": a, "after_chunk_id": None})
+        if move
+        else hub.client.put(path, json={"chunk_ids": [a]})
+    )
+
+    assert response.status_code == 200, response.text
+    assert [entry["chunk_id"] for entry in response.json()["entries"]] == [a, b]
 
 
 def _seed(hub: HubHarness, n: int, *, promote: bool) -> None:
@@ -143,7 +167,10 @@ def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
             hub.services,
             chunks=replace(hub.services.chunks, facts=counting, record=record),
             queue=QueueService(
-                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue),
+                record=record,
+                exclusive=chunk_stores(hub.engine, hub.clock).exclusive,
+                clock=hub.clock,
             ),
         ),
     )
@@ -237,7 +264,7 @@ def test_whole_order_replace_writes_every_position_in_one_transaction_regardless
     tmp_path: Path, path: str, promote: bool
 ) -> None:
     """A whole-order replace of N chunks costs one write transaction, not N — the
-    statement count must not grow with the queue's length."""
+    position insert stays batched; row-lock statements grow with the live roster."""
     replace_path = "/api/queue" if path == "/api/queue" else "/api/backlog"
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
@@ -253,4 +280,6 @@ def test_whole_order_replace_writes_every_position_in_one_transaction_regardless
     small_count = count_queries(small.engine, lambda: call(small, small_ids))
     large_count = count_queries(large.engine, lambda: call(large, large_ids))
 
-    assert small_count == large_count
+    # Each conservatively live chunk is locked in sorted order; all reads and the
+    # position insert remain batched.
+    assert large_count - small_count == len(large_ids) - len(small_ids)

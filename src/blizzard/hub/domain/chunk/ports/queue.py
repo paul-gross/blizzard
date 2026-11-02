@@ -30,6 +30,12 @@ class IReadChunkQueueRepository(Protocol):
 class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
     """Read-write chunk-queue access."""
 
+    def queue_positions_locked(self, handle: ILockedChunkRead, chunk_ids: Sequence[str]) -> dict[str, float]: ...
+    def promoted_ats_locked(self, handle: ILockedChunkRead, chunk_ids: Sequence[str]) -> dict[str, datetime]: ...
+    def record_positions_locked(
+        self, handle: ILockedChunkRead, positions: Sequence[tuple[str, float]], *, at: datetime
+    ) -> None: ...
+
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
@@ -46,8 +52,7 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         lands both facts or neither, never one without the other. Not idempotent: the caller
         judged, under the same lock, that the chunk is not currently promoted. Returns the freshly-written
         ``chunk_promoted.id``. The handle must come from ``locked_queue``, which locks the
-        queue key before the chunk. This protects position writes, not a ranking resolved
-        before the lock, which may already be stale."""
+        queue key before the chunk; resolve the ranking on that same transaction."""
         ...
 
     def record_demote_with_position_locked(
@@ -58,8 +63,7 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         facts or neither, never a demoted chunk ranked by its stale ready-queue position. Not idempotent:
         the caller judged, under the same lock, that the chunk is currently promoted. Returns the
         freshly-written ``chunk_demoted.id``. The handle must come from ``locked_queue``,
-        which locks the queue key before the chunk. This protects position writes, not a
-        ranking resolved before the lock, which may already be stale."""
+        which locks the queue key before the chunk; resolve the ranking on that same transaction."""
         ...
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:

@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
@@ -46,6 +47,10 @@ class ILockedChunkRead(Protocol):
         ...
 
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
+
+    def live_statuses(self) -> dict[str, ChunkStatus]:
+        """Derive the live roster on this transaction's connection."""
+        ...
 
 
 class ILockedFlowAdmissionRead(ILockedChunkRead, Protocol):
@@ -83,9 +88,8 @@ class IChunkExclusiveWrites(Protocol):
         ...
 
     def locked_queue(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:
-        """Lock the queue position key, then named chunks in sorted order. Locked promotion
-        and demotion require this handle. The key protects position writes, not a ranking
-        resolved before the lock, which may already be stale."""
+        """Lock the queue key, then named and conservatively live chunks in sorted order.
+        Ingest also takes the key before minting. Resolve decisions on this connection."""
         ...
 
     def locked_flow_admission(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedFlowAdmissionRead]:
@@ -105,7 +109,8 @@ class IChunkExclusiveWrites(Protocol):
     ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each
-        pointer locks only its own key. With
+        pointer locks only its own key. The queue key is taken first, before the graph key,
+        so ingestion cannot add a backlog member during a queue decision. With
         ``project``, its source links' key is taken before any pointer's, the one order every
         locker of both keeps; a source link or unlink of that project waits for the commit. A
         write under the lock goes through a write repository's own ``*_locked`` method, taking

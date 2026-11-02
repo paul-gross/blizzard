@@ -7,12 +7,23 @@ surface, never a stored column."""
 
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
+from blizzard.hub.domain.operations.promote import PromoteService
+from blizzard.hub.domain.operations.queue import Placement
+from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
+from tests.support import (
+    HubHarness,
+    build_hub,
+    capture_statements,
+    chunk_stores,
+    pointer_token,
+    write_chunk_pause_facts,
+)
 
 pytestmark = pytest.mark.component
 
@@ -55,6 +66,30 @@ def _peek_ids(hub: HubHarness) -> list[str]:
     resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     return [e["chunk_id"] for e in resp.json()["entries"]]
+
+
+def test_promotion_failure_rolls_back_gap_renormalization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    a, b, new = _ingest(hub, 1), _ingest(hub, 2), _ingest_backlog(hub, 3)
+    stores = chunk_stores(hub.engine, hub.clock)
+    stores.queue.record_queue_positions([(a, 1.0), (b, math.nextafter(1.0, math.inf))], at=hub.clock.now())
+    before = stores.queue.queue_positions([a, b, new])
+    chunk = stores.record.get(new)
+    assert chunk is not None
+
+    def fail(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("injected failure")
+
+    monkeypatch.setattr(ChunkQueueStore, "record_promote_with_position_locked", fail)
+    service = PromoteService(
+        record=stores.record, queue=stores.queue, facts=stores.facts, exclusive=stores.exclusive, clock=hub.clock
+    )
+    with pytest.raises(RuntimeError, match="injected failure"):
+        service.promote(chunk, statuses={}, placement=Placement(after_chunk_id=a))
+
+    assert stores.queue.queue_positions([a, b, new]) == before
+    facts = stores.facts.load_facts(new)
+    assert facts is not None and not facts.promoted
 
 
 def test_peek_is_fifo_by_mint_before_any_reorder(tmp_path: Path) -> None:

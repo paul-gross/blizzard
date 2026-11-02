@@ -35,6 +35,23 @@ def _mint(store: ChunkStores, chunk_id: str) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
 
 
+def test_locked_promoted_ats_batches_and_combines_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, engine = _store(tmp_path)
+    ids = [f"ch_{i}" for i in range(5)]
+    for chunk_id in ids:
+        _mint(store, chunk_id)
+    for chunk_id in (ids[0], ids[-1]):
+        store.queue.record_promote(chunk_id, at=_T0)
+    monkeypatch.setattr(batching, "BATCH_SIZE", 2)
+
+    with store.exclusive.locked_queue([]) as handle, capture_statements(engine) as statements:
+        actual = store.queue.promoted_ats_locked(handle, ids)
+
+    assert actual == {ids[0]: _T0, ids[-1]: _T0}
+    promoted_reads = [sql for sql, _ in statements if "FROM chunk_promoted" in sql]
+    assert len(promoted_reads) == 3
+
+
 def test_record_queue_positions_writes_an_empty_sequence_as_a_no_op(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
 

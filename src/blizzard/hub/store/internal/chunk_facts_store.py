@@ -215,7 +215,10 @@ class ChunkFactsStore:
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
         itself stays in ``src/blizzard/hub/domain/chunk/model.py``; this only narrows which rows get read."""
         with self._store.read("load_live_statuses") as conn:
-            statuses = self._maybe_live_statuses(conn)
+            return self.load_live_statuses_conn(conn)
+
+    def load_live_statuses_conn(self, conn: Connection) -> dict[str, ChunkStatus]:
+        statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
@@ -264,14 +267,18 @@ class ChunkFactsStore:
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
         prefilter's tie residue derives here, not in SQL. Ephemeral chunks never write a
         terminal fact, so they are excluded in the same query."""
+        candidate_ids = self.maybe_live_ids_conn(conn, project)
+        facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
+        return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
+
+    def maybe_live_ids_conn(self, conn: Connection, project: ProjectId | None = None) -> list[str]:
+        """The conservative live roster, before deriving status, on the caller's connection."""
         candidates = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )
         if project is not None:
             candidates = candidates.where(s.chunks.c.project_id == project)
-        candidate_ids = [r.chunk_id for r in conn.execute(candidates)]
-        facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
-        return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
+        return [r.chunk_id for r in conn.execute(candidates)]
 
     def _load(
         self,

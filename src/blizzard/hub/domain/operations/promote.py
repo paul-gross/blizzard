@@ -21,9 +21,9 @@ from blizzard.hub.domain.operations.queue import (
     TAIL_PLACEMENT,
     Placement,
     QueueList,
-    read_ranking,
+    locked_candidates,
+    locked_ranking,
     resolve_landing,
-    write_positions_fn,
 )
 
 
@@ -106,29 +106,25 @@ class PromoteService:
         the landing :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the
         tail, the top, or right after ``placement``'s anchor — and returns the fresh ``chunk_promoted.id``.
 
-        The landing ranks other chunks — a different aggregate — so it is resolved before the
-        lock from ``statuses``; the chunk's own promotability is not."""
-        pre_lock = self._facts.load_facts(chunk.chunk_id)
-        if pre_lock is not None and pre_lock.promoted:
-            return None  # a replay needs no lock
-        now = self._clock.now()
-        candidates = ready_members(self._record, self._facts, statuses=statuses)
-        landing = resolve_landing(
-            read_ranking(self._queue, candidates),
-            QueueList.READY,
-            candidates,
-            chunk_id=chunk.chunk_id,
-            placement=placement,
-            statuses=statuses,
-        )
-        if landing.renormalized:
-            write_positions_fn(self._queue, QueueList.READY)(list(landing.renormalized), at=now)
-        with self._exclusive.locked_queue([chunk.chunk_id]) as handle:
+        All ranking and position writes share the queue-locked transaction."""
+        ids = [chunk.chunk_id] + ([placement.after_chunk_id] if placement.after_chunk_id is not None else [])
+        with self._exclusive.locked_queue(ids) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not promotion_writes(chunk.chunk_id, facts):
                 return None
+            now = self._clock.now()
+            candidates, current_statuses = locked_candidates(handle, QueueList.READY, include_paused=True)
+            landing = resolve_landing(
+                locked_ranking(self._queue, handle, candidates),
+                QueueList.READY,
+                candidates,
+                chunk_id=chunk.chunk_id,
+                placement=placement,
+                statuses=current_statuses,
+            )
+            self._queue.record_positions_locked(handle, landing.renormalized, at=now)
             return self._queue.record_promote_with_position_locked(
                 handle, chunk.chunk_id, position=landing.position, at=now
             )

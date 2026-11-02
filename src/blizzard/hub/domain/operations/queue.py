@@ -200,6 +200,15 @@ class QueuePage:
     next_cursor: str | None
 
 
+@domain_model
+@dataclass(frozen=True)
+class QueueMutation:
+    """The list and fleet statuses on which one committed queue mutation decided."""
+
+    ordered: list[Chunk]
+    statuses: Mapping[str, ChunkStatus]
+
+
 def entries_of(ordered: Sequence[Chunk], projects: Collection[str] | None = None) -> list[QueueEntry]:
     """``ordered`` as entries at their whole-order positions, narrowed to the chunks of
     ``projects`` — every chunk when ``None``. Narrowing selects from the ranked order and
@@ -461,14 +470,41 @@ def read_ranking(queue: IReadChunkQueueRepository, candidates: Sequence[Chunk]) 
     return QueueRanking(positions=queue.queue_positions(chunk_ids), promoted_ats=queue.promoted_ats(chunk_ids))
 
 
+def locked_ranking(
+    queue: IWriteChunkQueueRepository, handle: ILockedChunkRead, candidates: Sequence[Chunk]
+) -> QueueRanking:
+    ids = [c.chunk_id for c in candidates]
+    return QueueRanking(queue.queue_positions_locked(handle, ids), queue.promoted_ats_locked(handle, ids))
+
+
+def locked_candidates(
+    handle: ILockedChunkRead, list_: QueueList, *, include_paused: bool = False
+) -> tuple[list[Chunk], dict[str, ChunkStatus]]:
+    statuses = handle.live_statuses()
+    target = ChunkStatus.READY if list_ is QueueList.READY else ChunkStatus.NOT_READY
+    ids = [cid for cid, status in statuses.items() if status is target]
+    if include_paused:
+        paused = [cid for cid, status in statuses.items() if status is ChunkStatus.PAUSED]
+        ids.extend(cid for cid, facts in handle.facts_for(paused).items() if facts.is_ready_but_for_pause())
+    return list(handle.records_for(ids).values()), statuses
+
+
 class QueueService:
     """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
     hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
 
-    def __init__(self, *, queue: IWriteChunkQueueRepository, record: IReadChunkRecordRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        queue: IWriteChunkQueueRepository,
+        record: IReadChunkRecordRepository,
+        exclusive: IChunkExclusiveWrites,
+        clock: IClock,
+    ) -> None:
         self._queue = queue
         self._record = record
         self._clock = clock
+        self._exclusive = exclusive
 
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
@@ -502,18 +538,27 @@ class QueueService:
         """``not_ready`` chunks in backlog order — ascending by effective position."""
         return self.ordered(QueueList.NOT_READY, statuses=statuses)
 
-    def reorder(self, list_: QueueList, chunks: Sequence[Chunk], *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+    def reorder(
+        self, list_: QueueList, chunks: Sequence[Chunk], *, statuses: Mapping[str, ChunkStatus]
+    ) -> QueueMutation:
         """Replace ``list_``'s whole order with the named ``chunks`` first (:func:`replacement_order`
         decides it, checking each against the list itself) and return the order written."""
-        ordered = replacement_order(list_, self.ordered(list_, statuses=statuses), chunks, statuses)
-        self.replace_order(list_, ordered)
-        return ordered
+        with self._exclusive.locked_queue([c.chunk_id for c in chunks]) as handle:
+            candidates, current_statuses = locked_candidates(handle, list_)
+            ordered = replacement_order(
+                list_, locked_ranking(self._queue, handle, candidates).ordered(candidates), chunks, current_statuses
+            )
+            self._queue.record_positions_locked(
+                handle, [(c.chunk_id, float(i)) for i, c in enumerate(ordered)], at=self._clock.now()
+            )
+            return QueueMutation(ordered, current_statuses)
 
-    def move(self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]) -> None:
+    def move(
+        self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]
+    ) -> QueueMutation:
         """Move ``chunk`` right after ``after`` (top when ``None``) within ``list_``, each
         checked against the list itself (:func:`resolve_move`)."""
-        moving, anchor = resolve_move(list_, self.ordered(list_, statuses=statuses), chunk, after, statuses)
-        self.reposition(list_, moving, anchor, statuses=statuses)
+        return self.reposition(list_, chunk, after, statuses=statuses)
 
     def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: one ascending explicit position fact per
@@ -526,20 +571,27 @@ class QueueService:
 
     def reposition(
         self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]
-    ) -> None:
+    ) -> QueueMutation:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new explicit position
         immediately after ``after`` (top when ``after is None``) without restamping every other chunk.
         An ``after`` outside ``list_`` is refused (:class:`NotInList`). Bisection exhausting the
         representable doubles renormalizes the list first (:meth:`QueueRanking.land_after`)."""
-        write = write_positions_fn(self._queue, list_)
-        candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
-        anchor = require_anchor_among(list_, candidates, after.chunk_id if after is not None else None, statuses)
-        ranking = read_ranking(self._queue, candidates)
-        landing = ranking.land_after(ranking.ordered(candidates), anchor)
-        if landing.renormalized:
-            write(list(landing.renormalized), at=self._clock.now())
-        new_position = landing.position
-        write([(chunk.chunk_id, new_position)], at=self._clock.now())
+        ids = [chunk.chunk_id] + ([after.chunk_id] if after is not None else [])
+        with self._exclusive.locked_queue(ids) as handle:
+            candidates, current_statuses = locked_candidates(handle, list_)
+            ranking = locked_ranking(self._queue, handle, candidates)
+            moving, anchor = resolve_move(list_, ranking.ordered(candidates), chunk, after, current_statuses)
+            remaining = [c for c in candidates if c.chunk_id != moving.chunk_id]
+            landing = ranking.land_after(ranking.ordered(remaining), anchor)
+            new_position = landing.position
+            self._queue.record_positions_locked(
+                handle, [*landing.renormalized, (chunk.chunk_id, new_position)], at=self._clock.now()
+            )
+            ordered = ranking.ordered(remaining)
+            insertion = (
+                0 if anchor is None else next(i + 1 for i, c in enumerate(ordered) if c.chunk_id == anchor.chunk_id)
+            )
+            ordered.insert(insertion, moving)
         _log.info(
             "queue chunk repositioned",
             list=list_.value,
@@ -547,6 +599,7 @@ class QueueService:
             after_chunk_id=after.chunk_id if after is not None else None,
             position=new_position,
         )
+        return QueueMutation(ordered, current_statuses)
 
     def _candidates(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`

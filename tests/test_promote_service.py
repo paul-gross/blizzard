@@ -38,9 +38,13 @@ class _LockedFacts:
     """The locked handle's one read :meth:`PromoteService.promote` makes."""
 
     chunk_facts: ChunkFacts
+    repo: _FakeChunkRepo
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.chunk_facts
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.repo, name)
 
 
 @dataclass
@@ -75,7 +79,30 @@ class _FakeChunkRepo:
 
     @contextmanager
     def locked_queue(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _LockedFacts(self.facts))
+        yield cast(ILockedChunkRead, _LockedFacts(self.facts, self))
+
+    def live_statuses(self) -> dict[str, ChunkStatus]:
+        return {
+            **{c.chunk_id: ChunkStatus.READY for c in self.ready},
+            **dict.fromkeys(self.paused, ChunkStatus.PAUSED),
+        }
+
+    def records_for(self, ids: Sequence[str]) -> dict[str, Chunk]:
+        return {c.chunk_id: c for c in [*self.ready, *self.paused.values()] if c.chunk_id in ids}
+
+    def facts_for(self, ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return self.status_facts_for(ids)
+
+    def queue_positions_locked(self, handle: ILockedChunkRead, ids: Sequence[str]) -> dict[str, float]:
+        return self.queue_positions(ids)
+
+    def promoted_ats_locked(self, handle: ILockedChunkRead, ids: Sequence[str]) -> dict[str, datetime]:
+        return self.promoted_ats(ids)
+
+    def record_positions_locked(
+        self, handle: ILockedChunkRead, positions: Sequence[tuple[str, float]], *, at: datetime
+    ) -> None:
+        self.positions.update(positions)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts

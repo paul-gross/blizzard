@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import Connection
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import (
     IChunkExclusiveWrites,
@@ -63,6 +64,9 @@ class LockedChunkTransaction:
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self._facts.load_facts_conn(self.conn, chunk_id)
+
+    def live_statuses(self) -> dict[str, ChunkStatus]:
+        return self._facts.load_live_statuses_conn(self.conn)
 
     def facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return self._facts.load_facts_for_conn(self.conn, chunk_ids)
@@ -165,7 +169,12 @@ class ChunkExclusiveWrites:
     def locked_queue(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
         with self._store.write("locked_queue") as conn:
             lock_queue_positions(conn)
-            ids = frozenset(chunk_ids)
+            # The key excludes queue mutations and ingest; the conservative live roster
+            # also includes chunks whose status may enter either list via a row-locked
+            # writer such as claim, pause, or restart. Acquire every row in one order.
+            # This deliberately costs one UPDATE per live chunk and can delay unrelated
+            # chunk writers; the roster must stay stable until the queue decision commits.
+            ids = frozenset([*chunk_ids, *self._facts.maybe_live_ids_conn(conn)])
             for chunk_id in sorted(ids):
                 lock_chunk_row(conn, chunk_id)
             yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
@@ -198,6 +207,9 @@ class ChunkExclusiveWrites:
         self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
     ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._store.write("locked_work_ref_transaction") as conn:
+            # Ingest creates a backlog member. Take the queue key before the graph,
+            # project and pointer keys so a queue roster cannot miss a concurrent mint.
+            lock_queue_positions(conn)
             # Group moves refs while holding this key. Take it before any project or
             # pointer key so admission sees either side of the entire fold.
             lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])

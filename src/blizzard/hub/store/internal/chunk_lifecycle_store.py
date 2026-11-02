@@ -17,6 +17,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
     is_ephemeral_id,
+    lock_chunk_row,
     next_route_seq,
     route_of_conn,
 )
@@ -37,6 +38,7 @@ class ChunkLifecycleStore:
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins."""
         with self._store.write("record_pause") as conn:
+            lock_chunk_row(conn, chunk_id)
             result = conn.execute(
                 self._store.insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
             )

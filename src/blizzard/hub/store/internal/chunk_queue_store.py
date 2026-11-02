@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
+from sqlalchemy import Connection
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -37,28 +39,50 @@ class ChunkQueueStore:
     def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
         """The newest explicit queue position per chunk among ``chunk_ids`` — the ordering
         the peek honours."""
-        result: dict[str, float] = {}
         with self._store.read("queue_positions") as conn:
-            for batch in id_batches(chunk_ids):
-                rows = conn.execute(
-                    newest_fact_select(
-                        self._store,
-                        s.queue_positions,
-                        s.queue_positions.c.chunk_id,
-                        batch,
-                        s.queue_positions.c.chunk_id,
-                        s.queue_positions.c.position,
-                    )
-                ).all()
-                result.update((r.chunk_id, float(r.position)) for r in rows)
+            return self._positions_conn(conn, chunk_ids)
+
+    def _positions_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, float]:
+        result: dict[str, float] = {}
+        for batch in id_batches(chunk_ids):
+            rows = conn.execute(
+                newest_fact_select(
+                    self._store,
+                    s.queue_positions,
+                    s.queue_positions.c.chunk_id,
+                    batch,
+                    s.queue_positions.c.chunk_id,
+                    s.queue_positions.c.position,
+                )
+            ).all()
+            result.update((r.chunk_id, float(r.position)) for r in rows)
         return result
+
+    def queue_positions_locked(self, handle: ILockedChunkRead, chunk_ids: Sequence[str]) -> dict[str, float]:
+        return self._positions_conn(conn_of(handle), chunk_ids)
+
+    def promoted_ats_locked(self, handle: ILockedChunkRead, chunk_ids: Sequence[str]) -> dict[str, datetime]:
+        return self._promoted_ats_conn(conn_of(handle), chunk_ids)
+
+    def record_positions_locked(
+        self, handle: ILockedChunkRead, positions: Sequence[tuple[str, float]], *, at: datetime
+    ) -> None:
+        if positions:
+            conn_of(handle).execute(
+                self._store.insert(s.queue_positions),
+                [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
+            )
 
     def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
         """Each currently promoted chunk's newest ``chunk_promoted.promoted_at`` among ``chunk_ids``."""
-        result: dict[str, datetime] = {}
         with self._store.read("promoted_ats") as conn:
-            for batch in id_batches(chunk_ids):
-                result.update(currently_promoted_ats(conn, batch))
+            return self._promoted_ats_conn(conn, chunk_ids)
+
+    @staticmethod
+    def _promoted_ats_conn(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, datetime]:
+        result: dict[str, datetime] = {}
+        for batch in id_batches(chunk_ids):
+            result.update(currently_promoted_ats(conn, batch))
         return result
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
