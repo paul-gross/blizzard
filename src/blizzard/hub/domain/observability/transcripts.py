@@ -8,6 +8,7 @@ adjudicating three independent caps."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -183,11 +184,17 @@ class IReadTranscriptSegments(Protocol):
 class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
     """Adds the writes."""
 
+    def locked_ingest(
+        self, runner_id: str, records: Sequence[tuple[int, TranscriptSlice]]
+    ) -> AbstractContextManager[IWriteTranscriptSegments]: ...
+
     def high_water(self, runner_id: str) -> int: ...
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None: ...
 
     def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState: ...
+
+    def existing_chunks(self, chunk_ids: Sequence[str]) -> set[str]: ...
 
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
         """The owner recorded for the record's lease epoch, or ``None`` while none is recorded."""
@@ -237,6 +244,15 @@ class LeaseSegmentsNotOwned(Exception):
         super().__init__("lease segments belong to another runner")
         self.owning_runner_id = owning_runner_id
         self.requesting_runner_id = requesting_runner_id
+
+
+class TranscriptChunkMissing(Exception):
+    """A transcript cannot be stored until its chunk exists in this tenant."""
+
+    def __init__(self, chunk_id: str, seq: int) -> None:
+        super().__init__(f"transcript seq {seq} names missing chunk {chunk_id}")
+        self.chunk_id = chunk_id
+        self.seq = seq
 
 
 def refuse_foreign_lease_read(owning_runner_id: str | None, *, requesting_runner_id: str) -> None:
@@ -337,15 +353,24 @@ class TranscriptIngestService:
         """``records`` pairs each record with its lane ``seq``, kept out of :class:`TranscriptSlice`
         since ``seq`` is a lane concept, not a record's stored identity. A retired runner is refused with
         :class:`RunnerRetired` before anything lands. A record whose lease another holder owns
-        (:func:`ships_from_lease_holder`) is refused unstored, on replay too, and the mark advances past it."""
+        (:func:`ships_from_lease_holder`) is refused unstored, on replay too, and the mark advances past it.
+        A missing chunk rolls back the batch and raises :class:`TranscriptChunkMissing`; the FIFO retries it and
+        cannot reach later records until the chunk exists."""
         self._retired.refuse_if_retired(runner_id, action="transcript ingest")
-        mark = self._store.high_water(runner_id)
+        with self._store.locked_ingest(runner_id, records) as store:
+            return self._ingest_locked(store, runner_id, records)
+
+    def _ingest_locked(
+        self, store: IWriteTranscriptSegments, runner_id: str, records: list[tuple[int, TranscriptSlice]]
+    ) -> TranscriptIngestResult:
+        mark = store.high_water(runner_id)
         applied: list[int] = []
         already: list[int] = []
         capped: list[int] = []
         refused: list[int] = []
         now = self._clock.now()
-        owners = self._store.epoch_owners([(record.chunk_id, record.epoch) for _, record in records])
+        owners = store.epoch_owners([(record.chunk_id, record.epoch) for _, record in records])
+        chunks = store.existing_chunks([record.chunk_id for _, record in records])
 
         for seq, record in sorted(records, key=lambda pair: pair[0]):
             if not ships_from_lease_holder(owners.get((record.chunk_id, record.epoch)), runner_id):
@@ -353,7 +378,7 @@ class TranscriptIngestService:
                 mark = max(mark, seq)
                 continue
             if seq <= mark:
-                outcome = replay_outcome(self._store.natural_key_state(record.segment_id, record.turn_range_start))
+                outcome = replay_outcome(store.natural_key_state(record.segment_id, record.turn_range_start))
                 if outcome == "capped":
                     capped.append(seq)
                     continue
@@ -366,20 +391,19 @@ class TranscriptIngestService:
                     seq=seq,
                     segment_id=record.segment_id,
                 )
-                if self._apply(record, at=now):
-                    applied.append(seq)
-                else:
-                    capped.append(seq)
-                continue
-            # Every reachable outcome advances the mark; every field is wire-validated.
-            mark = seq
-            if self._apply(record, at=now):
+            if (
+                record.chunk_id not in chunks
+                and store.natural_key_state(record.segment_id, record.turn_range_start) != "accepted"
+            ):
+                raise TranscriptChunkMissing(record.chunk_id, seq)
+            if self._apply(store, record, at=now):
                 applied.append(seq)
             else:
                 capped.append(seq)
+            mark = max(mark, seq)
 
         if applied or capped or refused:
-            self._store.set_high_water(runner_id, seq=mark, at=now)
+            store.set_high_water(runner_id, seq=mark, at=now)
         _log.info(
             "transcript segments ingested",
             runner_id=runner_id,
@@ -393,30 +417,32 @@ class TranscriptIngestService:
             high_water=mark, applied=applied, already_applied=already, capped=capped, refused=refused
         )
 
-    def _apply(self, record: TranscriptSlice, *, at: datetime) -> bool:
+    def _apply(self, store: IWriteTranscriptSegments, record: TranscriptSlice, *, at: datetime) -> bool:
         """``True`` stored, ``False`` cap-rejected — both advance the high-water."""
-        state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
+        state = store.natural_key_state(record.segment_id, record.turn_range_start)
         byte_count = record.byte_count
-        reason = self._reject_reason(record, byte_count=byte_count, at=at) if adjudicates(state) else None
+        reason = self._reject_reason(store, record, byte_count=byte_count, at=at) if adjudicates(state) else None
         write = segment_write(state, reason)
         if write is SegmentWrite.UPDATE_STILL_REJECTED and reason is not None:
-            self._store.update_still_rejected(record, byte_count=byte_count, reason=reason, at=at)
+            store.update_still_rejected(record, byte_count=byte_count, reason=reason, at=at)
         elif write is SegmentWrite.UPDATE_TO_ACCEPTED:
-            self._store.update_to_accepted(record, byte_count=byte_count, codec="zlib", at=at)
+            store.update_to_accepted(record, byte_count=byte_count, codec="zlib", at=at)
         elif write is SegmentWrite.INSERT_REJECTED and reason is not None:
-            self._store.insert_rejected(record, byte_count=byte_count, reason=reason, at=at)
+            store.insert_rejected(record, byte_count=byte_count, reason=reason, at=at)
         elif write is SegmentWrite.INSERT_ACCEPTED:
-            self._store.insert_accepted(record, byte_count=byte_count, codec="zlib", at=at)
+            store.insert_accepted(record, byte_count=byte_count, codec="zlib", at=at)
         return write.stored
 
-    def _reject_reason(self, record: TranscriptSlice, *, byte_count: int, at: datetime) -> str | None:
+    def _reject_reason(
+        self, store: IWriteTranscriptSegments, record: TranscriptSlice, *, byte_count: int, at: datetime
+    ) -> str | None:
         """Walk the cap ladder, reading each stored sum only once the earlier steps pass."""
         caps = self._caps
         breach = caps.record_breach(byte_count)
         if breach is None:
-            breach = caps.chunk_breach(byte_count, chunk_stored=self._store.chunk_stored_bytes(record.chunk_id))
+            breach = caps.chunk_breach(byte_count, chunk_stored=store.chunk_stored_bytes(record.chunk_id))
         if breach is None:
-            window = self._store.runner_window_bytes(record.runner_id, since=caps.window_start(at))
+            window = store.runner_window_bytes(record.runner_id, since=caps.window_start(at))
             breach = caps.runner_breach(byte_count, runner_window=window)
         return None if breach is None else self._rejected(record, breach)
 

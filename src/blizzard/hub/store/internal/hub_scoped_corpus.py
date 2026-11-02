@@ -49,7 +49,7 @@ from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
 from blizzard.hub.store.internal.corpus_rows import open_tenant
-from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
+from blizzard.hub.store.internal.transcript_event_store import content_fingerprint
 from blizzard.hub.tenancy import TenantId
 
 #: Opens a read, named by its operation, whose every statement is marked hub-scoped
@@ -254,7 +254,16 @@ class SweepCorpusReads:
                     segment.c.tenant_id,
                     segment.c.segment_id,
                     segment.c.content_digest,
+                    segment.c.chunk_id,
+                    segment.c.node_id,
+                    segment.c.epoch,
+                    segment.c.spawn_generation,
+                    segment.c.normalizer_version,
+                    segment.c.harness_id,
                     segment.c.harness_version,
+                    segment.c.model,
+                    segment.c.effort,
+                    segment.c.rejected,
                 )
                 .join(
                     visible,
@@ -275,7 +284,7 @@ class SweepCorpusReads:
         for (tenant_id, segment_id), rows in itertools.groupby(digest_rows, key=lambda r: (r.tenant_id, r.segment_id)):
             tenant = TenantId(tenant_id)
             visible_ids.setdefault(tenant, set()).add(segment_id)
-            fingerprint = fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
+            fingerprint = content_fingerprint(list(rows))
             if is_candidate(markers.get((tenant_id, segment_id)), fingerprint):
                 candidates.setdefault(tenant, []).append(segment_id)
         return {

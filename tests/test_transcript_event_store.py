@@ -194,7 +194,7 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    assert len(executed) == len(builders)
+    assert {arg.func.id for arg in executed if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)} == builders
     for arg in executed:
         built_by_a_builder = isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id in builders
         assert built_by_a_builder, ast.unparse(arg)
@@ -490,8 +490,113 @@ def test_candidacy_narrows_to_the_given_chunk(tmp_path: Path) -> None:
 # --- scoped replacement ------------------------------------------------
 
 
+def _ready(engine: Any, segment_id: str = "sg_1") -> str:
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id=segment_id), byte_count=10, codec="zlib", at=_NOW
+    )
+    current = TranscriptEventStore(hub_store_connections(engine)).segment_derivation_input(segment_id)
+    assert current is not None
+    return current.content_fingerprint
+
+
+def test_stale_input_cannot_replace_current_derivation(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    record = _segment_record()
+    segments.insert_rejected(record, byte_count=10, reason="too_large", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    stale = store.segment_derivation_input("sg_1")
+    assert stale is not None
+    segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    current = store.segment_derivation_input("sg_1")
+    assert current is not None
+    assert store.replace_segment_events(
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint=current.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+    assert not store.replace_segment_events(
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=False,
+        content_fingerprint=stale.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+    marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
+    assert marker is not None and marker.content_fingerprint == current.content_fingerprint and marker.event_count == 1
+
+
+def test_visibility_is_rechecked_for_replace_and_drop(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    assert store.replace_segment_events(
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint=fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+    assert store.drop_segments(frozenset({"sg_1"}), at=_NOW) == 0
+    assert store.derivation_marker("sg_1", _EXTRACTOR_VERSION) is not None
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_1"), byte_count=10, codec="zlib", at=_NOW
+    )
+    assert store.drop_segments(frozenset({"sg_1"}), at=_NOW) == 1
+    assert not store.replace_segment_events(
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint=fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+    assert store.derivation_marker("sg_1", _EXTRACTOR_VERSION) is None
+
+
+def test_drop_rechecks_each_id_and_counts_invisible_ids_even_if_missing(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    _ready(engine, "sg_visible")
+    _ready(engine, "sg_hidden")
+    store = TranscriptEventStore(hub_store_connections(engine))
+    _derive(store, "sg_visible")
+    _derive(store, "sg_hidden")
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id="sg_successor", supersedes="sg_hidden"), byte_count=10, codec="zlib", at=_NOW
+    )
+    scoped = hub_store_connections(engine)
+    with scoped.write("seed_missing_marker") as conn:
+        conn.execute(
+            store_module._upsert_marker_stmt(
+                scoped,
+                "sg_missing",
+                _EXTRACTOR_VERSION,
+                content_fingerprint="old",
+                event_count=0,
+                complete=True,
+                at=_NOW,
+            )
+        )
+
+    assert store.drop_segments(frozenset({"sg_visible", "sg_hidden", "sg_missing"}), at=_NOW) == 2
+    assert store.derivation_marker("sg_visible", _EXTRACTOR_VERSION) is not None
+    assert store.derivation_marker("sg_hidden", _EXTRACTOR_VERSION) is None
+    assert store.derivation_marker("sg_missing", _EXTRACTOR_VERSION) is None
+    assert [row.segment_id for row in _drop_rows(engine)] == ["sg_hidden"]
+
+
 def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events(
@@ -499,7 +604,7 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
         _EXTRACTOR_VERSION,
         [_event()],
         complete=True,
-        content_fingerprint="fp1",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -511,7 +616,7 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
 
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
     assert marker is not None
-    assert marker.content_fingerprint == "fp1"
+    assert marker.content_fingerprint == fingerprint
     assert marker.event_count == 1
     assert marker.complete is True
 
@@ -521,6 +626,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
     makes even a partially-applied re-run converge: a second identical replace leaves
     exactly one row, not two, and never raises."""
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     for _ in range(2):
@@ -529,7 +635,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
             _EXTRACTOR_VERSION,
             [_event()],
             complete=True,
-            content_fingerprint="fp1",
+            content_fingerprint=fingerprint,
             at=_NOW,
             provenance=_PROVENANCE,
         )
@@ -541,13 +647,14 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
 
 def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1",
         "blizzard-analytics/1",
         [_event()],
         complete=True,
-        content_fingerprint="fp1",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -557,7 +664,7 @@ def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_pa
         "blizzard-analytics/2",
         [_event(turn_path="1")],
         complete=True,
-        content_fingerprint="fp2",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -572,10 +679,11 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
     """An unknown-dialect or empty-content segment derives zero events, honestly recorded
     rather than left looking like it was never attempted."""
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_NOW, provenance=_PROVENANCE
+        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=fingerprint, at=_NOW, provenance=_PROVENANCE
     )
 
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
@@ -598,13 +706,14 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
 
 def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1",
         "blizzard-analytics/1",
         [_event()],
         complete=True,
-        content_fingerprint="fp1",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -613,11 +722,14 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
         "blizzard-analytics/2",
         [_event(turn_path="1")],
         complete=True,
-        content_fingerprint="fp2",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
 
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_1"), byte_count=10, codec="zlib", at=_NOW
+    )
     store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 
     with engine.connect() as conn:
@@ -627,12 +739,14 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
 
 
 def _derive(store: TranscriptEventStore, segment_id: str) -> None:
+    current = store.segment_derivation_input(segment_id)
+    assert current is not None
     store.replace_segment_events(
         segment_id,
         _EXTRACTOR_VERSION,
         [_event()],
         complete=True,
-        content_fingerprint="fp",
+        content_fingerprint=current.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -665,6 +779,9 @@ def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tm
         at=_NOW,
     )
     _derive(store, "sg_1")
+    segments.insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_1"), byte_count=10, codec="zlib", at=_NOW
+    )
     dropped_at = datetime(2026, 8, 13, tzinfo=UTC)
 
     store.drop_segments(frozenset({"sg_1"}), at=dropped_at)
@@ -681,8 +798,11 @@ def test_drop_segments_appends_a_new_fact_when_a_segment_is_dropped_again(tmp_pa
     TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
         _segment_record(), byte_count=10, codec="zlib", at=_NOW
     )
+    _derive(store, "sg_1")
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_1"), byte_count=10, codec="zlib", at=_NOW
+    )
     for _ in range(2):
-        _derive(store, "sg_1")
         store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 
     assert len(_drop_rows(engine)) == 2
@@ -691,7 +811,6 @@ def test_drop_segments_appends_a_new_fact_when_a_segment_is_dropped_again(tmp_pa
 def test_drop_segments_without_a_stored_record_deletes_and_writes_no_fact(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    _derive(store, "sg_1")
 
     store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 
@@ -708,6 +827,9 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
         _segment_record(), byte_count=10, codec="zlib", at=_NOW
     )
     _derive(store, "sg_1")
+    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(segment_id="sg_new", supersedes="sg_1"), byte_count=10, codec="zlib", at=_NOW
+    )
 
     def _boom(stmts: ScopedStatements) -> Any:
         raise RuntimeError("injected")
@@ -736,13 +858,14 @@ def test_replace_segment_events_writes_no_drop_fact(tmp_path: Path) -> None:
 
 def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    fingerprint = _ready(engine)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1",
         _EXTRACTOR_VERSION,
         [_event()],
         complete=True,
-        content_fingerprint="fp1",
+        content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
     )
@@ -763,17 +886,25 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
     store = TranscriptEventStore(hub_store_connections(engine))
     segment_ids = [f"sg_{i}" for i in range(5)]
     for segment_id in segment_ids:
+        fingerprint = _ready(engine, segment_id)
         store.replace_segment_events(
             segment_id,
             _EXTRACTOR_VERSION,
             [_event()],
             complete=True,
-            content_fingerprint="fp",
+            content_fingerprint=fingerprint,
             at=_NOW,
             provenance=_PROVENANCE,
         )
 
-    store.drop_segments(frozenset(segment_ids), at=_NOW)
+    scoped = hub_store_connections(engine)
+    with scoped.write("hide_segments") as conn:
+        conn.execute(
+            scoped.update(s.transcript_segments)
+            .where(s.transcript_segments.c.segment_id.in_(segment_ids))
+            .values(final=False)
+        )
+    assert store.drop_segments(frozenset(segment_ids), at=_NOW) == len(segment_ids)
 
     with engine.connect() as conn:
         assert conn.execute(hub_store_connections(engine).select(s.transcript_events)).all() == []
@@ -801,18 +932,20 @@ def test_drop_locks_all_segments_in_order_before_processing_batches(
 
 def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
+    first = _ready(engine, "sg_1")
+    second = _ready(engine, "sg_2")
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1",
         _EXTRACTOR_VERSION,
         [_event()],
         complete=True,
-        content_fingerprint="fp1",
+        content_fingerprint=first,
         at=_NOW,
         provenance=_PROVENANCE,
     )
     store.replace_segment_events(
-        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_NOW, provenance=_PROVENANCE
+        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=second, at=_NOW, provenance=_PROVENANCE
     )
 
     assert store.derived_segment_ids() == frozenset({"sg_1", "sg_2"})

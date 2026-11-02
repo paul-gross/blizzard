@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import zlib
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Insert, Row, Select, Update, func
+from sqlalchemy import Connection, Insert, Row, Select, Update, func
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
@@ -26,8 +28,11 @@ from blizzard.hub.domain.observability.transcripts import (
     lost_turns,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import lock_keys
-from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
+from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, lock_keys
+from blizzard.hub.store.internal.host_registry_store import lock_host_registry
+from blizzard.hub.store.internal.runner_registry_store import refuse_retired_runner_or_host
+from blizzard.hub.store.internal.transcript_locks import SEGMENT_VISIBILITY_LOCK
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -173,6 +178,37 @@ def _natural_key_state_stmt(stmts: ScopedStatements, segment_id: str, turn_range
     )
 
 
+def _existing_chunks_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str]) -> Select[Any]:
+    return stmts.select(s.chunks, s.chunks.c.chunk_id).where(s.chunks.c.chunk_id.in_(chunk_ids))
+
+
+def _existing_segment_keys_stmt(stmts: ScopedStatements, segment_ids: Sequence[str]) -> Select[Any]:
+    c = s.transcript_segments.c
+    return stmts.select(
+        s.transcript_segments, c.segment_id, c.turn_range_start, c.supersedes, c.chunk_id, c.runner_id
+    ).where(c.segment_id.in_(segment_ids))
+
+
+def _lock_transcript_decisions(conn: Connection, records: Sequence[TranscriptSlice], runner_id: str | None) -> None:
+    keys = {(r.segment_id, r.turn_range_start) for r in records}
+    lock_keys(conn, "transcript-natural-key", [json.dumps([segment, start]) for segment, start in keys])
+    chunks = {r.chunk_id for r in records}
+    runners = {r.runner_id for r in records}
+    visibility = {r.segment_id for r in records} | {r.supersedes for r in records if r.supersedes is not None}
+    for batch in id_batches(sorted({segment for segment, _ in keys})):
+        for row in conn.execute(_existing_segment_keys_stmt(statements_of(conn), batch)):
+            if (row.segment_id, row.turn_range_start) in keys:
+                chunks.add(row.chunk_id)
+                runners.add(row.runner_id)
+                if row.supersedes is not None:
+                    visibility.add(row.supersedes)
+    lock_keys(conn, "transcript-chunk-budget", sorted(chunks))
+    lock_keys(conn, "transcript-runner-budget", sorted(runners))
+    if runner_id is not None:
+        lock_keys(conn, "transcript-high-water", [runner_id])
+    lock_keys(conn, SEGMENT_VISIBILITY_LOCK, sorted(visibility))
+
+
 def _epoch_owners_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str], epochs: Sequence[int]) -> Select[Any]:
     """The owners of ``chunk_ids`` at any of ``epochs`` — a superset of the pairs asked for,
     since a row-value ``IN`` is not portable (`bzh:sql-portable`)."""
@@ -281,8 +317,47 @@ def _update_still_rejected_stmt(
 class TranscriptSegmentStore:
     """Read-write transcript-segment adapter over the hub store engine."""
 
-    def __init__(self, store: ScopedConnections) -> None:
+    def __init__(self, store: ScopedConnections, *, conn: Connection | None = None) -> None:
         self._store = store
+        self._conn = conn
+
+    @contextmanager
+    def locked_ingest(
+        self, runner_id: str, records: Sequence[tuple[int, TranscriptSlice]]
+    ) -> Generator[TranscriptSegmentStore, None, None]:
+        with self._store.write("transcript_ingest") as conn:
+            for chunk_id in sorted({record.chunk_id for _, record in records}):
+                lock_chunk_row(conn, chunk_id)
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="transcript ingest")
+            _lock_transcript_decisions(conn, [record for _, record in records], runner_id)
+            yield TranscriptSegmentStore(self._store, conn=conn)
+
+    @contextmanager
+    def _read(self, operation: str) -> Generator[Connection, None, None]:
+        if self._conn is not None:
+            yield self._conn
+        else:
+            with self._store.read(operation) as conn:
+                yield conn
+
+    @contextmanager
+    def _write(self, operation: str) -> Generator[Connection, None, None]:
+        if self._conn is not None:
+            yield self._conn
+        else:
+            with self._store.write(operation) as conn:
+                yield conn
+
+    @contextmanager
+    def _record_write(self, operation: str, record: TranscriptSlice) -> Generator[Connection, None, None]:
+        if self._conn is not None:
+            yield self._conn
+        else:
+            with self._store.write(operation) as conn:
+                lock_chunk_row(conn, record.chunk_id)
+                _lock_transcript_decisions(conn, [record], None)
+                yield conn
 
     # --- reads ----------------------------------------------------------------
 
@@ -341,16 +416,23 @@ class TranscriptSegmentStore:
         ]
 
     def high_water(self, runner_id: str) -> int:
-        with self._store.read("high_water") as conn:
+        with self._read("high_water") as conn:
             row = conn.execute(_high_water_stmt(self._store, runner_id)).one_or_none()
             return row.seq if row is not None else 0
 
     def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
-        with self._store.read("natural_key_state") as conn:
+        with self._read("natural_key_state") as conn:
             row = conn.execute(_natural_key_state_stmt(self._store, segment_id, turn_range_start)).one_or_none()
         if row is None:
             return "absent"
         return "rejected" if row.rejected else "accepted"
+
+    def existing_chunks(self, chunk_ids: Sequence[str]) -> set[str]:
+        found: set[str] = set()
+        with self._read("transcript_existing_chunks") as conn:
+            for batch in id_batches(sorted(set(chunk_ids))):
+                found.update(conn.execute(_existing_chunks_stmt(self._store, batch)).scalars())
+        return found
 
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
         return self.epoch_owners([(chunk_id, epoch)]).get((chunk_id, epoch))
@@ -363,7 +445,7 @@ class TranscriptSegmentStore:
         for chunk_id, epoch in wanted:
             epochs_by_chunk.setdefault(chunk_id, set()).add(epoch)
         owners: dict[tuple[str, int], EpochOwner] = {}
-        with self._store.read("epoch_owners") as conn:
+        with self._read("epoch_owners") as conn:
             # Batched by chunk id, each batch narrowed by its epochs; a pair outside
             # ``wanted`` is filtered out below.
             for batch in id_batches(sorted(epochs_by_chunk)):
@@ -376,19 +458,19 @@ class TranscriptSegmentStore:
         return owners
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
-        with self._store.read("chunk_stored_bytes") as conn:
+        with self._read("chunk_stored_bytes") as conn:
             total = conn.execute(_chunk_stored_bytes_stmt(self._store, chunk_id)).scalar_one()
             return int(total)
 
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int:
-        with self._store.read("runner_window_bytes") as conn:
+        with self._read("runner_window_bytes") as conn:
             total = conn.execute(_runner_window_bytes_stmt(self._store, runner_id, since)).scalar_one()
             return int(total)
 
     # --- writes -----------------------------------------------------------------
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        with self._store.write("set_high_water") as conn:
+        with self._write("set_high_water") as conn:
             lock_keys(conn, "transcript-high-water", [runner_id])
             existing = conn.execute(_high_water_stmt(self._store, runner_id)).one_or_none()
             if existing is None:
@@ -399,18 +481,18 @@ class TranscriptSegmentStore:
 
     def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
-        with self._store.write("insert_accepted") as conn:
+        with self._record_write("insert_accepted", record) as conn:
             conn.execute(
                 _insert_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
             )
 
     def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._store.write("insert_rejected") as conn:
+        with self._record_write("insert_rejected", record) as conn:
             conn.execute(_insert_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
 
     def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
-        with self._store.write("update_to_accepted") as conn:
+        with self._record_write("update_to_accepted", record) as conn:
             conn.execute(
                 _update_to_accepted_stmt(
                     self._store, record, byte_count=byte_count, codec=codec, content=content, at=at
@@ -418,7 +500,7 @@ class TranscriptSegmentStore:
             )
 
     def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._store.write("update_still_rejected") as conn:
+        with self._record_write("update_still_rejected", record) as conn:
             conn.execute(_update_still_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
 
     # --- helpers ------------------------------------------------------------

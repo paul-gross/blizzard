@@ -88,7 +88,7 @@ def test_segment_writer_waits_on_shared_key(
             assert (store.derivation_marker("sg_1", "v2") is not None) is omit
         else:
             marker = store.derivation_marker("sg_1", "v1")
-            assert marker is not None and marker.event_count == 0
+            assert marker is None  # the missing segment is rejected after acquiring the key
     finally:
         holder.dispose()
         waiter.dispose()
@@ -112,6 +112,6 @@ def test_segment_keys_are_tenant_and_segment_scoped(database_url: str) -> None:
             other_segment.result(timeout=5)
             other_tenant.result(timeout=5)
         module.TranscriptEventStore(first).drop_segments(frozenset({"sg_1", "sg_2"}), at=_AT)
-        assert module.TranscriptEventStore(second).derivation_marker("sg_1", "v1") is not None
+        assert module.TranscriptEventStore(second).derivation_marker("sg_1", "v1") is None
     finally:
         engine.dispose()

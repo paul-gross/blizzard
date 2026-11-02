@@ -91,15 +91,39 @@ def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "c
 def test_derivation_markers_matches_derivation_marker_per_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    for segment_id in ("sg_1", "sg_2"):
+        segments.insert_accepted(_segment_record(segment_id=segment_id), byte_count=10, codec="zlib", at=_T0)
+    first = store.segment_derivation_input("sg_1")
+    second = store.segment_derivation_input("sg_2")
+    assert first is not None and second is not None
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_T0, provenance=_PROVENANCE
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=first.content_fingerprint,
+        at=_T0,
+        provenance=_PROVENANCE,
     )
     store.replace_segment_events(
-        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_T0, provenance=_PROVENANCE
+        "sg_2",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=second.content_fingerprint,
+        at=_T0,
+        provenance=_PROVENANCE,
     )
     # A different extractor version's marker must not leak into the requested version's read.
     store.replace_segment_events(
-        "sg_2", "blizzard-analytics/2", [], complete=True, content_fingerprint="fp3", at=_T0, provenance=_PROVENANCE
+        "sg_2",
+        "blizzard-analytics/2",
+        [],
+        complete=True,
+        content_fingerprint=second.content_fingerprint,
+        at=_T0,
+        provenance=_PROVENANCE,
     )
 
     result = store.derivation_markers(_EXTRACTOR_VERSION)

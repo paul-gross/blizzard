@@ -73,6 +73,8 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_records_for_lease_stmt": m._records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
         "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
         "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "_existing_chunks_stmt": m._existing_chunks_stmt(_STMTS, ["ch_1"]),
+        "_existing_segment_keys_stmt": m._existing_segment_keys_stmt(_STMTS, ["sg_1"]),
         "_epoch_owners_stmt": m._epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
         "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
         "_runner_window_bytes_stmt": m._runner_window_bytes_stmt(_STMTS, "r1", _NOW),
@@ -142,7 +144,7 @@ def test_every_statement_the_store_executes_compiles_under_both_dialects() -> No
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):
             sql = str(stmt.compile(dialect=dialect))
-            assert "transcript_" in sql or "epoch_owners" in sql, name
+            assert "transcript_" in sql or "epoch_owners" in sql or "chunks" in sql, name
 
 
 def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:

@@ -16,8 +16,8 @@ from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import transcript_event_store as event_rows
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
-from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from tests.support import count_rows_read, hub_store_connections, migrated_hub_at, mint_graph, stamp
 
 pytestmark = pytest.mark.component
@@ -59,8 +59,7 @@ def _criteria(**overrides: object) -> EventQueryCriteria:
 
 
 class _Fixture(NamedTuple):
-    """A migrated, empty store, the engine behind it, and the writer its tests seed
-    through — the write path is the event store's own, never ad-hoc SQL."""
+    """A migrated, empty store, the engine behind it, and a synthetic event-row seeder."""
 
     store: AnalyticsEventQueryStore
     engine: Engine
@@ -72,7 +71,6 @@ def _new_store(tmp_path: Path) -> _Fixture:
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     connections = hub_store_connections(engine)
-    writer = TranscriptEventStore(connections)
 
     def insert_events(
         segment_id: str,
@@ -80,15 +78,12 @@ def _new_store(tmp_path: Path) -> _Fixture:
         extractor_version: str = _VERSION,
         provenance: SegmentProvenance = _PROVENANCE,
     ) -> None:
-        writer.replace_segment_events(
-            segment_id,
-            extractor_version,
-            list(events),
-            complete=True,
-            content_fingerprint="fp",
-            at=_NOW,
-            provenance=provenance,
-        )
+        with connections.write("seed_events") as conn:
+            conn.execute(event_rows._delete_events_stmt(connections, segment_id, extractor_version))
+            conn.execute(
+                event_rows._insert_events_stmt(connections),
+                event_rows._event_rows(segment_id, extractor_version, list(events), provenance),
+            )
 
     return _Fixture(AnalyticsEventQueryStore(connections), engine, insert_events)
 

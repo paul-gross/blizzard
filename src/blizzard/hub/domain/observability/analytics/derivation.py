@@ -43,7 +43,12 @@ _log = get_logger("blizzard.hub.transcript_events")
 class GraphPins:
     """Per chunk, its transitions and mint pin, pre-resolved once for a whole
     pass. Owns the "newest matching transition, else mint pin" rule
-    :meth:`EventDerivationService.derive_segment` applies per node-step."""
+    :meth:`EventDerivationService.derive_segment` applies per node-step.
+
+    These reads are not fenced with event replacement: a concurrent graph-pin change
+    can leave a derivation stamped with a stale graph even when the segment is unchanged.
+    Segment fingerprints and candidacy do not currently detect that change.
+    """
 
     transitions_by_chunk: dict[str, list[TransitionFact]] = field(default_factory=dict[str, list[TransitionFact]])
     mint_pin_by_chunk: dict[str, str] = field(default_factory=dict[str, str])
@@ -243,7 +248,7 @@ class EventDerivationService:
             current.turns, normalizer_version=current.normalizer_version, extractors=self._extractors
         )
         events = stamp_events(extracted, current, graph_id)
-        self._events.replace_segment_events(
+        return self._events.replace_segment_events(
             segment_id,
             self._extractor_version,
             events,
@@ -252,20 +257,23 @@ class EventDerivationService:
             at=self._clock.now(),
             provenance=current.provenance,
         )
-        return True
 
     def re_derive(self, scope: ReDeriveScope, *, limit: int) -> ReDeriveOutcome:
         """Derive ``scope``: its one segment, or up to ``limit`` of its current candidates.
-        ``derived`` counts the segments actually derived — a candidate gone by now, or one
-        with no resolvable graph pin, is not counted. A segment that is not visible is refused: no derive, no marker."""
+        ``derived`` counts the segments actually derived. If an attempted derive fails, re-read
+        candidacy for ``remaining``. A segment that is not visible is refused: no derive, no marker."""
         if scope.segment_id is not None:
             if not self._events.visible_segment_ids(segment_id=scope.segment_id):
                 return ReDeriveOutcome(derived=0, remaining=0, not_visible=True)
             pins = self.graph_pins_for([scope.segment_id])
-            return ReDeriveOutcome(derived=1 if self.derive_segment(scope.segment_id, pins) else 0, remaining=0)
+            derived = self.derive_segment(scope.segment_id, pins)
+            remaining = 0 if derived else int(scope.segment_id in self.candidate_segment_ids())
+            return ReDeriveOutcome(derived=int(derived), remaining=remaining)
         to_derive, remaining = scope.batch(self.candidate_segment_ids(chunk_id=scope.chunk_id), limit)
         pins = self.graph_pins_for(to_derive)
         derived = sum(1 for segment_id in to_derive if self.derive_segment(segment_id, pins))
+        if derived != len(to_derive):
+            remaining = len(self.candidate_segment_ids(chunk_id=scope.chunk_id))
         return ReDeriveOutcome(derived=derived, remaining=remaining)
 
 
@@ -299,8 +307,7 @@ class TenantEventDerivation:
             return False
         for batch in id_batches(candidates):
             self._derive_batch(batch, pins, tally)
-        self._events.drop_segments(stale, at=self._clock.now())
-        tally.dropped += len(stale)
+        tally.dropped += self._events.drop_segments(stale, at=self._clock.now())
         return True
 
     def _derive_batch(self, batch: Sequence[str], pins: GraphPins, tally: DerivationTally) -> None:

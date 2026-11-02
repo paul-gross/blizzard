@@ -301,14 +301,16 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         content_fingerprint: str,
         at: datetime,
         provenance: SegmentProvenance,
-    ) -> None:
+    ) -> bool:
         """One transaction: delete this pair's existing rows, write ``events`` each
         stamped with ``provenance``, and write the marker. Rows at *other*
-        extractor versions are untouched."""
+        extractor versions are untouched. Return false if the input is no longer current
+        or the segment is no longer visible."""
         ...
 
-    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> None:
+    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> int:
         """One transaction: delete every row and marker every one of ``segment_ids`` ever
         produced, at every extractor version, and write each segment's drop fact stamped
-        ``at``. A no-op for an empty set."""
+        ``at``. Only segments still invisible are processed; return their count, including
+        ids with no stored rows. An id with no segment record produces no drop fact."""
         ...

@@ -31,6 +31,7 @@ from blizzard.hub.domain.observability.analytics.events import (
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.transcript_locks import SEGMENT_VISIBILITY_LOCK
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -40,7 +41,7 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 #: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
 #: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
 _DROP_SEGMENTS_BATCH_SIZE = 1000
-_SEGMENT_LOCK_NAMESPACE = "transcript-events-segment"
+_SEGMENT_LOCK_NAMESPACE = SEGMENT_VISIBILITY_LOCK
 
 
 def _minted_chunk_ids_subselect(stmts: ScopedStatements) -> Select[Any]:
@@ -51,7 +52,10 @@ def _minted_chunk_ids_subselect(stmts: ScopedStatements) -> Select[Any]:
 
 
 def _visible_segment_ids_stmt(
-    stmts: ScopedStatements, chunk_id: str | None = None, segment_id: str | None = None
+    stmts: ScopedStatements,
+    chunk_id: str | None = None,
+    segment_id: str | None = None,
+    segment_ids: Sequence[str] | None = None,
 ) -> Select[Any]:
     """The tenant's visible segments; the superseded-pointer check is a correlated ``NOT EXISTS``
     over the same tenant's segments, since a segment id is runner-minted."""
@@ -68,6 +72,8 @@ def _visible_segment_ids_stmt(
         stmt = stmt.where(s.transcript_segments.c.chunk_id == chunk_id)
     if segment_id is not None:
         stmt = stmt.where(s.transcript_segments.c.segment_id == segment_id)
+    if segment_ids is not None:
+        stmt = stmt.where(s.transcript_segments.c.segment_id.in_(segment_ids))
     return stmt
 
 
@@ -76,17 +82,23 @@ def _derived_segment_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
 
 
 def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None) -> Select[Any]:
-    """Each visible segment's own ``content_digest`` and ``harness_version``
-    — the latter folds per shipped window, so a still-rejected re-offer that only
-    refreshes it still changes the fingerprint. No ``content`` column named — the
-    candidacy read's whole point. Ordered so a segment's rows arrive in range order."""
+    """Content-free fingerprint inputs, ordered by segment and range."""
     return (
         stmts.select(
             s.transcript_segments,
             s.transcript_segments.c.segment_id,
             s.transcript_segments.c.turn_range_start,
             s.transcript_segments.c.content_digest,
+            s.transcript_segments.c.chunk_id,
+            s.transcript_segments.c.node_id,
+            s.transcript_segments.c.epoch,
+            s.transcript_segments.c.spawn_generation,
+            s.transcript_segments.c.normalizer_version,
+            s.transcript_segments.c.harness_id,
             s.transcript_segments.c.harness_version,
+            s.transcript_segments.c.model,
+            s.transcript_segments.c.effort,
+            s.transcript_segments.c.rejected,
         )
         .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
@@ -275,22 +287,33 @@ def _delete_all_markers_for_segments_stmt(stmts: ScopedStatements, segment_ids: 
     )
 
 
-def fingerprint_from_parts(parts: Sequence[tuple[str, str | None]]) -> str:
-    digest = hashlib.sha256()
-    for content_digest_value, harness_version in parts:
-        digest.update(content_digest_value.encode("ascii"))
-        digest.update(b"\x00")
-        digest.update((harness_version or "").encode("utf-8"))
-        digest.update(b"\x01")
-    return digest.hexdigest()
-
-
 def content_fingerprint(records: Sequence[Any]) -> str:
-    """A deterministic fingerprint of a segment's own content plus its own
-    ``harness_version`` — content via each record's ``content_digest``,
-    harness_version folded in too since a still-rejected re-offer can refresh it with no
-    content change. Recomputing it never reads a content byte."""
-    return fingerprint_from_parts([(row.content_digest, row.harness_version) for row in records])
+    """Fingerprint every record's content digest and derivation context without reading content.
+
+    The versioned encoding makes old content-only markers candidates for re-derivation.
+    JSON preserves distinctions such as null versus an empty string and field boundaries.
+    """
+    parts = [
+        [
+            row.content_digest,
+            row.chunk_id,
+            row.node_id,
+            row.epoch,
+            row.spawn_generation,
+            row.normalizer_version,
+            row.harness_id,
+            row.harness_version,
+            row.model,
+            row.effort,
+            row.rejected,
+        ]
+        for row in records
+    ]
+    encoded = json.dumps(["segment-derivation-v2", parts], ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+_fingerprint_records = content_fingerprint
 
 
 def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
@@ -350,7 +373,7 @@ class TranscriptEventStore:
         candidates: list[str] = []
         for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
             visible_segment_ids.add(segment_id)
-            fingerprint = fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
+            fingerprint = content_fingerprint(list(rows))
             if is_candidate(markers.get(segment_id), fingerprint):
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
@@ -476,9 +499,13 @@ class TranscriptEventStore:
         content_fingerprint: str,
         at: datetime,
         provenance: SegmentProvenance,
-    ) -> None:
+    ) -> bool:
         with self._store.write("replace_segment_events") as conn:
             lock_keys(conn, _SEGMENT_LOCK_NAMESPACE, [segment_id])
+            visible = conn.execute(_visible_segment_ids_stmt(self._store, segment_id=segment_id)).first()
+            rows = conn.execute(_segment_contexts_stmt(self._store, [segment_id])).all()
+            if not visible or not rows or content_fingerprint != _fingerprint_records(rows):
+                return False
             conn.execute(_delete_events_stmt(self._store, segment_id, extractor_version))
             conn.execute(_delete_marker_stmt(self._store, segment_id, extractor_version))
             if events:
@@ -496,14 +523,24 @@ class TranscriptEventStore:
                     at=at,
                 )
             )
+            return True
 
-    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> None:
+    def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> int:
         if not segment_ids:
-            return
+            return 0
+        dropped = 0
         with self._store.write("drop_segments") as conn:
             ordered_ids = sorted(segment_ids)
             lock_keys(conn, _SEGMENT_LOCK_NAMESPACE, ordered_ids)
             for batch in itertools.batched(ordered_ids, _DROP_SEGMENTS_BATCH_SIZE):
+                visible = {
+                    row.segment_id
+                    for row in conn.execute(_visible_segment_ids_stmt(self._store, segment_ids=batch)).all()
+                }
+                batch = tuple(segment_id for segment_id in batch if segment_id not in visible)
+                if not batch:
+                    continue
+                dropped += len(batch)
                 # A segment with no stored record writes no drop fact: nothing to record it against.
                 first_by_segment: dict[str, Row[Any]] = {}
                 for row in conn.execute(_drop_identities_stmt(self._store, batch)).all():
@@ -524,6 +561,7 @@ class TranscriptEventStore:
                     )
                 conn.execute(_delete_all_events_for_segments_stmt(self._store, batch))
                 conn.execute(_delete_all_markers_for_segments_stmt(self._store, batch))
+        return dropped
 
 
 _transcript_event_store_conforms: type[IWriteTranscriptEvents] = TranscriptEventStore

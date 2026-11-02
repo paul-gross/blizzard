@@ -20,6 +20,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
@@ -105,18 +106,28 @@ def _event(chunk_id: str, turn: int, *, epoch: int = 1) -> TranscriptEvent:
 def _derive(
     engine: Engine, segment_id: str, at: datetime, *, events: int = 1, version: str = _V1, chunk_id: str = "ch_1"
 ) -> None:
-    TranscriptEventStore(hub_store_connections(engine)).replace_segment_events(
+    store = TranscriptEventStore(hub_store_connections(engine))
+    current = store.segment_derivation_input(segment_id)
+    assert current is not None
+    assert store.replace_segment_events(
         segment_id,
         version,
         [_event(chunk_id, turn) for turn in range(events)],
         complete=True,
-        content_fingerprint="fp",
+        content_fingerprint=current.content_fingerprint,
         at=at,
         provenance=_PROVENANCE,
     )
 
 
 def _drop(engine: Engine, segment_id: str, at: datetime) -> None:
+    scoped = hub_store_connections(engine)
+    with scoped.write("hide_segment") as conn:
+        conn.execute(
+            scoped.update(s.transcript_segments)
+            .where(s.transcript_segments.c.segment_id == segment_id)
+            .values(final=False)
+        )
     TranscriptEventStore(hub_store_connections(engine)).drop_segments(frozenset({segment_id}), at=at)
 
 

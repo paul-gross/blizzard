@@ -22,9 +22,11 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.observability.analytics.derivation import (
+    DerivationTally,
     EventDerivationReconciler,
     EventDerivationService,
     GraphPins,
+    ReDeriveScope,
     TenantEventDerivation,
 )
 from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ
@@ -766,6 +768,103 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
 
 
 # --- batched input decoding -----------------
+
+
+def test_convergence_counts_only_ids_still_invisible_at_drop(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    assert fixture.service.derive_segment("sg_1", fixture.service.graph_pins_for(["sg_1"]))
+    tenant = TenantEventDerivation(service=fixture.service, events=fixture.events, clock=fixture.clock)
+    tally = DerivationTally()
+
+    assert tenant.converge([], frozenset({"sg_1", "sg_missing"}), tally)
+    assert tally.dropped == 1
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is not None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("chunk_id", "ch_2"),
+        ("node_id", "nd_other"),
+        ("epoch", 2),
+        ("spawn_generation", 2),
+        ("normalizer_version", "other/1"),
+        ("harness_id", "other"),
+        ("harness_version", "other"),
+        ("model", "other"),
+        ("effort", "other"),
+    ],
+)
+def test_context_only_reoffer_invalidates_old_derivation_and_both_candidacy_reads(
+    fixture: _Fixture, field: str, value: object
+) -> None:
+    fixture.mint_chunk("ch_2")
+    record = _segment_record()
+    fixture.segments.insert_rejected(record, byte_count=10, reason="too_large", at=_NOW)
+    old = fixture.events.segment_derivation_input("sg_1")
+    assert old is not None
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    assert fixture.service.derive_input("sg_1", old, pins)
+    fixture.segments.update_still_rejected(
+        _segment_record(**{field: value}), byte_count=10, reason="too_large", at=_NOW
+    )
+    current = fixture.events.segment_derivation_input("sg_1")
+    assert current is not None and old.content_fingerprint != current.content_fingerprint
+    assert not fixture.service.derive_input("sg_1", old, pins)
+    assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == ["sg_1"]
+    assert any("sg_1" in read.candidate_segment_ids for read in fixture.corpus.candidacy(EXTRACTOR_VERSION).values())
+
+
+def test_context_only_change_rederives_existing_event_provenance(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    old = fixture.events.segment_derivation_input("sg_1")
+    assert old is not None
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    assert fixture.service.derive_input("sg_1", old, pins)
+    scoped = hub_store_connections(fixture.engine)
+    with scoped.write("change_context") as conn:
+        conn.execute(
+            scoped.update(s.transcript_segments).where(s.transcript_segments.c.segment_id == "sg_1").values(model="new")
+        )
+
+    assert not fixture.service.derive_input("sg_1", old, pins)
+    assert fixture.service.candidate_segment_ids() == ["sg_1"]
+    assert fixture.service.derive_segment("sg_1", pins)
+    assert [row.model for row in fixture.stored_events()] == ["new"]
+    assert fixture.service.candidate_segment_ids() == []
+
+
+def test_legacy_content_only_marker_is_a_candidate_for_both_reads(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    assert fixture.service.derive_segment("sg_1", fixture.service.graph_pins_for(["sg_1"]))
+    scoped = hub_store_connections(fixture.engine)
+    with scoped.write("old_marker") as conn:
+        conn.execute(
+            scoped.update(s.transcript_event_derivations)
+            .where(s.transcript_event_derivations.c.segment_id == "sg_1")
+            .values(content_fingerprint="legacy-content-only")
+        )
+    assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == ["sg_1"]
+    assert any("sg_1" in read.candidate_segment_ids for read in fixture.corpus.candidacy(EXTRACTOR_VERSION).values())
+
+
+@pytest.mark.parametrize("scope", [ReDeriveScope(), ReDeriveScope(chunk_id="ch_1"), ReDeriveScope(segment_id="sg_1")])
+def test_rederive_reports_candidate_remaining_after_context_changes_during_extraction(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch, scope: ReDeriveScope
+) -> None:
+    fixture.segments.insert_rejected(_segment_record(), byte_count=10, reason="too_large", at=_NOW)
+    original = fixture.events.replace_segment_events
+
+    def change_before_replace(*args: Any, **kwargs: Any) -> bool:
+        fixture.segments.update_still_rejected(
+            _segment_record(model="new-model"), byte_count=10, reason="too_large", at=_NOW
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(fixture.events, "replace_segment_events", change_before_replace)
+    outcome = fixture.service.re_derive(scope, limit=10)
+    assert (outcome.derived, outcome.remaining) == (0, 1)
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is None
 
 
 class _SpyEvents(TranscriptEventStore):

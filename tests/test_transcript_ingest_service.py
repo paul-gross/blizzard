@@ -4,8 +4,11 @@ ordering, the three independent caps, and truncation recording."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier
 from typing import cast
 
 import pytest
@@ -22,11 +25,13 @@ from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     SegmentSummary,
     TranscriptCaps,
+    TranscriptChunkMissing,
     TranscriptIngestService,
     TranscriptSlice,
 )
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard, RunnerRetired
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import transcript_segment_store
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import HubHarness, build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
 
@@ -82,6 +87,226 @@ def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_
     assert replay.applied == []
     assert replay.already_applied == [1, 2]
     assert replay.high_water == 2
+
+
+def test_failed_high_water_write_rolls_back_segment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected failure")
+
+    monkeypatch.setattr(transcript_segment_store, "_insert_high_water_stmt", fail)
+    with pytest.raises(RuntimeError, match="injected failure"):
+        service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+
+    assert store.high_water("r1") == 0
+    assert store.natural_key_state("sg_1", 0) == "absent"
+
+
+@pytest.mark.parametrize("oversized", [False, True])
+@pytest.mark.parametrize("capped_prefix", [False, True])
+def test_missing_chunk_rolls_back_prefix_until_chunk_arrives(
+    tmp_path: Path, oversized: bool, capped_prefix: bool
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    batch = [
+        _record(
+            1,
+            turn_range_start=0,
+            turn_range_end=0,
+            turns_json="x" * (RECORD_MAX_BYTES + 1) if capped_prefix else "[]",
+        ),
+        _record(
+            2,
+            turn_range_start=0,
+            turn_range_end=0,
+            segment_id="sg_missing",
+            chunk_id="ch_missing",
+            turns_json="x" * (RECORD_MAX_BYTES + 1) if oversized else "[]",
+        ),
+        _record(3, turn_range_start=1, turn_range_end=1),
+    ]
+
+    for _ in range(2):
+        with pytest.raises(TranscriptChunkMissing) as exc:
+            service.ingest("r1", batch)
+        assert (exc.value.chunk_id, exc.value.seq) == ("ch_missing", 2)
+        assert store.high_water("r1") == 0
+        assert store.natural_key_state("sg_1", 0) == "absent"
+        assert store.natural_key_state("sg_1", 1) == "absent"
+        assert store.natural_key_state("sg_missing", 0) == "absent"
+
+    with hub.engine.begin() as conn:
+        seed_chunk(conn, "ch_missing", graph_id="gr_1", at=_T0)
+    result = service.ingest("r1", batch)
+    assert result.already_applied == []
+    assert result.applied == [seq for seq, capped in [(1, capped_prefix), (2, oversized), (3, False)] if not capped]
+    assert result.capped == [seq for seq, capped in [(1, capped_prefix), (2, oversized)] if capped]
+    assert result.high_water == 3
+
+
+def test_missing_chunk_does_not_prevent_replay_of_accepted_natural_key(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+
+    result = service.ingest("r1", [_record(2, turn_range_start=0, turn_range_end=0, chunk_id="ch_missing")])
+
+    assert result.applied == [2]
+    assert result.high_water == 2
+    assert len(store.records_for_segment("ch_1", "sg_1")) == 1
+
+
+def test_missing_first_chunk_does_not_commit_or_ack_later_records(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    batch = [
+        _record(1, turn_range_start=0, turn_range_end=0, chunk_id="ch_missing"),
+        _record(2, turn_range_start=1, turn_range_end=1),
+    ]
+    with pytest.raises(TranscriptChunkMissing):
+        service.ingest("r1", batch)
+    assert store.high_water("r1") == 0
+    assert store.natural_key_state("sg_1", 1) == "absent"
+
+
+def test_unexpected_later_write_failure_rolls_back_the_whole_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    original = transcript_segment_store._insert_accepted_stmt
+
+    def fail_on_second(stmts, record, **kwargs):
+        if record.turn_range_start == 1:
+            raise RuntimeError("unexpected write failure")
+        return original(stmts, record, **kwargs)
+
+    monkeypatch.setattr(transcript_segment_store, "_insert_accepted_stmt", fail_on_second)
+    with pytest.raises(RuntimeError, match="unexpected write failure"):
+        service.ingest(
+            "r1", [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
+        )
+    assert store.high_water("r1") == 0
+    assert store.natural_key_state("sg_1", 0) == "absent"
+
+
+def test_retirement_is_rechecked_inside_the_ingest_transaction(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.runner_lifecycle_facts).values(
+                stamp(s.runner_lifecycle_facts, runner_id="r1", retired=True, set_at=_T0, set_by="op")
+            )
+        )
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+
+    with pytest.raises(RunnerRetired):
+        service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+    assert store.high_water("r1") == 0
+    assert store.natural_key_state("sg_1", 0) == "absent"
+
+
+@pytest.mark.parametrize("direct", [False, True])
+def test_refresh_locks_old_and_new_visibility_and_decision_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, direct: bool
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    old = _record(1, turn_range_start=0, turn_range_end=0, supersedes="sg_old", chunk_id="ch_old", runner_id="r_old")[1]
+    store.insert_rejected(old, byte_count=1, reason="too_large", at=_T0)
+    # Another row of this segment is not being refreshed; its pointer is not an old target.
+    other = _record(2, turn_range_start=1, turn_range_end=1, supersedes="sg_unrelated")[1]
+    store.insert_rejected(other, byte_count=1, reason="too_large", at=_T0)
+    record = _record(3, turn_range_start=0, turn_range_end=0, supersedes="sg_new")[1]
+    calls: list[tuple[str, list[str]]] = []
+    original = transcript_segment_store.lock_keys
+
+    def capture(conn, namespace, keys):
+        calls.append((namespace, sorted(keys)))
+        original(conn, namespace, keys)
+
+    monkeypatch.setattr(transcript_segment_store, "lock_keys", capture)
+    if direct:
+        store.update_to_accepted(record, byte_count=record.byte_count, codec="zlib", at=_T0)
+    else:
+        service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+        assert service.ingest("r1", [(3, record)]).applied == [3]
+
+    assert ("transcript-natural-key", ['["sg_1", 0]']) in calls
+    assert ("transcript-chunk-budget", ["ch_1", "ch_old"]) in calls
+    assert ("transcript-runner-budget", ["r1", "r_old"]) in calls
+    assert ("transcript-events-segment", ["sg_1", "sg_new", "sg_old"]) in calls
+
+
+def test_ingest_locks_chunks_before_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    calls: list[str] = []
+    chunk_lock = transcript_segment_store.lock_chunk_row
+    registry_lock = transcript_segment_store.lock_host_registry
+
+    def chunk(conn, chunk_id):
+        calls.append("chunk")
+        chunk_lock(conn, chunk_id)
+
+    def registry(conn):
+        calls.append("registry")
+        registry_lock(conn)
+
+    monkeypatch.setattr(transcript_segment_store, "lock_chunk_row", chunk)
+    monkeypatch.setattr(transcript_segment_store, "lock_host_registry", registry)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+    assert calls == ["chunk", "registry"]
+
+
+@pytest.mark.parametrize("same_key", [False, True])
+def test_competing_ingests_share_natural_key_and_chunk_budget(tmp_path: Path, same_key: bool) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS, store=store, clock=hub.clock, caps=TranscriptCaps(chunk_budget_max_bytes=50)
+    )
+    barrier = Barrier(2)
+
+    def ingest(runner: str, segment: str):
+        barrier.wait(timeout=5)
+        return service.ingest(
+            runner,
+            [
+                _record(
+                    1, turn_range_start=0, turn_range_end=0, runner_id=runner, segment_id=segment, turns_json="x" * 40
+                )
+            ],
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(ingest, "r1", "sg_1")
+        second = pool.submit(ingest, "r2", "sg_1" if same_key else "sg_2")
+        results = [first.result(timeout=10), second.result(timeout=10)]
+
+    assert sum(len(result.applied) for result in results) == (2 if same_key else 1)
+    assert sum(len(result.capped) for result in results) == (0 if same_key else 1)
+    assert store.chunk_stored_bytes("ch_1") == 40
+    assert store.high_water("r1") == store.high_water("r2") == 1
 
 
 def test_a_record_shipped_under_another_holders_lease_is_refused_unstored_and_advances_the_mark(
@@ -381,6 +606,9 @@ class _FakeTranscriptStore:
         self.chunk_bytes = 0
         self.runner_bytes = 0
 
+    def locked_ingest(self, runner_id: str, records: Sequence[tuple[int, TranscriptSlice]]):
+        return nullcontext(self)
+
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentSummary]:
         raise NotImplementedError
 
@@ -395,6 +623,9 @@ class _FakeTranscriptStore:
 
     def high_water(self, runner_id: str) -> int:
         return 0
+
+    def existing_chunks(self, chunk_ids: Sequence[str]) -> set[str]:
+        return set(chunk_ids)
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         pass

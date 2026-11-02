@@ -22,6 +22,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
@@ -94,18 +95,27 @@ class _Events:
 
     def derive_events(self, segment_id: str, events: list[TranscriptEvent], version: str = EXTRACTOR_VERSION) -> None:
         self.hub.clock.advance(timedelta(seconds=1))
-        TranscriptEventStore(hub_store_connections(self.hub.engine)).replace_segment_events(
+        store = TranscriptEventStore(hub_store_connections(self.hub.engine))
+        current = store.segment_contexts([segment_id])[segment_id]
+        assert store.replace_segment_events(
             segment_id,
             version,
             events,
             complete=True,
-            content_fingerprint="fp",
+            content_fingerprint=current.content_fingerprint,
             at=self.hub.clock.now(),
             provenance=_PROVENANCE,
         )
 
     def drop(self, segment_id: str) -> None:
         self.hub.clock.advance(timedelta(seconds=1))
+        scoped = hub_store_connections(self.hub.engine)
+        with scoped.write("hide_segment") as conn:
+            conn.execute(
+                scoped.update(s.transcript_segments)
+                .where(s.transcript_segments.c.segment_id == segment_id)
+                .values(final=False)
+            )
         TranscriptEventStore(hub_store_connections(self.hub.engine)).drop_segments(
             frozenset({segment_id}), at=self.hub.clock.now()
         )
@@ -377,6 +387,11 @@ def test_events_current_shows_only_what_a_segment_counts_now(tmp_path: Path) -> 
     assert _subjects(now, "sg_c") == []
 
     # sg_c derived again after its drop counts again
+    scoped = hub_store_connections(world.hub.engine)
+    with scoped.write("restore_visibility") as conn:
+        conn.execute(
+            scoped.update(s.transcript_segments).where(s.transcript_segments.c.segment_id == "sg_c").values(final=True)
+        )
     world.derive("sg_c", 3)
     world.sweep()
     assert _subjects(world.view("events_current"), "sg_c") == [f"/work/src/f{n}.py" for n in range(3)]
