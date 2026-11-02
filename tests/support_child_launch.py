@@ -4,6 +4,9 @@ Each helper reads the daemon env when called, so a test's ``monkeypatch.setenv``
 
 from __future__ import annotations
 
+import contextlib
+import os
+
 from blizzard.runner.environments.factory import WorkspaceLaunch
 from blizzard.runner.environments.internal.basic_provider import CLONE_TIMEOUT
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
@@ -33,3 +36,13 @@ def version_probe() -> VersionProbe:
 def env_git(timeout: float = CLONE_TIMEOUT) -> SubprocessEnvGit:
     """The workspace bindings' git over the real driver and :func:`tool_env`, at the basic binding's bound."""
     return SubprocessEnvGit(children=CHILDREN, env=tool_env(), timeout=timeout)
+
+
+def wait_for_exit(pid: int) -> None:
+    """Block until the spawned child ``pid`` has exited.
+
+    The adapter hands back a pid, not the ``Popen`` that launched it, so the launching ``Popen`` is garbage-collected
+    while the child runs and lands on ``subprocess``'s private list of unreaped children. Any later ``Popen`` in the
+    same process, from another test or thread, reaps it. Our wait then finds no child, which means it already exited."""
+    with contextlib.suppress(ChildProcessError):
+        os.waitpid(pid, 0)

@@ -7,7 +7,6 @@ monkeypatched ``subprocess.Popen``; component tests launch a fake ``opencode`` b
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from concurrent.futures import Executor
@@ -60,7 +59,7 @@ from blizzard.runner.process.internal.linux_process_probe import LinuxProcessPro
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support_child_launch import CHILDREN, version_probe, wait_for_exit
 from tests.support_opencode_binary import worker_binary
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
@@ -388,16 +387,16 @@ def test_real_child_process_receives_effective_bundle_on_every_launch(tmp_path: 
     fresh = adapter.spawn(envelope, preamble, None)
     fresh.confirm_durable()
     fresh_handle = fresh.await_identity(5)
-    os.waitpid(fresh_handle.pid, 0)
+    wait_for_exit(fresh_handle.pid)
     resumed = adapter.spawn(envelope, preamble, None, resume_from=fresh_handle.session_id)
     resumed.confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
     nudge = adapter.resume_with_message(str(workdir), fresh_handle.session_id, "continue")
     nudge.confirm_durable()
-    os.waitpid(nudge.pid, 0)
+    wait_for_exit(nudge.pid)
     judge = adapter.judge(str(workdir), fresh_handle.session_id, "assess", str(tmp_path / "judge.jsonl"))
     judge.confirm_durable()
-    os.waitpid(judge.pid, 0)
+    wait_for_exit(judge.pid)
 
     recorded = [json.loads(line) for line in capture.read_text().splitlines()]
     assert len(recorded) == 4
@@ -704,7 +703,7 @@ def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path, spa
     assert handle.session_id == "ses_minted_abc"
     assert handle.pid > 0
     assert handle.process_start_time
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
 
 @pytest.mark.component
@@ -724,7 +723,7 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path, spawn_e
 
     assert handle.session_id == "ses_self_assigned"
     assert handle.session_id != "hint-never-honored"
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
 
 @pytest.mark.component
@@ -747,7 +746,7 @@ def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path, spawn_ex
     )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert "diagnostic-sentinel" in stderr_path.read_text()
 
@@ -982,7 +981,7 @@ def test_resume_spawn_never_performs_the_handshake(tmp_path: Path, spawn_executo
 
     handle = pending.await_identity(0)  # already a `WorkerHandle` — trivial phase two
     assert handle.session_id == "ses_prior"
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
 
 @pytest.mark.component
@@ -996,7 +995,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(
 
     judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
     judge_handle.confirm_durable()  # real component tests stand in for `Judgement._elicit`'s own call
-    os.waitpid(judge_handle.pid, 0)
+    wait_for_exit(judge_handle.pid)
     output = Path(workdir / "judge-output.json").read_text()
     assert adapter.parse_verdict(output) == "pass"
 
@@ -1004,7 +1003,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(
         str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
     )
     resumed.confirm_durable()  # component tests stand in for `_wake`'s call (src/blizzard/runner/lifecycle/dormant.py)
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
     assert (workdir / "nudge.out").exists()
 
 
@@ -1025,7 +1024,7 @@ def test_spawn_launches_through_the_process_launcher_with_its_own_group(
 
     assert handle.pgid is not None
     assert handle.pgid == handle.pid  # `start_new_session=True`'s own POSIX contract
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
 
 # --------------------------------------------------------------------------- #

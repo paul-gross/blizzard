@@ -6,7 +6,6 @@ parsed output with and without a plugin reference. Neither executes the plugin h
 
 from __future__ import annotations
 
-import os
 import re
 from concurrent.futures import Executor
 from pathlib import Path
@@ -32,7 +31,7 @@ from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.runner_fakes import make_envelope
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support_child_launch import CHILDREN, version_probe, wait_for_exit
 from tests.support_opencode_binary import worker_binary
 
 _BLIZZARD_ENV_NAME = re.compile(r"BLIZZARD_[A-Z_]+")
@@ -146,7 +145,7 @@ def test_a_plugin_reference_does_not_change_fake_binary_output_parsing(
         pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
         pending.confirm_durable()  # stands in for `Spawner.spawn`'s own call
         handle = pending.await_identity(5.0)
-        os.waitpid(handle.pid, 0)
+        wait_for_exit(handle.pid)
         output = stdout_path.read_text()
         return adapter.parse_verdict(output), adapter.parse_assessment(output), adapter.has_usable_output(output)
 
