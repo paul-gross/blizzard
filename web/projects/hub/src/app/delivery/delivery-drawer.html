@@ -1,0 +1,113 @@
+@let r = row();
+@let v = view();
+<section class="drawer" data-testid="delivery-drawer" aria-labelledby="delivery-drawer-heading">
+  <header class="head">
+    <div class="who">
+      <div class="title-line">
+        <span class="id" id="delivery-drawer-heading">{{ r.chunk.shortId }}</span>
+        @for (line of r.chunk.lines; track $index) {
+          @if (line.label; as label) {
+            <span class="ref">{{ label }}</span>
+          }
+          @if (line.title; as title) {
+            <span class="title" [title]="title">{{ title }}</span>
+          }
+        }
+      </div>
+      @if (r.step; as step) {
+        <span class="dim">{{ step }}</span>
+      }
+    </div>
+    <span class="pipe">
+      @for (stage of stages; track stage; let i = $index) {
+        @if (i > 0) {
+          <span class="connector" [class.lit]="i <= r.stage"></span>
+        }
+        <span class="stage" [class.lit]="i <= r.stage" [class.at]="i === r.stage" [class.bad]="r.bounce !== null && i === r.stage">{{ stage }}</span>
+      }
+    </span>
+    <a class="open" data-testid="delivery-drawer-open" [routerLink]="'/board/chunk/' + r.chunk.chunkId | lensLink">Open chunk ↗</a>
+  </header>
+
+  @if (pending()) {
+    <div class="body">
+      <div class="side"><fleet-kit-skeleton variant="card" [rows]="2" /></div>
+      <div class="main"><fleet-kit-skeleton [rows]="10" /></div>
+    </div>
+  } @else if (failed() || !v) {
+    <p class="empty">Couldn't read this chunk's detail.</p>
+  } @else {
+    <div class="summary" data-testid="delivery-drawer-summary">
+      <span><b>{{ v.summary.attempts }}</b> submission{{ v.summary.attempts === 1 ? '' : 's' }}</span>
+      <span><b [class.bad]="v.summary.bounces > 0">{{ v.summary.bounces }}</b> bounce{{ v.summary.bounces === 1 ? '' : 's' }}</span>
+      @if (v.summary.span; as span) {
+        <span><b>{{ span }}</b> {{ v.summary.spanLanded ? 'submitted → landed' : 'since first submission' }}</span>
+      }
+      <span><b>{{ v.summary.reposLanded }}/{{ v.summary.reposTotal }}</b> repos landed</span>
+    </div>
+    <div class="body">
+      <div class="side">
+        <h3 class="h">Repositories</h3>
+        @for (repo of v.repos; track repo.forge) {
+          <div class="repo" data-testid="delivery-drawer-repo" [style.--tone]="toneColor(repo.tone)">
+            <div class="repo-head">
+              <span class="repo-name" [title]="repo.forge">{{ repo.name }}</span>
+              <span class="repo-state">{{ repo.state }}</span>
+            </div>
+            @if (repo.branch; as branch) {
+              <span class="dim mono" [title]="branch">{{ branch }}</span>
+            }
+            <span class="repo-links">
+              @for (pr of repo.prs; track pr.text) {
+                <a [href]="pr.url" target="_blank" rel="noopener noreferrer">PR {{ pr.text }}</a>
+              }
+              @if (repo.commit; as commit) {
+                <a class="commit" [href]="commit.url" target="_blank" rel="noopener noreferrer">{{ commit.text }}</a>
+              }
+            </span>
+            @if (repo.lastAttempt; as last) {
+              <span class="dim" [title]="last.title">last attempt {{ last.outcome }} {{ last.age }}</span>
+            }
+          </div>
+        } @empty {
+          <p class="empty">Not delivering to any repository yet.</p>
+        }
+      </div>
+      <div class="main">
+        <h3 class="h">Delivery history</h3>
+        <ol class="history">
+          @for (entry of v.history; track entry.id) {
+            <li class="entry" data-testid="delivery-history-entry" [style.--tone]="toneColor(entry.tone)">
+              <span class="when" [title]="entry.whenTitle">{{ entry.when }}</span>
+              <span class="age">{{ entry.age }}</span>
+              <span class="what">
+                <span class="text">{{ entry.text }}</span>
+                @if (entry.repos; as repos) {
+                  <span class="dim"> · {{ repos }}</span>
+                }
+                @if (entry.logKey; as key) {
+                  <a class="log" [routerLink]="'/board/chunk/' + r.chunk.chunkId + '/artifact/' + key | lensLink">log</a>
+                }
+              </span>
+              @if (entry.detail; as detail) {
+                <span class="detail">{{ detail }}</span>
+              }
+              @if (entry.step; as step) {
+                <span class="detail">{{ step.name }} exited {{ step.exitCode ?? '?' }}</span>
+                @if (step.outputTail) {
+                  <pre class="tail" [class.open]="isUnfolded(entry.id)">{{ tail(entry.id, step) }}</pre>
+                  @if (step.long) {
+                    <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the output, not an action: the kit button's bordered chrome would outweigh it. -->
+                    <button type="button" class="fold" (click)="toggle(entry.id)">{{ isUnfolded(entry.id) ? 'show less' : 'show all' }}</button>
+                  }
+                }
+              }
+            </li>
+          } @empty {
+            <li class="empty">No delivery yet.</li>
+          }
+        </ol>
+      </div>
+    </div>
+  }
+</section>

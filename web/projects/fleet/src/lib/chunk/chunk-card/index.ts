@@ -5,6 +5,7 @@ export {
   cardShowsStatus,
   type ChunkCardView,
   finishedWord,
+  foldTitles,
   stepLabel,
   type WorkLine,
   workLines,

@@ -1,0 +1,248 @@
+:host {
+  display: block;
+  min-height: 0;
+}
+.drawer {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface-resting);
+  font-size: var(--fs-xs);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.id {
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+.ref {
+  flex: none;
+  color: var(--cyan);
+}
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.dim {
+  color: var(--label);
+}
+.mono {
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pipe {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding-top: 2px;
+}
+.stage {
+  color: color-mix(in srgb, var(--label) 45%, transparent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.connector {
+  width: 16px;
+  margin: 0 4px;
+  border-top: 1px solid color-mix(in srgb, var(--label) 35%, transparent);
+}
+.connector.lit {
+  border-top-color: color-mix(in srgb, var(--cyan) 45%, transparent);
+}
+.stage.lit {
+  color: var(--text);
+}
+.stage.at {
+  color: var(--cyan);
+  font-weight: 700;
+}
+.stage.at.bad {
+  color: var(--red);
+}
+.open {
+  flex: none;
+  padding-top: 2px;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.open:hover,
+.repo-links a:hover,
+.log:hover {
+  text-decoration: underline;
+}
+.summary {
+  display: flex;
+  gap: 18px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label);
+}
+.summary b {
+  font-weight: normal;
+  color: var(--snow);
+}
+.summary b.bad {
+  color: var(--red);
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+}
+.side,
+.main {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid var(--line);
+}
+.h {
+  margin: 0 0 4px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  font-weight: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.repo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-left: 2px solid var(--tone);
+  background: var(--surface-hover);
+}
+.repo-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.repo-name {
+  color: var(--snow);
+}
+.repo-state {
+  color: var(--tone);
+  white-space: nowrap;
+}
+.repo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.repo-links a,
+.log {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.commit {
+  color: var(--amber-hi);
+}
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.entry {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 3px 0 3px 8px;
+  border-left: 2px solid var(--tone);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.when {
+  color: var(--text);
+  text-align: right;
+}
+.age {
+  color: var(--label);
+}
+.what {
+  min-width: 0;
+}
+.text {
+  color: var(--tone);
+}
+.log {
+  margin-left: 8px;
+}
+.detail,
+.tail,
+.fold {
+  grid-column: 3;
+}
+.detail {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.tail {
+  margin: 2px 0;
+  padding: 4px 6px;
+  max-height: calc(12 * 1.35em + 8px);
+  overflow: hidden;
+  background: black;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.tail.open {
+  max-height: none;
+}
+.fold {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.empty {
+  margin: 6px 10px;
+  color: var(--label);
+}
+.history .empty,
+.side .empty {
+  margin: 2px 0;
+}

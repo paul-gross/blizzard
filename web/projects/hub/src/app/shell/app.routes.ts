@@ -47,6 +47,8 @@ export const VIEW_ROUTES: Routes = [
     path: 'board/chunk/:chunkId',
     loadChildren: () => import('../board/chunk/chunk-page.routes').then((m) => m.CHUNK_PAGE_ROUTES),
   },
+  // The Delivery tab: every flow's line, open changes, bounces, and recent landings, full width.
+  { path: 'delivery', loadComponent: () => import('../delivery/delivery-page').then((m) => m.DeliveryPage) },
   { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },

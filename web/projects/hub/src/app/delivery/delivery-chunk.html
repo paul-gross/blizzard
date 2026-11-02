@@ -1,0 +1,23 @@
+@let chunk = ref();
+<div class="chunk" data-testid="delivery-chunk" [attr.data-chunk]="chunk.chunkId">
+  @for (line of fold().shown; track $index) {
+    <span class="item">
+      @if (line.label; as label) {
+        <span class="ref">{{ label }}</span>
+      }
+      @if (chunk.titlesPending) {
+        <fleet-kit-skeleton class="title-skeleton" [rows]="1" />
+      } @else if (line.title; as title) {
+        <span class="title" [title]="title">{{ title }}</span>
+      }
+    </span>
+  } @empty {
+    <span class="ref">{{ chunk.shortId }}</span>
+  }
+</div>
+@if (fold().hidden > 0 || expanded()) {
+  <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
+  <button type="button" class="fold" data-testid="delivery-chunk-fold" [attr.aria-expanded]="expanded()" (click)="toggleFold()">
+    {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
+  </button>
+}

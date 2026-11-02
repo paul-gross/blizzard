@@ -908,6 +908,7 @@ const HUB_LAYERS = {
   core: [],
   admin: [],
   board: ['graphs', 'runners'],
+  delivery: ['board', 'graphs'],
   demo: [],
   events: [],
   graphs: [],
@@ -932,6 +933,7 @@ const HUB_LAYERS = {
   shell: [
     'admin',
     'board',
+    'delivery',
     'demo',
     'events',
     'garden',
