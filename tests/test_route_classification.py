@@ -379,6 +379,7 @@ FLEET: set[tuple[str, str]] = {
     ("POST", "/api/fleet/runners"),
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"),
     ("GET", "/api/fleet/runners/{runner_id}"),
+    ("GET", "/api/fleet/runners/{runner_id}/decisions"),
     ("POST", "/api/fleet/transcripts"),  # the transcript lane's own push
     # A lease's own read-back of its shipped segments, confined by its own always-raising
     # ownership check rather than `assert_owns`.

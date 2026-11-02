@@ -23,6 +23,7 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.control import _GateDecision, _gates_line, _UnenforceableGate, gate_decision_lines
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -139,6 +140,11 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
 def _no_hub(*allow_base_urls: str) -> Bound:
     """Fail loudly if the CLI verb reaches for the hub — it must never."""
     return bind_local_only(allow_base_urls=allow_base_urls)
+
+
+def _screen(output: str) -> list[str]:
+    """What `status` prints, less the structured log lines the local API emits when its forward to the hub finds none."""
+    return [line for line in output.splitlines() if not line.startswith('{"')]
 
 
 @pytest.mark.component
@@ -285,7 +291,7 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(tmp_path: Path) 
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    headline = result.output.splitlines()[0]
+    headline = _screen(result.output)[0]
     assert headline.startswith("runner r-one (rn_1)  workspace="), headline
     assert "tenant=" not in result.output
 
@@ -304,7 +310,7 @@ def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path) -> N
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert result.output.splitlines()[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
+    assert _screen(result.output)[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
 
 
 @pytest.mark.component
@@ -705,7 +711,7 @@ def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(tmp_path:
 
     for result in results:
         assert result.exit_code == 0, result.output
-    assert results[1].output == results[0].output == results[2].output
+    assert _screen(results[1].output) == _screen(results[0].output) == _screen(results[2].output)
 
 
 @pytest.mark.component
@@ -786,3 +792,53 @@ def test_a_name_shared_by_two_runners_fails_naming_their_ids(tmp_path: Path, mon
     assert "matches several runners" in result.output
     assert "rn_a" in result.output and "rn_b" in result.output
     assert paths == ["/api/host/runners"]
+
+
+@pytest.mark.unit
+def test_the_gates_line_annotates_each_gate_the_hub_flagged() -> None:
+    flags: list[_UnenforceableGate] = [{"node": "deliver", "reason": "hub-executed"}]
+
+    assert _gates_line(["build", "deliver"], flags) == "build, deliver (not enforceable: hub-executed)"
+
+
+@pytest.mark.unit
+def test_the_gates_line_is_plain_until_a_hub_that_flags_has_answered() -> None:
+    assert _gates_line(["build", "deliver"], None) == "build, deliver"
+    assert _gates_line([], []) == "none"
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_lists_each_open_decision() -> None:
+    decisions: list[_GateDecision] = [
+        {"chunk_id": "ch_1", "node_name": "build", "submitted_at": "2026-07-16T12:00:00Z"}
+    ]
+
+    assert gate_decision_lines(decisions) == [
+        "",
+        "gate decisions (1):",
+        "  chunk=ch_1  node=build  parked at 2026-07-16T12:00:00Z",
+    ]
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_counts_none() -> None:
+    assert gate_decision_lines([]) == ["", "gate decisions (0):"]
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_is_one_line_when_the_hub_could_not_answer() -> None:
+    assert gate_decision_lines(None) == ["", "gate decisions: hub unreachable"]
+
+
+@pytest.mark.component
+def test_status_renders_every_section_with_the_hub_unreachable_and_reports_the_decisions_as_unreachable(
+    tmp_path: Path,
+) -> None:
+    root = init_runner_home(tmp_path)
+    bound = _no_hub()
+    with serve_local_api(root):
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "gate decisions" in result.output
+    assert "open asks (0):" in result.output

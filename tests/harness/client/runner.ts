@@ -7,6 +7,7 @@ import type {
   AskListResponse,
   AskRequest,
   AskResponse,
+  OpenDecisionsResponse,
   HarnessHealthListResponse,
   OpenTakeoverListResponse,
   TakeoverOpenResponse,
@@ -61,6 +62,8 @@ export interface RunnerClient {
   facts(options?: { limit?: number }): Promise<ApiResponse<FactListResponse>>;
   /** `GET …/api/asks?open=true`: the questions workers have asked and no one has answered. */
   asks(): Promise<ApiResponse<AskListResponse>>;
+  /** `GET …/api/gate-decisions`: the open gate decisions this runner imposed, read through the hub. */
+  gateDecisions(): Promise<ApiResponse<OpenDecisionsResponse>>;
   /** `POST …/api/leases/{id}/asks`: a question put as the lease's worker; `headers` act as that worker (`workerHeaders`). */
   ask(leaseId: string, question: string, options: AskRequest['options'], headers: Record<string, string>): Promise<ApiResponse<AskResponse>>;
   /** `GET …/api/takeovers`: the takeovers a person has open. */
@@ -215,6 +218,7 @@ export function runnerHostApi(options: {
         transcript: (chunkId, segmentId) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/transcripts/${encodeURIComponent(segmentId)}`),
         facts: (factOptions = {}) => raw.get('/api/facts', factOptions.limit === undefined ? {} : { params: { limit: factOptions.limit } }),
         asks: () => raw.get('/api/asks', { params: { open: 'true' } }),
+        gateDecisions: () => raw.get('/api/gate-decisions'),
         ask: (leaseId, question, askOptions, headers) => raw.post(`/api/leases/${encodeURIComponent(leaseId)}/asks`, { data: { question, options: askOptions }, headers }),
         takeovers: () => raw.get('/api/takeovers'),
         openTakeover: (chunkId, takeoverOptions = {}) => raw.post(`/api/chunks/${encodeURIComponent(chunkId)}/takeovers`, { data: { force: takeoverOptions.force ?? false } }),

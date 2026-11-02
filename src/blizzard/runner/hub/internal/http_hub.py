@@ -78,6 +78,7 @@ from blizzard.runner.hub.client import (
     TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
+    UnenforceableGate,
     VersionRefusal,
 )
 from blizzard.runner.hub.held_token import ICurrentHubToken
@@ -401,6 +402,11 @@ class HttpHubClient:
             window=(
                 HubVersionWindow(floor=reply.window.floor, ceiling=reply.window.ceiling)
                 if reply.window is not None
+                else None
+            ),
+            unenforceable_gates=(
+                tuple(UnenforceableGate(node=g.node, reason=g.reason) for g in reply.unenforceable_gates)
+                if reply.unenforceable_gates is not None
                 else None
             ),
         )

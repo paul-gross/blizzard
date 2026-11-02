@@ -14,7 +14,7 @@ from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.fleet import FleetSummaryView
-from blizzard.wire.runner import VersionWindowView
+from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -177,6 +177,8 @@ class RunnerStatusView(WireModel):
     last_tick_at: str | None
     #: The node names this runner's own loaded configuration holds for a human decision.
     gates: list[str] = []
+    #: The gates the hub last reported as not enforceable; ``None`` until a hub that reports them answers.
+    unenforceable_gates: list[UnenforceableGateView] | None = None
     #: The identity verdict; ``None`` from a runner with no loop checking it.
     identity: IdentityVerdictView | None = None
     #: The projects the runner serves, as configured and as its hub last answered them; ``None`` when neither its

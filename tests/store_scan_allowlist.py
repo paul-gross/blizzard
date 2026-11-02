@@ -28,6 +28,7 @@ from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IRead
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
+from blizzard.hub.domain.graph.model import IReadNodeExecutors
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
@@ -358,6 +359,14 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         200,
         "every invitation one tenant has issued, read whole on its tenant key — the tenant's invitation list is what "
         "`invite list` shows, bounded by the invitations its admins hand out; a lookup by id or token uses its own key.",
+    ),
+    MethodScopedAllowance(
+        IReadNodeExecutors,
+        "executors_by_node_name",
+        "graph_nodes",
+        200,
+        "every node of one tenant's non-retired graphs, read whole on its tenant key — the executor census a registry "
+        "read classifies a runner's gates against; bounded by the tenant's graph definitions, never its chunk volume.",
     ),
     # --- named-index walks by design ----------------------------------------------------
     IndexWalkAllowance(IReadAnalyticsEventQueries, "counts_by_agent_type", ("transcript_events",), _ANALYTICS_REASON),

@@ -969,6 +969,15 @@ class IReadGraphBodies(Protocol):
         ...
 
 
+class IReadNodeExecutors(Protocol):
+    """The executor census: where each node name runs, across the tenant's graphs."""
+
+    def executors_by_node_name(self) -> dict[str, frozenset[Executor]]:
+        """Node name to the executors it has across every non-retired graph in the tenant, answered in one statement.
+        A name no non-retired graph has is absent."""
+        ...
+
+
 class IReadGraphRepository(IReadManyGraphs, Protocol):
     """Read-only graph access."""
 

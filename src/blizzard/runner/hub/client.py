@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -493,9 +494,18 @@ class HubVersionWindow:
 
 @domain_model
 @dataclass(frozen=True)
+class UnenforceableGate:
+    """A gate the hub reports as not enforceable, with its reason as the hub named it."""
+
+    node: str
+    reason: UnenforceableGateReason | Unrecognized
+
+
+@domain_model
+@dataclass(frozen=True)
 class RegistrationReply:
     """The hub's reply to a successful registration. ``tenant_*``, ``projects`` (one per declared entry as the hub
-    resolved it), ``hub_version`` and ``window`` are ``None`` from a hub that predates them."""
+    resolved it), ``hub_version``, ``window`` and ``unenforceable_gates`` are ``None`` from a hub that predates them."""
 
     runner_id: str
     runner_name: str
@@ -505,6 +515,8 @@ class RegistrationReply:
     projects: tuple[ServedProject, ...] | None = None
     hub_version: str | None = None
     window: HubVersionWindow | None = None
+    #: The registered gates the hub reports as not enforceable; ``None`` from a hub that predates the report.
+    unenforceable_gates: tuple[UnenforceableGate, ...] | None = None
 
 
 @domain_model

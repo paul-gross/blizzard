@@ -7,6 +7,7 @@ across a lowered ``BATCH_SIZE`` boundary."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -262,3 +263,37 @@ def test_get_enabled_by_name_query_count_does_not_grow_with_retired_newer_mint_c
     assert many_enabled is not None and many_enabled.graph_id == many_old.graph_id
     assert few_store.graph_id_of_enabled_name("shared") == few_old.graph_id
     assert many_store.graph_id_of_enabled_name("shared") == many_old.graph_id
+
+
+# --- executors_by_node_name ---------------------------------------------------- #
+
+
+def _mint_hub_node(store: GraphStore, graph_id: str, name: str, node_name: str) -> None:
+    node = replace(_node(f"{graph_id}_nd_0", node_name, graph_id=graph_id), executor=Executor.HUB)
+    graph = Graph(graph_id=graph_id, name=name, entry_node_id=node.node_id, nodes=[node], edges=[], created_at=_T0)
+    store.mint(graph, definition_yaml="", at=_T0)
+
+
+def test_executors_by_node_name_spans_non_retired_graphs_and_ignores_retired_ones(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _mint(store, "gr_1", "alpha", node_names=["build", "shared"], created_at=_T0)
+    _mint_hub_node(store, "gr_2", "beta", "deliver")
+    _mint_hub_node(store, "gr_3", "gamma", "shared")
+    retired = _mint(store, "gr_4", "delta", node_names=["retired-only"], created_at=_T0)
+    store.record_lifecycle(retired.graph_id, retired=True, at=_T0, by="op")
+
+    found = store.executors_by_node_name()
+
+    assert found == {
+        "build": frozenset({Executor.RUNNER}),
+        "deliver": frozenset({Executor.HUB}),
+        "shared": frozenset({Executor.RUNNER, Executor.HUB}),
+    }
+
+
+def test_executors_by_node_name_is_one_statement(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    for i in range(3):
+        _mint(store, f"gr_{i}", f"g{i}", node_names=["a", "b"], created_at=_T0)
+
+    assert count_queries(engine, store.executors_by_node_name) == 1

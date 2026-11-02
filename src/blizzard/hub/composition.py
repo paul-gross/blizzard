@@ -138,7 +138,7 @@ from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
@@ -279,6 +279,8 @@ class TenantServices:
     graphs: IReadGraphRepository
     #: Each mint's stored authoring body.
     graph_bodies: IReadGraphBodies
+    #: Where each node name runs across the tenant's non-retired graphs — what a runner's gates are flagged against.
+    node_executors: IReadNodeExecutors
     ingest: IngestService
     promote: PromoteService
     demote: DemoteService
@@ -1154,6 +1156,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         graphs=graph_store,
         graph_bodies=graph_store,
+        node_executors=graph_store,
         ingest=IngestService(
             record=chunk_record,
             exclusive=chunk_exclusive,

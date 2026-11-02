@@ -8982,6 +8982,10 @@ export type RunnerRegistrationResponse = {
      * Tenant Name
      */
     tenant_name: string | null;
+    /**
+     * Unenforceable Gates
+     */
+    unenforceable_gates: Array<UnenforceableGateView> | null;
     window: VersionWindowView | null;
 };
 
@@ -9108,6 +9112,10 @@ export type RunnerRegistryView = {
      * Subscriptions
      */
     subscriptions: Array<SubscriptionUsageView>;
+    /**
+     * Unenforceable Gates
+     */
+    unenforceable_gates: Array<UnenforceableGateView>;
     /**
      * Version
      */
@@ -10618,6 +10626,30 @@ export type TurnSegmentViewOutput = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UnenforceableGateReason
+ */
+export const UnenforceableGateReason = { HUB_EXECUTED: 'hub-executed', UNKNOWN_NODE: 'unknown-node' } as const;
+
+/**
+ * UnenforceableGateReason
+ */
+export type UnenforceableGateReason = typeof UnenforceableGateReason[keyof typeof UnenforceableGateReason];
+
+/**
+ * UnenforceableGateView
+ *
+ * One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a
+ * runner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one.
+ */
+export type UnenforceableGateView = {
+    /**
+     * Node
+     */
+    node: string;
+    reason: UnenforceableGateReason;
 };
 
 /**
@@ -15689,6 +15721,36 @@ export type GetRunnerApiFleetRunnersRunnerIdGetResponses = {
 };
 
 export type GetRunnerApiFleetRunnersRunnerIdGetResponse = GetRunnerApiFleetRunnersRunnerIdGetResponses[keyof GetRunnerApiFleetRunnersRunnerIdGetResponses];
+
+export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/runners/{runner_id}/decisions';
+};
+
+export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetError = ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors[keyof ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors];
+
+export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OpenDecisionsResponse;
+};
+
+export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetResponse = ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetResponses[keyof ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetResponses];
 
 export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData = {
     body?: never;

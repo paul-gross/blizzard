@@ -464,6 +464,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/fleet/routes"): _f({"chunk_id": "{chunk_id}", "workspace_id": "w1", "environment_ids": ["env-a"]}),
     ("POST", "/api/fleet/runners"): _own({"workspace_id": "w2"}, status=201),
     ("GET", "/api/fleet/runners/{runner_id}"): _f(status=403, reason=_NOT_THE_BEARER),
+    ("GET", "/api/fleet/runners/{runner_id}/decisions"): _f(status=403, reason=_NOT_THE_BEARER),
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"): _f(status=403, reason=_NOT_THE_BEARER),
     ("GET", "/api/fleet/scopes"): _LIST,
     ("GET", "/api/fleet/summary"): _LIST,

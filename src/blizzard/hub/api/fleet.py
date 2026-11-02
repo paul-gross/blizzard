@@ -39,6 +39,7 @@ from blizzard.hub.api.analytics import (
 )
 from blizzard.hub.api.auth import RunnerPrincipal, require_runner_principal, require_runner_principal_even_if_retired
 from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant, tenant_bound
+from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
@@ -97,7 +98,7 @@ from blizzard.wire.chunk import (
     WorkItemsView,
 )
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
+from blizzard.wire.decision import DecisionSubmission, OpenDecisionsResponse
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     RunnerFactAck,
@@ -1060,6 +1061,9 @@ def register_runner(
         subscription_unrostered=flags.subscription_unrostered,
         hub_version=registered.version.hub_version,
         window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling),
+        unenforceable_gates=runners_api.unenforceable_views(
+            request.gates, services.node_executors.executors_by_node_name() if request.gates else {}
+        ),
     )
 
 
@@ -1077,6 +1081,23 @@ def heartbeat_runner(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     services.events.publish_runner_changed(runner_id, kind="heartbeat", runner_name=fleet.principal.runner_name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/runners/{runner_id}/decisions", response_model=OpenDecisionsResponse)
+def list_runner_decisions(
+    runner_id: str,
+    services: Services,
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+) -> OpenDecisionsResponse:
+    """The calling runner's own open gate decisions — the unresolved ones its configuration imposed, whole rather than
+    paged; 403 when the path names another runner."""
+    fleet.assert_owns(runner_id)
+    rows = services.chunks.decisions.list_open_decisions(imposed_by_runner_id=runner_id)
+    runner_names = services.registry.names_for([runner_id]) if rows else {}
+    labels = ProjectLabels.read(services, (d.project_id for d in rows))
+    return OpenDecisionsResponse(
+        decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
+    )
 
 
 @router.get("/runners/{runner_id}", response_model=RunnerView)

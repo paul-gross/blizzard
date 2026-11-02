@@ -18,6 +18,7 @@ const REGISTRY: RunnerRegistryView = {
   declining: [],
   env_capacity: null,
   gates: [],
+  unenforceable_gates: [],
   host_id: null,
   hub_paused: false,
   last_seen_at: null,
@@ -213,6 +214,15 @@ describe('FleetRunnerRow', () => {
     expect(caps?.querySelector('[data-harness-id="codex"]')?.getAttribute('data-available')).toBe('false');
     const gates = el.querySelector('[data-testid="fleet-runner-gates"]');
     expect([...gates!.querySelectorAll('[data-testid="runner-gate-badge"]')].map((b) => b.textContent?.trim())).toEqual(['build', 'review']);
+  });
+
+  it('passes the unenforceable gates through to the gate badges', async () => {
+    const { el } = await render(
+      row('rn_flag', { gates: ['deliver'], unenforceable_gates: [{ node: 'deliver', reason: 'hub-executed' }] }),
+    );
+
+    const badge = el.querySelector('[data-testid="fleet-runner-gates"] [data-gate="deliver"]');
+    expect(badge?.getAttribute('data-unenforceable')).toBe('hub-executed');
   });
 
   it('emits togglePause with the row, only while the brake is offered', async () => {

@@ -125,7 +125,12 @@ def test_a_body_runner_id_naming_another_runner_is_ignored_on_a_fleet_write(tmp_
 
 
 @pytest.mark.parametrize(
-    ("method", "path"), [("post", "/api/fleet/runners/runner-b/heartbeats"), ("get", "/api/fleet/runners/runner-b")]
+    ("method", "path"),
+    [
+        ("post", "/api/fleet/runners/runner-b/heartbeats"),
+        ("get", "/api/fleet/runners/runner-b"),
+        ("get", "/api/fleet/runners/runner-b/decisions"),
+    ],
 )
 def test_a_runner_verb_on_a_path_naming_another_runner_is_refused_403(tmp_path: Path, method: str, path: str) -> None:
     hub = build_hub(tmp_path)

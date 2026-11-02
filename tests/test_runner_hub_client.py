@@ -16,6 +16,7 @@ from structlog.testing import capture_logs
 
 from blizzard import __version__
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -33,6 +34,7 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
     TranscriptPush,
+    UnenforceableGate,
     VersionRefusal,
 )
 from blizzard.runner.hub.internal import http_hub as http_hub_module
@@ -769,3 +771,28 @@ def test_identity_raises_when_the_hub_is_unreachable() -> None:
 
 def _pushes(batch: TranscriptSegmentBatch) -> list[TranscriptPush]:
     return [TranscriptPush(seq=r.seq, body=r.model_dump(mode="json", exclude={"seq"})) for r in batch.records]
+
+
+def _register_with(body: dict[str, object]) -> RegistrationReply:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(201, json={"runner_id": "rn_1", "first_registration": True, **body})
+
+    client = HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)))
+    return client.register_runner("r-claude", "ws1")
+
+
+@pytest.mark.unit
+def test_register_runner_reads_the_gates_the_hub_reports_as_not_enforceable() -> None:
+    reply = _register_with(
+        {"unenforceable_gates": [{"node": "deliver", "reason": "hub-executed"}, {"node": "x", "reason": "future"}]}
+    )
+
+    assert reply.unenforceable_gates == (
+        UnenforceableGate("deliver", UnenforceableGateReason.HUB_EXECUTED),
+        UnenforceableGate("x", Unrecognized("future")),
+    )
+
+
+@pytest.mark.unit
+def test_register_runner_reads_no_flags_from_a_hub_that_predates_the_report() -> None:
+    assert _register_with({}).unenforceable_gates is None

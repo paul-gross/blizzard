@@ -6,8 +6,19 @@
     <ul class="gate-list">
       @for (gate of gates(); track gate) {
         <li>
-          <fleet-kit-badge data-testid="runner-gate-badge" variant="soft" tone="waiting" [attr.data-gate]="gate">
+          @let reason = reasonOf(gate);
+          <fleet-kit-badge
+            data-testid="runner-gate-badge"
+            variant="soft"
+            [tone]="reason === null ? 'waiting' : 'needs'"
+            [attr.data-gate]="gate"
+            [attr.data-unenforceable]="reason"
+            [attr.title]="reason === null ? null : 'No graph runs this node on a runner, so this gate can never hold a chunk.'"
+          >
             {{ gate }}
+            @if (reason !== null) {
+              <span class="unenforceable" data-testid="runner-gate-unenforceable">not enforceable: {{ reason }}</span>
+            }
           </fleet-kit-badge>
         </li>
       }

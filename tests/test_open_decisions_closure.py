@@ -28,14 +28,14 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
+def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1", *, imposed_by_runner_id: str | None = None) -> ChunkStores:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.decisions.record_decision(
-        imposed_by_runner_id=None,
+        imposed_by_runner_id=imposed_by_runner_id,
         decision_id="dec_1",
         chunk_id=chunk_id,
         node_id="nd_1",
@@ -117,3 +117,28 @@ def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_resolve_window
     status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
 
     assert ("dec_1" in _open_ids(store)) is verb_legal_from(ChunkVerb.RESOLVE_DECISION, status)
+
+
+def _runner_imposed_ids(store: ChunkStores, runner_id: str) -> list[str]:
+    return [d.decision_id for d in store.decisions.list_open_decisions(imposed_by_runner_id=runner_id)]
+
+
+def test_the_runner_filter_lists_only_the_decisions_that_runner_imposed(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path, imposed_by_runner_id="rn_a")
+
+    assert _runner_imposed_ids(store, "rn_a") == ["dec_1"]
+    assert _runner_imposed_ids(store, "rn_b") == []
+
+
+def test_the_runner_filter_leaves_out_a_graph_declared_gate(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path, imposed_by_runner_id=None)
+
+    assert _open_ids(store) == ["dec_1"]
+    assert _runner_imposed_ids(store, "rn_a") == []
+
+
+def test_the_runner_filter_leaves_out_a_resolved_decision(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path, imposed_by_runner_id="rn_a")
+    assert store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_T0)
+
+    assert _runner_imposed_ids(store, "rn_a") == []

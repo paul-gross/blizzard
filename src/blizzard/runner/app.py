@@ -63,6 +63,7 @@ from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.floor import host_router as host_floor_router
 from blizzard.runner.api.floor import runner_router as runner_floor_router
 from blizzard.runner.api.garden import router as garden_router
+from blizzard.runner.api.gate_decisions import router as gate_decisions_router
 from blizzard.runner.api.git_commits import router as git_commits_router
 from blizzard.runner.api.harness_health import router as harness_health_router
 from blizzard.runner.api.health import router as health_router
@@ -181,6 +182,7 @@ _RUNNER_UNGATED = (
     heartbeat_router,
     session_end_router,
     asks_router,
+    gate_decisions_router,
     attachments_router,
     git_commits_router,
     artifacts_router,

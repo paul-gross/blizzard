@@ -83,7 +83,7 @@
 </ng-template>
 <ng-template #gates>
   @if (row().gates.length > 0) {
-    <app-gate-badge-group data-testid="fleet-runner-gates" [labelled]="false" [gates]="row().gates" />
+    <app-gate-badge-group data-testid="fleet-runner-gates" [labelled]="false" [gates]="row().gates" [unenforceable]="row().unenforceable_gates" />
   } @else {
     <span class="none-inline">none</span>
   }

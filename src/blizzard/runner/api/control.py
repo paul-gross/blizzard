@@ -17,7 +17,7 @@ from blizzard.runner.status.view import RunnerStatusService, ThrottleStatus
 from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.report import FLOOR_LEVER
-from blizzard.wire.runner import VersionWindowView
+from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
     CapacitiesView,
@@ -135,6 +135,11 @@ def runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),
+        unenforceable_gates=(
+            None
+            if summary.unenforceable_gates is None
+            else [UnenforceableGateView(node=g.node, reason=g.reason) for g in summary.unenforceable_gates]
+        ),
         identity=_identity_view(summary.identity) if summary.identity is not None else None,
         served_projects=(
             [

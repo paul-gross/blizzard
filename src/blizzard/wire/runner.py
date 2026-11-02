@@ -8,6 +8,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRefusalReason
@@ -97,6 +98,14 @@ class RunnerDecliningView(WireModel):
     until: str | None = None
 
 
+class UnenforceableGateView(WireModel):
+    """One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a
+    runner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one."""
+
+    node: str
+    reason: Annotated[UnenforceableGateReason | Unrecognized, OPEN]
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
     in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
@@ -179,6 +188,8 @@ class RunnerRegistrationResponse(WireModel):
     hub_version: str | None = None
     #: The window the hub judged this runner's version under; ``None`` from a hub that predates the handshake.
     window: VersionWindowView | None = None
+    #: The registered gates the hub reports as not enforceable; ``None`` from a hub that predates the report.
+    unenforceable_gates: list[UnenforceableGateView] | None = None
 
 
 class RunnerEnrollmentResponse(BaseModel):
@@ -347,6 +358,8 @@ class RunnerRegistryView(WireModel):
     retired_by: str | None = None
     # The node names the runner declared it holds for a human decision; empty when it imposes none.
     gates: list[str] = []
+    # The gates the hub reports as not enforceable, each with its reason; empty when every gate can park a chunk.
+    unenforceable_gates: list[UnenforceableGateView] = []
     # The projects the runner serves, as declared and resolved; empty when it serves none.
     projects: list[ServedProjectView] = []
     # The bindings the runner declared, flagged against its host's latest report; `None` when it declared none.

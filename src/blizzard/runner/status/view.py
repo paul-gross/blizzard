@@ -21,7 +21,7 @@ from blizzard.runner.environments.repository import (
 )
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.client import BindingDeclaration, UnenforceableGate
 from blizzard.runner.hub.hub_version import HubVersion, ICurrentHubVersion
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IdentityVerdict
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
@@ -198,6 +198,8 @@ class RunnerStatusSummary:
     last_tick_at: datetime | None
     #: The node names this runner's loaded configuration holds for a human decision.
     gates: tuple[str, ...] = ()
+    #: The gates the hub last reported as not enforceable; ``None`` until a hub that reports them answers.
+    unenforceable_gates: tuple[UnenforceableGate, ...] | None = None
     #: Whether the token resolves to the configured runner; ``None`` where no loop checks it.
     identity: IdentityVerdict | None = None
     #: The tenant the runner serves, as its hub last answered; ``None`` until a hub that names it answers.
@@ -358,6 +360,9 @@ class RunnerStatusService:
             ),
             last_tick_at=self._daemon_liveness.last_daemon_liveness(),
             gates=self._gates,
+            unenforceable_gates=self._hub_version.current().unenforceable_gates
+            if self._hub_version is not None
+            else None,
             identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
             tenant_id=identity.tenant_id if identity is not None else None,
             tenant_name=identity.tenant_name if identity is not None else None,
