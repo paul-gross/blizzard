@@ -119,8 +119,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated fully onto
     the row lock and import `threading` no longer.
 
-- **`bzh:hub-store-adapter-imports`** (`rules/hub-store-adapter-imports.yml`) — a store adapter does not import a sibling
-  adapter to perform another repository's mutation. The prose home is `bzh:sibling-adapter-independence` in
+- **`bzh:hub-store-adapter-imports`** (`rules/hub-store-adapter-imports.yml`) — a store adapter does not import a
+  sibling adapter to perform another repository's mutation. The prose home is `bzh:sibling-adapter-independence` in
   `blizzard-context:/architecture/repository-access.md`.
   - Scoped to `src/blizzard/hub/store/internal/**`, `*factory.py` composition roots exempt.
   - Matches an absolute or relative import of a `*_store` module, by `from` or plain `import`, including
