@@ -3,7 +3,7 @@ revision this build expects, and no runner's rows foreign to the host."""
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 
 import click
@@ -18,7 +18,7 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_layout import HostLayout, hold_host
+from blizzard.runner.host_layout import HostHeld, HostLayout, hold_host
 from blizzard.runner.lifecycle.identity_check import foreign_store_reason
 from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, reset_command
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -54,16 +54,18 @@ def store_write_guard(
     runners: Mapping[str, str],
     configured: tuple[str, ...],
     refuse_foreign: bool,
+    held: Callable[[HostHeld], Exception] | None = None,
 ) -> Generator[Mapping[str, str], None, None]:
     """The host directory held while the caller ``action``s, its store current, and ``runners`` (id to name) judged
     against the store's identity rows; every refusal is a :class:`click.ClickException` naming ``action``. A foreign
-    runner refuses when ``refuse_foreign``, else is yielded (id to reason) for the caller to halt."""
+    runner refuses when ``refuse_foreign``, else is yielded (id to reason) for the caller to halt. A host holding the
+    directory raises ``held``'s exception when the caller gives one, else the refusal to stop it first."""
     layout = HostLayout(config.root)
     with hold_host(
         layout,
         (layout.legacy_socket_path,),
         lambda sock: daemon_holding(sock, door),
-        lambda held: click.ClickException(f"{held}, so this cannot {action} — stop it first"),
+        held or (lambda running: click.ClickException(f"{running}, so this cannot {action} — stop it first")),
     ):
         with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
             ensure_current_revision(config)

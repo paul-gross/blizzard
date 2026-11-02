@@ -66,11 +66,27 @@ class _FakeHostHub:
         return HostFactPushAck(high_water=max(seqs), applied=seqs, already_applied=[], rejected=[])
 
 
+@dataclass
+class _Retirement:
+    """What the tick asked a runner's retirement watch, and its answer."""
+
+    asked: int = 0
+    retired: bool = False
+    raises: bool = False
+
+    def forget_if_retired(self) -> bool:
+        self.asked += 1
+        if self.raises:
+            raise RuntimeError("the store is unreadable")
+        return self.retired
+
+
 @dataclass(frozen=True)
 class _Runner:
     runner_id: str
     identity: RunnerIdentityHolder
     identity_verdict: IdentityVerdictHolder
+    retirement: _Retirement = field(default_factory=lambda: _Retirement())
 
 
 def _runner(runner_id: str, *, tenant: str | None = _TENANT) -> _Runner:
@@ -331,3 +347,30 @@ def test_the_lane_clears_only_up_to_the_answered_mark_and_never_moves_it_back(tm
     assert (lane.host_high_water_seen(), lane.host_buffered_count()) == (3, 0)
     lane.record_host_high_water(seq=1, at=_AT)
     assert lane.host_high_water_seen() == 3
+
+
+def test_a_runner_the_host_does_not_hold_is_asked_whether_the_hub_retired_it_and_a_held_one_is_not(
+    tmp_path: Path,
+) -> None:
+    held, released = _runner("rn_a"), _runner("rn_b")
+    world = _world(tmp_path, held, released)
+    world.hub.report_answer = _held("rn_a")
+
+    world.step.run()
+
+    assert (held.retirement.asked, released.retirement.asked) == (0, 1)
+    assert released.identity_verdict.verdict().state is IdentityState.NOT_HELD
+
+
+def test_a_failed_forget_of_one_runner_reaches_neither_the_others_standing_nor_the_next_tick(tmp_path: Path) -> None:
+    broken, other = _runner("rn_a"), _runner("rn_b")
+    broken.retirement.raises = True
+    world = _world(tmp_path, broken, other)
+    world.hub.report_answer = _held("rn_c")
+
+    world.step.run()
+    world.step.run()
+
+    assert (broken.retirement.asked, other.retirement.asked) == (2, 2)
+    assert other.identity_verdict.verdict().state is IdentityState.NOT_HELD
+    assert world.status.current().state is HostRegistrationState.REGISTERED

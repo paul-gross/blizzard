@@ -18,6 +18,7 @@ token the hub knows over a store naming another runner, which the runner refuses
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -31,7 +32,7 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
-from blizzard.runner.hub.identity import judged
+from blizzard.runner.hub.identity import RunnerIdentity, judged
 
 
 class BootstrapStop(StrEnum):
@@ -53,9 +54,14 @@ class BootstrapStop(StrEnum):
     STORE_NAMES_A_RUNNER = "store_names_a_runner"
     #: The held token's runner, ``held``, belongs to another tenant than the one named.
     ANOTHER_TENANT = "another_tenant"
+    #: The held token's runner, ``held``, is not the one ``runner_id`` configured, and no re-add was asked for.
     ANOTHER_RUNNER = "another_runner"
+    #: The runner ``runner_id`` is configured but holds no token, and adding another in its place was not allowed.
     TOKENLESS_CONFIGURED = "tokenless_configured"
+    #: The store to set aside also holds the runners ``sharing`` names, whose backlog it would drop.
     STORE_SHARED = "store_shared"
+    #: The kept runner ``runner_id`` is not one the joined host's record holds.
+    NOT_UNDER_HOST = "not_under_host"
 
 
 class BootstrapStopped(Exception):
@@ -79,14 +85,6 @@ class BootstrapStopped(Exception):
         self.held = held
         self.sharing = sharing
         self.reason = reason
-
-
-class StoreShared(Exception):
-    """The store cannot be set aside: the runners ``sharing`` also hold it, and their backlog would be dropped."""
-
-    def __init__(self, sharing: tuple[str, ...]) -> None:
-        super().__init__(f"the store is shared with runner {', '.join(sharing)}")
-        self.sharing = sharing
 
 
 class TokenNotWritten(Exception):
@@ -119,6 +117,16 @@ class JoinedRunner:
     added: bool
     tenant_id: str | None = None
     tenant_name: str | None = None
+
+    def identity_at(self, registered_at: datetime) -> RunnerIdentity:
+        """The identity row this runner's join records, registered at ``registered_at``."""
+        return RunnerIdentity(
+            runner_id=self.runner_id,
+            runner_name=self.runner_name,
+            registered_at=registered_at,
+            tenant_id=self.tenant_id,
+            tenant_name=self.tenant_name,
+        )
 
 
 def kept_identity(
@@ -171,6 +179,13 @@ def refuse_tokenless(
         raise BootstrapStopped(BootstrapStop.TOKENLESS_CONFIGURED, runner_id=configured_id)
 
 
+def refuse_unplaced(joined: JoinedRunner, host_runner_ids: tuple[str, ...]) -> None:
+    """Raise :class:`BootstrapStopped` when ``joined`` was kept, not added, and the joined host's record, which
+    holds ``host_runner_ids``, does not hold it — an added runner is placed under the host by its add."""
+    if not joined.added and joined.runner_id not in host_runner_ids:
+        raise BootstrapStopped(BootstrapStop.NOT_UNDER_HOST, runner_id=joined.runner_id)
+
+
 class ITokenWriter(Protocol):
     """Where an added runner's token is kept for the runner to present."""
 
@@ -179,15 +194,27 @@ class ITokenWriter(Protocol):
         ...
 
 
-class IRunnerStoreAside(Protocol):
-    """The runner's local store, as joining sees it: whose it is, and moving it aside."""
+class IStoreSetAside(Protocol):
+    """The local store, as a join that replaces it sees it: the move aside."""
+
+    def set_aside(self) -> None:
+        """Move the store aside, timestamped, and start a fresh one; never deletes."""
+        ...
+
+
+class IRunnerStoreAside(IStoreSetAside, Protocol):
+    """The runner's local store, as joining sees it: whose it is, who else shares it, and moving it aside."""
 
     def stored_runner_id(self) -> str | None:
         """The id of the runner the store's identity row names, or ``None`` when it names none."""
         ...
 
-    def set_aside(self) -> None:
-        """Move the store aside, timestamped, and start a fresh one; never deletes. Raises :class:`StoreShared`."""
+    def is_set_aside(self) -> bool:
+        """Whether this init has already set the store aside."""
+        ...
+
+    def sharing(self) -> tuple[str, ...]:
+        """The names of the other runners that share the store."""
         ...
 
 
@@ -246,7 +273,12 @@ class RunnerBootstrap:
         return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True, tenant_id=tenant_id)
 
     def _set_aside(self) -> None:
-        try:
-            self._store.set_aside()
-        except StoreShared as exc:
-            raise BootstrapStopped(BootstrapStop.STORE_SHARED, sharing=exc.sharing) from exc
+        """Set the store aside for this runner's re-add — a no-op once this init already set it aside, and refused
+        while another runner shares it: setting it aside would drop that runner's backlog and rewind its sequences
+        below the hub's high-water marks."""
+        if self._store.is_set_aside():
+            return
+        sharing = self._store.sharing()
+        if sharing:
+            raise BootstrapStopped(BootstrapStop.STORE_SHARED, sharing=sharing)
+        self._store.set_aside()

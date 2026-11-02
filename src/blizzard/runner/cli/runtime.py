@@ -46,8 +46,7 @@ from blizzard.runner.composition import (
     RunnerProcess,
     build_host_process,
     build_host_read_stores,
-    build_identity_forgetter,
-    build_identity_writer,
+    build_identity_service,
     build_read_stores,
     build_runner_process,
     runner_store_migrations,
@@ -73,11 +72,12 @@ from blizzard.runner.hub.bootstrap import (
     BootstrapStopped,
     HeldToken,
     IRunnerStoreAside,
+    IStoreSetAside,
     JoinedRunner,
     RunnerBootstrap,
-    StoreShared,
     TokenNotWritten,
     refuse_tokenless,
+    refuse_unplaced,
 )
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
@@ -102,7 +102,7 @@ from blizzard.runner.hub.host_bootstrap import (
     HostTokenNotWritten,
     JoinedHost,
 )
-from blizzard.runner.hub.identity import RunnerIdentity, judged
+from blizzard.runner.hub.identity import judged
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.lifecycle.identity_check import (
@@ -297,7 +297,7 @@ def register_host(
     config: HostConfig,
     collaborators: InitCollaborators,
     host_clients: HostClients,
-    store: IRunnerStoreAside,
+    store: IStoreSetAside,
     rerun: _Rerun,
 ) -> JoinedHost:
     """Keep the host the held host token names, or add one named after the first ``[[runner]]`` and write its
@@ -459,30 +459,24 @@ def _join_runner(
     token = config.token_for(entry)
     with collaborators.join_with(config.hub_url, token.value) as (identity, _admin):
         joined = _join_hub(
-            config, entry, token, identity, HostRunnerAdmin(host.client), store.for_runner(entry), rerun, clock
+            config,
+            entry,
+            token,
+            identity,
+            HostRunnerAdmin(host.client),
+            store.for_runner(entry),
+            rerun,
+            clock,
+            host=host.joined,
         )
-    if not joined.added and not host.joined.holds(joined.runner_id):
-        raise click.ClickException(_stands_elsewhere(config, entry, joined, host.joined, rerun))
     # The token is written before the id, and the id before the identity row: a crash between any two is completed
     # by running init again, which keeps the runner the token names and, under --allow-readd, writes the id it
     # left stale. A configured id differing from the joined runner's reaches here only by a re-add.
     if entry.id != joined.runner_id:
         with click_exception_on(ConfigError):
             write_runner_id(config.layout, entry.name, joined.runner_id, strict=config.strict)
-    _record_identity(config, joined, clock)
-
-
-def _stands_elsewhere(
-    config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, host: JoinedHost, rerun: _Rerun
-) -> str:
-    """The stop for a kept runner the hub does not hold under this host."""
-    hub, host_id = config.hub_url, host.record.host_id
-    return (
-        f"runner {entry.name}'s token belongs to runner {joined.runner_id}, which the hub at {hub} does not hold "
-        f"under this host ({host_id}), so its id and identity row were not written: place it under this host with "
-        f"`blizzard hub runner-host adopt {host_id} {joined.runner_id} --hub-url {hub}`, then re-run "
-        f"`{rerun.again()}`"
-    )
+    with build_identity_service(config.db_url, runner_id=joined.runner_id, clock=clock) as identities:
+        identities.record(joined)
 
 
 def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, clock: IClock) -> None:
@@ -584,21 +578,22 @@ class _RuntimeStore:
 
 @dataclass(frozen=True)
 class _RunnerStoreView:
+    """The store as one runner joins it: the facts joining judges by, and the move itself."""
+
     store: _RuntimeStore
     entry: RunnerEntry
 
     def stored_runner_id(self) -> str | None:
         return self.store.stored_runner_id(sibling_of=self.entry)
 
+    def is_set_aside(self) -> bool:
+        return self.store.is_set_aside()
+
+    def sharing(self) -> tuple[str, ...]:
+        """The names of the other ``[[runner]]`` entries of the host, which share its store."""
+        return tuple(other.name for other in self.store.config.runners if other.name != self.entry.name)
+
     def set_aside(self) -> None:
-        """Set the shared store aside for this runner's re-add — a no-op once the host's own re-add set it aside,
-        and refused while another ``[[runner]]`` stays beside it: setting the store aside would drop that runner's
-        backlog and rewind its sequences below the hub's high-water marks."""
-        if self.store.is_set_aside():
-            return
-        siblings = tuple(other.name for other in self.store.config.runners if other.name != self.entry.name)
-        if siblings:
-            raise StoreShared(siblings)
         self.store.set_aside()
 
 
@@ -613,39 +608,8 @@ class _Joining:
     token_env: str
     #: Where the held token resolved from, in words; ``None`` when ``.env`` supplied it or none is held.
     overridden_by: str | None
-
-
-def _record_identity(config: HostConfig, joined: JoinedRunner, clock: IClock) -> None:
-    """Write the joined runner's identity row from the hub's answer, so a configured runner has its row before it
-    writes anything else."""
-    engine = create_engine_from_url(config.db_url)
-    try:
-        identities = build_identity_writer(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=joined.runner_id
-        )
-        identities.record_runner_identity(
-            RunnerIdentity(
-                runner_id=joined.runner_id,
-                runner_name=joined.runner_name,
-                registered_at=clock.now(),
-                tenant_id=joined.tenant_id,
-                tenant_name=joined.tenant_name,
-            )
-        )
-    finally:
-        engine.dispose()
-
-
-def forget_identity(config: HostConfig, runner_id: str) -> None:
-    """Delete a retired runner's identity row from the host's store, so the store names only runners the host
-    configures and a later start or ``init`` does not take it for another host's."""
-    engine = create_engine_from_url(config.db_url)
-    try:
-        build_identity_forgetter(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=runner_id
-        ).forget_runner_identity()
-    finally:
-        engine.dispose()
+    #: The host the runner joins under; ``None`` before the host is registered.
+    host_id: str | None = None
 
 
 def _join_hub(
@@ -657,10 +621,12 @@ def _join_hub(
     store: IRunnerStoreAside,
     rerun: _Rerun,
     clock: IClock,
+    *,
+    host: JoinedHost,
 ) -> JoinedRunner:
-    """Keep the runner the held token names, or add one and write its token; any stop exits
+    """Keep the runner the held token names when ``host`` holds it, or add one and write its token; any stop exits
     non-zero with nothing added."""
-    joining, token_file = _joining_of(config, entry, token)
+    joining, token_file = _joining_of(config, entry, token, host_id=host.record.host_id)
     hub = config.hub_url
     try:
         joined = RunnerBootstrap(identity, admin, token_file, store).join(
@@ -686,6 +652,10 @@ def _join_hub(
         raise click.ClickException(str(exc)) from exc
     if not joined.added:
         _refuse_unsettled(config, entry, joined, clock)
+        try:
+            refuse_unplaced(joined, tuple(held.runner_id for held in host.record.runners))
+        except BootstrapStopped as exc:
+            raise click.ClickException(_stopped(exc, joining, token_file, rerun)) from exc
     tenant = _in_tenant(joined.tenant_id, joined.tenant_name)
     if joined.added:
         click.echo(
@@ -703,7 +673,9 @@ def _held(token: ResolvedToken) -> HeldToken | None:
     return HeldToken(token.value, from_process_env=not token.rereads_dotenv()) if token.value else None
 
 
-def _joining_of(config: HostConfig, entry: RunnerEntry, token: ResolvedToken) -> tuple[_Joining, HubTokenFile]:
+def _joining_of(
+    config: HostConfig, entry: RunnerEntry, token: ResolvedToken, *, host_id: str | None = None
+) -> tuple[_Joining, HubTokenFile]:
     """What ``init`` joins for ``entry``, and the ``.env`` file its token is written to."""
     token_env = hub_token_variable(entry.name)
     joining = _Joining(
@@ -712,6 +684,7 @@ def _joining_of(config: HostConfig, entry: RunnerEntry, token: ResolvedToken) ->
         name=entry.name,
         token_env=token_env,
         overridden_by=None if token.rereads_dotenv() else _source_words(token, token_env),
+        host_id=host_id,
     )
     return joining, HubTokenFile.of(config.root, token_env)
 
@@ -808,6 +781,13 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
                 f"runner {joining.name} is configured as {runner_id} but holds no token, so init would add another "
                 f"runner in its place; restore its token, or re-run `{rerun.readding()}` to set its store aside and "
                 "add a new one"
+            )
+        case BootstrapStop.NOT_UNDER_HOST:
+            return (
+                f"runner {joining.name}'s token belongs to runner {runner_id}, which the hub at {hub} does not hold "
+                f"under this host ({joining.host_id}), so its id and identity row were not written: place it under "
+                f"this host with `blizzard hub runner-host adopt {joining.host_id} {runner_id} --hub-url {hub}`, "
+                f"then re-run `{rerun.again()}`"
             )
         case BootstrapStop.STORE_SHARED:
             name, root = joining.name, joining.root

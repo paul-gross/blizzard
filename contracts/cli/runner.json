@@ -1507,7 +1507,7 @@
       "short_help": "Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current node, with its retry budget carried over."
     },
     "retire": {
-      "help": "Retire one of this registered host's runners at its hub, forget its identity here, and remove its\n`[[runner]]` from the host file. A running host stops running it shortly after.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "help": "Retire one of this registered host's runners at its hub, forget its identity here, and remove its\n`[[runner]]` from the host file. With the host stopped, this forgets the identity; a running host forgets it itself\nwhen it halts the runner at its next tick.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -1522,7 +1522,7 @@
           "type": "text"
         },
         {
-          "help": "The host's runner to retire, by name or id.",
+          "help": "The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store still names.",
           "hidden": false,
           "kind": "option",
           "name": "runner",

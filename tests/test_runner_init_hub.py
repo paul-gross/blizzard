@@ -24,10 +24,11 @@ from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
     HeldToken,
+    JoinedRunner,
     RunnerBootstrap,
-    StoreShared,
     kept_identity,
     refuse_tokenless,
+    refuse_unplaced,
 )
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
@@ -554,6 +555,12 @@ class _JoinLog:
     def stored_runner_id(self) -> str | None:
         return self.stored
 
+    def is_set_aside(self) -> bool:
+        return False
+
+    def sharing(self) -> tuple[str, ...]:
+        return ()
+
     def set_aside(self) -> None:
         self.calls.append("set_aside")
 
@@ -576,8 +583,8 @@ class _Tokens:
 
 @dataclass
 class _SharedStore(_JoinLog):
-    def set_aside(self) -> None:
-        raise StoreShared(("r-two",))
+    def sharing(self) -> tuple[str, ...]:
+        return ("r-two",)
 
 
 def _join(
@@ -630,6 +637,28 @@ def test_a_re_add_over_a_store_other_runners_hold_stops_naming_them_with_nothing
         _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
     assert (stopped.value.stop, stopped.value.sharing) == (BootstrapStop.STORE_SHARED, ("r-two",))
     assert log.calls == []
+
+
+@pytest.mark.unit
+def test_a_re_add_over_a_store_this_init_already_set_aside_is_not_judged_shared() -> None:
+    @dataclass
+    class _AlreadyAside(_SharedStore):
+        def is_set_aside(self) -> bool:
+            return True
+
+    log = _AlreadyAside(stored="rn_old")
+    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
+    assert log.calls == ["add"]
+
+
+@pytest.mark.unit
+def test_a_kept_runner_the_joined_host_does_not_hold_stops_naming_it() -> None:
+    kept = JoinedRunner(runner_id="rn_1", runner_name="r", added=False)
+    with pytest.raises(BootstrapStopped) as stopped:
+        refuse_unplaced(kept, ("rn_2",))
+    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.NOT_UNDER_HOST, "rn_1")
+    refuse_unplaced(kept, ("rn_1",))
+    refuse_unplaced(JoinedRunner(runner_id="rn_9", runner_name="r", added=True), ())
 
 
 @pytest.mark.unit

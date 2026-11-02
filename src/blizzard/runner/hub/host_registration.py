@@ -103,6 +103,12 @@ class HostRegistrationHolder:
 _current_host_registration_conforms: type[ICurrentHostRegistration] = HostRegistrationHolder
 
 
+class IForgetRetiredRunner(Protocol):
+    """Forgets one runner's identity row once the hub proves it retired."""
+
+    def forget_if_retired(self) -> bool: ...
+
+
 class IStandingRunner(Protocol):
     """One of the host's runners, as the registration step judges it: its configured id, the identity its own
     registration recorded, and the verdict its standing under the host folds into."""
@@ -113,6 +119,8 @@ class IStandingRunner(Protocol):
     def identity(self) -> ICurrentRunnerIdentity: ...
     @property
     def identity_verdict(self) -> IHostStandingSink: ...
+    @property
+    def retirement(self) -> IForgetRetiredRunner: ...
 
 
 def standing_of(
@@ -210,6 +218,17 @@ class HostRegistration:
             own = runner.identity.current()
             standing, reason = standing_of(runner.runner_id, own.tenant_id if own else None, answer, identity)
             runner.identity_verdict.stand(standing, reason=reason)
+            if standing is HostStanding.NOT_HELD:
+                self._forget_if_retired(runner)
+
+    def _forget_if_retired(self, runner: IStandingRunner) -> None:
+        """A runner not held may be retired, or only awaiting adoption: its row goes only on the hub's proof. A
+        failed forget stays this runner's — the next tick retries — and reaches neither the other runners nor the
+        tick's other steps."""
+        try:
+            runner.retirement.forget_if_retired()
+        except Exception:
+            _log.exception("forgetting a retired runner's identity failed", runner_id=runner.runner_id)
 
     def _identity_for(self, answer: HostRecord, now: datetime) -> HostIdentity:
         """The host's identity per ``answer``, from a first answer; raises :class:`HostIdentityAlreadyRecorded`."""

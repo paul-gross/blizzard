@@ -66,7 +66,14 @@ from blizzard.runner.harness.wiring import (
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_file import HostFileEditor
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
+from blizzard.runner.hub.client import (
+    HostReport,
+    HostReportedWorkspace,
+    IHostHubClient,
+    ITokenIdentityReader,
+    TokenIdentity,
+    TokenRefusal,
+)
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -76,11 +83,10 @@ from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
-    IWriteRetiredRunnerIdentity,
-    IWriteRunnerIdentityRepository,
     RunnerIdentityHolder,
 )
-from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
+from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
+from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClient, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.ingest import IIngestStores, ITokenFiles, RunnerIngest
@@ -282,6 +288,8 @@ class RunnerProcess:
     identity: RunnerIdentityHolder
     #: Whether this runner has verified its token names the configured runner — unchecked from start.
     identity_verdict: IdentityVerdictHolder
+    #: Forgets this runner's identity row once its own token is refused as retired — the host tick's.
+    retirement: RetiredRunnerWatch
     #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
     hub_token: HubTokenHolder
     #: The host's broker, stamping this runner's id on every runner-scoped event; ``None`` on a host with none.
@@ -918,6 +926,7 @@ def _build_runner(
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
+        hub_token = held_hub_token(config, token)
         return RunnerProcess(
             host=host,
             config=config,
@@ -932,7 +941,13 @@ def _build_runner(
             trace_replay=trace_replay,
             identity=identity,
             identity_verdict=IdentityVerdictHolder(_identity_remedy(config, runner_id)),
-            hub_token=held_hub_token(config, token),
+            retirement=RetiredRunnerWatch(
+                runner_id=runner_id,
+                rows=stores.identity,
+                forgetter=RunnerIdentityStore(connections),
+                token_identity=_OwnTokenIdentity(config.hub_url, hub_token),
+            ),
+            hub_token=hub_token,
             events=RunnerEventPublisher.over(host.events, runner_id),
             harness_telemetry=plan,
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
@@ -987,18 +1002,37 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
     )
 
 
-def build_identity_writer(
-    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
-) -> IWriteRunnerIdentityRepository:
-    """The identity row's writer, bound to ``runner_id``, for ``init`` to record the runner it joined."""
-    return build_stores(engine, errors=errors, runner_id=runner_id).identity
+@contextlib.contextmanager
+def build_identity_service(
+    db_url: str, *, runner_id: str, clock: IClock
+) -> Generator[RunnerIdentityService, None, None]:
+    """The identity row's service, bound to ``runner_id``, for ``runner init`` and ``runner retire`` on a stopped host.
+    It owns the engine it opens and disposes it on exit, so no verb holds a write repository past its use."""
+    engine = create_engine_from_url(db_url)
+    try:
+        identities = RunnerIdentityStore(
+            RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id)
+        )
+        yield RunnerIdentityService(recorder=identities, forgetter=identities, clock=clock)
+    finally:
+        engine.dispose()
 
 
-def build_identity_forgetter(
-    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
-) -> IWriteRetiredRunnerIdentity:
-    """The identity row's forgetter, bound to ``runner_id``, for ``runner retire`` to forget the runner it retired."""
-    return RunnerIdentityStore(RunnerStoreConnections(engine, errors, runner_id))
+class _OwnTokenIdentity:
+    """The identity read under a runner's own held token, each call over a client that lives only for it."""
+
+    def __init__(self, hub_url: str, token: HubTokenHolder) -> None:
+        self._hub_url = hub_url
+        self._token = token
+
+    def identity(self) -> TokenIdentity | TokenRefusal:
+        with httpx2.Client(
+            base_url=self._hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS, auth=HeldTokenAuth(self._token)
+        ) as client:
+            return HttpHubClient(client).identity()
+
+
+_own_token_identity_conforms: type[ITokenIdentityReader] = _OwnTokenIdentity
 
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:
