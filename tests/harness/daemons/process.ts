@@ -259,11 +259,12 @@ export async function stopDaemon(daemon: { pid: number; group?: boolean; exited?
   if (daemon.exited !== undefined) {
     const grace = sleep(STOP_GRACE_MS).then(() => undefined);
     if ((await Promise.race([daemon.exited, grace])) !== undefined) return;
-  }
-  const deadline = Date.now() + STOP_GRACE_MS;
-  while (daemon.exited === undefined && Date.now() < deadline) {
-    if (!isAlive(daemon.pid)) return;
-    await sleep(POLL_MS);
+  } else {
+    const deadline = Date.now() + STOP_GRACE_MS;
+    while (Date.now() < deadline) {
+      if (!isAlive(daemon.pid)) return;
+      await sleep(POLL_MS);
+    }
   }
   try {
     signalDaemon(daemon, 'SIGKILL');
