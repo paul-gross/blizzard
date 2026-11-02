@@ -492,6 +492,112 @@ def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world:
     assert [k for (k,) in kinds].count("repository-unresolved") == 1
 
 
+def test_submit_refusal_rolls_back_artifact_event_and_routing_on_failure(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id, build = world.mint()
+    world.complete(chunk_id, build, repo="acme/unknown")
+    lines = world.lines(world.tenant)
+    router = cast(Any, lines._refusals)
+    hub_exec = router._hub_exec
+    original = hub_exec.record_hub_step_transition_locked
+    published: list[dict[str, Any]] = []
+    monkeypatch.setattr(router._events._publisher, "publish_event_logged", lambda **kw: published.append(kw))
+
+    def abort_after_transition(*args: Any, **kwargs: Any) -> bool:
+        assert original(*args, **kwargs)
+        raise RuntimeError("abort refusal")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(hub_exec, "record_hub_step_transition_locked", abort_after_transition)
+        assert lines.reconcile(0).submitted == 0
+    assert world.detail(chunk_id)["current_node_name"] == "merge"
+    assert not [a for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name.startswith("hub-log")]
+    with world.hub.engine.connect() as conn:
+        kinds = (
+            conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id)))
+            .scalars()
+            .all()
+        )
+    assert "repository-unresolved" not in kinds
+    assert published == []
+    assert world.submissions(chunk_id) == []
+
+    lines.reconcile(0)
+    assert world.detail(chunk_id)["current_node_name"] == "build"
+    assert [
+        a.name for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name.startswith("hub-log")
+    ] == ["hub-log.repository-unresolved"]
+    with world.hub.engine.connect() as conn:
+        kinds = (
+            conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id)))
+            .scalars()
+            .all()
+        )
+    assert kinds.count("repository-unresolved") == 1
+    assert [event["kind"] for event in published] == ["repository-unresolved"]
+
+
+@pytest.mark.parametrize("destination", ["unknown", "graph:missing", "graph:landing"])
+def test_submit_refusal_routes_unroutable_and_cross_graph(
+    world: _World, destination: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if destination == "graph:landing":
+        assert world.hub.client.post("/api/graphs", json={"definition_yaml": _LANDING}).status_code == 201
+    chunk_id, build = world.mint()
+    world.complete(chunk_id, build, repo="acme/unknown")
+    graph_id = world.detail(chunk_id)["graph_id"]
+    graph = world.hub.services.graphs.get(graph_id)
+    assert graph is not None
+    node = graph.node_by_name("merge")
+    assert node is not None
+    edge = graph.edge_for_choice(node.node_id, "failure")
+    assert edge is not None
+    with world.hub.engine.begin() as conn:
+        conn.execute(
+            hub_scoped(
+                update(s.graph_edges)
+                .where(s.graph_edges.c.choice_id == edge.choice_id)
+                .values(to_node_name=destination)
+            )
+        )
+    lines = world.lines(world.tenant)
+    router = cast(Any, lines._refusals)
+    store = router._movement if destination == "graph:landing" else router._escalations
+    method = "record_migration_locked" if destination == "graph:landing" else "record_bounce_escalation_locked"
+    original = getattr(store, method)
+
+    def abort_after_route(*args: Any, **kwargs: Any) -> Any:
+        original(*args, **kwargs)
+        raise RuntimeError("abort routing")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, method, abort_after_route)
+        lines.reconcile(0)
+    assert world.detail(chunk_id)["graph_id"] == graph_id
+    assert world.detail(chunk_id)["current_node_name"] == "merge"
+    assert not [a for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id) if a.name.startswith("hub-")]
+    with world.hub.engine.connect() as conn:
+        kinds = (
+            conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id)))
+            .scalars()
+            .all()
+        )
+    assert "repository-unresolved" not in kinds
+    assert "hub-node-unroutable-outcome" not in kinds
+
+    lines.reconcile(0)
+    detail = world.detail(chunk_id)
+    if destination == "graph:landing":
+        assert detail["graph_id"] != graph_id
+        assert detail["current_node_name"] == "merge"
+    else:
+        assert detail["status"] == "needs_human"
+    artifacts = [a.name for a in world.hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    assert "hub-log.repository-unresolved" in artifacts
+    assert ("hub-unroutable-outcome" in artifacts) == (destination == "unknown")
+
+
 def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_up(world: _World) -> None:
     chunk_id, build = world.mint()
     graph_id = world.detail(chunk_id)["graph_id"]

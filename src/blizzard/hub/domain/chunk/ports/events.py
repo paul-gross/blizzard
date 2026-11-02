@@ -11,6 +11,7 @@ from typing import Protocol
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -67,6 +68,21 @@ class IReadChunkEventsRepository(Protocol):
 
 class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
     """Read-write chunk-events access."""
+
+    def record_event_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        severity: EventLogSeverity,
+        kind: str,
+        chunk_id: str,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+    ) -> int:
+        """Append a chunk event on the locked transaction."""
+        ...
 
     def record_event(
         self,

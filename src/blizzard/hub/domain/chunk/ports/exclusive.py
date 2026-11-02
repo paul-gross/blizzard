@@ -16,6 +16,7 @@ from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
+from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -59,7 +60,7 @@ class ILockedFlowAdmissionRead(ILockedChunkRead, Protocol):
     def flow_admission_locked(self) -> None: ...
 
 
-class ILockedWorkRefRead(Protocol):
+class ILockedWorkRefRead(ILockedConfigTransaction, Protocol):
     """The guard read resolved on the one connection its pointer locks were taken on.
     Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds no chunk-row lock,
     so it cannot satisfy a chunk-row ``*_locked`` write."""

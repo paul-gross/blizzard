@@ -3,9 +3,11 @@ whole with a ``422`` body naming what to choose; and a source unlinked under an 
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -301,3 +303,70 @@ def test_locked_hub_item_project_is_checked_against_named_project(
     monkeypatch.setattr(exclusive, "locked_work_refs", interleaved)
     with pytest.raises(IngestItemProjectMismatch):
         ingest.ingest([pointer], graph=graph, project=first)
+
+
+@pytest.mark.parametrize("change", ["resolve_ambiguity", "add_link", "move_link"])
+def test_api_infers_from_links_at_admission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
+    hub, first, second = _two_projects(tmp_path)
+    source = "shared" if change == "resolve_ambiguity" else "a"
+    exclusive = hub.services.ingest._exclusive
+    original = exclusive.locked_work_refs
+
+    @contextmanager
+    def interleaved(pointers: Any, *, project: Any = None) -> Any:
+        if change in ("resolve_ambiguity", "move_link"):
+            response = hub.client.post(f"/api/projects/{first}/source-links/{source}/retire")
+            assert response.status_code == 200, response.text
+        if change in ("add_link", "move_link"):
+            link_project(hub.engine, project=second, source=source)
+        with original(pointers, project=project) as handle:
+            yield handle
+
+    monkeypatch.setattr(exclusive, "locked_work_refs", interleaved)
+    status, body = _ingest(hub, f"{source}:race")
+    if change == "add_link":
+        assert status == 422
+        assert body["detail"]["code"] == "project_required"
+        assert {p["project_id"] for p in body["detail"]["projects"]} == {first, second}
+        assert hub.services.graphs.get_enabled_by_name(hub.services.default_graph_doc.name) is None
+        assert hub.client.get("/api/chunks").json()["chunks"] == []
+    else:
+        assert status == 201, body
+        assert _project_of(hub, body["chunk_id"]) == second
+        assert body["project_id"] == second
+
+
+def test_hub_fallback_refuses_multiple_projects_before_default_graph(tmp_path: Path) -> None:
+    hub, _, _ = _two_projects(tmp_path)
+    # The fallback cannot select a sole project when there are two.
+    status, body = _ingest(hub, "hub:999")
+    assert status == 422
+    assert body["detail"]["code"] == "project_required"
+    assert hub.services.graphs.get_enabled_by_name(hub.services.default_graph_doc.name) is None
+
+
+def test_hub_fallback_uses_the_sole_project(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    project = ProjectId(default_project(hub.engine))
+
+    status, body = _ingest(hub, "hub:999")
+
+    assert status == 201, body
+    assert _project_of(hub, body["chunk_id"]) == project
+
+
+def test_concurrent_api_ingests_admit_one_live_holder(tmp_path: Path) -> None:
+    hub, first, _ = _two_projects(tmp_path)
+    start = Barrier(2)
+
+    def submit() -> tuple[int, dict[str, Any]]:
+        start.wait(timeout=10)
+        return _ingest(hub, "a:concurrent")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: submit(), range(2)))
+    assert sorted(status for status, _ in results) == [201, 409]
+    winner = next(body for status, body in results if status == 201)
+    loser = next(body for status, body in results if status == 409)
+    assert loser["existing_chunk_id"] == winner["chunk_id"]
+    assert _project_of(hub, winner["chunk_id"]) == first

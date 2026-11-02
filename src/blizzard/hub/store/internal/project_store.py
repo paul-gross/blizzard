@@ -16,7 +16,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead, ILockedConfigTransaction
 from blizzard.hub.domain.projects.model import (
     IWriteProjectRepository,
     Project,
@@ -25,7 +25,7 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlugTaken,
 )
 from blizzard.hub.domain.projects.resolve import resolve
-from blizzard.hub.store.internal.chunk_rows import conn_of
+from blizzard.hub.store.internal.chunk_rows import config_conn_of, conn_of
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
@@ -139,7 +139,13 @@ class ProjectStore:
 
     def list_all(self) -> list[Project]:
         with self._store.read("list_all") as conn:
-            rows = conn.execute(self._store.select(projects).order_by(projects.c.slug)).all()
+            return self._list_all_conn(conn)
+
+    def list_all_locked(self, handle: ILockedConfigTransaction) -> list[Project]:
+        return self._list_all_conn(config_conn_of(handle))
+
+    def _list_all_conn(self, conn: Connection) -> list[Project]:
+        rows = conn.execute(self._store.select(projects).order_by(projects.c.slug)).all()
         return [_of(row) for row in rows]
 
     def get_by_slug(self, slug: ProjectSlug) -> Project | None:

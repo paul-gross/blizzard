@@ -37,7 +37,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedFlowAdmissionRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -351,6 +351,154 @@ class HubNodeRouter:
                     close_decision=close_decision,
                 )
             ending.end(handle, outcome=choice, closure=choice if wrote else None)
+
+    def refuse_locked(
+        self,
+        handle: ILockedFlowAdmissionRead,
+        chunk: Chunk,
+        graph: Graph,
+        node: Node,
+        *,
+        epoch: int,
+        step: str,
+        detail: str,
+        resolution: RepositoryResolution | None = None,
+    ) -> list[Callable[[], object]]:
+        """Record and route a submit refusal on its admission decision transaction."""
+        notifications: list[Callable[[], object]] = []
+        close = decide_close_enqueue(chunk.work_refs, lambda source: self._work_sources.closer(source) is not None)
+        now = self._clock.now()
+        announced = self._artifacts.record_hub_artifact_locked(
+            handle,
+            chunk.chunk_id,
+            node_id=node.node_id,
+            node_name=node.name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=f"{HUB_LOG_PREFIX}{step}",
+            content=f"[{step.replace('-', ' ')}]\n{detail}\n",
+            at=now,
+            close_decision=close,
+        )
+        if announced and resolution is not None and (kind := REFUSAL_EVENT[resolution.outcome]) is not None:
+            notifications.append(
+                self._events.record_locked(
+                    handle,
+                    kind=kind,
+                    chunk_id=chunk.chunk_id,
+                    project_id=chunk.project_id,
+                    node_name=node.name,
+                    message=resolution.detail,
+                    detail={"epoch": epoch},
+                    at=now,
+                )
+            )
+        choice = HUB_DEFAULT_FAILURE_CHOICE
+        edge = graph.edge_for_choice(node.node_id, choice)
+        if edge is not None and edge.target_graph is not None:
+            target = self._graphs.get_enabled_by_name_locked(handle, edge.target_graph)
+            if target is None:
+                unresolvable = UnresolvableTarget.of(edge)
+                self._escalate_locked(handle, chunk, unresolvable.cause, unresolvable.detail, epoch=epoch + 1)
+            else:
+                landing = Landing.authored(edge, target, node)
+                outcome = self._movement.record_migration_locked(
+                    handle,
+                    chunk.chunk_id,
+                    from_node_id=node.node_id,
+                    from_graph_id=node.graph_id,
+                    to_graph_id=landing.graph.graph_id,
+                    landed_node_id=landing.node_id,
+                    choice_name=choice,
+                    decision_id=None,
+                    model=landing.model,
+                    epoch=epoch,
+                    admission=EpochAdmission.CURRENT,
+                    claimant=None,
+                    at=now,
+                    artifacts=[],
+                    source=landing.source,
+                    release_route=landing.releases_route,
+                    clear_intent=landing.clear_intent,
+                    migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
+                    close_decision=close,
+                )
+                if outcome is not None and not isinstance(outcome, FenceRefusal):
+                    open_graph_gate_on_arrival(
+                        self._decisions,
+                        handle,
+                        self._clock,
+                        chunk_id=chunk.chunk_id,
+                        graph=landing.graph,
+                        node_id=landing.node_id,
+                        epoch=epoch,
+                        close_decision=close,
+                    )
+            return notifications
+        to_node = _target(graph, edge.to_node_name) if edge is not None else None
+        if to_node is not None:
+            self._hub_exec.record_hub_step_transition_locked(
+                handle,
+                chunk.chunk_id,
+                from_node_id=node.node_id,
+                to_node_id=to_node,
+                choice_name=choice,
+                epoch=epoch + 1,
+                admission=EpochAdmission.ABOVE,
+                runner_id=_HUB_RUNNER_ID,
+                transition_id=Id.mint(IdPrefix.TRANSITION, self._clock).value,
+                at=now,
+                artifacts=[],
+                release_route=to_node == RESERVED_TERMINAL,
+                close_decision=close,
+            )
+            return notifications
+        target_name = edge.to_node_name if edge is not None else None
+        description = (
+            f"no authored edge for choice `{choice}` on hub node `{node.name}`"
+            if target_name is None
+            else f"choice `{choice}` on hub node `{node.name}` routes to unknown node `{target_name}`"
+        )
+        authored = sorted(c.name for c in node.choices)
+        announced = self._artifacts.record_hub_artifact_locked(
+            handle,
+            chunk.chunk_id,
+            node_id=node.node_id,
+            node_name=node.name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=_UNROUTABLE_ARTIFACT_NAME,
+            content=f"{description}\n\nauthored choices: {', '.join(authored) or '<none>'}\n"
+            "The chunk is escalated to a person; nothing routes it on.\n",
+            at=now,
+            close_decision=close,
+        )
+        if announced:
+            notifications.append(
+                self._events.record_locked(
+                    handle,
+                    kind=_EVENT_UNROUTABLE_OUTCOME,
+                    chunk_id=chunk.chunk_id,
+                    project_id=chunk.project_id,
+                    node_name=node.name,
+                    message=description,
+                    detail={"choice": choice, "epoch": epoch, "authored_choices": authored},
+                    at=now,
+                )
+            )
+        named = (
+            f"`{choice}`, which no edge routes"
+            if target_name is None
+            else f"`{choice}`, routed to unknown `{target_name}`"
+        )
+        self._escalate_locked(
+            handle,
+            chunk,
+            EscalationCause.UNROUTABLE_OUTCOME,
+            f"hub node `{node.name}` answered {named}",
+            epoch=epoch + 1,
+        )
+        return notifications
 
     def refuse(
         self,

@@ -377,9 +377,18 @@ class FlowLineReconciler:
                     resources=resources,
                     at=self._clock.now(),
                 )
-        self._refusals.refuse(
-            chunk, graph, node, epoch=epoch, step=resolved.step, detail=resolved.detail, resolution=resolved.resolution
-        )
+            notifications = self._refusals.refuse_locked(
+                handle,
+                record,
+                graph,
+                node,
+                epoch=epoch,
+                step=resolved.step,
+                detail=resolved.detail,
+                resolution=resolved.resolution,
+            )
+        for notify in notifications:
+            notify()
         return None
 
     def _close_departed(

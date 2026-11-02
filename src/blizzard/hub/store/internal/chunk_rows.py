@@ -40,6 +40,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
+from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
@@ -453,6 +454,11 @@ def conn_of(handle: ILockedChunkRead) -> Connection:
 
 def work_ref_conn_of(handle: ILockedWorkRefRead) -> Connection:
     """:func:`conn_of`'s sibling for a domain-held :class:`ILockedWorkRefRead`."""
+    return cast(_LockedConnection, handle).conn
+
+
+def config_conn_of(handle: ILockedConfigTransaction) -> Connection:
+    """Recover the connection of a config-locked transaction."""
     return cast(_LockedConnection, handle).conn
 
 

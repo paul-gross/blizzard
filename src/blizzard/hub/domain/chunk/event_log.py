@@ -4,11 +4,13 @@ event-authoring call site gets the live broadcast without knowing the broker exi
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
+from functools import partial
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -25,6 +27,40 @@ class EventLogService:
     ) -> None:
         self._events = events
         self._publisher = publisher
+
+    def record_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        kind: EventLogKind,
+        chunk_id: str,
+        project_id: ProjectId | None,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+    ) -> Callable[[], object]:
+        """Write on the decision transaction; return its post-commit notification."""
+        severity = EVENT_LOG_SEVERITY[kind]
+        row_id = self._events.record_event_locked(
+            handle,
+            severity=severity,
+            kind=kind,
+            chunk_id=chunk_id,
+            node_name=node_name,
+            message=message,
+            detail=detail,
+            at=at,
+        )
+        return partial(
+            self._publisher.publish_event_logged,
+            severity=severity,
+            kind=kind,
+            chunk_id=chunk_id,
+            runner_id=None,
+            key=f"event_log:{row_id}",
+            project_id=project_id,
+        )
 
     def record(
         self,

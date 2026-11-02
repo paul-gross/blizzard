@@ -2446,6 +2446,20 @@ def test_domain_layer_check_counts_every_import_form(tmp_path: Path, rel: str, t
     assert len(violations) == (1 if caught else 0), violations
 
 
+@pytest.mark.parametrize("module", ["authoring", "model"])
+def test_graph_admission_depends_on_kernel_not_chunk(tmp_path: Path, module: str) -> None:
+    domain = tmp_path / "domain"
+    graph = domain / "graph"
+    graph.mkdir(parents=True)
+    source = graph / f"{module}.py"
+    tree = _hub_domain_tree(domain, _DOMAIN_PACKAGE_LAYERS)
+
+    source.write_text("from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction\n")
+    assert _layer_crossings(tree) == []
+    source.write_text("from blizzard.hub.domain.chunk.ports.exclusive import ILockedWorkRefRead\n")
+    assert len(_layer_crossings(tree)) == 1
+
+
 @pytest.mark.parametrize(
     "layers",
     [

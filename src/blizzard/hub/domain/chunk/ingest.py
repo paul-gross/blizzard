@@ -11,19 +11,19 @@ service is handed (``bzh:domain-orchestration-split``); a refusal raised outside
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkRef, mint_chunk
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId, sole_project
 
 
 class IWorkRefLabels(Protocol):
@@ -256,26 +256,51 @@ class IngestService:
         a live chunk holds. Of two overlapping ingests of one pointer, exactly one mints.
 
         Project inference and pointer admission read their facts on the locked transaction."""
+        return self._ingest(pointers, project=project, graph=lambda _: graph, projects=None).chunk_id
+
+    def ingest_default(
+        self,
+        pointers: Sequence[WorkRef],
+        *,
+        project: ProjectId | None,
+        graph: Callable[[ILockedWorkRefRead], Graph],
+        projects: IReadProjectRepository,
+    ) -> Chunk:
+        """Admit and mint with the default graph, resolving the sole-project fallback under the lock."""
+        return self._ingest(pointers, project=project, graph=graph, projects=projects)
+
+    def _ingest(
+        self,
+        pointers: Sequence[WorkRef],
+        *,
+        project: ProjectId | None,
+        graph: Callable[[ILockedWorkRefRead], Graph],
+        projects: IReadProjectRepository | None,
+    ) -> Chunk:
         work_refs = ingest_work_refs(pointers)
         try:
             with self._exclusive.locked_work_refs(work_refs, project=project) as handle:
-                chosen = choose_ingest_project(
-                    project,
-                    work_refs,
-                    handle.source_links(configured_sources(work_refs)),
-                    handle.item_projects(work_refs),
-                )
+                links = handle.source_links(configured_sources(work_refs))
+                items = handle.item_projects(work_refs)
+                try:
+                    chosen = choose_ingest_project(project, work_refs, links, items)
+                except IngestProjectUnknown:
+                    if projects is None:
+                        raise
+                    chosen = choose_ingest_project(
+                        sole_project(projects.list_all_locked(handle)).project_id, work_refs, links, items
+                    )
                 chunk = decide_ingest(
                     work_refs,
                     live_holders=handle.live_holders(work_refs),
-                    graph=graph,
+                    graph=graph(handle),
                     project_id=chosen,
                     at=self._clock.now(),
                 )
                 self._record.mint_locked(handle, chunk)
         except (IngestSourceNotLinked, IngestConflict) as exc:
             raise exc.labelled(self._labels) from None
-        return chunk.chunk_id
+        return chunk
 
     def _recorded_projects(self, work_refs: Sequence[WorkRef]) -> dict[WorkRef, ProjectId]:
         """The hub items' recorded projects — they decide the project when nothing else names one, and

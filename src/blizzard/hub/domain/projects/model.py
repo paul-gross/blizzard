@@ -15,7 +15,7 @@ from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead, ILockedConfigTransaction
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import parse_color
@@ -191,6 +191,10 @@ class IReadProjectRepository(Protocol):
 
     def list_all(self) -> list[Project]:
         """Every project of the tenant, ordered by slug."""
+        ...
+
+    def list_all_locked(self, handle: ILockedConfigTransaction) -> list[Project]:
+        """Every project, read on the config-locked transaction."""
         ...
 
     def get_by_slug(self, slug: ProjectSlug) -> Project | None:

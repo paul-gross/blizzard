@@ -28,6 +28,7 @@ from blizzard.hub.domain.graph.model import (
     NodeDoc,
 )
 from blizzard.hub.domain.graph.validation import Validator, cross_graph_warnings
+from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction
 
 
 class DefaultGraphRetired(Exception):
@@ -173,10 +174,15 @@ class GraphMintService:
     def _prepared(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
         """``doc`` validated and reified, with its warnings. The cross-graph reads resolve other
         graphs' names — a different aggregate — so they never run under a name lock."""
+        graph, warnings = self._compiled(doc)
+        enabled = self._graphs.enabled_names(graph.cross_graph_targets())
+        return graph, [*warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
+
+    def _compiled(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
+        """Validate and reify without repository reads."""
         result = Validator.of(doc, self._catalogue).require_valid()
         graph = Reification.of(doc, self._clock).graph
-        enabled = self._graphs.enabled_names(graph.cross_graph_targets())
-        return graph, [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
+        return graph, list(result.warnings)
 
     def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:
         """Mint ``doc`` only if it differs from ``minted``, the store's newest of its name.
@@ -206,4 +212,19 @@ class GraphMintService:
             if resolved is not None:
                 return resolved
             self._graphs.mint_locked(handle, graph, definition_yaml=definition_yaml, at=graph.created_at)
+        return graph
+
+    def ensure_default_locked(self, handle: ILockedConfigTransaction, doc: GraphDoc, *, definition_yaml: str) -> Graph:
+        """Resolve or mint the default on an existing config-locked transaction."""
+        name = self._graphs.name_on_config(handle, doc.name)
+        existing = name.get_enabled_by_name(doc.name)
+        resolved = resolve_default(
+            doc.name, enabled=existing, any_minted=existing is None and name.any_minted(doc.name)
+        )
+        if resolved is not None:
+            return resolved
+        # Cross-graph warnings are not returned by this operation, so do not open
+        # another connection to compute them while the admission transaction is held.
+        graph, _ = self._compiled(doc)
+        self._graphs.mint_locked(name, graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph

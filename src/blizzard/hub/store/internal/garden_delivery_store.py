@@ -68,11 +68,6 @@ class GardenDeliveryStore:
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
             lock_chunk_row(conn, plan.chunk_id)
-            # Every finding an `observed`/`gone` op names, locked before any read below so the guard
-            # further down judges a state no verb can move until this transaction ends. Chunk row
-            # first, then findings sorted: no path locks a finding and then a chunk.
-            for batch in id_batches(sorted(plan.expect)):
-                lock_findings(conn, batch)
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED
@@ -153,6 +148,17 @@ class GardenDeliveryStore:
 
             new_findings = [f for d in surviving_deltas for f in d.new_findings]
             facts = [fact for d in surviving_deltas for fact in d.facts]
+            links = [
+                {"proposal_id": p.proposal_id, "finding_id": ref_substitutions.get(finding_id, finding_id)}
+                for p in surviving_proposals
+                for finding_id in p.finding_ids
+                if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
+            ]
+            # FK checks on facts and links also lock existing findings. Acquire all of them
+            # together, in order, before the guard or any insert can acquire another lock.
+            lock_ids = set(plan.expect) | {fact.finding_id for fact in facts} | {link["finding_id"] for link in links}
+            for batch in id_batches(sorted(lock_ids)):
+                lock_findings(conn, batch)
             # Only facts that will actually be inserted: a dropped, already-materialized delta's ops
             # write nothing, so a finding they name moving is no reason to refuse.
             written = {fact.finding_id for fact in facts}
@@ -242,14 +248,6 @@ class GardenDeliveryStore:
                         for p in surviving_proposals
                     ],
                 )
-                # An unresolved citation names a finding this visit never inserted, so its
-                # link is dropped like the delta was rather than pointing at nothing.
-                links = [
-                    {"proposal_id": p.proposal_id, "finding_id": ref_substitutions.get(finding_id, finding_id)}
-                    for p in surviving_proposals
-                    for finding_id in p.finding_ids
-                    if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
-                ]
                 if links:
                     cited = [link["finding_id"] for link in links]
                     outside = findings_outside_project(conn, cited, plan.run.project_id)

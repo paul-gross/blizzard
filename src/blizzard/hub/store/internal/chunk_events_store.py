@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, cast
 
 from sqlalchemy import Column, ColumnElement, Connection, Row, Select, and_, or_, true
 
@@ -27,14 +27,21 @@ from blizzard.hub.domain.chunk.model import (
     RouteReleaseCause,
 )
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import conn_of
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # The hub coordinator's own reserved ``transitions.runner_id`` — the only fact-table
 # difference between a ``hub-advanced`` and a ``node-completed`` transition.
 _HUB_RUNNER_ID = "hub"
+
+
+class _ChunkLocks(Protocol):
+    locked_ids: frozenset[str]
+
 
 # --- activity_facts_since's per-source base statements: each is what `_bounded` (below)
 # adds its `WHERE ts >= :since ORDER BY ts DESC, pk DESC LIMIT :limit` to. Named and
@@ -745,6 +752,36 @@ class ChunkEventsStore:
             stmt = stmt.where(stmt.selected_columns.chunk_id.in_(chunks))
         bounded_stmt = _bounded_stmt(stmt, ts_col=ts_col, pk_col=pk_col, since=since, limit=limit)
         return [builder(row) for row in conn.execute(bounded_stmt).all()]
+
+    def record_event_locked(
+        self,
+        handle: ILockedChunkRead,
+        *,
+        severity: EventLogSeverity,
+        kind: str,
+        chunk_id: str,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+    ) -> int:
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("event's chunk is not locked by this handle")
+        result = conn_of(handle).execute(
+            self._store.insert(s.event_log).values(
+                severity=severity,
+                kind=kind,
+                runner_id=None,
+                chunk_id=chunk_id,
+                lease_id=None,
+                node_name=node_name,
+                message=message,
+                detail=json.dumps(detail) if detail is not None else None,
+                recorded_at=at,
+            )
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def record_event(
         self,

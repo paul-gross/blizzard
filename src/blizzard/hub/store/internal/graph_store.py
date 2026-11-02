@@ -21,6 +21,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.graph.model import (
     Choice,
     ChoiceTarget,
@@ -28,6 +29,7 @@ from blizzard.hub.domain.graph.model import (
     Graph,
     GraphArtifact,
     GraphSummary,
+    IFlowGraphRead,
     ILockedGraphNameRead,
     IReadGraphBodies,
     IWriteGraphRepository,
@@ -36,7 +38,8 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
-from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction
+from blizzard.hub.store.internal.chunk_rows import config_conn_of, conn_of, lock_keys
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
@@ -297,6 +300,11 @@ class GraphStore:
             lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
             yield LockedGraphName(conn, self)
 
+    def name_on_config(self, handle: ILockedConfigTransaction, name: str) -> ILockedGraphNameRead:
+        conn = config_conn_of(handle)
+        lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
+        return LockedGraphName(conn, self)
+
     def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         self._mint_conn(cast(LockedGraphName, handle).conn, graph, definition_yaml=definition_yaml, at=at)
 
@@ -340,6 +348,10 @@ class GraphStore:
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._store.read("get_enabled_by_name") as conn:
             return self.enabled_by_name_conn(conn, name)
+
+    def get_enabled_by_name_locked(self, handle: IFlowGraphRead, name: str) -> Graph | None:
+        handle.flow_admission_locked()
+        return self.enabled_by_name_conn(conn_of(cast(ILockedChunkRead, handle)), name)
 
     def enabled_by_name_conn(self, conn: Connection, name: str) -> Graph | None:
         """`get_enabled_by_name`, resolved on the caller's connection."""

@@ -21,6 +21,7 @@ from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.kernel.config_read import ILockedConfigTransaction
 
 
 class GraphParseError(ValueError):
@@ -969,10 +970,17 @@ class IReadGraphBodies(Protocol):
         ...
 
 
+class IFlowGraphRead(Protocol):
+    """A flow admission transaction holding the config-authoring lock."""
+
+    def flow_admission_locked(self) -> None: ...
+
+
 class IReadGraphRepository(IReadManyGraphs, Protocol):
     """Read-only graph access."""
 
     def get(self, graph_id: str) -> Graph | None: ...
+    def get_enabled_by_name_locked(self, handle: IFlowGraphRead, name: str) -> Graph | None: ...
     def get_enabled_by_name(self, name: str) -> Graph | None:
         """The newest non-retired graph with ``name`` — the default-graph pin lookup.
 
@@ -1073,6 +1081,10 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
         connection — for a decision whose race has no graph row yet to lock
         (``bzh:store-exclusive-write``). A write under the lock goes through
         :meth:`mint_locked`, taking this same handle."""
+        ...
+
+    def name_on_config(self, handle: ILockedConfigTransaction, name: str) -> ILockedGraphNameRead:
+        """Lock a graph name on an existing config-locked transaction."""
         ...
 
     def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:

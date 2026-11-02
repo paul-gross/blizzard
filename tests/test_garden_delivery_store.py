@@ -24,6 +24,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     NewProposal,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.store.internal import garden_delivery_store
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import (
     artifacts,
@@ -464,7 +465,9 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         assert len(marker_rows) == 2
 
 
-def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_citation(tmp_path: Path) -> None:
+def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_citation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A later visit resolving `art_a` as already-materialized still mints a fresh id for
     its `ref`-carrying `add` op. A proposal in the same visit citing that ref must land on
     `fin_a`, the id the first visit actually recorded."""
@@ -552,9 +555,34 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
         ],
     )
 
+    second = replace(
+        second,
+        expect={"fin_z": "live"},
+        deltas=[
+            *second.deltas,
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_z", artifact_id="art_z", scope_slug="blizzard", revisions={}, measurement=None
+                ),
+                facts=[
+                    NewFindingFact(finding_id="fin_z", kind="observed", finding_set_id="fins_z"),
+                    NewFindingFact(finding_id="fin_y", kind="observed", finding_set_id="fins_z"),
+                ],
+            ),
+        ],
+    )
+    locked: list[list[str]] = []
+    original_lock = garden_delivery_store.lock_findings
+
+    def capture_lock(conn, ids):
+        locked.append(list(ids))
+        original_lock(conn, ids)
+
+    monkeypatch.setattr(garden_delivery_store, "lock_findings", capture_lock)
     outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
+    assert locked == [["fin_a", "fin_y", "fin_z"]]
     with engine.connect() as conn:
         finding_ids = {r.finding_id for r in conn.execute(hub_scoped(sa.select(findings)))}
         assert finding_ids == {"fin_a"}  # the phantom id was never inserted
@@ -604,6 +632,30 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
         assert [(r.proposal_id, r.finding_id) for r in link_rows] == [("gprop_1", "fin_1")]
         marker_rows = conn.execute(hub_scoped(sa.select(artifacts).where(artifacts.c.name == "garden-delivered"))).all()
         assert len(marker_rows) == 2
+
+
+def test_deliver_locks_direct_citations_before_linking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    first = _full_plan(default_project(engine))
+    assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    proposal = replace(first.proposals[0], proposal_id="gprop_new", source_artifact_id="art_new")
+    plan = replace(first, node_id="nd_2", epoch=2, deltas=[], proposals=[proposal])
+    locked: list[list[str]] = []
+    original_lock = garden_delivery_store.lock_findings
+
+    def capture_lock(conn, ids):
+        locked.append(list(ids))
+        original_lock(conn, ids)
+
+    monkeypatch.setattr(garden_delivery_store, "lock_findings", capture_lock)
+    assert store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    assert locked == [["fin_1"]]
+    with engine.connect() as conn:
+        links = conn.execute(hub_scoped(sa.select(garden_proposal_findings))).all()
+    assert {(link.proposal_id, link.finding_id) for link in links} == {
+        ("gprop_1", "fin_1"),
+        ("gprop_new", "fin_1"),
+    }
 
 
 def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_path: Path) -> None:

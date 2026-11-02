@@ -133,6 +133,9 @@ class LockedWorkRefTransaction:
                     result[WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref=row.ref)] = ProjectId(row.project_id)
         return result
 
+    def config_authoring_locked(self) -> None:
+        pass
+
 
 _POINTER_LOCK_NAMESPACE = "work_ref"
 

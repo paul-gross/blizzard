@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -297,8 +297,9 @@ class IHubStepRefusals(Protocol):
     """What the reconcile writes to a chunk it cannot submit: a visit refused before it names its resources routes its
     failure choice, and a hub node naming no action escalates its chunk at the visit's epoch plus one."""
 
-    def refuse(
+    def refuse_locked(
         self,
+        handle: ILockedFlowAdmissionRead,
         chunk: Chunk,
         graph: Graph,
         node: Node,
@@ -307,7 +308,7 @@ class IHubStepRefusals(Protocol):
         step: str,
         detail: str,
         resolution: RepositoryResolution | None = None,
-    ) -> object:
+    ) -> Sequence[Callable[[], object]]:
         """Record why the visit cannot run as its ``hub-log.<step>`` artifact and route its failure choice."""
         ...
 

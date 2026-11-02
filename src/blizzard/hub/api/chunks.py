@@ -29,7 +29,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.project_label_fields import project_label_fields
-from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.api.project_params import QueryProject, body_project, project_ref
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
@@ -47,7 +47,6 @@ from blizzard.hub.domain.chunk.ingest import (
     IngestConflict,
     IngestItemProjectMismatch,
     IngestProjectAmbiguous,
-    IngestProjectUnknown,
     IngestSourceNotLinked,
     ingest_work_refs,
 )
@@ -84,7 +83,6 @@ from blizzard.hub.domain.operations.restart import (
     RestartNodeUnknown,
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     BlockedView,
@@ -148,16 +146,6 @@ class OpenDecision:
             )
 
 
-def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: ProjectId | None) -> ProjectId:
-    """The project an ingest of ``pointers`` mints into: ``named``, or the one its configured sources agree on,
-    or the one its hub items record. When nothing it holds names one, the call acts in the tenant's only
-    project, :class:`ProjectRequired` otherwise."""
-    try:
-        return services.ingest.choose_project(pointers, named)
-    except IngestProjectUnknown:
-        return project_of_call(services).project_id
-
-
 def ingest_project_refusal(
     services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
 ) -> JSONResponse:
@@ -207,27 +195,27 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
             )
         pointers.append(pointer)
     try:
-        # The batch is refused before the default graph resolves, which may mint one.
         pointers = ingest_work_refs(pointers)
-        project = _ingest_project(services, pointers, named)
+        chunk = services.ingest.ingest_default(
+            pointers,
+            project=named,
+            projects=services.projects,
+            graph=lambda handle: services.graph_mint.ensure_default_locked(
+                handle, services.default_graph_doc, definition_yaml=services.default_graph_yaml
+            ),
+        )
     except EmptyIngest as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
         return ingest_project_refusal(services, exc)
     except IngestItemProjectMismatch as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    try:
-        graph = services.graph_mint.ensure_default(
-            services.default_graph_doc, definition_yaml=services.default_graph_yaml
-        )
     except DefaultGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
-    except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
-        return ingest_project_refusal(services, exc)
     except IngestConflict as exc:
         return ingest_conflict_response(services, exc)
+    chunk_id = chunk.chunk_id
+    project = chunk.require_project()
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
