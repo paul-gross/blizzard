@@ -232,11 +232,11 @@ def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
 
 
 def _named_runners(config: HostConfig, clock: IClock) -> tuple[str, ...]:
-    """The runners the store's identity rows name, none when the host has no store to read."""
-    try:
-        return named_runners(config, clock)
-    except Exception:
+    """The runners the store's identity rows name — none when the host has no store file yet. A store that exists but
+    cannot be read raises, so the cause is not hidden behind a "no such runner" refusal."""
+    if not HostLayout(config.root).store_path.exists():
         return ()
+    return named_runners(config, clock)
 
 
 def _retire_at_hub(ctx: click.Context, config: HostConfig, token: str, target: _Retiring, *, force: bool) -> str:
