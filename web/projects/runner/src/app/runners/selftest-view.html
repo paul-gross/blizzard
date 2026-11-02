@@ -1,0 +1,30 @@
+<fleet-kit-async-state [state]="state()" placement="inline" loadingText="LOADING…" errorText="HARNESSES UNAVAILABLE" emptyText="NO HARNESS CONFIGURED">
+  <ul class="selftests" data-testid="selftests">
+    @for (row of rows(); track row.harness) {
+      <li class="selftest" data-testid="selftest" [attr.data-harness-id]="row.harness">
+        <span class="selftest-head">
+          <span class="harness">{{ harnessName(row.harness) }}</span>
+          @if (row.run; as run) {
+            <fleet-kit-badge variant="pill" [tone]="tone(run.status)" data-testid="selftest-status">{{ run.status }}</fleet-kit-badge>
+          }
+          <fleet-kit-button [testid]="'run-selftest-' + row.harness" [disabled]="row.busy" (click)="runSelftest.emit(row.harness)">Run selftest</fleet-kit-button>
+        </span>
+        @if (row.run; as run) {
+          @if (run.status !== 'running') {
+            <ul class="checks" data-testid="selftest-checks">
+              @for (check of run.checks; track check.name) {
+                <li class="check" [class.failed]="!check.passed" data-testid="selftest-check">
+                  <span class="mark">{{ check.passed ? 'PASS' : 'FAIL' }}</span>
+                  <span class="name">{{ check.name }}</span>
+                  <span class="detail">{{ check.detail }}</span>
+                </li>
+              }
+            </ul>
+          }
+          <fleet-kit-error-line testid="selftest-run-error" [message]="run.error" />
+        }
+        <fleet-kit-error-line testid="selftest-error" [message]="row.error" />
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>

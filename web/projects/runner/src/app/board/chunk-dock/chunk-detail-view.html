@@ -38,6 +38,18 @@
               {{ harnessName(harnessId) }}
             </fleet-kit-badge>
           }
+          <span class="resume-line resume-requeue">
+            <fleet-kit-button testid="requeue-chunk" [disabled]="requeuePending()" (click)="confirmingRequeue.set(true)">Requeue</fleet-kit-button>
+            @if (requeued()) {
+              <span class="requeued-notice" data-testid="requeued-notice" role="status">Requeued — a fresh attempt spawns at its current node.</span>
+            }
+          </span>
+          <fleet-kit-error-line testid="requeue-error" [message]="requeueError()" />
+          @if (confirmingRequeue()) {
+            <fleet-kit-confirm-dialog [open]="true" heading="Requeue" [message]="'Requeue ' + esc.chunk_id + '? A fresh attempt spawns at its current node.'"
+              confirmLabel="Requeue" variant="primary" testid="confirm-requeue"
+              (confirmed)="confirmingRequeue.set(false); requeue.emit(esc.chunk_id)" (cancelled)="confirmingRequeue.set(false)" />
+          }
         </div>
       }
     </div>

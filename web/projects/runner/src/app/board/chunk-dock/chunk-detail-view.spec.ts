@@ -190,4 +190,41 @@ describe('MachineDetailView', () => {
       expect(el.querySelector('[data-testid="detail-resume-command"]')?.textContent).toContain('claude --resume sess-new');
     });
   });
+
+  describe('the Requeue control', () => {
+    const ESC: runnerApi.EscalationView = {
+      chunk_id: LEASE.chunk_id, lease_id: LEASE.lease_id, node_id: LEASE.node_id, epoch: LEASE.epoch,
+      closed_at: '2026-07-16T11:00:00.000Z', resume_command: 'claude --resume sess-new', wrapped_takeover_command: null,
+      closure: null, cause: null, effort: null, harness_id: null, harness_version: null, model: null, project_id: null, session_name: null,
+    };
+
+    async function mountView(inputs: Record<string, unknown> = {}) {
+      await TestBed.configureTestingModule({ imports: [MachineDetailView], providers: [provideZonelessChangeDetection()] }).compileComponents();
+      const fixture = TestBed.createComponent(MachineDetailView);
+      fixture.componentRef.setInput('lease', LEASE);
+      fixture.componentRef.setInput('escalation', ESC);
+      for (const [key, value] of Object.entries(inputs)) fixture.componentRef.setInput(key, value);
+      fixture.detectChanges();
+      return { fixture, el: fixture.nativeElement as HTMLElement };
+    }
+
+    it('emits the chunk id only once confirmed', async () => {
+      const { fixture, el } = await mountView();
+      const emitted = vi.fn();
+      fixture.componentInstance.requeue.subscribe(emitted);
+      el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!.click();
+      fixture.detectChanges();
+      expect(emitted).not.toHaveBeenCalled();
+      el.querySelector<HTMLElement>('[data-testid="confirm-requeue-confirm"]')!.click();
+      fixture.detectChanges();
+      expect(emitted).toHaveBeenCalledWith(LEASE.chunk_id);
+    });
+
+    it('disables while pending and renders its error and requeued notice', async () => {
+      const { el } = await mountView({ requeuePending: true, requeueError: 'refused', requeued: true });
+      expect(el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!.disabled).toBe(true);
+      expect(el.querySelector('[data-testid="requeue-error"]')?.textContent).toContain('refused');
+      expect(el.querySelector('[data-testid="requeued-notice"]')).not.toBeNull();
+    });
+  });
 });
