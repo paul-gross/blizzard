@@ -428,7 +428,7 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     probe = _OrderingProbe()
     opened = _service(store, probe=probe).open(_open_scope(store), force=True)
 
-    # Fact-before-kill (bzh:crash-correctness): the fact was already durable the
+    # Fact-before-kill (bzh:crash-point-registry): the fact was already durable the
     # instant the kill ran.
     assert probe.fact_open_at_kill is True
     assert probe.killed == [100]

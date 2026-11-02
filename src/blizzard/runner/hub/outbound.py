@@ -9,11 +9,9 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.fact_kinds import (
     ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
     EVENT_RECORDED,
     LEASE_MINTED,
     QUESTION_ASKED,
@@ -34,7 +32,6 @@ from blizzard.runner.hub.outbound_buffer import (
     OutboundEventFields,
     answer_delivered_payload,
     command_failed_event,
-    escalation_payload,
     event_payload,
     lease_minted_payload,
     question_asked_payload,
@@ -86,27 +83,6 @@ class OutboundFacts:
         is the fence input the hub's completion check consumes."""
         payload = lease_minted_payload(chunk_id, lease_id, epoch=epoch, route_token=self._route_token(chunk_id))
         self._enqueue(LEASE_MINTED, chunk_id, lease_id, payload, at)
-
-    def escalation(
-        self,
-        lease: Lease,
-        *,
-        takeover: str,
-        wrapped_takeover: str,
-        cause: EscalationCause,
-        detail: str,
-        at: datetime,
-    ) -> None:
-        """Carries both takeover strings and why the escalation was raised."""
-        payload = escalation_payload(
-            lease,
-            takeover=takeover,
-            wrapped_takeover=wrapped_takeover,
-            cause=cause,
-            detail=detail,
-            route_token=self._route_token(lease.chunk_id),
-        )
-        self._enqueue(ESCALATION_RECORDED, lease.chunk_id, lease.lease_id, payload, at)
 
     def question_asked(self, lease: Lease, ask: OpenAsk, *, at: datetime) -> None:
         payload = question_asked_payload(lease, ask, route_token=self._route_token(lease.chunk_id))

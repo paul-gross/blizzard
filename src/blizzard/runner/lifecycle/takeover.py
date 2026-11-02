@@ -2,7 +2,7 @@
 
 A chunk is **takeable** while this runner holds it and carries no running attempt; anything else
 raises a ``TakeoverError`` refusal. The **fact-before-command** ordering holds regardless of
-``force`` (``bzh:crash-correctness``): the open-takeover fact lands first — and a forced kill
+``force`` (``bzh:crash-point-registry``): the open-takeover fact lands first — and a forced kill
 writes no attempt fact, so it consumes no retry."""
 
 from __future__ import annotations
@@ -516,7 +516,7 @@ class TakeoverService:
         takeover_id = Id.mint(IdPrefix.TAKEOVER, self._clock).value
         fence_epoch = admission.fence_epoch
 
-        # Fact-before-command (bzh:crash-correctness): the open takeover is recorded
+        # Fact-before-command (bzh:crash-point-registry): the open takeover is recorded
         # before anything is killed or returned.
         self._takeover.record_takeover(
             takeover_id=takeover_id,

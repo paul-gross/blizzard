@@ -3,10 +3,23 @@ identity."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
+
+
+@domain_model
+@dataclass(frozen=True)
+class ClosureFact:
+    """One hub-bound fact a closure carries into the outbound buffer — its fact kind and its
+    already-rendered JSON payload."""
+
+    kind: str
+    payload: str
 
 
 class IReadLeaseRecordRepository(Protocol):
@@ -111,13 +124,12 @@ class IWriteLeaseRecordRepository(IReadChunkLeaseRepository, Protocol):
         node_id: str,
         reason: str,
         closed_at: datetime,
-        event_kind: str | None = None,
-        event_payload: str | None = None,
+        facts: Sequence[ClosureFact] = (),
         escalation_cause: str | None = None,
-    ) -> int | None:
+    ) -> list[int]:
         """Close a lease — a clean transition or a failure/escalation.
 
-        When ``event_kind``/``event_payload`` are given, the event is enqueued to the outbound buffer **in
-        the same transaction** as the closure; returns its seq, ``None`` when no event.
+        Each of ``facts`` is enqueued to the outbound buffer, in the order given, **in the same
+        transaction** as the closure; returns their seqs in that order (empty when none).
         ``escalation_cause`` records why an escalating closure escalated, durably beside it."""
         ...

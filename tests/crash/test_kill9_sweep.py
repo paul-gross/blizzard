@@ -127,6 +127,8 @@ _DEDICATED_PREFIXES = (
     "ingest.",
     "release.",
     "policy.",
+    "escalate.",
+    "answer.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -181,6 +183,12 @@ _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
 _POLICY_POINTS = [p for p in _ALL_POINTS if p.startswith("policy.")]
+# `escalate.*` fires in the RUNNER's one escalating close, which every escalation site goes
+# through. Swept by `test_kill9_at_escalate_crash_point` through the retries-exhausted site.
+_ESCALATE_POINTS = [p for p in _ALL_POINTS if p.startswith("escalate.")]
+# `answer.*` fires in the RUNNER's `_wake` when ON_ANSWER reaches it. Swept by
+# `test_kill9_at_answer_crash_point`.
+_ANSWER_POINTS = [p for p in _ALL_POINTS if p.startswith("answer.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -274,6 +282,12 @@ _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
 _POLICY_CI_SUBSET = ("policy.after-advance.before-marker", "policy.after-open-change.before-marker")
 
+# The escalate CI subset: the later window, where the closure and its escalation are durable together.
+_ESCALATE_CI_SUBSET = ("escalate.after-close.before-resume-clear",)
+
+# The answer CI subset: the park resume and the woken pid durable together, the launch not yet disarmed.
+_ANSWER_CI_SUBSET = ("answer.wake.after-record",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -309,6 +323,8 @@ _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 _INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
 _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 _POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
+_ESCALATE_SWEEP = _select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET)
+_ANSWER_SWEEP = _select(_ANSWER_POINTS, _ANSWER_CI_SUBSET)
 
 
 def test_policy_sweep_covers_all_six_windows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -352,6 +368,8 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
         | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
         | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
+        | set(_select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET))
+        | set(_select(_ANSWER_POINTS, _ANSWER_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -3208,6 +3226,217 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- The escalating close — a worker that always fails, its retries exhausted by the first failure ---
+
+
+def _always_fails_graph_yaml() -> str:
+    """A ``build -> deliver`` graph whose build does nothing and whose judgement names no
+    verdict, so every attempt fails — and ``retries.max: 0`` escalates on the first."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "pass\n",
+                "judgement": {
+                    "prompt": "pass\n",  # no verdict: a failed attempt
+                    "choices": {"pass": {"description": "The change is committed.", "to": "deliver"}},
+                },
+                "retries": {"max": 0, "exhausted": "escalate"},
+            },
+            "deliver": land_node(),
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_graph_chunk(hub: httpx2.Client, forge: httpx2.Client, title: str, graph: str) -> str:
+    """Mint ``graph`` and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": graph})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "a crash-sweep chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # rests not-ready otherwise
+    return chunk_id
+
+
+def _hub_escalations(hub_dir: Path, chunk_id: str) -> list[tuple[int, str | None]]:
+    """Every hub escalation row for ``chunk_id``: (epoch, cause)."""
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            table = hub_schema.escalations
+            rows = conn.execute(
+                hub_scoped(select(table.c.epoch, table.c.cause).where(table.c.chunk_id == chunk_id))
+            ).all()
+        return [(int(r[0]), r[1]) for r in rows]
+    finally:
+        engine.dispose()
+
+
+def _wait_hub_escalations(hub_dir: Path, chunk_id: str, *, timeout: float = 30.0) -> list[tuple[int, str | None]]:
+    deadline = time.monotonic() + timeout
+    rows = _hub_escalations(hub_dir, chunk_id)
+    while not rows and time.monotonic() < deadline:
+        time.sleep(0.2)
+        rows = _hub_escalations(hub_dir, chunk_id)
+    return rows
+
+
+@pytest.mark.parametrize("point", _ESCALATE_SWEEP)
+def test_kill9_at_escalate_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` on either side of the escalating close still escalates exactly once:
+    the closure and its ``escalation.recorded`` fact are one transaction, so recovery reads
+    either an open lease it re-escalates or a durable escalation it delivers."""
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_graph_chunk(hub, crash_env.forge, f"escalate {point}", _always_fails_graph_yaml())
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "needs_human", f"chunk did not escalate after kill at {point} (last {status!r})"
+
+        leases = leases_for_chunk(runner_dir, chunk_id)
+        assert len(leases) == 1, f"retries are exhausted by the first failure, yet the chunk minted {leases}"
+        lease_id, epoch, _session, _pid = leases[0]
+        rows = _wait_hub_escalations(hub_dir, chunk_id)
+        assert rows == [(epoch, "retries-exhausted")], f"expected one escalation for the lease, got {rows}"
+        store, engine = _runner_store(runner_dir)
+        try:
+            escalation = store.open_escalation_for_chunk(chunk_id)
+        finally:
+            engine.dispose()
+        assert escalation is not None and escalation.lease_id == lease_id
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- The answer wake — a worker that asks, answered through the hub ---
+
+
+def _asking_graph_yaml(landed_file: str, marker: Path) -> str:
+    """A ``build -> deliver`` graph whose build asks until the test writes ``marker``, then
+    builds. The answer is the build program itself, so the answer-woken session commits; a
+    later re-entry of ``build`` finds the marker and builds without asking again."""
+    import yaml
+
+    prompt = (
+        "import pathlib as _pathlib\n"
+        f"if not _pathlib.Path({str(marker)!r}).exists():\n"
+        "    ask('Which API style should the endpoint use?', ['rest', 'graphql'])\n"
+    ) + build_script(landed_file)
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": prompt,
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed; checks are green')\n",
+                    "choices": {"pass": {"description": "The change is committed.", "to": "deliver"}},
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": land_node(),
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _open_question_id(hub: httpx2.Client, chunk_id: str, *, timeout: float = 60.0) -> str:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = hub.get("/api/questions")
+        if response.status_code == 200:
+            for question in response.json():
+                if question["chunk_id"] == chunk_id:
+                    return str(question["question_id"])
+        time.sleep(0.2)
+    raise AssertionError(f"no open question surfaced for {chunk_id}")
+
+
+def _park_resumes(runner_dir: Path, question_id: str) -> list[str]:
+    """The lease id of every recorded resume of the park on ``question_id``."""
+    with _audit_connection(runner_dir) as conn:
+        table = runner_schema.park_resumes
+        rows = conn.execute(select(table.c.lease_id).where(table.c.question_id == question_id)).all()
+    return [str(r[0]) for r in rows]
+
+
+@pytest.mark.parametrize("point", _ANSWER_SWEEP)
+def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` inside the answer wake resumes the session at most once for the
+    question: the park resume rides the woken pid's record, so recovery reads either an open
+    park it re-wakes once or a resumed park whose pid is an ordinary recorded generation."""
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    marker = tmp_path / "answered.marker"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_graph_chunk(hub, crash_env.forge, landed_file, _asking_graph_yaml(landed_file, marker))
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # Armed from the start: unarmed in effect until ON_ANSWER reaches `_wake`.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+        question_id = _open_question_id(hub, chunk_id)
+        marker.write_text("answered\n")
+        answered = hub.post(
+            f"/api/questions/{question_id}/answers", json={"answer": build_script(landed_file), "answered_by": "sweep"}
+        )
+        assert answered.status_code == 201, answered.text
+
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status in {"done", "needs_human"}, f"chunk did not converge after kill at {point} (last {status!r})"
+
+        resumes = _park_resumes(runner_dir, question_id)
+        assert len(resumes) == 1, f"the answer resumed the park {len(resumes)} times after kill at {point}"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        if status == "done":
+            tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+            commits = [line for line in tree.splitlines() if line.strip()]
+            assert len(commits) <= 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)

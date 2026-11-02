@@ -1,8 +1,8 @@
 """SQLAlchemy adapter for the lease-liveness repository seam (package-private).
 
 Heartbeat and spawn facts. :meth:`LeaseLivenessStore.record_spawn`
-also opens/carries-forward the lease's transcript segment in the SAME transaction — a
-cross-concept write kept inside this one ``store/internal/`` package."""
+also opens/carries-forward the lease's transcript segment, and resumes an answered park, in the
+SAME transaction — cross-concept writes kept inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
@@ -17,7 +17,14 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final
-from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns, leases, transcript_segments
+from blizzard.runner.store.schema import (
+    heartbeats,
+    lease_context,
+    lease_spawns,
+    leases,
+    park_resumes,
+    transcript_segments,
+)
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
@@ -277,6 +284,7 @@ class LeaseLivenessStore:
         harness_version: str | None = None,
         pgid: int | None = None,
         spawn_cwd: str | None = None,
+        park_resume_question_id: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -317,6 +325,15 @@ class LeaseLivenessStore:
                 at=spawned_at,
                 spawn_cwd=spawn_cwd,
             )
+            if park_resume_question_id is not None:
+                # The answered park closes with the pid that consumes the answer: a crash
+                # before this commit leaves the park open for a single re-wake, never resumed
+                # with no worker; after it, the park reads resumed and the pid owned.
+                conn.execute(
+                    self._store.insert(park_resumes).values(
+                        lease_id=lease_id, question_id=park_resume_question_id, resumed_at=spawned_at
+                    )
+                )
         _log.info(
             "worker spawned",
             lease_id=lease_id,
