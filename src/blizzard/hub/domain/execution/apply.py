@@ -308,9 +308,9 @@ class ApplyService:
         resolving = submission.decision_id is not None
         artifacts = () if resolving else submission.artifacts
         if plan.escalates:
-            return self._escalate_choice(chunk, facts, from_node, submission, plan.edge, targets)
+            return self._escalate_choice(chunk, graph, from_node, submission, plan.edge, targets)
         if plan.migrates:
-            return self._migrate_across(chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts)
+            return self._migrate_across(chunk, graph, from_node, submission, plan.edge, targets, artifacts)
         assert plan.to_node_id is not None
         # The transition-time consult — after every rejection and before `record_transition`,
         # so a firing intent or follow-latest drift writes no transition row of its own.
@@ -389,7 +389,6 @@ class ApplyService:
         self,
         chunk: Chunk,
         graph: Graph,
-        facts: ChunkFacts,
         from_node: Node,
         submission: Completion,
         edge: Edge,
@@ -398,32 +397,28 @@ class ApplyService:
     ) -> ApplyResult:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch
         (:meth:`ApplyResult.escalated`)."""
-        if re_escalates(facts, edge, targets, epoch=submission.epoch):
-            return ApplyResult.unresolved_target(edge.target_graph)
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
         draft = UnresolvableTarget.of(edge)
         # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
-        escalated = self._escalations.record_escalation(
-            chunk.chunk_id,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
-            takeover_command=draft.takeover_command,
-            at=self._clock.now(),
-            decision_id=submission.decision_id,
-            cause=draft.cause,
-            detail=draft.detail,
+        return self._record_completion_escalation(
+            chunk,
+            graph,
+            from_node,
+            submission,
+            edge,
+            targets,
+            draft.takeover_command,
+            draft.cause,
+            draft.detail,
+            ApplyResult.unresolved_target(edge.target_graph),
         )
-        if isinstance(escalated, FenceRefusal):
-            return ApplyResult.failure(escalated.detail)
-        return ApplyResult.unresolved_target(edge.target_graph)
 
     def _escalate_choice(
         self,
         chunk: Chunk,
-        facts: ChunkFacts,
+        graph: Graph,
         from_node: Node,
         submission: Completion,
         edge: Edge,
@@ -432,22 +427,65 @@ class ApplyService:
         """Take the ``escalate`` choice — write an escalation instead of a transition, once per
         epoch. The worker's reasoning stays in the artifacts it produced."""
         draft = EscalateChoice.of(from_node, submission.choice)
-        if re_escalates(facts, edge, targets, epoch=submission.epoch, taken=draft):
-            return ApplyResult.escalate_choice(from_node, submission.choice)
-        escalated = self._escalations.record_escalation(
-            chunk.chunk_id,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
-            takeover_command=draft.takeover_command,
-            at=self._clock.now(),
-            decision_id=submission.decision_id,
-            cause=draft.cause,
-            detail=draft.detail,
+        return self._record_completion_escalation(
+            chunk,
+            graph,
+            from_node,
+            submission,
+            edge,
+            targets,
+            draft.takeover_command,
+            draft.cause,
+            draft.detail,
+            ApplyResult.escalate_choice(from_node, submission.choice),
         )
-        if isinstance(escalated, FenceRefusal):
-            return ApplyResult.failure(escalated.detail)
-        return ApplyResult.escalate_choice(from_node, submission.choice)
+
+    def _record_completion_escalation(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        from_node: Node,
+        submission: Completion,
+        edge: Edge,
+        targets: MigrationTargets,
+        takeover_command: str,
+        cause: str,
+        detail: str,
+        result: ApplyResult,
+    ) -> ApplyResult:
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            locked = handle.facts(chunk.chunk_id)
+            if locked is None:
+                return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
+            raced = self._landed_under_lock(locked, submission)
+            if raced is not None:
+                return self._answer_raced(chunk, graph, from_node, submission, raced)
+            replay = re_escalates(
+                locked, edge, targets, epoch=submission.epoch, taken=EscalateChoice.of(from_node, submission.choice)
+            )
+            try:
+                refuse_incoherent_attempt(
+                    locked, graph, from_node=from_node, epoch=submission.epoch, re_escalating=replay
+                )
+            except CompletionRefused as refused:
+                return ApplyResult.failure(refused.detail)
+            if replay:
+                return result
+            escalated = self._escalations.record_escalation_locked(
+                handle,
+                chunk.chunk_id,
+                epoch=submission.epoch,
+                admission=EpochAdmission.CURRENT,
+                claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                takeover_command=takeover_command,
+                at=self._clock.now(),
+                decision_id=submission.decision_id,
+                cause=cause,
+                detail=detail,
+            )
+            if isinstance(escalated, FenceRefusal):
+                return ApplyResult.failure(escalated.detail)
+            return result
 
     def _land_migration(
         self,

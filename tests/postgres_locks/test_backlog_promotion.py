@@ -25,7 +25,7 @@ def test_queue_key_blocks_writer(database_url: str, operation: str, omit: bool) 
     options = "-c statement_timeout=8000"
     waiter = sa.create_engine(database_url, connect_args={"application_name": "queue_waiter", "options": options})
     holder = sa.create_engine(database_url, connect_args={"application_name": "queue_holder", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     try:
         with waiter.begin() as conn:
             seed_graph(conn, "gr_queue", at=_AT)

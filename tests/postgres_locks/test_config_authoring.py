@@ -28,7 +28,7 @@ def test_authoring_waits_at_transaction_entrance(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "config_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "config_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     now = datetime.now(UTC)
     tenant = TenantId("ten_config_lock")
     try:

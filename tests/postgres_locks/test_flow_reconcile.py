@@ -109,6 +109,10 @@ def test_departure_rechecks_turn_after_competing_admission(database_url: str, om
                 result = two.result(timeout=10)
                 assert result.closed == 0
                 assert result.written == ()
+                assert result.floor == sub.arrival
+                again = reconciler.reconcile(result.floor)
+                assert again.floor == sub.arrival
+                assert again.closed == 0
 
         assert len(flows.open_turns()) == 1
         assert len(flows.open_submissions_from(0)) == int(not omit)

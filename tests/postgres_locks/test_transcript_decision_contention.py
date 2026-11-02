@@ -35,7 +35,7 @@ def test_ingest_rechecks_independent_decision(database_url, monkeypatch, decisio
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "decision_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "decision_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     try:
         tenant = TenantId("ten_transcript_decisions")
         scoped = scoped_connections(holder, tenant)
@@ -138,7 +138,7 @@ def test_ingest_rechecks_independent_decision(database_url, monkeypatch, decisio
                 future.result(timeout=5)
             else:
                 deadline = monotonic() + 5
-                with observer.connect() as monitor:
+                with observer.connect().execution_options(isolation_level="AUTOCOMMIT") as monitor:
                     while monotonic() < deadline:
                         blocked = monitor.execute(
                             sa.text("""

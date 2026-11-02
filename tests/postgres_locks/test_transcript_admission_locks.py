@@ -98,7 +98,7 @@ def test_admission_waits_for_each_decision_key(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "transcript_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "transcript_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     try:
         scoped = scoped_connections(holder, TenantId("ten_transcript_locks"))
         _seed(scoped)

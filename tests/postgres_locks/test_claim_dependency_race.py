@@ -35,7 +35,7 @@ def test_claim_races_dependency_change(database_url: str, change: str, commit: b
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "race_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "race_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_claim_race")
     scope = scoped_connections(waiter, tenant)
     clock = FixedClock(_AT)

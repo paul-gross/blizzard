@@ -39,7 +39,7 @@ def test_segment_writer_waits_on_shared_key(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "event_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "event_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_event_lock")
     try:
         scoped = scoped_connections(holder, tenant)
@@ -66,7 +66,7 @@ def test_segment_writer_waits_on_shared_key(
                     future.result(timeout=5)
                 else:
                     deadline = monotonic() + 5
-                    with observer.connect() as monitor:
+                    with observer.connect().execution_options(isolation_level="AUTOCOMMIT") as monitor:
                         while monotonic() < deadline:
                             blocked = monitor.execute(
                                 sa.text("""

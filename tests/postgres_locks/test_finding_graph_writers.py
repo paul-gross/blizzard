@@ -29,7 +29,7 @@ def test_direct_writer_waits_for_decision_lock(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "direct_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "direct_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_direct_lock")
     now = datetime.now(UTC)
     try:

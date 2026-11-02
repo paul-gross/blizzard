@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunk.model import AnswerOutcome
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
@@ -34,7 +35,7 @@ def test_restart_answer_race(database_url: str, order: str, monkeypatch: pytest.
     direct_engine = sa.create_engine(
         database_url, connect_args={"application_name": "answer_waiter", "options": "-c statement_timeout=8000"}
     )
-    observer = sa.create_engine(database_url)
+    observer = sa.create_engine(database_url, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_restart_answer")
     scope = scoped_connections(restart_engine, tenant)
     clock = FixedClock(_AT)
@@ -118,7 +119,8 @@ def test_restart_answer_race(database_url: str, order: str, monkeypatch: pytest.
                 assert reached.wait(8), "restart did not reach the answer race"
                 answered = pool.submit(answer)
                 if order in {"direct", "omission"}:
-                    assert answered.result(timeout=5).won
+                    outcome = answered.result(timeout=5)
+                    assert isinstance(outcome, AnswerOutcome) and outcome.won
                 else:
                     deadline = monotonic() + 5
                     with observer.connect() as monitor:
@@ -143,6 +145,7 @@ def test_restart_answer_race(database_url: str, order: str, monkeypatch: pytest.
             else:
                 restarted.result(timeout=10)
             outcome = answered.result(timeout=10)
+        assert isinstance(outcome, AnswerOutcome)
         assert outcome.won is (order in {"direct", "omission"})
         assert outcome.answer == ("automatic" if order in {"restart", "locked"} else "direct")
         with scope.read("verify") as conn:

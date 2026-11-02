@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
@@ -54,12 +55,15 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         ``question_id`` (a store-and-forward replay re-lands the same id harmlessly)."""
         ...
 
-    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
+    def answer_question(
+        self, question_id: str, *, answer: str, answered_by: str, at: datetime
+    ) -> AnswerOutcome | ChunkStatus:
         """First-write-wins CAS on the answer row.
 
         Exactly one answer row ever exists: the first write wins (``won=True``); a
         racing second write loses (``won=False``) and is handed the winning row. This
-        row alone flips the chunk out of ``waiting_on_human``."""
+        row alone flips the chunk out of ``waiting_on_human``. If the chunk ended before
+        the write, return its terminal status instead, without writing an answer."""
         ...
 
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:

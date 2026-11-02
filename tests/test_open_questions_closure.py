@@ -10,9 +10,17 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, verb_legal_from
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    QuestionClosed,
+    decide_close_enqueue,
+    verb_legal_from,
+)
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
 
@@ -91,6 +99,21 @@ def test_a_question_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_lis
     _finish(store)
 
     assert _open_ids(store) == []
+
+
+@pytest.mark.parametrize("end", [_stop, _finish], ids=["stopped", "done"])
+def test_answer_refuses_when_chunk_ends_after_precheck(tmp_path: Path, end: Callable[[ChunkStores], None]) -> None:
+    store = _store_with_question(tmp_path)
+    question = store.questions.get_question("qn_1")
+    assert question is not None
+    facts = ChunkFacts.or_default(store.facts.load_facts("ch_1"))
+    end(store)
+
+    service = QuestionService(questions=store.questions, clock=FixedClock(_T0))
+    with pytest.raises(QuestionClosed):
+        service.answer(question, facts, answer="yes", answered_by="op")
+    stored = store.questions.get_question("qn_1")
+    assert stored is not None and not stored.answered
 
 
 @pytest.mark.parametrize("end", [None, _stop, _finish], ids=["live", "stopped", "done"])

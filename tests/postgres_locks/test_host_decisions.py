@@ -56,7 +56,7 @@ def test_host_decision_waits_without_holder_tenant_admission(
     waiter = sa.create_engine(
         database_url, connect_args={"application_name": "host_decision_waiter", "options": options}
     )
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_host_lock")
     now = datetime.now(UTC)
     try:

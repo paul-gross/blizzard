@@ -11,6 +11,7 @@ from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -18,7 +19,7 @@ from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsReposi
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal, settled_stopped
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -108,7 +109,9 @@ class ChunkQuestionsStore:
             )
             return None
 
-    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
+    def answer_question(
+        self, question_id: str, *, answer: str, answered_by: str, at: datetime
+    ) -> AnswerOutcome | ChunkStatus:
         # First-write-wins CAS: the answer row's PK is (tenant_id, question_id), so a racing
         # second insert in the same tenant raises IntegrityError and the loser reads back the winner.
         try:
@@ -122,6 +125,13 @@ class ChunkQuestionsStore:
                 ).scalar_one_or_none()
                 if chunk_id is not None:
                     lock_chunk_row(conn, chunk_id)
+                    terminal = conn.execute(
+                        self._store.select(s.chunks, settled_stopped(self._store)).where(
+                            s.chunks.c.chunk_id == chunk_id, chunk_is_terminal(self._store, s.chunks.c.chunk_id)
+                        )
+                    ).scalar_one_or_none()
+                    if terminal is not None:
+                        return ChunkStatus.STOPPED if terminal else ChunkStatus.DONE
                 conn.execute(
                     self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at

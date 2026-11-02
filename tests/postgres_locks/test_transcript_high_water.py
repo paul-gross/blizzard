@@ -23,7 +23,7 @@ def test_first_write_waits_before_reading_high_water(database_url: str, omit: bo
     options = "-c statement_timeout=8000"
     engine = sa.create_engine(database_url, connect_args={"application_name": "transcript_waiter", "options": options})
     holder = sa.create_engine(database_url, connect_args={"application_name": "transcript_holder", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     scoped = scoped_connections(engine, TenantId("ten_transcript_lock"))
     holder_scoped = scoped_connections(holder, TenantId("ten_transcript_lock"))
     store = transcript_segment_store.TranscriptSegmentStore(scoped)

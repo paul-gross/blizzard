@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
@@ -89,6 +90,9 @@ class QuestionService:
         outcome = self._questions.answer_question(
             question.question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
         )
+        if isinstance(outcome, ChunkStatus):
+            question.require_answerable(outcome)
+            raise AssertionError("answer guard returned a nonterminal status")
         _log.info("answer applied", question_id=question.question_id, won=outcome.won, answered_by=outcome.answered_by)
         return outcome
 

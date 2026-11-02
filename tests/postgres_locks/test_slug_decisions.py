@@ -29,7 +29,7 @@ def test_move_locks_both_slug_keys(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "slug_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "slug_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_slug_lock")
     now = datetime.now(UTC)
     try:

@@ -19,10 +19,11 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import AnswerOutcome, WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
@@ -62,6 +63,11 @@ _CLI = ChangeContext(actor="alice", door=Door.CLI)
 _SOURCE = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
 _GITHUB = ForgeChoice(api_base="https://api.github.com")
 _REPO = RepositoryDraft(owner="acme", repo="demo", base_branch="master", secret_name="gh")
+
+
+def _answer_outcome(result: AnswerOutcome | ChunkStatus) -> AnswerOutcome:
+    assert isinstance(result, AnswerOutcome)
+    return result
 
 
 @dataclass(frozen=True)
@@ -270,14 +276,14 @@ def test_a_question_id_reused_in_another_tenant_is_a_different_question(tenants:
     first = _ask(tenants, tenants.first, "ship it?")
     second = _ask(tenants, tenants.second, "roll back?")
 
-    assert first.answer_question("qn_shared", answer="yes", answered_by="alice", at=_AT).won
+    assert _answer_outcome(first.answer_question("qn_shared", answer="yes", answered_by="alice", at=_AT)).won
     first.record_answer_delivered(question_id="qn_shared", chunk_id=f"ch_{tenants.first}", at=_AT)
     unanswered = second.get_question("qn_shared")
     assert unanswered is not None
     assert (unanswered.question, unanswered.answered, unanswered.delivered) == ("roll back?", False, False)
 
-    assert second.answer_question("qn_shared", answer="no", answered_by="bob", at=_AT).won
-    lost = first.answer_question("qn_shared", answer="maybe", answered_by="carol", at=_AT)
+    assert _answer_outcome(second.answer_question("qn_shared", answer="no", answered_by="bob", at=_AT)).won
+    lost = _answer_outcome(first.answer_question("qn_shared", answer="maybe", answered_by="carol", at=_AT))
     assert (lost.won, lost.answer) == (False, "yes")
     answered = second.get_question("qn_shared")
     assert answered is not None
@@ -297,7 +303,7 @@ def test_answer_locks_the_question_chunk_in_its_own_tenant(tenants: _Tenants, mo
         original(conn, chunk_id)
 
     monkeypatch.setattr(chunk_questions_store, "lock_chunk_row", record_lock)
-    assert second.answer_question("qn_shared", answer="second", answered_by="bob", at=_AT).won
-    assert first.answer_question("qn_shared", answer="first", answered_by="alice", at=_AT).won
-    assert not second.answer_question("qn_shared", answer="late", answered_by="bob", at=_AT).won
+    assert _answer_outcome(second.answer_question("qn_shared", answer="second", answered_by="bob", at=_AT)).won
+    assert _answer_outcome(first.answer_question("qn_shared", answer="first", answered_by="alice", at=_AT)).won
+    assert not _answer_outcome(second.answer_question("qn_shared", answer="late", answered_by="bob", at=_AT)).won
     assert locked == [f"ch_{tenants.second}", f"ch_{tenants.first}", f"ch_{tenants.second}"]

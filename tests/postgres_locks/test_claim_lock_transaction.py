@@ -30,7 +30,7 @@ def test_claim_waits_before_guard(database_url: str, kind: str, control: str, mo
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "claim_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "claim_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_claim_lock")
     scope = scoped_connections(waiter, tenant)
     guard = Event()

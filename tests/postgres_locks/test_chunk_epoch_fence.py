@@ -31,7 +31,7 @@ def test_question_writer_rechecks_concurrent_guard(database_url, monkeypatch, gu
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "epoch_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "epoch_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     now = datetime(2026, 1, 1, tzinfo=UTC)
     scope = scoped_connections(holder, TenantId("ten_epoch"))
     clock = FixedClock(now)

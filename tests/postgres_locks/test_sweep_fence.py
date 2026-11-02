@@ -33,7 +33,7 @@ def test_changed_generation_fences_retirement_sweep(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "sweep_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "sweep_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     now = datetime.now(UTC)
     tenant = TenantId("ten_sweep")
     try:

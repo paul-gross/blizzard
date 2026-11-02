@@ -30,7 +30,7 @@ def test_resolve_rechecks_after_chunk_contention(database_url, closing, omit, mo
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "resolve_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "resolve_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_resolve_contention")
     scope = scoped_connections(holder, tenant)
     try:

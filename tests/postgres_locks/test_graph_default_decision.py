@@ -28,7 +28,7 @@ def test_default_decision_against_graph_writer(database_url, writer, omit_lock, 
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "default_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "default_writer", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_default_decision")
     now = datetime.now(UTC)
     doc = PACKAGED.default.doc

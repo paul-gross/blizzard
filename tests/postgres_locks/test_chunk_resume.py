@@ -25,7 +25,7 @@ def test_resume_chunk_lock_and_timestamp(database_url: str, held_chunk: str) -> 
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "resume_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "resume_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     now = datetime(2026, 1, 1, tzinfo=UTC)
     clock = FixedClock(now)
     tenant = TenantId("ten_resume")

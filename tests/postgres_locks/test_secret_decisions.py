@@ -44,7 +44,7 @@ def test_secret_decision_locks_own_row(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "secret_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "secret_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_secret_lock")
     now = datetime.now(UTC)
     change = ConfigChange.of(ChangeContext("test", Door.API), RecordKind.SECRET, "gh", 1, ChangeOp.CREATE, (), now)
@@ -107,7 +107,7 @@ def test_work_source_serializes_with_secret(
     waiter = sa.create_engine(
         database_url, connect_args={"application_name": "source_secret_waiter", "options": options}
     )
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_source_secret")
     now = datetime.now(UTC)
     ctx = ChangeContext("test", Door.API)
@@ -235,7 +235,7 @@ def test_repository_create_serializes_with_secret(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "ref_secret_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "ref_secret_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_ref_secret")
     now = datetime.now(UTC)
     ctx = ChangeContext("test", Door.API)

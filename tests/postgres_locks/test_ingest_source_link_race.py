@@ -46,7 +46,7 @@ def test_ingest_against_unlink(database_url: str, commit: bool, omit: bool, reli
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "source_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "source_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_source_race")
     scope = scoped_connections(waiter, tenant)
     holding = scoped_connections(holder, tenant)

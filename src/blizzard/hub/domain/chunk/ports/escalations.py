@@ -58,6 +58,23 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         when set, closes a gate decision no transition or migration will."""
         ...
 
+    def record_escalation_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None,
+        cause: str | None,
+        detail: str | None,
+    ) -> int | FenceRefusal:
+        """Record an escalation on the already-locked chunk transaction."""
+        ...
+
     def record_bounce_locked(
         self,
         handle: ILockedChunkRead,

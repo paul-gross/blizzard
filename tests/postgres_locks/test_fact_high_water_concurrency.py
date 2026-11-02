@@ -61,6 +61,9 @@ def test_concurrent_high_water_decisions(
     try:
         with holder_scoped.founding("found", name="water", created_at=_AT, created_by="test"):
             pass
+        # Finish dialect and connection initialization before the holder has an uncommitted write.
+        with waiter.connect():
+            pass
         if existing:
             writer(waiter_scoped)("key", seq=1, at=_AT)
         monkeypatch.setattr(holder_scoped, "_lock_open_tenant", lambda conn: None)
@@ -73,7 +76,7 @@ def test_concurrent_high_water_decisions(
                     monkeypatch.setattr(module, "lock_keys", lambda *args: None)
                 second = pool.submit(writer(waiter_scoped), "key", seq=3, at=_AT + timedelta(hours=2))
                 deadline = monotonic() + 5
-                with observer.connect() as watch:
+                with observer.connect().execution_options(isolation_level="AUTOCOMMIT") as watch:
                     while monotonic() < deadline:
                         query = watch.execute(
                             sa.text("""

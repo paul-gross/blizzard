@@ -74,23 +74,80 @@ class ChunkEscalationsStore:
     ) -> int | FenceRefusal:
         with self._store.write("record_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
-            result = conn.execute(
-                self._store.insert(s.escalations).values(
-                    chunk_id=chunk_id,
-                    epoch=epoch,
-                    takeover_command=takeover_command,
-                    wrapped_takeover_command=wrapped_takeover_command,
-                    decision_id=decision_id,
-                    cause=cause,
-                    detail=detail,
-                    recorded_at=at,
-                )
+            return self._record_escalation(
+                conn,
+                chunk_id,
+                epoch=epoch,
+                admission=admission,
+                claimant=claimant,
+                takeover_command=takeover_command,
+                at=at,
+                decision_id=decision_id,
+                wrapped_takeover_command=wrapped_takeover_command,
+                cause=cause,
+                detail=detail,
             )
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
+
+    def record_escalation_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None,
+        cause: str | None,
+        detail: str | None,
+    ) -> int | FenceRefusal:
+        return self._record_escalation(
+            conn_of(handle),
+            chunk_id,
+            epoch=epoch,
+            admission=admission,
+            claimant=claimant,
+            takeover_command=takeover_command,
+            at=at,
+            decision_id=decision_id,
+            wrapped_takeover_command="",
+            cause=cause,
+            detail=detail,
+        )
+
+    def _record_escalation(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        claimant: Claimant | None,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None,
+        wrapped_takeover_command: str,
+        cause: str | None,
+        detail: str | None,
+    ) -> int | FenceRefusal:
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        result = conn.execute(
+            self._store.insert(s.escalations).values(
+                chunk_id=chunk_id,
+                epoch=epoch,
+                takeover_command=takeover_command,
+                wrapped_takeover_command=wrapped_takeover_command,
+                decision_id=decision_id,
+                cause=cause,
+                detail=detail,
+                recorded_at=at,
+            )
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def record_bounce_locked(
         self,

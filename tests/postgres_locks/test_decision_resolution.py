@@ -23,7 +23,7 @@ def test_resolution_decision_lock(database_url: str, scenario: str, monkeypatch:
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "decision_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "decision_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     scope = scoped_connections(holder, TenantId("ten_decision_lock"))
     try:
         with scope.founding("found", name="decision-lock", created_at=_AT, created_by="test"):

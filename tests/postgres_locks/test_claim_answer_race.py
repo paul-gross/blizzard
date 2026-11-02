@@ -12,6 +12,7 @@ from sqlalchemy import event
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunk.model import AnswerOutcome
 from blizzard.hub.domain.execution.claim import ClaimDeniedNotReady, ClaimService
 from blizzard.hub.domain.graph.model import Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
@@ -38,7 +39,7 @@ def test_claim_status_guard_races_direct_answer(database_url: str, omit: bool, m
     answer_engine = sa.create_engine(
         database_url, connect_args={"application_name": "question_answer", "options": options}
     )
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_claim_answer")
     scope = scoped_connections(claim_engine, tenant)
     reached, release = Event(), Event()
@@ -142,7 +143,8 @@ def test_claim_status_guard_races_direct_answer(database_url: str, omit: bool, m
                 assert reached.wait(8)
                 direct = pool.submit(answer.answer_question, "question", answer="yes", answered_by="person", at=_AT)
                 if omit:
-                    assert direct.result(timeout=5).won
+                    outcome = direct.result(timeout=5)
+                    assert isinstance(outcome, AnswerOutcome) and outcome.won
                 else:
                     deadline = monotonic() + 5
                     with observer.connect() as watch:
@@ -166,7 +168,8 @@ def test_claim_status_guard_races_direct_answer(database_url: str, omit: bool, m
                 with pytest.raises(ClaimDeniedNotReady) as denied:
                     claim.result(timeout=10)
                 assert denied.value.status.value == "waiting_on_human"
-            assert direct.result(timeout=10).won
+            outcome = direct.result(timeout=10)
+            assert isinstance(outcome, AnswerOutcome) and outcome.won
         assert (stores.route.route_of("chunk") is not None) is omit
     finally:
         release.set()

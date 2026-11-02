@@ -25,7 +25,7 @@ def test_lifecycle_waits_for_name_decision(
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "graph_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "graph_waiter", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     now = datetime.now(UTC)
     try:
         scoped = scoped_connections(holder, TenantId("ten_graph_lifecycle"))

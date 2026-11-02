@@ -36,7 +36,7 @@ def test_transition_winner_fences_stale_replacement(
     options = "-c statement_timeout=8000"
     writer = sa.create_engine(database_url, connect_args={"application_name": "pin_writer", "options": options})
     reader = sa.create_engine(database_url, connect_args={"application_name": "pin_replace", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     scope = scoped_connections(writer, TenantId("ten_pin_race"))
     reached, release = Event(), Event()
     try:

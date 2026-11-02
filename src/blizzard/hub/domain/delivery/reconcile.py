@@ -403,6 +403,8 @@ class FlowLineReconciler:
                 still_open.append(sub)
             elif (written := self._flows.close(sub.submission_id, outcome=withdrawal, at=now)) is not None:
                 closed.append(written)
+            else:
+                still_open.append(sub)
         return closed, still_open
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:

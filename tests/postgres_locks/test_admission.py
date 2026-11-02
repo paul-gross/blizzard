@@ -22,7 +22,7 @@ def test_existing_tenant_admission_serializes_writers(database_url: str) -> None
     waiter = sa.create_engine(
         database_url, connect_args={"application_name": "blizzard_lock_waiter", "options": options}
     )
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     tenant = TenantId("ten_lock_test")
     entered = Event()
     release = Event()

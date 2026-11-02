@@ -28,7 +28,7 @@ def test_graph_decision_key(database_url: str, operation: str, omit: bool) -> No
     options = "-c statement_timeout=8000"
     engine = sa.create_engine(database_url, connect_args={"application_name": "dependency_waiter", "options": options})
     holder = sa.create_engine(database_url, connect_args={"application_name": "dependency_holder", "options": options})
-    observer = sa.create_engine(database_url, connect_args={"options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
     scoped = scoped_connections(engine, TenantId("ten_dependency_lock"))
     dependencies = chunk_dependencies_store.ChunkDependenciesStore(scoped, SystemClock())
     exclusive = chunk_exclusive_store.ChunkExclusiveWrites(
