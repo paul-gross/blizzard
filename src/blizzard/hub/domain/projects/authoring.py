@@ -14,7 +14,14 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource
 from blizzard.hub.domain.projects.color import ColorPick, decide_color
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project, ProjectEdit
-from blizzard.hub.domain.projects.order import IWriteProjectPositions, PositionFact, RankedLink, move, whole_order
+from blizzard.hub.domain.projects.order import (
+    IProjectPositionDecision,
+    IWriteProjectPositions,
+    PositionFact,
+    RankedLink,
+    move,
+    whole_order,
+)
 
 
 class ProjectAuthoring:
@@ -113,9 +120,10 @@ class ProjectAuthoring:
         """Rank ``repositories`` ``1.0``, ``2.0``, … in the order given and every other repository ``project`` links
         unranked; answers the project's links in their new order. ``repository_not_linked`` for a repository the
         project does not link."""
-        links = self._positions.landing_links(project.project_id)
-        ordered = [repository.repository_id for repository in repositories]
-        return self._record(project, links, whole_order(links, ordered, project=project.slug), ctx)
+        with self._positions.authoring() as positions:
+            links = positions.landing_links(project.project_id)
+            ordered = [repository.repository_id for repository in repositories]
+            return self._record(positions, project, links, whole_order(links, ordered, project=project.slug), ctx)
 
     def position_repository(
         self,
@@ -129,20 +137,26 @@ class ProjectAuthoring:
         """Move ``repository`` to unranked, or to just after the ranked ``after`` — to the front when ``after`` is
         ``None`` — renumbering the ranked repositories first when no midpoint is left; answers the project's links in
         their new order. ``repository_not_linked`` for a repository the project does not link."""
-        links = self._positions.landing_links(project.project_id)
-        facts = move(
-            links,
-            repository.repository_id,
-            after=None if after is None else after.repository_id,
-            unranked=unranked,
-            project=project.slug,
-        )
-        return self._record(project, links, facts, ctx)
+        with self._positions.authoring() as positions:
+            links = positions.landing_links(project.project_id)
+            facts = move(
+                links,
+                repository.repository_id,
+                after=None if after is None else after.repository_id,
+                unranked=unranked,
+                project=project.slug,
+            )
+            return self._record(positions, project, links, facts, ctx)
 
     def _record(
-        self, project: Project, links: list[RankedLink], facts: Sequence[PositionFact], ctx: ChangeContext
+        self,
+        positions: IProjectPositionDecision,
+        project: Project,
+        links: list[RankedLink],
+        facts: Sequence[PositionFact],
+        ctx: ChangeContext,
     ) -> list[RankedLink]:
         if not facts:
             return links
-        self._positions.record_positions(project.project_id, facts, at=self._clock.now(), by=ctx.actor)
-        return self._positions.landing_links(project.project_id)
+        positions.record_positions(project.project_id, facts, at=self._clock.now(), by=ctx.actor)
+        return positions.landing_links(project.project_id)

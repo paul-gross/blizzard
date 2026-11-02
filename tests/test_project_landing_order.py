@@ -195,3 +195,13 @@ def test_an_unlinked_repository_cannot_be_ordered(world: _World) -> None:
     world.authoring.unlink_repository(link, OP)
     with pytest.raises(RepositoryNotLinked):
         world.put("web")
+
+
+def test_position_decision_rolls_back_all_facts_on_error(world: _World) -> None:
+    with pytest.raises(RuntimeError), world.positions.authoring() as decision:
+        decision.record_positions(
+            world.project.project_id, [PositionFact(world.repos["web"].repository_id, 1.0)], at=_T0, by=OP.actor
+        )
+        assert decision.landing_links(world.project.project_id)[0].slug == "web"
+        raise RuntimeError("rollback")
+    assert world.facts() == 0

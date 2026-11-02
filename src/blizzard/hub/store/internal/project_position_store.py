@@ -6,7 +6,8 @@ them again. A position write is not a revision of the link and appends no change
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 
 from sqlalchemy import func
@@ -16,9 +17,15 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.projects.order import IWriteProjectPositions, PositionFact, RankedLink, in_landing_order
+from blizzard.hub.domain.projects.order import (
+    IProjectPositionDecision,
+    IWriteProjectPositions,
+    PositionFact,
+    RankedLink,
+    in_landing_order,
+)
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
-from blizzard.hub.store.schema import project_repository_positions, repositories
+from blizzard.hub.store.schema import project_repository_link_facts, project_repository_positions, repositories
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
@@ -66,6 +73,12 @@ class ProjectPositionStore:
         self._store = store
         self._links = links
 
+    @contextmanager
+    def authoring(self) -> Generator[IProjectPositionDecision]:
+        with self._store.write("project_position_authoring") as conn:
+            lock_config_authoring(conn)
+            yield _PositionDecision(conn)
+
     def landing_links(self, project_id: ProjectId) -> list[RankedLink]:
         standing = self._links.repositories_of(project_id)
         if not standing:
@@ -84,8 +97,40 @@ class ProjectPositionStore:
             return
         with self._store.write("record_positions") as conn:
             lock_config_authoring(conn)
+            _PositionDecision(conn).record_positions(project_id, facts, at=at, by=by)
+
+
+class _PositionDecision:
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def landing_links(self, project_id: ProjectId) -> list[RankedLink]:
+        conn = self._conn
+        stmts = statements_of(conn)
+        facts = project_repository_link_facts
+        newest = (
+            stmts.select(facts, facts.c.repository_id, func.max(facts.c.id).label("id"))
+            .where(facts.c.project_id == project_id)
+            .group_by(facts.c.repository_id)
+            .subquery()
+        )
+        ids = list(
             conn.execute(
-                statements_of(conn).insert_rows(
+                stmts.select(facts, facts.c.repository_id)
+                .join(newest, facts.c.id == newest.c.id)
+                .where(facts.c.project_id == project_id, facts.c.linked.is_(True))
+            ).scalars()
+        )
+        positions = newest_positions(conn, {(project_id, name) for name in ids})
+        slugs = _slugs(conn, ids)
+        return in_landing_order(
+            [RankedLink(RepositoryId(name), slugs[name], positions.get((project_id, name))) for name in ids]
+        )
+
+    def record_positions(self, project_id: ProjectId, facts: Sequence[PositionFact], *, at: datetime, by: str) -> None:
+        if facts:
+            self._conn.execute(
+                statements_of(self._conn).insert_rows(
                     project_repository_positions,
                     [
                         {

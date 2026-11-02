@@ -10,6 +10,7 @@ is not a revision of the link: it carries who set it, and writes no change row."
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -134,9 +135,17 @@ class IReadProjectPositions(Protocol):
         ...
 
 
-class IWriteProjectPositions(IReadProjectPositions, Protocol):
-    """Adds the position write."""
+class IProjectPositionDecision(IReadProjectPositions, Protocol):
+    """Position reads and writes inside one decision."""
 
     def record_positions(self, project_id: ProjectId, facts: Sequence[PositionFact], *, at: datetime, by: str) -> None:
         """Append one position fact per entry of ``facts``, in order, in one transaction."""
+        ...
+
+
+class IWriteProjectPositions(IProjectPositionDecision, Protocol):
+    """Adds serialized position decisions."""
+
+    def authoring(self) -> AbstractContextManager[IProjectPositionDecision]:
+        """Open a serialized landing-order decision."""
         ...
