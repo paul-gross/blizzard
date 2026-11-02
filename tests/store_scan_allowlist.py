@@ -124,6 +124,11 @@ _DERIVATION_SWEEP_REASON = (
     "every open tenant) to find what is not yet derived — a corpus pass, not a per-chunk lookup."
 )
 
+_DERIVATION_PROBE_REASON = (
+    "the derivation change probe aggregates segment counts and maxima, graph-pin extrema and distinct counts, "
+    "and transition counts and maxima per tenant; the index walks return only aggregate rows, never fact rows."
+)
+
 # The tenant's flows: one per branch any of its chunks has landed on.
 _TENANT_FLOWS_REASON = (
     "the tenant's every flow, by design — the board's Delivery band and `blizzard hub flow list` show each branch the "
@@ -656,7 +661,10 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         _ONE_SHOT_IMPORT_REASON,
     ),
     IndexWalkAllowance(
-        IReadDerivationCorpus, "derivation_signature", ("chunks", "transcript_segments"), _DERIVATION_SWEEP_REASON
+        IReadDerivationCorpus,
+        "derivation_signature",
+        ("chunks", "transcript_segments", "transitions"),
+        _DERIVATION_PROBE_REASON,
     ),
     IndexWalkAllowance(
         IReadDerivationCorpus, "derived_segment_ids", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON
@@ -705,7 +713,10 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         IReadTranscriptEvents, "derivation_markers", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON
     ),
     IndexWalkAllowance(
-        IReadTranscriptEvents, "derivation_signature", ("chunks", "transcript_segments"), _DERIVATION_SWEEP_REASON
+        IReadTranscriptEvents,
+        "derivation_signature",
+        ("chunks", "transcript_segments", "transitions"),
+        _DERIVATION_PROBE_REASON,
     ),
     IndexWalkAllowance(
         IReadTranscriptEvents, "derived_segment_ids", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON

@@ -199,6 +199,76 @@ def test_restarted_candidate_is_not_submitted(tmp_path: Path, monkeypatch: pytes
     assert FlowStore(hub_store_connections(hub.engine), hub.clock).submissions_of(chunk_id) == []
 
 
+@pytest.mark.parametrize("movement", ["stop", "restart"])
+def test_admit_rechecks_candidate_after_movement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, movement: str
+) -> None:
+    hub = _hub(tmp_path)
+    chunk_id = _chunk(hub, _WIDGET)
+    lines = hub.services.flow_lines
+    assert lines.reconcile(0).submitted == 1
+    flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
+    sub = flows.open_submissions_from(0)[0]
+    admit_one = lines._admit_one
+
+    def move_after_selection(candidate: Any) -> Any:
+        with hub.engine.begin() as conn:
+            graph_id = conn.execute(
+                hub_scoped(select(s.chunks.c.graph_id)).where(s.chunks.c.chunk_id == chunk_id)
+            ).scalar_one()
+            if movement == "stop":
+                conn.execute(
+                    insert(s.chunk_stopped).values(
+                        stamp(s.chunk_stopped, chunk_id=chunk_id, stopped_at=hub.clock.now(), stopped_by="operator")
+                    )
+                )
+            else:
+                conn.execute(
+                    insert(s.chunk_restarts).values(
+                        stamp(
+                            s.chunk_restarts,
+                            chunk_id=chunk_id,
+                            graph_id=graph_id,
+                            from_node_id=sub.node_id,
+                            to_node_id=sub.node_id,
+                            epoch=sub.epoch + 1,
+                            restarted_by="operator",
+                            recorded_at=hub.clock.now(),
+                        )
+                    )
+                )
+        return admit_one(candidate)
+
+    monkeypatch.setattr(lines, "_admit_one", move_after_selection)
+    assert lines.admit(0, hub.clock.now()) == []
+    assert flows.open_submissions_from(0), "the competing fact did not close the submission"
+    assert not flows.open_turns()
+    assert "turn-started" not in [fact[1] for fact in _facts(hub, chunk_id)]
+
+
+def test_admit_retries_when_contender_discovery_misses_a_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = _hub(tmp_path)
+    _chunk(hub, _WIDGET)
+    _chunk(hub, _WIDGET)
+    lines = hub.services.flow_lines
+    assert lines.reconcile(0).submitted == 2
+    flows = lines._flows
+    earlier, candidate = flows.open_submissions_from(0)
+    discover = flows.open_submissions_on
+    calls = 0
+
+    def miss_once(flow_ids: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        found = discover(flow_ids)
+        return [sub for sub in found if sub.submission_id != earlier.submission_id] if calls == 1 else found
+
+    monkeypatch.setattr(flows, "open_submissions_on", miss_once)
+    assert lines._admit_one(candidate) is None
+    assert calls == 2
+    assert not flows.open_turns()
+
+
 def test_a_lever_whose_write_rolled_back_publishes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _hub(tmp_path)
     chunk_id = _chunk(hub, _WIDGET)

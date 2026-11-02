@@ -18,7 +18,12 @@ from dataclasses import dataclass
 from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.chunk.ports.exclusive import (
+    IChunkExclusiveWrites,
+    ILockedChunkRead,
+    ILockedFlowAdmissionRead,
+    ILockedWorkRefRead,
+)
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -31,6 +36,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, lock_chunk_row, lock_keys, route_of_conn
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.host_registry_store import lock_host_registry
 from blizzard.hub.store.internal.project_link_store import (
     PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
@@ -81,6 +87,13 @@ class LockedChunkTransaction:
 
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None:
         return self._registry.get_runner_conn(self.conn, runner_id)
+
+
+class LockedFlowAdmissionTransaction(LockedChunkTransaction):
+    """A chunk transaction preceded by the config-authoring lock."""
+
+    def flow_admission_locked(self) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -136,6 +149,17 @@ class ChunkExclusiveWrites:
             for chunk_id in sorted(ids):
                 lock_chunk_row(conn, chunk_id)
             yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
+
+    @contextmanager
+    def locked_flow_admission(self, chunk_ids: Sequence[str]) -> Generator[ILockedFlowAdmissionRead, None, None]:
+        with self._store.write("locked_flow_admission") as conn:
+            lock_config_authoring(conn)
+            ids = frozenset(chunk_ids)
+            for chunk_id in sorted(ids):
+                lock_chunk_row(conn, chunk_id)
+            yield LockedFlowAdmissionTransaction(
+                conn, self._facts, self._record, self._dependencies, self._registry, ids
+            )
 
     @contextmanager
     def locked_queue(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:

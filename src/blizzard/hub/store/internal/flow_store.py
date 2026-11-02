@@ -15,8 +15,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedFlowAdmissionRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.delivery.flows import (
     NOT_VERDICTS,
@@ -28,6 +28,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingTerms,
     LandingWrite,
+    PollPolicy,
     Submission,
     SubmissionClosure,
     SubmissionRecord,
@@ -55,6 +56,9 @@ from blizzard.hub.store.internal.flow_rows import (
     write_landing,
 )
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.internal.project_link_store import standing_repository_pairs_conn
+from blizzard.hub.store.internal.project_position_store import newest_positions
+from blizzard.hub.store.internal.repository_record_store import repository_records_conn
 from blizzard.hub.store.scoped import ScopedConnections
 
 _sub = s.flow_submissions
@@ -383,32 +387,124 @@ class FlowStore:
         at: datetime,
     ) -> Turn | None:
         with self._store.write("take_turn") as conn:
-            if not lock_flow_submission(conn, submission_id):
-                return None
-            row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
-            if row is None:
-                return None
-            flows = flows_held(conn, [submission_id]).get(submission_id, ())
-            closed = conn.execute(
-                self._store.select(_closures, _closures.c.submission_id).where(
-                    _closures.c.submission_id == submission_id
-                )
-            ).first()
-            if closed is not None or has_open_turn(conn, submission_id):
-                return None
-            if flows and (
-                self._busy(conn, flows) or not self._ahead_on(conn, flows, arrival=row.arrival) <= passed_over
-            ):
-                return None
-            turn = Turn(
-                turn_id=Id.mint(IdPrefix.HUB_TURN, self._clock).value, submission_id=submission_id, started_at=at
+            return self._take_turn_on(conn, submission_id, passed_over=passed_over, terms=terms, at=at)
+
+    def turn_contenders_locked(self, handle: ILockedChunkRead, submission_id: str) -> list[Submission] | None:
+        conn = conn_of(handle)
+        row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
+        if row is None:
+            return []
+        if row.chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        lock_flow_submission(conn, submission_id)
+        flows = flows_held(conn, [submission_id]).get(submission_id, ())
+        if flows and self._busy(conn, flows):
+            return []
+        earlier: set[str] = self._ahead_on(conn, flows, arrival=row.arrival) if flows else set()
+        rows = [row]
+        for batch in id_batches(sorted(earlier)):
+            rows.extend(conn.execute(self._store.select(_sub).where(_sub.c.submission_id.in_(batch))).all())
+        if not {r.chunk_id for r in rows} <= cast(_ChunkLocks, handle).locked_ids:
+            return None
+        return self._submissions(conn, sorted(rows, key=lambda r: r.arrival), closed={})
+
+    def candidate_terms_locked(
+        self, handle: ILockedFlowAdmissionRead, submission: Submission, *, chunk: Chunk | None = None
+    ) -> tuple[LandingTerms, ...]:
+        if submission.chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        conn = conn_of(handle)
+        ids = sorted({flow.repository_id for flow in submission.flows})
+        records = repository_records_conn(conn, ids)
+        if chunk is not None and chunk.chunk_id != submission.chunk_id:
+            raise ValueError("chunk does not match submission")
+        if chunk is None:
+            chunk = handle.record(submission.chunk_id)
+        project_id = chunk.project_id if chunk is not None else None
+        positions: dict[tuple[str, str], float | None] = {}
+        if project_id is not None and ids:
+            standing = standing_repository_pairs_conn(conn, project_id, ids)
+            positions = newest_positions(conn, standing)
+        return tuple(
+            LandingTerms.candidate(
+                repository_id,
+                records.get(repository_id),
+                position=positions.get((project_id, repository_id)) if project_id is not None else None,
             )
-            conn.execute(
-                self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
+            for repository_id in ids
+        )
+
+    def poll_policies_locked(
+        self, handle: ILockedChunkRead, nodes: Sequence[tuple[str, str]]
+    ) -> dict[tuple[str, str], PollPolicy]:
+        conn = conn_of(handle)
+        wanted = set(nodes)
+        result: dict[tuple[str, str], PollPolicy] = {}
+        table = s.graph_nodes
+        for batch in id_batches(sorted({node_id for _, node_id in wanted})):
+            rows = conn.execute(
+                self._store.select(
+                    table,
+                    table.c.graph_id,
+                    table.c.node_id,
+                    table.c.poll_interval_seconds,
+                    table.c.poll_timeout_seconds,
+                ).where(table.c.node_id.in_(batch))
             )
-            write_facts(conn, flows, submission_id, row.chunk_id, kind="turn-started", outcome=None, at=at)
-            self._take_terms(conn, row, flows, terms)
-            return turn
+            for row in rows:
+                key = (row.graph_id, row.node_id)
+                if key in wanted:
+                    result[key] = PollPolicy.from_seconds(row.poll_interval_seconds, row.poll_timeout_seconds)
+        return result
+
+    def take_turn_locked(
+        self,
+        handle: ILockedChunkRead,
+        submission_id: str,
+        *,
+        passed_over: frozenset[str],
+        terms: Sequence[LandingTerms],
+        at: datetime,
+    ) -> Turn | None:
+        conn = conn_of(handle)
+        chunk_id = conn.execute(
+            self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission_id)
+        ).scalar()
+        if chunk_id is None:
+            return None
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        return self._take_turn_on(conn, submission_id, passed_over=passed_over, terms=terms, at=at)
+
+    def _take_turn_on(
+        self,
+        conn: Connection,
+        submission_id: str,
+        *,
+        passed_over: frozenset[str],
+        terms: Sequence[LandingTerms],
+        at: datetime,
+    ) -> Turn | None:
+        if not lock_flow_submission(conn, submission_id):
+            return None
+        row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
+        if row is None:
+            return None
+        flows = flows_held(conn, [submission_id]).get(submission_id, ())
+        closed = conn.execute(
+            self._store.select(_closures, _closures.c.submission_id).where(_closures.c.submission_id == submission_id)
+        ).first()
+        if closed is not None or has_open_turn(conn, submission_id):
+            return None
+        if flows and (self._busy(conn, flows) or not self._ahead_on(conn, flows, arrival=row.arrival) <= passed_over):
+            return None
+        turn = Turn(turn_id=Id.mint(IdPrefix.HUB_TURN, self._clock).value, submission_id=submission_id, started_at=at)
+        conn.execute(
+            self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
+        )
+        write_facts(conn, flows, submission_id, row.chunk_id, kind="turn-started", outcome=None, at=at)
+        self._take_terms(conn, row, flows, terms)
+        return turn
 
     def end_turn_locked(
         self,

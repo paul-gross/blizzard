@@ -48,6 +48,12 @@ class ILockedChunkRead(Protocol):
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
 
 
+class ILockedFlowAdmissionRead(ILockedChunkRead, Protocol):
+    """A chunk handle that also holds the config-authoring key before its chunk locks."""
+
+    def flow_admission_locked(self) -> None: ...
+
+
 class ILockedWorkRefRead(Protocol):
     """The guard read resolved on the one connection its pointer locks were taken on.
     Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds no chunk-row lock,
@@ -80,6 +86,10 @@ class IChunkExclusiveWrites(Protocol):
         """Lock the queue position key, then named chunks in sorted order. Locked promotion
         and demotion require this handle. The key protects position writes, not a ranking
         resolved before the lock, which may already be stale."""
+        ...
+
+    def locked_flow_admission(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedFlowAdmissionRead]:
+        """Lock config-authoring, then the named chunks in sorted order."""
         ...
 
     def locked_dependency_graph(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:

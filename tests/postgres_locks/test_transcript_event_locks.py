@@ -20,7 +20,14 @@ _AT = datetime(2026, 10, 27, tzinfo=UTC)
 
 def _replace(store: module.TranscriptEventStore, segment: str) -> None:
     store.replace_segment_events(
-        segment, "v1", [], complete=True, content_fingerprint="new", at=_AT, provenance=_PROVENANCE
+        segment,
+        "v1",
+        [],
+        complete=True,
+        content_fingerprint="new",
+        at=_AT,
+        provenance=_PROVENANCE,
+        expected_pin=("missing", "graph"),
     )
 
 

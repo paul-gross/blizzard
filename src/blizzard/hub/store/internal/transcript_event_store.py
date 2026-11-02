@@ -13,7 +13,7 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Insert, Row, Select, func
+from sqlalchemy import Delete, Insert, Row, Select, func, select
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.observability.analytics.events import (
@@ -30,7 +30,7 @@ from blizzard.hub.domain.observability.analytics.events import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, lock_keys
 from blizzard.hub.store.internal.transcript_locks import SEGMENT_VISIBILITY_LOCK
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
@@ -81,6 +81,37 @@ def _derived_segment_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(s.transcript_event_derivations, s.transcript_event_derivations.c.segment_id).distinct()
 
 
+def resolved_graph_id() -> Any:
+    """The segment row's selected graph; every correlated lookup matches its tenant."""
+    segment, transition, chunk = s.transcript_segments, s.transitions, s.chunks
+    matching = (
+        select(transition.c.graph_id)
+        .where(
+            transition.c.tenant_id == segment.c.tenant_id,
+            transition.c.chunk_id == segment.c.chunk_id,
+            transition.c.to_node_id == segment.c.node_id,
+            transition.c.epoch == segment.c.epoch,
+            transition.c.graph_id.is_not(None),
+        )
+        .order_by(transition.c.recorded_at.desc(), transition.c.graph_id.desc())
+        .limit(1)
+        .correlate(segment)
+        .scalar_subquery()
+    )
+    fallback = (
+        select(chunk.c.graph_id)
+        .where(chunk.c.tenant_id == segment.c.tenant_id, chunk.c.chunk_id == segment.c.chunk_id)
+        .correlate(segment)
+        .scalar_subquery()
+    )
+    return func.coalesce(matching, fallback)
+
+
+def derivation_fingerprint(content: str, graph_id: str | None) -> str:
+    encoded = json.dumps(["segment-graph-v1", content, graph_id], ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
 def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None) -> Select[Any]:
     """Content-free fingerprint inputs, ordered by segment and range."""
     return (
@@ -99,6 +130,7 @@ def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None
             s.transcript_segments.c.model,
             s.transcript_segments.c.effort,
             s.transcript_segments.c.rejected,
+            resolved_graph_id().label("graph_id"),
         )
         .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
@@ -106,17 +138,19 @@ def _candidacy_digests_stmt(stmts: ScopedStatements, chunk_id: str | None = None
 
 
 def _derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
-    """The change probe's one cheap aggregate read: row count, max
-    ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
-    count as a scalar subquery, so the whole probe is one statement. No per-row read: a
-    fixed number of aggregates regardless of corpus size."""
-    chunk_count = stmts.select(s.chunks, func.count()).scalar_subquery()
+    """One statement of aggregates; no transcript or graph rows are returned individually."""
+    chunk, transition = s.chunks, s.transitions
     return stmts.select(
         s.transcript_segments,
         func.count(s.transcript_segments.c.id).label("segment_count"),
         func.max(s.transcript_segments.c.id).label("max_segment_id"),
         func.max(s.transcript_segments.c.received_at).label("max_received_at"),
-        chunk_count.label("chunk_count"),
+        stmts.select(chunk, func.count()).scalar_subquery().label("chunk_count"),
+        stmts.select(chunk, func.min(chunk.c.graph_id)).scalar_subquery().label("graph_min"),
+        stmts.select(chunk, func.max(chunk.c.graph_id)).scalar_subquery().label("graph_max"),
+        stmts.select(chunk, func.count(chunk.c.graph_id.distinct())).scalar_subquery().label("graph_distinct"),
+        stmts.select(transition, func.count()).scalar_subquery().label("transition_count"),
+        stmts.select(transition, func.max(transition.c.recorded_at)).scalar_subquery().label("latest_transition_at"),
     )
 
 
@@ -146,6 +180,24 @@ def _marker_stmt(stmts: ScopedStatements, segment_id: str, extractor_version: st
         s.transcript_event_derivations.c.segment_id == segment_id,
         s.transcript_event_derivations.c.extractor_version == extractor_version,
     )
+
+
+def _pin_transitions_stmt(stmts: ScopedStatements, chunk_id: str, node_id: str, epoch: int) -> Select[Any]:
+    return (
+        stmts.select(s.transitions, s.transitions.c.graph_id, s.transitions.c.recorded_at)
+        .where(
+            s.transitions.c.chunk_id == chunk_id,
+            s.transitions.c.to_node_id == node_id,
+            s.transitions.c.epoch == epoch,
+            s.transitions.c.graph_id.is_not(None),
+        )
+        .order_by(s.transitions.c.recorded_at.desc(), s.transitions.c.graph_id.desc())
+        .limit(1)
+    )
+
+
+def _chunk_pin_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
+    return stmts.select(s.chunks, s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)
 
 
 def _markers_stmt(stmts: ScopedStatements, extractor_version: str) -> Select[Any]:
@@ -373,7 +425,8 @@ class TranscriptEventStore:
         candidates: list[str] = []
         for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
             visible_segment_ids.add(segment_id)
-            fingerprint = content_fingerprint(list(rows))
+            grouped = list(rows)
+            fingerprint = derivation_fingerprint(content_fingerprint(grouped), grouped[0].graph_id)
             if is_candidate(markers.get(segment_id), fingerprint):
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
@@ -386,6 +439,11 @@ class TranscriptEventStore:
             max_segment_id=row.max_segment_id,
             max_received_at=row.max_received_at,
             chunk_count=row.chunk_count,
+            graph_min=row.graph_min,
+            graph_max=row.graph_max,
+            graph_distinct=row.graph_distinct,
+            transition_count=row.transition_count,
+            latest_transition_at=row.latest_transition_at,
         )
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
@@ -499,13 +557,27 @@ class TranscriptEventStore:
         content_fingerprint: str,
         at: datetime,
         provenance: SegmentProvenance,
+        expected_pin: tuple[str, str],
     ) -> bool:
         with self._store.write("replace_segment_events") as conn:
+            lock_chunk_row(conn, expected_pin[0])
             lock_keys(conn, _SEGMENT_LOCK_NAMESPACE, [segment_id])
             visible = conn.execute(_visible_segment_ids_stmt(self._store, segment_id=segment_id)).first()
             rows = conn.execute(_segment_contexts_stmt(self._store, [segment_id])).all()
             if not visible or not rows or content_fingerprint != _fingerprint_records(rows):
                 return False
+            chunk_id, graph_id = expected_pin
+            first = rows[0]
+            if first.chunk_id != chunk_id:
+                return False
+            transitions = conn.execute(_pin_transitions_stmt(self._store, chunk_id, first.node_id, first.epoch)).all()
+            if transitions:
+                if transitions[0].graph_id != graph_id:
+                    return False
+            else:
+                current_pin = conn.execute(_chunk_pin_stmt(self._store, chunk_id)).scalar_one_or_none()
+                if current_pin != graph_id:
+                    return False
             conn.execute(_delete_events_stmt(self._store, segment_id, extractor_version))
             conn.execute(_delete_marker_stmt(self._store, segment_id, extractor_version))
             if events:
@@ -517,7 +589,7 @@ class TranscriptEventStore:
                     self._store,
                     segment_id,
                     extractor_version,
-                    content_fingerprint=content_fingerprint,
+                    content_fingerprint=derivation_fingerprint(content_fingerprint, graph_id),
                     event_count=len(events),
                     complete=complete,
                     at=at,

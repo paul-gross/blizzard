@@ -105,6 +105,7 @@ def test_derivation_markers_matches_derivation_marker_per_segment(tmp_path: Path
         content_fingerprint=first.content_fingerprint,
         at=_T0,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     store.replace_segment_events(
         "sg_2",
@@ -114,6 +115,7 @@ def test_derivation_markers_matches_derivation_marker_per_segment(tmp_path: Path
         content_fingerprint=second.content_fingerprint,
         at=_T0,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     # A different extractor version's marker must not leak into the requested version's read.
     store.replace_segment_events(
@@ -124,6 +126,7 @@ def test_derivation_markers_matches_derivation_marker_per_segment(tmp_path: Path
         content_fingerprint=second.content_fingerprint,
         at=_T0,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     result = store.derivation_markers(_EXTRACTOR_VERSION)

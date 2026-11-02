@@ -10,7 +10,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedFlowAdmissionRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
@@ -21,6 +21,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingTerms,
     LandingWrite,
+    PollPolicy,
     Submission,
     SubmissionRecord,
     Turn,
@@ -125,6 +126,28 @@ class IFlowChangePublisher(Protocol):
 class IWriteFlows(IReadFlows, Protocol):
     """Read-write flows access. Decisions serialize by chunk and resource; arrivals also serialize per tenant."""
 
+    def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
+        """Open submissions on the named flows, for tentative contender discovery."""
+        ...
+
+    def candidate_terms_locked(
+        self, handle: ILockedFlowAdmissionRead, submission: Submission, *, chunk: Chunk | None = None
+    ) -> tuple[LandingTerms, ...]:
+        """The held repositories' current terms on the config- and chunk-locked transaction. ``chunk``, if supplied,
+        is that submission's record read through the same handle."""
+        ...
+
+    def poll_policies_locked(
+        self, handle: ILockedChunkRead, nodes: Sequence[tuple[str, str]]
+    ) -> dict[tuple[str, str], PollPolicy]:
+        """The named graph/node pairs' poll settings, read on the locked transaction."""
+        ...
+
+    def turn_contenders_locked(self, handle: ILockedChunkRead, submission_id: str) -> list[Submission] | None:
+        """Lock the candidate's flows and reload it and earlier open contenders; ``None`` if a chunk is unlocked,
+        or an empty list if the candidate is absent or a held flow is busy."""
+        ...
+
     def submit(
         self,
         chunk_id: str,
@@ -177,6 +200,18 @@ class IWriteFlows(IReadFlows, Protocol):
         The same transaction gives the submission terms for each repository it holds and has none for: those an
         earlier generation of the visit took, else the candidate in ``terms`` — so a retried turn keeps what its first
         took, and a resubmission keeps what the visit took."""
+        ...
+
+    def take_turn_locked(
+        self,
+        handle: ILockedChunkRead,
+        submission_id: str,
+        *,
+        passed_over: frozenset[str],
+        terms: Sequence[LandingTerms],
+        at: datetime,
+    ) -> Turn | None:
+        """Take the turn on its chunk's locked transaction, after the caller rechecks eligibility."""
         ...
 
     def end_turn_locked(

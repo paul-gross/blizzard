@@ -63,7 +63,7 @@ class TranscriptEvent:
 @domain_model
 @dataclass(frozen=True)
 class DerivationMarker:
-    """One ``(segment_id, extractor_version)`` pair's most recent derivation."""
+    """One pair's most recent derivation; its fingerprint covers content and selected graph."""
 
     segment_id: str
     extractor_version: str
@@ -184,12 +184,17 @@ class CandidacyRead:
 @dataclass(frozen=True)
 class DerivationSignature:
     """The aggregate fingerprint :meth:`IReadTranscriptEvents.derivation_signature` reads:
-    segment count, highest segment id, latest ``received_at``, and chunk count."""
+    segment and chunk aggregates, graph-pin extrema and distinct count, and transition aggregates."""
 
     segment_count: int
     max_segment_id: int | None
     max_received_at: datetime | None
     chunk_count: int
+    graph_min: str | None = None
+    graph_max: str | None = None
+    graph_distinct: int = 0
+    transition_count: int = 0
+    latest_transition_at: datetime | None = None
 
 
 @domain_model
@@ -250,11 +255,8 @@ class IReadTranscriptEvents(Protocol):
         ...
 
     def derivation_signature(self) -> DerivationSignature:
-        """One constant-cost aggregate read over every input :meth:`candidacy` and its
-        visibility read see — no per-row read, so its cost never grows
-        with segment count. Equal to a previous call's result exactly when nothing
-        relevant to a pass has changed since, cheap enough to check before running the
-        full pass (candidacy/derive/drop)."""
+        """Compact aggregates of segment, chunk-pin and transition inputs. Changes that
+        leave the aggregates unchanged are caught by the sweep's forced floor."""
         ...
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
@@ -301,11 +303,13 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         content_fingerprint: str,
         at: datetime,
         provenance: SegmentProvenance,
+        expected_pin: tuple[str, str],
     ) -> bool:
         """One transaction: delete this pair's existing rows, write ``events`` each
         stamped with ``provenance``, and write the marker. Rows at *other*
         extractor versions are untouched. Return false if the input is no longer current
-        or the segment is no longer visible."""
+        or the segment is no longer visible. ``expected_pin`` is the chunk and graph
+        used to stamp the events, including when the event list is empty."""
         ...
 
     def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> int:

@@ -52,6 +52,14 @@ class LinkKind:
 _SOURCES = LinkKind(project_source_links, project_source_link_facts, "work_source_id", "source link")
 _REPOSITORIES = LinkKind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
 
+
+def standing_repository_pairs_conn(conn: Connection, project_id: str, ids: list[str]) -> set[tuple[str, str]]:
+    """The named repository links that stand on the caller's transaction."""
+    if not ids:
+        return set()
+    return set(_newest(statements_of(conn), conn, _REPOSITORIES, [project_id], ids, standing_only=True))
+
+
 #: The link tables each link record kind writes to.
 LINK_KINDS: Mapping[RecordKind, LinkKind] = {
     RecordKind.PROJECT_SOURCE_LINK: _SOURCES,

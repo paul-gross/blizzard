@@ -26,12 +26,13 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
     TURN_SUPERSEDED,
     AdmittedTurn,
-    LandingTerms,
+    FlowLine,
+    PollPolicy,
     Submission,
     Turn,
     TurnEvent,
@@ -213,47 +214,59 @@ class FlowLineReconciler:
 
     def admit(self, floor: int, now: datetime) -> list[AdmittedTurn]:
         """Take a turn, oldest arrival first, for every open submission at or above ``floor`` that is next on every
-        flow it holds, judged on one bulk read; the store re-checks each under the flows' locks, handed the
-        submissions judged ineligible."""
+        flow it holds, selected on one bulk read. Recheck the candidate and earlier contenders under their chunk
+        locks and the candidate's flow locks before starting its turn."""
         subs = self._flows.open_submissions_from(floor)
         if not subs:
             return []
         line = self._lines.line(subs, turning=frozenset(turn.submission_id for turn in self._flows.open_turns()))
-        passed_over = frozenset(sub.submission_id for sub in subs if not line.eligible(sub, now=now))
         nexts = [sub for sub in subs if line.is_next(sub, now=now)]
-        terms = self._candidate_terms(nexts)
         admitted: list[AdmittedTurn] = []
         for sub in nexts:
-            turn: Turn | None = self._flows.take_turn(
-                sub.submission_id, passed_over=passed_over, terms=terms[sub.submission_id], at=self._clock.now()
-            )
+            turn = self._admit_one(sub)
             if turn is not None:
                 admitted.append(AdmittedTurn(turn, sub))
         return admitted
 
-    def _candidate_terms(self, subs: Sequence[Submission]) -> dict[str, tuple[LandingTerms, ...]]:
-        """The terms each submission's repositories would take now, by submission: each held repository's record
-        and its position in the chunk's project's order, read fresh. The store writes one only where the visit has
-        taken none."""
-        if not subs:
-            return {}
-        records: dict[str, ConfiguredRepository] = {
-            record.repository_id: record for record in self._repositories.list_all(include_retired=True)
-        }
-        chunks = self._record.get_many(sorted({sub.chunk_id for sub in subs}))
-        projects: dict[str | None, LandingProject] = {}
-        candidates: dict[str, tuple[LandingTerms, ...]] = {}
-        for sub in subs:
-            chunk = chunks.get(sub.chunk_id)
-            project_id = chunk.project_id if chunk is not None else None
-            if project_id not in projects:
-                projects[project_id] = LandingProject.read(project_id, projects=self._projects, links=self._links)
-            positions = projects[project_id].positions
-            candidates[sub.submission_id] = tuple(
-                LandingTerms.candidate(repository_id, records.get(repository_id), position=positions.get(repository_id))
-                for repository_id in sorted({flow.repository_id for flow in sub.flows})
-            )
-        return candidates
+    def _admit_one(self, sub: Submission) -> Turn | None:
+        # Discovery is tentative: take every chunk first, then verify the set under the flow keys.
+        # A newly discovered contender cannot be locked here without inverting chunk -> flow.
+        for _ in range(3):
+            discovered = self._flows.open_submissions_on([flow.flow_id for flow in sub.flows])
+            chunk_ids = sorted({sub.chunk_id, *(s.chunk_id for s in discovered if s.arrival < sub.arrival)})
+            with self._exclusive.locked_flow_admission(chunk_ids) as handle:
+                contenders = self._flows.turn_contenders_locked(handle, sub.submission_id)
+                if contenders is None:
+                    continue
+                if not contenders:
+                    return None
+                ids = sorted({s.chunk_id for s in contenders})
+                facts = handle.facts_for(ids)
+                chunks = handle.records_for(ids)
+                node_keys = [(chunk.graph_id, s.node_id) for s in contenders if (chunk := chunks.get(s.chunk_id))]
+                node_policies = self._flows.poll_policies_locked(handle, node_keys)
+                policies: dict[str, PollPolicy] = {}
+                for contender in contenders:
+                    chunk = chunks.get(contender.chunk_id)
+                    key = (chunk.graph_id, contender.node_id) if chunk is not None else None
+                    policies[contender.submission_id] = node_policies.get(key, PollPolicy()) if key else PollPolicy()
+                if sub.chunk_id not in facts or sub.chunk_id not in chunks:
+                    return None
+                current = FlowLine(
+                    submissions=tuple(contenders),
+                    facts={chunk_id: ChunkFacts.or_default(facts.get(chunk_id)) for chunk_id in ids},
+                    policies=policies,
+                )
+                at = self._clock.now()
+                candidate = next((s for s in contenders if s.submission_id == sub.submission_id), None)
+                if candidate is None or not current.eligible(candidate, now=at):
+                    return None
+                passed_over = frozenset(s.submission_id for s in contenders if not current.eligible(s, now=at))
+                terms = self._flows.candidate_terms_locked(handle, candidate, chunk=chunks[sub.chunk_id])
+                return self._flows.take_turn_locked(
+                    handle, sub.submission_id, passed_over=passed_over, terms=terms, at=at
+                )
+        return None
 
     def escalate_actionless(self) -> int:
         """Escalate every chunk of this tenant standing at a hub node that names no action — the boot step run

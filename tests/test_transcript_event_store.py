@@ -137,6 +137,8 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_segment_contexts_stmt": m._segment_contexts_stmt(_STMTS, ["sg_1"]),
         "_drop_identities_stmt": m._drop_identities_stmt(_STMTS, ["sg_1"]),
         "_insert_drops_stmt": m._insert_drops_stmt(_STMTS),
+        "_pin_transitions_stmt": m._pin_transitions_stmt(_STMTS, "ch_1", "nd_build", 1),
+        "_chunk_pin_stmt": m._chunk_pin_stmt(_STMTS, "ch_1"),
     }
 
 
@@ -167,8 +169,9 @@ def test_transcript_event_drops_ddl_compiles_under_both_dialects() -> None:
 def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):
-            assert "transcript_event" in str(stmt.compile(dialect=dialect)) or "transcript_segments" in str(
-                stmt.compile(dialect=dialect)
+            sql = str(stmt.compile(dialect=dialect))
+            assert any(
+                table in sql for table in ("transcript_event", "transcript_segments", "transitions", "chunks")
             ), name
 
 
@@ -378,6 +381,7 @@ def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(t
         content_fingerprint=current.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     read = store.candidacy(_EXTRACTOR_VERSION)
@@ -403,6 +407,7 @@ def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp
         content_fingerprint=stale.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
@@ -431,6 +436,7 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
         content_fingerprint=derived.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
 
@@ -462,6 +468,7 @@ def test_candidacy_includes_a_still_rejected_segment_whose_harness_version_refre
         content_fingerprint=stale.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
 
@@ -518,6 +525,7 @@ def test_stale_input_cannot_replace_current_derivation(tmp_path: Path) -> None:
         content_fingerprint=current.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     assert not store.replace_segment_events(
         "sg_1",
@@ -527,9 +535,14 @@ def test_stale_input_cannot_replace_current_derivation(tmp_path: Path) -> None:
         content_fingerprint=stale.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
-    assert marker is not None and marker.content_fingerprint == current.content_fingerprint and marker.event_count == 1
+    assert (
+        marker is not None
+        and marker.content_fingerprint == store_module.derivation_fingerprint(current.content_fingerprint, "gr_1")
+        and marker.event_count == 1
+    )
 
 
 def test_visibility_is_rechecked_for_replace_and_drop(tmp_path: Path) -> None:
@@ -544,6 +557,7 @@ def test_visibility_is_rechecked_for_replace_and_drop(tmp_path: Path) -> None:
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     assert store.drop_segments(frozenset({"sg_1"}), at=_NOW) == 0
     assert store.derivation_marker("sg_1", _EXTRACTOR_VERSION) is not None
@@ -559,6 +573,7 @@ def test_visibility_is_rechecked_for_replace_and_drop(tmp_path: Path) -> None:
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     assert store.derivation_marker("sg_1", _EXTRACTOR_VERSION) is None
 
@@ -607,6 +622,7 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     with engine.connect() as conn:
@@ -616,7 +632,7 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
 
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
     assert marker is not None
-    assert marker.content_fingerprint == fingerprint
+    assert marker.content_fingerprint == store_module.derivation_fingerprint(fingerprint, "gr_1")
     assert marker.event_count == 1
     assert marker.complete is True
 
@@ -638,6 +654,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
             content_fingerprint=fingerprint,
             at=_NOW,
             provenance=_PROVENANCE,
+            expected_pin=("ch_1", "gr_1"),
         )
 
     with engine.connect() as conn:
@@ -657,6 +674,7 @@ def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_pa
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     store.replace_segment_events(
@@ -667,6 +685,7 @@ def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_pa
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     with engine.connect() as conn:
@@ -683,7 +702,14 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
     store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=fingerprint, at=_NOW, provenance=_PROVENANCE
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
@@ -716,6 +742,7 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     store.replace_segment_events(
         "sg_1",
@@ -725,6 +752,7 @@ def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
@@ -749,6 +777,7 @@ def _derive(store: TranscriptEventStore, segment_id: str) -> None:
         content_fingerprint=current.content_fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
 
@@ -868,6 +897,7 @@ def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) ->
         content_fingerprint=fingerprint,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     store.drop_segments(frozenset(), at=_NOW)
@@ -895,6 +925,7 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
             content_fingerprint=fingerprint,
             at=_NOW,
             provenance=_PROVENANCE,
+            expected_pin=("ch_1", "gr_1"),
         )
 
     scoped = hub_store_connections(engine)
@@ -943,9 +974,17 @@ def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path
         content_fingerprint=first,
         at=_NOW,
         provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
     store.replace_segment_events(
-        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=second, at=_NOW, provenance=_PROVENANCE
+        "sg_2",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=second,
+        at=_NOW,
+        provenance=_PROVENANCE,
+        expected_pin=("ch_1", "gr_1"),
     )
 
     assert store.derived_segment_ids() == frozenset({"sg_1", "sg_2"})

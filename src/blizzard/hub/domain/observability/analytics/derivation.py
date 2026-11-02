@@ -41,13 +41,11 @@ _log = get_logger("blizzard.hub.transcript_events")
 @domain_model
 @dataclass(frozen=True)
 class GraphPins:
-    """Per chunk, its transitions and mint pin, pre-resolved once for a whole
-    pass. Owns the "newest matching transition, else mint pin" rule
+    """Per chunk, its transitions and current pin, pre-resolved once for a whole
+    pass. Owns the "newest matching transition, else current pin" rule
     :meth:`EventDerivationService.derive_segment` applies per node-step.
 
-    These reads are not fenced with event replacement: a concurrent graph-pin change
-    can leave a derivation stamped with a stale graph even when the segment is unchanged.
-    Segment fingerprints and candidacy do not currently detect that change.
+    Replacement rechecks the selected pin under the chunk lock.
     """
 
     transitions_by_chunk: dict[str, list[TransitionFact]] = field(default_factory=dict[str, list[TransitionFact]])
@@ -55,15 +53,15 @@ class GraphPins:
 
     def graph_id_for(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
         """The node-step's graph: the newest transition among this chunk's
-        pre-resolved ones matching ``node_id``/``epoch``, else the chunk's mint pin, else
-        ``None`` when neither resolves (an unresolvable chunk)."""
+        pre-resolved ones matching ``node_id``/``epoch``, breaking timestamp ties by
+        greatest graph id, else the chunk's current pin, else ``None`` when neither resolves."""
         matches = [
             t
             for t in self.transitions_by_chunk.get(chunk_id, [])
             if t.to_node_id == node_id and t.epoch == epoch and t.graph_id is not None
         ]
         if matches:
-            newest = max(matches, key=lambda t: t.recorded_at)
+            newest = max(matches, key=lambda t: (t.recorded_at, t.graph_id or ""))
             assert newest.graph_id is not None  # narrowed by the filter above
             return newest.graph_id
         return self.mint_pin_by_chunk.get(chunk_id)
@@ -256,6 +254,7 @@ class EventDerivationService:
             content_fingerprint=current.content_fingerprint,
             at=self._clock.now(),
             provenance=current.provenance,
+            expected_pin=(current.chunk_id, graph_id),
         )
 
     def re_derive(self, scope: ReDeriveScope, *, limit: int) -> ReDeriveOutcome:

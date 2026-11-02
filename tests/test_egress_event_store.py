@@ -117,6 +117,7 @@ def _derive(
         content_fingerprint=current.content_fingerprint,
         at=at,
         provenance=_PROVENANCE,
+        expected_pin=(current.chunk_id, "gr_1"),
     )
 
 

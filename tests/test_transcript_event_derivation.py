@@ -185,6 +185,100 @@ def test_a_finalized_segments_events_appear_with_no_manual_step(fixture: _Fixtur
     assert rows[0].epoch == 1
 
 
+def test_stale_transition_pin_is_refused_before_replacement(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    assert fixture.service.derive_segment("sg_1", pins)
+    with fixture.engine.begin() as conn:
+        conn.execute(
+            hub_store_connections(fixture.engine)
+            .insert(s.transitions)
+            .values(
+                transition_id="tr_new",
+                chunk_id="ch_1",
+                graph_id="gr_new",
+                from_node_id=None,
+                to_node_id="nd_build",
+                epoch=1,
+                runner_id="r1",
+                recorded_at=_NOW + timedelta(seconds=1),
+            )
+        )
+    assert not fixture.service.derive_segment("sg_1", pins)
+    assert fixture.stored_events()[0].graph_id == "gr_mint"
+    assert fixture.service.derive_segment("sg_1", fixture.service.graph_pins_for(["sg_1"]))
+    assert fixture.stored_events()[0].graph_id == "gr_new"
+
+
+def test_stale_fallback_pin_is_refused_even_without_events(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(
+        _segment_record(node_id="nd_other", turns_json="[]"), byte_count=10, codec="zlib", at=_NOW
+    )
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    with fixture.engine.begin() as conn:
+        conn.execute(
+            hub_store_connections(fixture.engine)
+            .update(s.chunks)
+            .where(s.chunks.c.chunk_id == "ch_1")
+            .values(graph_id="gr_new")
+        )
+    assert not fixture.service.derive_segment("sg_1", pins)
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is None
+    assert fixture.service.derive_segment("sg_1", fixture.service.graph_pins_for(["sg_1"]))
+
+
+def test_transition_pin_remains_valid_after_chunk_repin(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    with fixture.engine.begin() as conn:
+        conn.execute(
+            hub_store_connections(fixture.engine)
+            .update(s.chunks)
+            .where(s.chunks.c.chunk_id == "ch_1")
+            .values(graph_id="gr_new")
+        )
+    assert fixture.service.derive_segment("sg_1", pins)
+    assert fixture.stored_events()[0].graph_id == "gr_mint"
+
+
+@pytest.mark.parametrize("change", ["fallback", "transition", "tie"])
+def test_pin_only_change_invalidates_marker_and_runs_next_sweep(fixture: _Fixture, change: str) -> None:
+    node = "nd_other" if change == "fallback" else "nd_build"
+    # An empty derivation still has to retain the graph it used in its marker.
+    fixture.segments.insert_accepted(
+        _segment_record(node_id=node, turns_json="[]"), byte_count=10, codec="zlib", at=_NOW
+    )
+    fixture.reconciler.sweep()
+    old = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
+    assert old is not None and old.event_count == 0
+    before = fixture.corpus.derivation_signature()
+    scoped = hub_store_connections(fixture.engine)
+    with scoped.write("change pin") as conn:
+        if change == "fallback":
+            conn.execute(scoped.update(s.chunks).where(s.chunks.c.chunk_id == "ch_1").values(graph_id="gr_new"))
+        else:
+            conn.execute(
+                scoped.insert(s.transitions).values(
+                    transition_id="tr_new",
+                    chunk_id="ch_1",
+                    graph_id="gr_new",
+                    to_node_id=node,
+                    epoch=1,
+                    runner_id="r1",
+                    recorded_at=_NOW if change == "tie" else _NOW + timedelta(seconds=1),
+                )
+            )
+    assert fixture.corpus.derivation_signature() != before
+    assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == ["sg_1"]
+    assert any("sg_1" in read.candidate_segment_ids for read in fixture.corpus.candidacy(EXTRACTOR_VERSION).values())
+    assert fixture.service.graph_pins_for(["sg_1"]).graph_id_for("ch_1", node, 1) == "gr_new"
+    fixture.reconciler.sweep()  # no clock advance: the probe, not the forced floor, starts this pass
+    new = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
+    assert new is not None and new.content_fingerprint != old.content_fingerprint
+    assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == []
+    assert all(not read.candidate_segment_ids for read in fixture.corpus.candidacy(EXTRACTOR_VERSION).values())
+
+
 def test_a_derived_events_provenance_matches_its_segments_own(fixture: _Fixture) -> None:
     """The segment's own frozen harness identity rides every event
     that segment derives, read straight off `transcript_segments`."""
@@ -767,6 +861,40 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
     assert calls == 1
 
 
+def test_graph_pin_probe_collision_converges_at_forced_floor(fixture: _Fixture) -> None:
+    fixture.mint_chunk("ch_low")
+    fixture.mint_chunk("ch_high")
+    scoped = hub_store_connections(fixture.engine)
+    with scoped.write("pins") as conn:
+        for chunk_id, graph_id in (("ch_low", "gr_a"), ("ch_1", "gr_m"), ("ch_high", "gr_z")):
+            conn.execute(scoped.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
+    fixture.segments.insert_accepted(_segment_record(node_id="nd_other"), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+    assert fixture.stored_events()[0].graph_id == "gr_m"
+    before = fixture.corpus.derivation_signature()
+    with scoped.write("repin") as conn:
+        conn.execute(scoped.update(s.chunks).where(s.chunks.c.chunk_id == "ch_1").values(graph_id="gr_n"))
+    assert fixture.corpus.derivation_signature() == before  # extrema and distinct count collide
+    assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == ["sg_1"]
+    fixture.reconciler.sweep()
+    assert fixture.stored_events()[0].graph_id == "gr_m"
+    fixture.clock.advance(timedelta(minutes=10))
+    fixture.reconciler.sweep()
+    assert fixture.stored_events()[0].graph_id == "gr_n"
+
+
+def test_derivation_probes_return_a_fixed_number_of_rows_as_segments_grow(fixture: _Fixture) -> None:
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    corpus_rows = count_rows_read(fixture.engine, fixture.corpus.derivation_signature)
+    tenant_rows = count_rows_read(fixture.engine, fixture.events.derivation_signature)
+    for i in range(40):
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_extra_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    assert count_rows_read(fixture.engine, fixture.corpus.derivation_signature) == corpus_rows
+    assert count_rows_read(fixture.engine, fixture.events.derivation_signature) == tenant_rows == 1
+
+
 # --- batched input decoding -----------------
 
 
@@ -837,12 +965,14 @@ def test_context_only_change_rederives_existing_event_provenance(fixture: _Fixtu
 def test_legacy_content_only_marker_is_a_candidate_for_both_reads(fixture: _Fixture) -> None:
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
     assert fixture.service.derive_segment("sg_1", fixture.service.graph_pins_for(["sg_1"]))
+    current = fixture.events.segment_derivation_input("sg_1")
+    assert current is not None
     scoped = hub_store_connections(fixture.engine)
     with scoped.write("old_marker") as conn:
         conn.execute(
             scoped.update(s.transcript_event_derivations)
             .where(s.transcript_event_derivations.c.segment_id == "sg_1")
-            .values(content_fingerprint="legacy-content-only")
+            .values(content_fingerprint=current.content_fingerprint)
         )
     assert fixture.events.candidacy(EXTRACTOR_VERSION).candidate_segment_ids == ["sg_1"]
     assert any("sg_1" in read.candidate_segment_ids for read in fixture.corpus.candidacy(EXTRACTOR_VERSION).values())

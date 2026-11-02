@@ -355,17 +355,14 @@ class PollPolicy:
     @classmethod
     def of(cls, node: Node) -> PollPolicy:
         """The node's own overrides, else the module defaults."""
+        return cls.from_seconds(node.poll_interval_seconds, node.poll_timeout_seconds)
+
+    @classmethod
+    def from_seconds(cls, interval: int | None, timeout: int | None) -> PollPolicy:
+        """The stored overrides, defaulting each unspecified cadence."""
         return cls(
-            interval=(
-                timedelta(seconds=node.poll_interval_seconds)
-                if node.poll_interval_seconds is not None
-                else DEFAULT_POLL_INTERVAL
-            ),
-            timeout=(
-                timedelta(seconds=node.poll_timeout_seconds)
-                if node.poll_timeout_seconds is not None
-                else DEFAULT_POLL_TIMEOUT
-            ),
+            interval=timedelta(seconds=interval) if interval is not None else DEFAULT_POLL_INTERVAL,
+            timeout=timedelta(seconds=timeout) if timeout is not None else DEFAULT_POLL_TIMEOUT,
         )
 
     def due_at(self, row: HubNodePollFact) -> datetime:

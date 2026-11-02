@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null, select, union_all
+from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, cast, func, literal, null, select, union_all
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
@@ -49,7 +49,11 @@ from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
 from blizzard.hub.store.internal.corpus_rows import open_tenant
-from blizzard.hub.store.internal.transcript_event_store import content_fingerprint
+from blizzard.hub.store.internal.transcript_event_store import (
+    content_fingerprint,
+    derivation_fingerprint,
+    resolved_graph_id,
+)
 from blizzard.hub.tenancy import TenantId
 
 #: Opens a read, named by its operation, whose every statement is marked hub-scoped
@@ -211,14 +215,19 @@ class SweepCorpusReads:
     # --- event derivation -------------------------------------------------------------
 
     def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
-        """One grouped statement of segment and chunk aggregates per tenant."""
-        segment, chunk = s.transcript_segments, s.chunks
+        """One statement returning only segment, chunk-pin and transition aggregates per tenant."""
+        segment, chunk, transition = s.transcript_segments, s.chunks, s.transitions
         segments = select(
             segment.c.tenant_id.label("tenant_id"),
             func.count(segment.c.id).label("segment_count"),
             func.max(segment.c.id).label("max_segment_id"),
             func.max(segment.c.received_at).label("max_received_at"),
             literal(0).label("chunk_count"),
+            cast(null(), chunk.c.graph_id.type).label("graph_min"),
+            cast(null(), chunk.c.graph_id.type).label("graph_max"),
+            literal(0).label("graph_distinct"),
+            literal(0).label("transition_count"),
+            cast(null(), transition.c.recorded_at.type).label("latest_transition_at"),
         ).group_by(segment.c.tenant_id)
         chunks = select(
             chunk.c.tenant_id.label("tenant_id"),
@@ -226,9 +235,26 @@ class SweepCorpusReads:
             null().label("max_segment_id"),
             null().label("max_received_at"),
             func.count().label("chunk_count"),
+            func.min(chunk.c.graph_id).label("graph_min"),
+            func.max(chunk.c.graph_id).label("graph_max"),
+            func.count(chunk.c.graph_id.distinct()).label("graph_distinct"),
+            literal(0).label("transition_count"),
+            null().label("latest_transition_at"),
         ).group_by(chunk.c.tenant_id)
+        transitions = select(
+            transition.c.tenant_id,
+            literal(0),
+            null(),
+            null(),
+            literal(0),
+            null(),
+            null(),
+            literal(0),
+            func.count(),
+            func.max(transition.c.recorded_at),
+        ).group_by(transition.c.tenant_id)
         with self._read("corpus derivation signature") as conn:
-            rows = conn.execute(union_all(segments, chunks)).all()
+            rows = conn.execute(union_all(segments, chunks, transitions)).all()
         merged: dict[str, dict[str, Any]] = {}
         for row in rows:
             into = merged.setdefault(
@@ -239,6 +265,13 @@ class SweepCorpusReads:
             if row.max_segment_id is not None:
                 into["max_segment_id"] = row.max_segment_id
                 into["max_received_at"] = row.max_received_at
+            if row.graph_min is not None:
+                into["graph_min"] = row.graph_min
+                into["graph_max"] = row.graph_max
+                into["graph_distinct"] = row.graph_distinct
+            if row.transition_count:
+                into["transition_count"] = row.transition_count
+                into["latest_transition_at"] = row.latest_transition_at
         return {TenantId(tenant): DerivationSignature(**values) for tenant, values in merged.items()}
 
     def candidacy(self, extractor_version: str) -> dict[TenantId, CandidacyRead]:
@@ -264,6 +297,7 @@ class SweepCorpusReads:
                     segment.c.model,
                     segment.c.effort,
                     segment.c.rejected,
+                    resolved_graph_id().label("graph_id"),
                 )
                 .join(
                     visible,
@@ -284,7 +318,8 @@ class SweepCorpusReads:
         for (tenant_id, segment_id), rows in itertools.groupby(digest_rows, key=lambda r: (r.tenant_id, r.segment_id)):
             tenant = TenantId(tenant_id)
             visible_ids.setdefault(tenant, set()).add(segment_id)
-            fingerprint = content_fingerprint(list(rows))
+            grouped = list(rows)
+            fingerprint = derivation_fingerprint(content_fingerprint(grouped), grouped[0].graph_id)
             if is_candidate(markers.get((tenant_id, segment_id)), fingerprint):
                 candidates.setdefault(tenant, []).append(segment_id)
         return {

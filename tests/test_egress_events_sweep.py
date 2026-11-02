@@ -105,6 +105,7 @@ class _Events:
             content_fingerprint=current.content_fingerprint,
             at=self.hub.clock.now(),
             provenance=_PROVENANCE,
+            expected_pin=(current.chunk_id, self.graph.graph_id),
         )
 
     def drop(self, segment_id: str) -> None:

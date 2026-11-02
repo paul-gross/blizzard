@@ -51,6 +51,16 @@ _FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
 
+def repository_records_conn(conn: Connection, ids: list[str]) -> dict[str, ConfiguredRepository]:
+    """The named records on the caller's transaction, including retired records."""
+    records: dict[str, ConfiguredRepository] = {}
+    retired = _retirements(conn, [RepositoryId(repository_id) for repository_id in ids])
+    for batch in id_batches(ids):
+        rows = conn.execute(statements_of(conn).select(repositories).where(repositories.c.repository_id.in_(batch)))
+        records.update((row.repository_id, _of(row, retired_at=retired.get(row.repository_id))) for row in rows)
+    return records
+
+
 def _retirements(conn: Connection, ids: list[RepositoryId] | None = None) -> dict[str, datetime]:
     """When each currently-retired repository's newest retirement fact was set, by repository id."""
     facts = repository_lifecycle_facts
