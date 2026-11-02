@@ -3473,6 +3473,8 @@ def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
+
+
 # --- The takeover entry — a forced entry over a live worker, killed between its decision and its entry fact ---
 
 _TAKEOVER_CHUNK = "ch_takeover"
@@ -3524,6 +3526,9 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
             session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-takeover"),
             spawned_at=_TAKEOVER_NOW,
         )
+        # A fresh heartbeat keeps REAP from closing the seeded lease as a stalled worker before the entry reaches it,
+        # however long a loaded machine takes to get the request in.
+        store.record_heartbeat(lease_id=_TAKEOVER_LEASE, beat_at=datetime.now(UTC))
         store.record_binding(
             chunk_id=_TAKEOVER_CHUNK,
             environment_id="e1",
@@ -3539,8 +3544,12 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
 
         # The runner records the entry's decision, then self-SIGKILLs inside the entry: the client sees the
         # killed connection, never a 201.
-        with pytest.raises(httpx2.HTTPError):
-            runner.post(f"/api/chunks/{_TAKEOVER_CHUNK}/takeovers", json={"force": True})
+        try:
+            response = runner.post(f"/api/chunks/{_TAKEOVER_CHUNK}/takeovers", json={"force": True})
+        except httpx2.HTTPError:
+            pass
+        else:
+            pytest.fail(f"the armed entry answered {response.status_code}, not a kill")
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
         violations = Invariants(runner_db_url=db_url).run()
