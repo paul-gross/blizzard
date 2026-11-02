@@ -2,8 +2,8 @@
 
 Every function here runs on a connection it is handed, marked hub-scoped, and never opens one.
 Each statement reads across every tenant and leaves out every closed one by being built through
-``OPEN_TENANTS`` (``open_tenants.py``), and answers each row's ``tenant_id`` beside it. Chunk ids are
-hub-minted, so a filter on chunk ids needs no tenant beside it; a question or segment id is
+``OPEN_TENANTS`` (``src/blizzard/hub/store/internal/open_tenants.py``), and answers each row's ``tenant_id``
+beside it. Chunk ids are hub-minted, so a filter on chunk ids needs no tenant beside it; a question or segment id is
 runner-minted, so a statement matching one row to another by such an id matches the tenant too.
 Hydration is a fixed set of batched statements per id batch, whatever the chunk count
 (``bzh:bulk-reconstitution``)."""
@@ -71,7 +71,8 @@ TraceReader = Callable[[Connection, FactTable, Sequence[str]], dict[str, list[An
 
 def closing_candidates(conn: Connection, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
     """Every open tenant's chunks with a closing fact in ``[since, until]`` — a fact of a table the registry
-    marks closing (``fact_families.py``); a chunk's tenant is the one :func:`step_facts_for` tags its facts with."""
+    marks closing (``src/blizzard/hub/store/internal/fact_families.py``); a chunk's tenant is the one
+    :func:`step_facts_for` tags its facts with."""
     chunk_ids: dict[str, None] = {}
     frontiers: list[datetime] = []
     newest: list[datetime] = []
