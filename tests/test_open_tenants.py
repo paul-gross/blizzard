@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.open_tenants import ALL_TENANTS, OPEN_TENANTS
+
+pytestmark = pytest.mark.unit
 
 _CLOSED_CLAUSE = "tenant_deletions"
 
