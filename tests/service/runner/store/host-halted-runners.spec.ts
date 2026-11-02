@@ -3,6 +3,9 @@ import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, runnerTest as test } from '../../../harness/fixtures';
 
+// The subject is what a freshly initialized runner host looks like, so `init` runs for real.
+test.use({ coldInit: true });
+
 const contract = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../contracts/store/runner.json'), 'utf8')) as {
   tables: Record<string, { columns: Record<string, unknown> }>;
 };

@@ -5,6 +5,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { parse } from 'smol-toml';
 import { expect, runnerTest as test } from '../../../harness/fixtures';
 
+// The subject is what a freshly initialized runner host looks like, so `init` runs for real.
+test.use({ coldInit: true });
+
 // `init --allow-readd` over what a pre-host runner left behind, on a real `blizzard-runner` and a test-owned mock hub: a
 // directory holding a pre-host `data/runner.db` and its token under the unsuffixed variable, with no config beside them.
 // Without the flag `init` refuses, names graduation, and changes nothing; with it the store is set aside, a runner is

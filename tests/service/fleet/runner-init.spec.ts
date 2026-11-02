@@ -1,5 +1,8 @@
 import { expect, test } from '../../harness/fixtures';
 
+// The subject is `init`, so every host here runs it for real.
+test.use({ coldInit: true });
+
 // `blizzard-runner init` against a real hub that signs no one in: the operator's local-to-local bootstrap, and what a
 // runner's hub-minted id survives: a rename, a deleted store, a retirement, and a reset of its hub's data. The hosts are
 // stepped, so "online" and "renamed" are read after a completed step.

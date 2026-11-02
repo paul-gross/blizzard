@@ -2,51 +2,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../../playwright.config';
-import { stopDaemon, sleep } from '../daemons/process';
+import { stopDaemon } from '../daemons/process';
 import { runDir } from '../env';
 import { signInSuperuser } from '../auth';
 import { HubInternal } from '../client/internal';
 import { furnishCommonTenant, hubsFile, type HubCoordinates, type ProjectHubs, startHubStack } from '../hubs';
+import { runOnce } from '../run-once';
 import { assertProfilesSound, discoverProfiles, profileEnv, readProfile } from '../profiles';
-
-const FIRST_WAIT_MS = 120_000;
-
-/** Writes `body` to `file` whole: under a temporary name, then renamed into place, so a waiter that sees the file never reads it half-written. */
-function publish(file: string, body: string): void {
-  const partial = `${file}.${process.pid}.partial`;
-  fs.writeFileSync(partial, body);
-  fs.renameSync(partial, file);
-}
 
 /**
  * Checks every profile in the package, once per run: the setup project that creates `first.lock` runs the check and
  * writes `first.done`, and the others wait on that file, so a broken profile fails every setup before any hub starts.
  */
-async function checkProfilesOnce(): Promise<void> {
-  const dir = runDir();
-  fs.mkdirSync(dir, { recursive: true });
-  const lock = path.join(dir, 'first.lock');
-  const done = path.join(dir, 'first.done');
-  try {
-    fs.closeSync(fs.openSync(lock, 'wx'));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    const deadline = Date.now() + FIRST_WAIT_MS;
-    while (!fs.existsSync(done)) {
-      if (Date.now() > deadline) throw new Error('the first setup project never finished the profile check', { cause: error });
-      await sleep(100);
-    }
-    const outcome = JSON.parse(fs.readFileSync(done, 'utf8')) as { error?: string };
-    if (outcome.error !== undefined) throw new Error(outcome.error, { cause: error });
-    return;
-  }
-  try {
-    assertProfilesSound();
-    publish(done, JSON.stringify({}));
-  } catch (error) {
-    publish(done, JSON.stringify({ error: (error as Error).message }));
-    throw error;
-  }
+function checkProfilesOnce(): Promise<void> {
+  return runOnce('first', assertProfilesSound);
 }
 
 test('start the profile’s shared hubs', async ({ playwright }, testInfo) => {

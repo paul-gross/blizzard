@@ -1,7 +1,8 @@
 import { parse } from 'smol-toml';
 import { expect, test } from '../../harness/fixtures';
 
-test.use({ isolation: 'fresh-tenant', runnerStarted: false });
+// The subject is a freshly initialized runner's scaffold, so `init` runs for real.
+test.use({ isolation: 'fresh-tenant', runnerStarted: false, coldInit: true });
 
 test('test_a_freshly_initialized_runner_is_offered_a_default_chunk_on_first_registration', async ({ runnerHost, api, issue, bearer, project }) => {
   const projects = (await api.get('/api/projects')).body.projects as { slug: string; project_id: string }[];

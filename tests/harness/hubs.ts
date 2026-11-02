@@ -7,6 +7,7 @@ import { startIdp } from './daemons/idp';
 import { type DaemonRecord, type LiveDaemon, recordOf, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
 import { egressDirectory } from './egress';
+import { hubTemplate } from './init-templates';
 import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
@@ -88,9 +89,10 @@ export interface HubStack {
 /**
  * A hub, a mock forge, and a stub IdP of its own. The forge and IdP start first, so the profile's `${forge}` and
  * `${idp}` expand to their URLs before the hub's file is written, and `${egress}` to the stack's export directory;
- * `hubEnv` reaches the hub process only.
+ * `hubEnv` reaches the hub process only. The hub restores the per-run `init` template unless `cold` asks for a real
+ * `blizzard-hub init`.
  */
-export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubStack> {
+export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}, cold = false): Promise<HubStack> {
   const beside = await Promise.allSettled([startForge(dir), startIdp(dir)]);
   const running = beside.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
   const failure = beside.find((outcome) => outcome.status === 'rejected');
@@ -105,7 +107,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
   fs.mkdirSync(egressDirectory(dir), { recursive: true });
   const expanded = expandProfile(profile, { idp: idp.url, forge: forge.url, egress: egressDirectory(dir) });
   try {
-    hub = await startHub(dir, expanded, hubEnv);
+    hub = await startHub(dir, expanded, hubEnv, cold ? undefined : await hubTemplate());
   } catch (error) {
     await Promise.all(running.map(stopDaemon));
     throw error;

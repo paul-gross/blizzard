@@ -123,10 +123,10 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHosts: async (
-    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories },
+    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories, coldInit },
     use,
   ) => {
-    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories };
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories, coldInit };
     await use({
       create: async (options = {}) => {
         runnerBinding.admit?.();
@@ -137,7 +137,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHost: async (
-    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir },
+    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, coldInit },
     use,
     testInfo,
   ) => {
@@ -146,7 +146,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
       return;
     }
     // A held block's host is the worker's: built by the first test, with a context, usage stand-in and ledger that outlive it.
-    const options = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir };
+    const options = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, coldInit };
     await use(
       await heldStacks.acquire(`host:${held}`, async () => {
         runnerBinding.admit?.();

@@ -10,6 +10,7 @@ import type { Ledger } from './client/ledger';
 import { type LiveDaemon, freePort, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
 import { startRunnerHost } from './daemons/runner-host';
 import { BLIZZARD_ROOT, binDir, daemonEnv, mockBinDir, readContract, requireBinary } from './env';
+import { runnerStoreTemplate, RUNNER_STORE } from './init-templates';
 import { scanLog } from './logs';
 import { checkOwnedKeys, checkProfile, expandProfile, mergeHostProfile, parseProfile, type TomlTable } from './profiles';
 import { type OtlpSink, startOtlpSink } from './otlp-sink';
@@ -82,6 +83,8 @@ export interface RunnerHostOptions {
   runnerDir: string | undefined;
   /** Forge-backed bare origins supplied by repositories the test owns, replacing the fixture's same-named origins. */
   runnerRepositories: Record<string, string>;
+  /** `true` runs `init` against an empty directory instead of seeding `data/host.db` from the per-run store template. */
+  coldInit: boolean;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -100,6 +103,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerAdopted: undefined,
   runnerDir: undefined,
   runnerRepositories: {},
+  coldInit: false,
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -461,6 +465,12 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       let initHostFile: string;
       if (ownDir === undefined) {
         started = Date.now();
+        if (!options.coldInit) {
+          // The store `init` would migrate, already migrated: `init` finds it at head and migrates nothing.
+          const store = path.join(dir, RUNNER_STORE);
+          fs.mkdirSync(path.dirname(store), { recursive: true });
+          fs.copyFileSync(await runnerStoreTemplate(), store);
+        }
         if (index > 0 || adopted !== undefined) {
           // `init` scaffolds the file before it reaches the hub, so a first pass against nothing leaves the scaffold to
           // rename; the second pass registers the host under that name.

@@ -193,15 +193,16 @@ async function startFreshTestHub(options: {
   playwright: PlaywrightWorkerArgs['playwright'];
   hubConfig: TomlTable;
   hubEnv: Record<string, string>;
+  coldInit: boolean;
   testInfo: TestInfo;
 }): Promise<{ value: TestHub; dispose: () => Promise<void> }> {
-  const { playwright, hubConfig, hubEnv, testInfo } = options;
+  const { playwright, hubConfig, hubEnv, coldInit, testInfo } = options;
   const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
   const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
   const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
   // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
   const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
-  const stack = await startStack(dir, 0, profile, env);
+  const stack = await startStack(dir, 0, profile, env, coldInit);
   const { coordinates } = stack;
   let hubProcess = stack.hub;
   const control: FreshHubControl = {
@@ -299,7 +300,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     await use(level);
   },
 
-  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, held, heldStacks }, use, testInfo) => {
+  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, coldInit, held, heldStacks }, use, testInfo) => {
     if (level.served !== 'fresh-hub') {
       if (held !== undefined) throw new Error(`held names a stack of the block's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
       const coordinates = hub.coordinates();
@@ -318,7 +319,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       });
       return;
     }
-    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv, testInfo });
+    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv, coldInit, testInfo });
     if (held !== undefined) {
       await use(await heldStacks.acquire(`hub:${held}`, open));
       return;
