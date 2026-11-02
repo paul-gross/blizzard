@@ -61,3 +61,10 @@ def test_a_forges_own_web_base_moves_its_repositories_branch_links() -> None:
 
 def test_an_unhandled_forge_kind_has_no_github_branch_link() -> None:
     assert web_links(replace(_forge("https://other.example"), kind="other")) is None
+
+
+def test_commit_url_is_the_commit_address_on_the_forges_web_origin_with_the_sha_quoted() -> None:
+    links = web_links(_forge("https://api.github.com", "https://code.acme.example"))
+    assert links is not None
+    assert links.commit_url(_REPOSITORY, "abc123") == "https://code.acme.example/acme/widget/commit/abc123"
+    assert links.commit_url(_REPOSITORY, "a/b c") == "https://code.acme.example/acme/widget/commit/a%2Fb%20c"

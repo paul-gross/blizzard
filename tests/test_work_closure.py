@@ -6,6 +6,7 @@ covers the drain that retires what the enqueue queued."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -25,8 +26,15 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, PrMarker, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    CloseEnqueueDecision,
+    PendingCloseIntent,
+    WorkItemCloseOutcome,
+    WorkRef,
+)
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, IReadLandedCommitLinks, no_commit_link
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -338,7 +346,7 @@ class _FakeCloseChunks:
     def get_many(self, chunk_ids: list[str]) -> dict[str, SimpleNamespace]:
         """The record's batched read, holding only the chunks ``projects`` names."""
         self.record_reads.append(list(chunk_ids))
-        return {c: SimpleNamespace(project_id=self.projects[c]) for c in chunk_ids if c in self.projects}
+        return {c: SimpleNamespace(chunk_id=c, project_id=self.projects[c]) for c in chunk_ids if c in self.projects}
 
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
         self.delivery_reads.append(list(chunk_ids))
@@ -391,6 +399,23 @@ class _FakeCloseChunks:
         return len(self.events)
 
 
+class _NoCommitLinks:
+    def for_chunks(self, chunks: Sequence[Chunk]) -> dict[str, CommitLink]:
+        return {chunk.chunk_id: no_commit_link for chunk in chunks}
+
+
+@dataclass
+class _ForgeCommitLinks:
+    """Links every landed commit of each chunk it is asked for under ``origin``, recording each batch it serves."""
+
+    origin: str
+    reads: list[list[str]]
+
+    def for_chunks(self, chunks: Sequence[Chunk]) -> dict[str, CommitLink]:
+        self.reads.append([chunk.chunk_id for chunk in chunks])
+        return {chunk.chunk_id: lambda repo, sha: f"{self.origin}/{repo}/commit/{sha}" for chunk in chunks}
+
+
 def _as_delivery(chunks: _FakeCloseChunks) -> IWriteChunkDeliveryRepository:
     return cast(IWriteChunkDeliveryRepository, chunks)
 
@@ -418,6 +443,7 @@ def _drainer(
     clock: FixedClock | None = None,
     public_url: str | None = None,
     slugs: dict[str, str] | None = None,
+    commit_links: IReadLandedCommitLinks | None = None,
 ) -> CloseDrainSweep:
     registry = WorkSourceRegistry({}, closers=closers, slugs=slugs)
     clock = clock or FixedClock(_NOW)
@@ -430,6 +456,7 @@ def _drainer(
             events=_as_events(chunks),
             work_sources=registry,
             clock=clock,
+            commit_links=commit_links or _NoCommitLinks(),
             public_url=public_url,
         ),
         clock,
@@ -614,6 +641,7 @@ def test_sweep_against_a_real_store_defers_a_turned_away_close_to_its_resume_at(
             events=_event_log(hub),
             work_sources=WorkSourceRegistry({}, closers={"default": closer}),
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )
@@ -738,6 +766,26 @@ def test_sweep_hands_each_closer_the_trace_of_its_chunks_landing_from_one_batche
     assert closer.traces[2] is None  # a hand-completed chunk landed nothing to name
 
 
+def test_sweep_hands_each_closer_the_record_forges_commit_url_for_a_landing_with_no_pr_from_one_batched_read() -> None:
+    landed = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))
+    other = PendingCloseIntent(chunk_id="ch_2", ref=WorkRef(source="default", ref="2"), intent_id=2)
+    chunks = _FakeCloseChunks([landed, other])
+    chunks.projects.update({"ch_1": "prj_widget", "ch_2": "prj_widget"})
+    chunks.sources["ch_1"] = DeliverySources(markers=[_marker("ch_1", "merged/acme/widget", "abc123")])
+    links = _ForgeCommitLinks("https://forge.example", [])
+    closer = FakeCloser()
+
+    _drainer(chunks, {"default": closer}, commit_links=links).sweep()
+
+    assert links.reads == [["ch_1", "ch_2"]]
+    assert chunks.record_reads == [["ch_1", "ch_2"]]
+    trace = closer.traces[0]
+    assert trace is not None
+    assert [(g.repo, g.pr_url, g.commit_url) for g in trace.landings] == [
+        ("acme/widget", None, "https://forge.example/acme/widget/commit/abc123")
+    ]
+
+
 def test_sweep_resolves_the_projects_of_its_chunks_in_one_batched_read_and_names_none_for_a_gone_chunk() -> None:
     present = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))
     also_present = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="2"), intent_id=2)
@@ -793,6 +841,7 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )
@@ -828,6 +877,7 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )
@@ -864,6 +914,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )
@@ -901,6 +952,7 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_retires_it(tmp_path: Pa
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )
@@ -932,6 +984,7 @@ def test_mixed_legacy_intents_close_and_skip_once(tmp_path: Path) -> None:
             events=_event_log(hub),
             work_sources=WorkSourceRegistry({}, closers={"default": closer}),
             clock=hub.clock,
+            commit_links=hub.services.commit_links,
         ),
         hub.clock,
     )

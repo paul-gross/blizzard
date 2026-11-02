@@ -6003,7 +6003,7 @@ export type JudgedBy = typeof JudgedBy[keyof typeof JudgedBy];
 /**
  * LandedRepoView
  *
- * One repo's actual merged revision; URL absent without a known PR forge.
+ * One repo's actual merged revision; URL from its PR's or repository record's forge, absent with neither.
  */
 export type LandedRepoView = {
     /**

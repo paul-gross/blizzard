@@ -151,7 +151,7 @@ class PrView(BaseModel):
 
 
 class LandedRepoView(WireModel):
-    """One repo's actual merged revision; URL absent without a known PR forge."""
+    """One repo's actual merged revision; URL from its PR's or repository record's forge, absent with neither."""
 
     repo: str
     commit_hash: str

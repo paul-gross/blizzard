@@ -293,6 +293,7 @@ def list_chunks(
     # rendered rows: one narrowed, batched read over this page's ids.
     delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
     declarations = delivery_declarations_for(services, page_chunks, delivery_sources)
+    commit_links = services.commit_links.for_chunks(page_chunks)
     # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
     live_holders = services.chunks.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)
     # The page's routed runners' registered names — one batched read, narrowed to the page.
@@ -322,6 +323,7 @@ def list_chunks(
                     facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
                     delivery_sources.get(chunk.chunk_id, DeliverySources()),
                     declarations.get(chunk.chunk_id, []),
+                    commit_links[chunk.chunk_id],
                 ),
                 runner_names=runner_names,
                 projects=projects,

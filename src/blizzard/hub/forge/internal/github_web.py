@@ -1,6 +1,7 @@
 """GitHub's browser address binding, independent of credentialed API calls."""
 
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.config.repositories import RepositoryFields
@@ -13,3 +14,6 @@ class GitHubWebLinks:
 
     def branch_url(self, repository: RepositoryFields, branch_name: str) -> str:
         return f"{self.web_origin}/{repository.owner}/{repository.repo}/tree/{branch_name}"
+
+    def commit_url(self, repository: RepositoryFields, sha: str) -> str:
+        return f"{self.web_origin}/{repository.owner}/{repository.repo}/commit/{quote(sha, safe='')}"

@@ -19,6 +19,8 @@ class IForgeWebLinks(Protocol):
 
     def branch_url(self, repository: RepositoryFields, branch_name: str) -> str: ...
 
+    def commit_url(self, repository: RepositoryFields, sha: str) -> str: ...
+
 
 def web_links(forge: ConfiguredForge) -> IForgeWebLinks | None:
     """The kind's pure link binding, absent for a forge kind without one."""

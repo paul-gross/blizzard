@@ -10,6 +10,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
 from blizzard.hub.domain.chunk.no_code import no_code_repos
+from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, no_commit_link
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
@@ -59,7 +60,8 @@ class LandedRepo:
 
 
 def _commit_url(repo: str, sha: str, pr_url: str) -> str | None:
-    """Only a PR on this very repo supplies a trustworthy forge web origin."""
+    """Only a PR on this very repo supplies a trustworthy forge web origin from a PR's own address; the other
+    trusted origin is a repository record's forge, operator-configured, which a :data:`CommitLink` answers from."""
     parsed = urlsplit(pr_url)
     parts = parsed.path.strip("/").split("/")
     if (
@@ -87,8 +89,13 @@ class DeliveryRead:
 
     @classmethod
     def of(
-        cls, facts: ChunkFacts, sources: DeliverySources, declarations: Sequence[Mapping[str, str | None]] = ()
+        cls,
+        facts: ChunkFacts,
+        sources: DeliverySources,
+        declarations: Sequence[Mapping[str, str | None]] = (),
+        commit_link: CommitLink = no_commit_link,
     ) -> DeliveryRead:
+        """``commit_link`` gives a landed repo's address when no PR on that repo derives one; a PR-derived one wins."""
         prs: dict[tuple[str, int], DeliveryPr] = {}
         legacy = {repo: sha for repo, sha in sources.legacy_landed.items() if is_landed_revision(sha)}
         landed = {**legacy, **LandedRepos.of(sources.markers).shas}
@@ -124,7 +131,8 @@ class DeliveryRead:
             LandedRepo(
                 repo,
                 sha,
-                next((_commit_url(repo, sha, pr.url) for pr in reversed(list(prs.values())) if pr.repo == repo), None),
+                next((_commit_url(repo, sha, pr.url) for pr in reversed(list(prs.values())) if pr.repo == repo), None)
+                or commit_link(repo, sha),
             )
             for repo, sha in sorted(landed.items())
         ]
@@ -158,9 +166,16 @@ class DeliveryTrace:
     landings: tuple[TraceLanding, ...]
 
     @classmethod
-    def of(cls, chunk_id: str, sources: DeliverySources, *, board_url: str | None) -> DeliveryTrace | None:
+    def of(
+        cls,
+        chunk_id: str,
+        sources: DeliverySources,
+        *,
+        board_url: str | None,
+        commit_link: CommitLink = no_commit_link,
+    ) -> DeliveryTrace | None:
         """Folded as :meth:`DeliveryRead.of` does; ``None`` when no repo landed."""
-        read = DeliveryRead.of(ChunkFacts(minted=True), sources)
+        read = DeliveryRead.of(ChunkFacts(minted=True), sources, commit_link=commit_link)
         landings = tuple(
             TraceLanding(
                 repo=landed.repo,

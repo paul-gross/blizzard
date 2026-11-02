@@ -77,10 +77,11 @@ carry `forge_id`, `forge_slug`, and `forge_name`. A work source's forge must be 
 refused `422 forge_kind_mismatch`. An unknown or retired forge is refused `422 forge_unavailable`. A repository create
 naming neither `forge` nor `forge_api_url` is refused `422 forge_required`.
 
-The board links a commit's branch through its project's linked repository record and that record's forge, regardless of
-the chunk's work-item source. A missing or ambiguous repository match gives no link. The GitHub binding derives the
-branch address from the forge's web origin, so a `web_base` edit moves the links of repositories that name it on the
-next read; a forge kind without a browser-link binding gives no branch link.
+The board links a commit's branch, and a landed repository's commit, through its project's linked repository record and
+that record's forge, regardless of the chunk's work-item source. A landed commit's link from its pull request wins when
+there is one. A missing or ambiguous repository match, or a chunk with no project, gives no link. The GitHub binding
+derives both addresses from the forge's web origin, so a `web_base` edit moves the links of repositories that name it on
+the next read; a forge kind without a browser-link binding gives no link.
 
 ### The old address fields
 
