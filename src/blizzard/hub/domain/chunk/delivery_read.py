@@ -60,8 +60,9 @@ class LandedRepo:
 
 
 def _commit_url(repo: str, sha: str, pr_url: str) -> str | None:
-    """Only a PR on this very repo supplies a trustworthy forge web origin from a PR's own address; the other
-    trusted origin is a repository record's forge, operator-configured, which a :data:`CommitLink` answers from."""
+    """The commit url derived from a PR on this very repo: the PR's own web origin is trusted only when its path names
+    the repo. A repository record's forge origin, operator-configured, is trusted the same way through a
+    :data:`CommitLink`."""
     parsed = urlsplit(pr_url)
     parts = parsed.path.strip("/").split("/")
     if (
