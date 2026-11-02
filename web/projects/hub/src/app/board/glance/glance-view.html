@@ -32,9 +32,15 @@
       @if (row.ask; as ask) {
         <span class="ask" data-testid="glance-ask">{{ ask }}</span>
       }
+      @if (showsNodeStrip(row)) {
+        <app-node-strip class="node-strip" [chunkId]="row.chunkId" [graphId]="row.graphId" [currentNodeId]="row.nodeId || null" />
+      }
+      @if (row.completedAt; as completedAt) {
+        <fleet-when class="done-at" data-testid="glance-done-at" [iso]="completedAt" />
+      }
       <span class="meta">
         <span class="where">
-          <span class="step" [title]="row.node">{{ row.node }}</span>
+          <span class="step" [title]="stepLabel(row) + (row.nodeId ? ' (' + row.nodeId + ')' : '')">{{ stepLabel(row) }}</span>
           @if (row.runner; as runner) {
             <span class="sep">·</span>
             <span class="runner" data-testid="glance-runner">
@@ -61,22 +67,26 @@
 
 <div class="glance" data-testid="glance-board">
   <div class="vitals" data-testid="glance-vitals">
-    <div class="vital" data-testid="vital-needs-you">
+    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
+    <button type="button" class="vital" data-testid="vital-needs-you" [class.on]="filter() === 'needs'" [attr.aria-pressed]="filter() === 'needs'" (click)="toggleFilter('needs')">
       <span class="v-n" [style.color]="vitals().needsYou > 0 ? laneColor('needs') : null">{{ vitals().needsYou }}</span>
       <span class="v-cap">needs you</span>
-    </div>
-    <div class="vital" data-testid="vital-running">
+    </button>
+    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
+    <button type="button" class="vital" data-testid="vital-running" [class.on]="filter() === 'running'" [attr.aria-pressed]="filter() === 'running'" (click)="toggleFilter('running')">
       <span class="v-n" [style.color]="laneColor('running')">{{ vitals().running }}</span>
       <span class="v-cap">running</span>
-    </div>
-    <div class="vital" data-testid="vital-ready">
+    </button>
+    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
+    <button type="button" class="vital" data-testid="vital-ready" [class.on]="filter() === 'ready'" [attr.aria-pressed]="filter() === 'ready'" (click)="toggleFilter('ready')">
       <span class="v-n">{{ vitals().ready }}</span>
       <span class="v-cap">ready</span>
-    </div>
-    <div class="vital" data-testid="vital-done-today">
+    </button>
+    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
+    <button type="button" class="vital" data-testid="vital-done-today" [class.on]="filter() === 'done'" [attr.aria-pressed]="filter() === 'done'" (click)="toggleFilter('done')">
       <span class="v-n" [style.color]="laneColor(DONE_LANE)">{{ vitals().doneToday }}</span>
       <span class="v-cap">done today</span>
-    </div>
+    </button>
     <div class="vital" data-testid="vital-runners-up">
       <span class="v-n">{{ vitals().runnersUpLabel }}</span>
       <span class="v-cap">runners up</span>
@@ -117,6 +127,7 @@
   >
     <div loading data-testid="glance-list-loading"><fleet-kit-skeleton [rows]="4" /></div>
     <ul class="cards" data-testid="glance-list">
+      @if (filter() === null) {
       @for (row of list().live; track row.chunkId) {
         <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
       }
@@ -131,8 +142,20 @@
       @for (row of list().backlog; track row.chunkId) {
         <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
       }
+      <li class="divider" data-testid="glance-done-divider" role="separator" aria-label="Backlog above, done below">
+        <span class="divider-label">▲ Backlog</span>
+        <span class="divider-rule"></span>
+        <span class="divider-label">Done ▼</span>
+      </li>
       @for (row of list().done; track row.chunkId) {
         <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
+      }
+      } @else {
+        @for (row of filtered(); track row.chunkId) {
+          <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />
+        } @empty {
+          <li class="empty" data-testid="glance-filter-empty">Nothing here.</li>
+        }
       }
     </ul>
   </fleet-kit-async-state>

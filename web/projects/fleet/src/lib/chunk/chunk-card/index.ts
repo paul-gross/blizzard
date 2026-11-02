@@ -1,4 +1,4 @@
-export { ChunkCard } from './chunk-card';
+export { ChunkCard, ChunkCardProgress } from './chunk-card';
 export { ChunkListRow } from './chunk-list-row';
 export {
   blockedLabel,

@@ -1,4 +1,6 @@
-import { injectQuery } from '@tanstack/angular-query-experimental';
+import type { Signal } from '@angular/core';
+import { injectQuery, type QueryObserverResult } from '@tanstack/angular-query-experimental';
+import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
 import { getGraphApiGraphsGraphIdGet, listGraphsApiGraphsGet, type GraphSummaryView, type GraphView, hubGraphKey, hubGraphsKey } from 'fleet';
 
@@ -52,18 +54,37 @@ export function shouldRetryGraphFetch(failureCount: number, error: Error): boole
 export function injectHubGraphQuery(graphId: () => string | null) {
   return injectQuery(() => {
     const id = graphId();
-    return {
-      queryKey: hubGraphKey(id),
-      enabled: id !== null,
-      queryFn: async (): Promise<GraphView> => {
-        const { data, error, response } = await getGraphApiGraphsGraphIdGet({
-          path: { graph_id: id! },
-          throwOnError: false,
-        });
-        if (error) throw new GraphFetchError(response?.status ?? 0);
-        return data!;
-      },
-      retry: shouldRetryGraphFetch,
-    };
+    return { ...graphQueryOptions(id), enabled: id !== null };
   });
+}
+
+/** One graph's read options — the key and fetch {@link injectHubGraphQuery} and {@link injectHubGraphNamesQuery}
+ * share, so both read one cache entry per graph. */
+function graphQueryOptions(id: string | null) {
+  return {
+    queryKey: hubGraphKey(id),
+    queryFn: async (): Promise<GraphView> => {
+      const { data, error, response } = await getGraphApiGraphsGraphIdGet({
+        path: { graph_id: id! },
+        throwOnError: false,
+      });
+      if (error) throw new GraphFetchError(response?.status ?? 0);
+      return data!;
+    },
+    retry: shouldRetryGraphFetch,
+  };
+}
+
+/** Each graph's name by its id, over the graph reads of every id handed in — a graph not yet read, or unreadable,
+ * is absent. */
+export function injectHubGraphNamesQuery(graphIds: () => readonly string[]): Signal<ReadonlyMap<string, string>> {
+  return injectQueries(() => ({
+    queries: [...new Set(graphIds())].map((id) => graphQueryOptions(id)),
+    // `combine` is handed the observers' plain results; the experimental typing names them signal proxies.
+    combine: (results) =>
+      new Map(
+        (results as unknown as readonly QueryObserverResult<GraphView>[])
+          .flatMap((result) => (result.data ? [[result.data.graph_id, result.data.name] as const] : [])),
+      ),
+  }));
 }

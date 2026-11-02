@@ -907,7 +907,7 @@ const FLEET_LAYERS = {
 const HUB_LAYERS = {
   core: [],
   admin: [],
-  board: ['runners'],
+  board: ['graphs', 'runners'],
   demo: [],
   events: [],
   graphs: [],

@@ -2,7 +2,7 @@ import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerReg
 import { chunkSummary } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
+import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
 
 /** No chunk's work items read yet. */
 const NO_ITEMS: ReadonlyMap<string, WorkItemsView> = new Map();
@@ -52,6 +52,7 @@ const groups = (
     hosts?: ReadonlyMap<string, string>;
     colors?: ReadonlyMap<string, string>;
     workItems?: ReadonlyMap<string, WorkItemsView>;
+    graphNames?: ReadonlyMap<string, string>;
   } = {},
 ) =>
   glanceListGroups(
@@ -64,6 +65,7 @@ const groups = (
     fields.colors ?? new Map(),
     NOW,
     fields.workItems ?? NO_ITEMS,
+    fields.graphNames,
   );
 
 const ids = (rows: readonly { chunkId: string }[]): string[] => rows.map((row) => row.chunkId);
@@ -104,6 +106,34 @@ describe('glanceListGroups', () => {
       chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
     ]);
     expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped']);
+  });
+
+  it('lists done today newest-first, whatever order the read returns them in', () => {
+    const list = groups([
+      chunk('ch_old', 'done', { terminal: true, completed_at: ago(5 * HOUR) }),
+      chunk('ch_new', 'done', { terminal: true, completed_at: ago(HOUR) }),
+      chunk('ch_mid', 'stopped', { terminal: true, completed_at: ago(3 * HOUR) }),
+    ]);
+    expect(ids(list.done)).toEqual(['ch_new', 'ch_mid', 'ch_old']);
+  });
+
+  it('carries the completion instant on a done card only', () => {
+    const list = groups([
+      chunk('ch_done', 'done', { terminal: true, completed_at: ago(HOUR) }),
+      chunk('ch_run', 'running', { completed_at: ago(HOUR) }),
+    ]);
+    expect(list.done[0].completedAt).toBe(ago(HOUR));
+    expect(list.live[0].completedAt).toBeNull();
+  });
+
+  it("names a card's graph once its name is read, and carries its node id and terminal flag", () => {
+    const [named] = groups([chunk('ch_1', 'running')], { graphNames: new Map([['gr_1', 'adv-dwf']]) }).live;
+    expect(named).toMatchObject({ graphId: 'gr_1', graphName: 'adv-dwf', nodeId: 'nd_build', terminal: false });
+
+    const [unread] = groups([chunk('ch_1', 'running')]).live;
+    expect(unread.graphName).toBeNull();
+    const [nodeless] = groups([chunk('ch_1', 'running', { current_node_id: null })]).live;
+    expect(nodeless.nodeId).toBe('');
   });
 
   it('marks an open gate and carries an open ask\'s question', () => {
@@ -211,5 +241,43 @@ describe('glanceVitals', () => {
       runner('r3', { online: false, connection: 'never_connected' }),
     ];
     expect(glanceVitals(liveRunners(fleet), groups([])).runnersUpLabel).toBe('1/2');
+  });
+});
+
+describe('filterGlanceRows', () => {
+  const LIST = groups(
+    [
+      chunk('ch_needs', 'needs_human'),
+      chunk('ch_wait', 'waiting_on_human'),
+      chunk('ch_run', 'running'),
+      chunk('ch_deliver', 'delivering'),
+      chunk('ch_r2', 'ready'),
+      chunk('ch_r1', 'ready'),
+      chunk('ch_backlog', 'not_ready'),
+      chunk('ch_done', 'done', { terminal: true, completed_at: ago(HOUR) }),
+    ],
+    { readyOrder: ['ch_r1', 'ch_r2'] },
+  );
+
+  it('narrows to each vital in list order', () => {
+    expect(ids(filterGlanceRows(LIST, 'needs'))).toEqual(['ch_needs', 'ch_wait']);
+    expect(ids(filterGlanceRows(LIST, 'running'))).toEqual(['ch_run', 'ch_deliver']);
+    expect(ids(filterGlanceRows(LIST, 'ready'))).toEqual(['ch_r1', 'ch_r2']);
+    expect(ids(filterGlanceRows(LIST, 'done'))).toEqual(['ch_done']);
+  });
+
+  it('never narrows to the backlog, which no vital counts', () => {
+    const all = (['needs', 'running', 'ready', 'done'] as const).flatMap((filter) => ids(filterGlanceRows(LIST, filter)));
+    expect(all).not.toContain('ch_backlog');
+  });
+
+  it('lists exactly as many cards as the vital it is narrowed to counts', () => {
+    const vitals = glanceVitals([], LIST);
+    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.doneToday };
+    for (const [filter, count] of Object.entries(counts)) expect(filterGlanceRows(LIST, filter as GlanceFilter)).toHaveLength(count);
+  });
+
+  it('answers no cards with no filter — the unfiltered list renders its own groups', () => {
+    expect(filterGlanceRows(LIST, null)).toEqual([]);
   });
 });

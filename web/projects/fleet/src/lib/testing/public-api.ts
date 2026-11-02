@@ -60,3 +60,4 @@ export {
   transcriptSegmentContentView,
 } from './builders/transcript';
 export { chunkCountsView, chunkSummary, fleetSpendView } from './builders/board';
+export { graphView, graphNodeView, graphEdgeView } from './builders/graph';

@@ -140,6 +140,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A projected progress mark, just above the step. */
+.progress:not(:empty) {
+  margin-bottom: 2px;
+}
 .step {
   display: flex;
   flex-wrap: nowrap;

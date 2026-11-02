@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
+import { graphView, OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { BoardPage } from './board-page';
@@ -36,7 +36,9 @@ function answer(_method: string, path: string): unknown {
     case '/api/chunks':
       return { chunks: [CHUNK], next_cursor: null };
     case `/api/chunks/${CHUNK_ID}`:
-      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [] };
+      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [], open_prs: [], closed_prs: [], landed_repos: [] };
+    case '/api/graphs/gr_1':
+      return graphView({ graph_id: 'gr_1', name: 'default' });
     case `/api/chunks/${CHUNK_ID}/work-items`:
       return { items: [] };
     case '/api/queue':

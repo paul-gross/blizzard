@@ -10,6 +10,7 @@ import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../core/runners.query';
 import { injectBoardWorkItemsQuery } from '../work-items/board-work-items.query';
+import { injectHubGraphNamesQuery } from '../../graphs/graphs.query';
 
 import { startOfLocalDayIso } from '../../core/local-day';
 import { glanceListGroups, glanceVitals, liveRunners, type GlanceListGroups } from './glance-board.model';
@@ -54,6 +55,9 @@ export class GlanceBoard {
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 
   /** Every chunk's work items — the board's own batched read, so the glance and the board share one cache. */
+  /** Each chunk's graph name by graph id — the cards name the graph beside the node. */
+  private readonly graphNames = injectHubGraphNamesQuery(() => this.chunks().flatMap((c) => (c.graph_id ? [c.graph_id] : [])));
+
   private readonly workItems = injectBoardWorkItemsQuery(() => this.chunks().map((chunk) => chunk.chunk_id));
 
   /** Every chunk as one ordered list of cards, as the desktop list orders its rows. */
@@ -68,6 +72,7 @@ export class GlanceBoard {
       this.projectColors(),
       this.now(),
       this.workItems(),
+      this.graphNames(),
     ),
   );
 

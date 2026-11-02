@@ -7,6 +7,7 @@ import { type ChunkDetail, type ChunkSummary, ChunkGeneralTab } from 'fleet';
 import { chunkDetail, chunkSummary, chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /** The chunk's delivery block layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const pr = { repo: 'very-long-repository-name', number: 42, url: 'https://forge.example/repository/pull/42' };
@@ -26,6 +27,7 @@ describe('delivery links real Chromium shell sweep', () => {
     it(`mounts the board card, dock and routed General tab without clipping links at ${width}px`, async () => {
       await page.viewport(width, 800);
       TestBed.resetTestingModule();
+      stubNodeStrip();
       await TestBed.configureTestingModule({
         imports: [BoardShell, ChunkDetailPanel, ChunkGeneralTab],
         providers: [provideZonelessChangeDetection(), provideRouter([])],

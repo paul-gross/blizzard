@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import {
   DONE_LANE,
+  FleetWhen,
   KitAsyncState,
   KitBadge,
   KitPanel,
@@ -23,7 +24,9 @@ import {
 import { LensLink } from 'fleet/shell';
 
 import { LaneIcon } from '../lane-icon/lane-icon';
-import type { GlanceListGroups } from './glance-board.model';
+import { NodeStrip } from '../node-strip/node-strip';
+import { graphStepLabel, showsNodeStrip } from '../node-strip/node-strip.model';
+import { filterGlanceRows, type GlanceFilter, type GlanceListGroups, type GlanceRow } from './glance-board.model';
 
 /** What every chunk row leads with: the chunk's work items, each its work-ref label over its title. */
 export interface RowWork {
@@ -58,7 +61,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
@@ -67,6 +70,12 @@ export class GlanceView {
   protected readonly projectTint = projectTint;
   protected readonly hasCostFigure = hasCostFigure;
   protected readonly formatTokens = formatTokens;
+  protected readonly showsNodeStrip = showsNodeStrip;
+
+  /** A card's step, named with its graph once that graph is read (`adv-dwf/pre-push`). */
+  protected stepLabel(row: GlanceRow): string {
+    return graphStepLabel(row.graphName, row.node);
+  }
 
   readonly vitals = input.required<Vitals>();
   readonly list = input.required<GlanceListGroups>();
@@ -80,6 +89,16 @@ export class GlanceView {
    * lane and lights only while non-zero. */
   protected laneColor(key: string): string {
     return toneColor(laneTone(key));
+  }
+
+  /** The vital the list is narrowed to — tapping a count shows only its cards; tapping it again clears it. */
+  protected readonly filter = signal<GlanceFilter | null>(null);
+
+  /** The list's cards under {@link filter}, in the order the unfiltered list shows them. */
+  protected readonly filtered = computed(() => filterGlanceRows(this.list(), this.filter()));
+
+  protected toggleFilter(key: GlanceFilter): void {
+    this.filter.update((current) => (current === key ? null : key));
   }
 
   /** A chunk's status tone as a color — the card's left edge, as a desktop list row's. */

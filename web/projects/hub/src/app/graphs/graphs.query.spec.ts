@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { graphView, settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { hubClient } from 'fleet';
-import { GraphFetchError, injectHubGraphQuery, shouldRetryGraphFetch } from './graphs.query';
+import { GraphFetchError, injectHubGraphNamesQuery, injectHubGraphQuery, shouldRetryGraphFetch } from './graphs.query';
 
 describe('shouldRetryGraphFetch', () => {
   it('never retries a 404 — the graph id is unknown, not a transient failure', () => {
@@ -49,5 +49,42 @@ describe('injectHubGraphQuery (404 wiring)', () => {
 
     expect(fixture.componentInstance.query.isError()).toBe(true);
     expect(stub.forRoute('/api/graphs/gr_missing', 'GET')).toHaveLength(1);
+  });
+});
+
+@Component({
+  selector: 'app-test-graph-names-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestGraphNamesHost {
+  readonly graphIds = signal<readonly string[]>(['gr_1', 'gr_2', 'gr_1', 'gr_gone']);
+  readonly names = injectHubGraphNamesQuery(() => this.graphIds());
+  readonly graph = injectHubGraphQuery(() => 'gr_1');
+}
+
+describe('injectHubGraphNamesQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('names each readable graph by its id, once per id, sharing the single-graph read\'s cache entry', async () => {
+    stub = stubRequestClient(hubClient, (_method, path) => {
+      if (path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'adv-dwf' });
+      if (path === '/api/graphs/gr_2') return graphView({ graph_id: 'gr_2', name: 'bas-dwf' });
+      return stubError(404, { detail: 'unknown graph' });
+    });
+    TestBed.configureTestingModule({
+      imports: [TestGraphNamesHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestGraphNamesHost);
+    await settle(fixture);
+
+    expect([...fixture.componentInstance.names()]).toEqual([
+      ['gr_1', 'adv-dwf'],
+      ['gr_2', 'bas-dwf'],
+    ]);
+    expect(stub.forRoute('/api/graphs/gr_1', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/graphs/gr_gone', 'GET')).toHaveLength(1);
   });
 });

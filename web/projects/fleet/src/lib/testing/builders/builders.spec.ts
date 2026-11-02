@@ -21,6 +21,9 @@ import {
   FIXTURE_NOW,
   fleetSpendView,
   goneFindingOp,
+  graphEdgeView,
+  graphNodeView,
+  graphView,
   landedChunkDetail,
   landedRepoView,
   midFlightChunkDetail,
@@ -86,6 +89,9 @@ const BUILDERS: Record<string, () => unknown> = {
   transcriptSegmentContentView,
   chunkCountsView,
   fleetSpendView,
+  graphView,
+  graphNodeView,
+  graphEdgeView,
 };
 
 describe('wire-shape builders', () => {

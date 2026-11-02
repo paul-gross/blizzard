@@ -84,6 +84,17 @@ export const RunnerFilledWithWorker: Story = {
       </div>`,
   }),
 };
+export const HubFilledWithProgress: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <div style="width: 720px; --list-columns: minmax(0, 1fr) 220px 90px">
+        <fleet-chunk-list-row [card]="card" [selected]="selected" (selectChunk)="selectChunk($event)">
+          <span chunkRowProgress style="display: block; height: 6px; background: var(--cyan-dim)"></span>
+        </fleet-chunk-list-row>
+      </div>`,
+  }),
+};
 export const EachTone: Story = {
   render: (args) => ({
     props: { ...args, cards: TONES.map((tone) => ({ ...HUB_CARD, chunkId: `ch_${tone}`, tone, status: tone })) },

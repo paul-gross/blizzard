@@ -483,3 +483,28 @@ describe('ChunkCard project tint', () => {
     expect(el.querySelector('fleet-kit-swatch')).toBeNull();
   });
 });
+
+describe('boardCardView step label', () => {
+  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', nodeId: 'nd_build', completedAt: null, graphId: 'gr_1' };
+  const HELD: BoardCard = { ...RUNNING, graphName: 'adv-dwf', runnerId: 'rn_1', runnerName: 'r-claude', hostName: 'xps' };
+
+  it('names the step by graph/node once the graph is read, then the holding runner by host/runner', () => {
+    expect(boardCardView({ ...RUNNING, graphName: 'adv-dwf' }).step).toBe('adv-dwf/build');
+    expect(boardCardView(HELD).step).toBe('adv-dwf/build · xps/r-claude');
+    expect(boardCardView(HELD).stepTitle).toBe('adv-dwf/build · xps/r-claude (nd_build)');
+  });
+
+  it('leaves the runner off the list row, which names its holder in a cell of its own', () => {
+    expect(boardCardView(HELD, 'row').step).toBe('adv-dwf/build');
+    expect(boardCardView(HELD, 'row').holder?.name).toBe('r-claude');
+  });
+
+  it('keeps the bare node until the graph is read, and a status word standing in for it bare', () => {
+    expect(boardCardView(RUNNING).step).toBe('build');
+    expect(boardCardView({ ...RUNNING, status: 'stopped', terminal: true, graphName: 'adv-dwf' }).step).toBe('stopped');
+  });
+
+  it('writes the step once on the card, the holder never repeated ahead of it', async () => {
+    expect((await render(HELD)).querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('adv-dwf/build · xps/r-claude');
+  });
+});

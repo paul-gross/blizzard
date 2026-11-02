@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { FLEET_CLOCK, hubClient } from 'fleet';
 import { RUNNER_HOST_NAMES } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { graphView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { vi } from 'vitest';
 
@@ -202,6 +202,7 @@ describe('GlanceBoard — one list and the vitals', () => {
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
       if (method === 'GET' && path === '/api/spend') return SPEND;
+      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
       return {};
     });
   }
@@ -222,7 +223,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   afterEach(() => stub.restore());
 
-  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, then done today', async () => {
+  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, the divider, then done today', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
 
@@ -235,6 +236,7 @@ describe('GlanceBoard — one list and the vitals', () => {
       'glance-ready-divider',
       'ch_01notreadylater000000000000',
       'ch_01notready00000000000000000',
+      'glance-done-divider',
       'ch_01donerecent0000000000000000',
       'ch_01stoppedrecent00000000000000',
     ]);
@@ -247,7 +249,7 @@ describe('GlanceBoard — one list and the vitals', () => {
     await settle(fixture);
 
     const list = ids(fixture.nativeElement as HTMLElement);
-    expect(list.slice(list.indexOf('glance-ready-divider') + 1, -2)).toEqual(['ch_01notready00000000000000000', 'ch_01notreadylater000000000000']);
+    expect(list.slice(list.indexOf('glance-ready-divider') + 1, list.indexOf('glance-done-divider'))).toEqual(['ch_01notready00000000000000000', 'ch_01notreadylater000000000000']);
     expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(0);
   });
 
@@ -261,12 +263,12 @@ describe('GlanceBoard — one list and the vitals', () => {
     expect(card(el, 'ch_01waitinghuman00000000000000')?.querySelector('.gate')).toBeNull();
   });
 
-  it('meta-lines a running card with its node, its runner by host and name, and its spend, tinted by its project', async () => {
+  it('meta-lines a running card with its graph and node, its runner by host and name, and its spend, tinted by its project', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const running = card(fixture.nativeElement as HTMLElement, 'ch_01running000000000000000000');
 
-    expect(running?.querySelector('.step')?.textContent?.trim()).toBe('build');
+    expect(running?.querySelector('.step')?.textContent?.trim()).toBe('default/build');
     expect(running?.querySelector('[data-testid="glance-runner"]')?.textContent?.replace(/\s+/g, '')).toBe('atlas/r-claude');
     expect(running?.querySelector('[data-testid="glance-cost"]')?.textContent).toContain('$2.03');
     expect(running?.classList).toContain('tinted');
@@ -398,6 +400,7 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
       if (method === 'GET' && path === '/api/spend') return ESTIMATE_SPEND;
+      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
       return {};
     });
     await TestBed.configureTestingModule({
@@ -459,6 +462,7 @@ describe('GlanceBoard — work items', () => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/questions') return [];
+      if (method === 'GET' && path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'default' });
       return {};
     });
     await TestBed.configureTestingModule({

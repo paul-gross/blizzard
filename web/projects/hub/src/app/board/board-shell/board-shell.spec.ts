@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import { type ChunkSummary, compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
 import { chunkUsageTotalView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const READY = (suffix: string): ChunkSummary => (chunkSummary({
   chunk_id: `ch_01ready${suffix}`,
@@ -26,6 +27,7 @@ const BACKLOG = (suffix: string): ChunkSummary => (chunkSummary({
 
 describe('BoardShell', () => {
   beforeEach(async () => {
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],
@@ -616,7 +618,16 @@ describe('BoardShell', () => {
       return found!.injector.get(CdkDropList);
     };
 
-    /** A drop from the other list: distinct containers, the dragged chunk id as the item's data. */
+    it('carries the node strip in a mid-graph card\'s cost row, at its current node, and on no other card', async () => {
+    const running = chunkSummary({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] });
+    const el = (await render([running, READY('a')])).nativeElement as HTMLElement;
+    const strips = [...el.querySelectorAll('[data-testid="node-strip-stub"]')];
+    expect(strips.map((strip) => strip.getAttribute('data-chunk'))).toEqual([running.chunk_id]);
+    expect(strips[0].closest('[data-testid="card-cost-row"]')).not.toBeNull();
+    expect(strips[0].getAttribute('data-node')).toBe('nd_build');
+  });
+
+  /** A drop from the other list: distinct containers, the dragged chunk id as the item's data. */
     const crossDrop = (chunkId: string, currentIndex: number) =>
       ({
         previousContainer: {},

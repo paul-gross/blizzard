@@ -1,0 +1,11 @@
+@if (groups().length) {
+  <div class="strip" data-testid="node-strip" role="img" [attr.aria-label]="'Graph progress'">
+    @for (group of groups(); track $index) {
+      <span class="group" [style.--blocks]="group.length">
+        @for (block of group; track block.nodeId) {
+          <span class="block" [attr.data-state]="block.state" [title]="block.name + ' · ' + block.state"></span>
+        }
+      </span>
+    }
+  </div>
+}

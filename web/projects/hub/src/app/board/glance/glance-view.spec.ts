@@ -5,6 +5,7 @@ import type { KitAsyncStateValue } from 'fleet';
 
 import type { GlanceListGroups, GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const VITALS: Vitals = {
   needsYou: 0,
@@ -24,6 +25,11 @@ const row = (fields: Partial<GlanceRow> = {}): GlanceRow => ({
   status: 'running',
   statusWord: null,
   node: 'build',
+  nodeId: '',
+  terminal: false,
+  graphId: null,
+  graphName: null,
+  completedAt: null,
   runner: null,
   gated: false,
   ask: null,
@@ -40,6 +46,7 @@ const text = (el: Element | null | undefined): string | undefined => el?.textCon
 
 describe('GlanceView', () => {
   beforeEach(async () => {
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [GlanceView],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
@@ -106,7 +113,7 @@ describe('GlanceView', () => {
     expect(el.querySelector('[data-testid="glance-spend-error"]')).not.toBeNull();
   });
 
-  it('renders live, then READY, the divider, BACKLOG, then done, as one list', async () => {
+  it('renders live, then READY, the divider, BACKLOG, the divider, then done, as one list', async () => {
     const fixture = render({
       live: [row({ chunkId: 'ch_live' })],
       ready: [row({ chunkId: 'ch_ready', lane: 'ready', status: 'ready' })],
@@ -121,15 +128,17 @@ describe('GlanceView', () => {
       'ch_ready',
       'glance-ready-divider',
       'ch_backlog',
+      'glance-done-divider',
       'ch_done',
     ]);
   });
 
-  it('keeps the divider with nothing either side of it', async () => {
+  it('keeps both dividers with nothing either side of them', async () => {
     const fixture = render({ live: [row()] });
     await fixture.whenStable();
 
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="glance-ready-divider"]')).not.toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="glance-done-divider"]')).not.toBeNull();
   });
 
   it('meta-lines a card with its node and holding runner, host and name each their own span', async () => {
@@ -269,5 +278,95 @@ describe('GlanceView', () => {
 
     expect([...card.querySelectorAll('[data-testid="glance-work-ref"]')].map(text)).toEqual(['toy-api#1', 'toy-web#3']);
     expect([...card.querySelectorAll('[data-testid="glance-title"]')].map(text)).toEqual(['Rate-limit login', 'Drop moment.js']);
+  });
+
+  it("names a card's step with its graph once the graph is read, and bare before", async () => {
+    const [named, bare] = await cards({ live: [row({ chunkId: 'ch_a', graphName: 'adv-dwf' }), row({ chunkId: 'ch_b' })] });
+
+    expect(text(named.querySelector('.step'))).toBe('adv-dwf/build');
+    expect(text(bare.querySelector('.step'))).toBe('build');
+  });
+
+  it('carries the node strip on a card mid-graph, at its current node, and none on a finished card', async () => {
+    const [running, done] = await cards({
+      live: [row({ chunkId: 'ch_run', nodeId: 'nd_build', graphId: 'gr_1' })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true })],
+    });
+
+    expect(running.querySelector('[data-testid="node-strip-stub"]')?.getAttribute('data-node')).toBe('nd_build');
+    expect(done.querySelector('[data-testid="node-strip-stub"]')).toBeNull();
+  });
+
+  it('stamps a done card with its completion, and no other card', async () => {
+    const [live, done] = await cards({
+      live: [row({ chunkId: 'ch_live' })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true, completedAt: '2026-07-16T11:00:00.000Z' })],
+    });
+
+    expect(done.querySelector('[data-testid="glance-done-at"]')).not.toBeNull();
+    expect(live.querySelector('[data-testid="glance-done-at"]')).toBeNull();
+  });
+
+  describe('the vitals filter', () => {
+    const LIST: Partial<GlanceListGroups> = {
+      live: [row({ chunkId: 'ch_needs', lane: 'needs', status: 'needs_human' }), row({ chunkId: 'ch_run' })],
+      ready: [row({ chunkId: 'ch_ready', lane: 'ready', status: 'ready' })],
+      backlog: [row({ chunkId: 'ch_backlog', lane: 'notready', status: 'not_ready' })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true })],
+    };
+
+    const listed = (el: HTMLElement) =>
+      [...el.querySelectorAll('[data-testid="glance-list"] > li')].map((li) => li.getAttribute('data-chunk') ?? li.getAttribute('data-testid'));
+
+    async function tap(fixture: ReturnType<typeof render>, id: string): Promise<HTMLButtonElement> {
+      const tile = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!;
+      tile.click();
+      await fixture.whenStable();
+      return tile;
+    }
+
+    it('narrows the list to one vital, dropping the dividers, and clears on a second tap', async () => {
+      const fixture = render(LIST);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      const tile = await tap(fixture, 'vital-running');
+      expect(listed(el)).toEqual(['ch_run']);
+      expect(tile.getAttribute('aria-pressed')).toBe('true');
+      expect(tile.classList).toContain('on');
+
+      await tap(fixture, 'vital-running');
+      expect(listed(el)).toContain('glance-ready-divider');
+      expect(listed(el)).toHaveLength(7);
+      expect(tile.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('moves the filter from one vital to another, pressing only the one tapped', async () => {
+      const fixture = render(LIST);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      const needs = await tap(fixture, 'vital-needs-you');
+      expect(listed(el)).toEqual(['ch_needs']);
+      const done = await tap(fixture, 'vital-done-today');
+      expect(listed(el)).toEqual(['ch_done']);
+      expect(needs.getAttribute('aria-pressed')).toBe('false');
+      expect(done.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('says so when a vital it is narrowed to has no cards', async () => {
+      const fixture = render({ live: [row()] });
+      await fixture.whenStable();
+
+      await tap(fixture, 'vital-ready');
+      expect(text((fixture.nativeElement as HTMLElement).querySelector('[data-testid="glance-filter-empty"]'))).toBe('Nothing here.');
+    });
+
+    it('leaves the runners-up tile a plain count, not a toggle', async () => {
+      const fixture = render(LIST);
+      await fixture.whenStable();
+
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="vital-runners-up"]')?.tagName).toBe('DIV');
+    });
   });
 });

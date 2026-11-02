@@ -40,7 +40,11 @@
           [canControl]="canControl()"
           (selectChunk)="selectChunk.emit($event)"
           (promote)="promote.emit($event)"
-        />
+        >
+          @if (strips().get(card.chunkId); as strip) {
+            <app-node-strip fleetChunkCardProgress [chunkId]="strip.chunkId" [graphId]="strip.graphId ?? null" [currentNodeId]="strip.nodeId || null" />
+          }
+        </fleet-chunk-card>
       </div>
     }
   </div>
@@ -54,7 +58,11 @@
         [canControl]="canControl()"
         (selectChunk)="selectChunk.emit($event)"
         (promote)="promote.emit($event)"
-      />
+      >
+        @if (strips().get(card.chunkId); as strip) {
+          <app-node-strip fleetChunkCardProgress [chunkId]="strip.chunkId" [graphId]="strip.graphId ?? null" [currentNodeId]="strip.nodeId || null" />
+        }
+      </fleet-chunk-card>
     }
   </div>
 }

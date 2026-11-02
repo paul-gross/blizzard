@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import type { ChunkCountsView, ChunkStatus, ChunkSummary } from 'fleet';
 import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /** A chunk whose status this build's generated vocabulary does not list, as a newer hub may send. */
 describe('BoardShell unknown status lane', () => {
@@ -23,6 +24,7 @@ describe('BoardShell unknown status lane', () => {
   });
 
   const render = async (layout: 'board' | 'list', chunks: readonly ChunkSummary[]) => {
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],

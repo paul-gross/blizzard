@@ -13,7 +13,8 @@ import { type ChunkCardView, foldTitles } from './chunk-card.model';
  * The row lays its cells on its container's `--list-columns` tracks, so each board sets its own columns. The left
  * edge, the id and the closing line are drawn in the status tone (`toneColor`, through one bound `--edge` property).
  * What only one app draws enters through named slots: a lead ahead of the work (`[chunkRowLead]`), the closing
- * line's icon (`[chunkRowFinishedIcon]`), and a live worker's line under the step (`[chunkRowWorker]`).
+ * line's icon (`[chunkRowFinishedIcon]`), and a live worker's line under the step (`[chunkRowWorker]`),
+ * and a progress mark just above the step (`[chunkRowProgress]`).
  *
  * Presentational only: activation leaves as {@link selectChunk}, exactly as a card's does.
  */
