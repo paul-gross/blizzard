@@ -9,7 +9,6 @@ from typing import Protocol
 
 from blizzard.foundation.crash import CrashPoint, crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSessions
@@ -64,7 +63,6 @@ UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where y
 _OVERLOAD_BACKOFF_MESSAGE = "# The provider was overloaded; retrying automatically."
 
 
-@collaborator
 @dataclass(frozen=True)
 class WakePoints:
     """The three crash points one :meth:`DormantSession._wake` reaches, chosen by its caller
