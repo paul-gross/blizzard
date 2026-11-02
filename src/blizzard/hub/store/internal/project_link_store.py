@@ -23,9 +23,15 @@ from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.store.internal.chunk_rows import lock_keys
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Reads newest project positions.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_position_store import newest_positions
+from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
     project_repository_link_facts,
     project_repository_links,

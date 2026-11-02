@@ -151,7 +151,7 @@ chunk.
 
 `chunk done` releases any live route in the same store transaction as the fact write, exactly as stop does, closes
 `completed` each of the chunk's flow submissions waiting its turn (one mid-turn closes at its turn's end), and enqueues
-a close intent per still-open work-item ref in that same transaction (`_enqueue_close_intents`) — hand-completing closes
+a close intent per still-open work-item ref in that same transaction (`enqueue_close_intents`) — hand-completing closes
 out the chunk's issue the way landing would, once the drain sweep retires it.
 
 The `chunk.stopped` fact is irreversible — there is no un-stop — but no longer the guaranteed last word: an operator can
@@ -177,10 +177,9 @@ Delete is also refused (409) when the chunk is a standing prerequisite for anoth
 dependents. Deleting a *dependent* chunk instead is unaffected: it still succeeds, and releases that chunk's own
 outgoing standing edges as part of the same delete write.
 
-A hub item and its chunk live and die together: deleting a chunk withdraws every open `hub:`-source pointer it holds —
-any `forge:`-source pointer on the same chunk survives untouched — and withdrawing a hub item deletes its unacquired
-holder chunk in the same stroke rather than refusing the withdrawal ([work-sources.md](./work-sources.md) owns the
-withdrawal route's own guard). A chunk a runner still holds still refuses the withdrawal exactly as before.
+Deleting a chunk atomically withdraws every open hub-owned item it holds; items from configured forge sources are left
+untouched. Withdrawing a hub item deletes its unacquired holder chunk rather than refusing the withdrawal
+([work-sources.md](./work-sources.md#hub-owned-items) owns the withdrawal route's guards and race behavior).
 
 Delete is irreversible — there is no un-delete — and, like stop, needs no live route: an unclaimed `not_ready` or
 `ready` chunk has none to release.

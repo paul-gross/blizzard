@@ -36,8 +36,8 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
-from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,

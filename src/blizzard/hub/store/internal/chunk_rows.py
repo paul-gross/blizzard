@@ -18,10 +18,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, Protocol, cast
+from typing import Any
 
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
-from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -38,7 +37,6 @@ from blizzard.hub.domain.chunk.model import (
     WorkRef,
     is_landed_revision,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
@@ -47,6 +45,7 @@ from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
 
 
@@ -402,59 +401,6 @@ def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[st
         )
         for chunk_id, row in live.items()
     }
-
-
-def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
-    """Take the chunk row's write lock, as the first statement after the scoped write's own
-    tenant-row lock — a no-op ``UPDATE`` on a row the caller already knows exists
-    (``bzh:sql-portable``, ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``).
-    On Postgres this queues a concurrent locker of the same row; SQLite's writer lock is
-    ``src/blizzard/hub/store/scoped.py``'s. Every guard read a decision rests on must follow this call."""
-    conn.execute(statements_of(conn).update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
-
-
-def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
-    """Take the write lock of each ``(tenant_id, namespace, key)`` row of ``keyed_locks``, in
-    sorted key order, as the first statements after the scoped write's own tenant-row lock — for
-    a decision whose race has no existing row to lock (``bzh:store-exclusive-write``). Rows are
-    per tenant through ``src/blizzard/hub/store/scoped.py``'s scoped insert. A no-op
-    ``UPDATE`` on an absent row locks nothing, so each row is first inserted if unseen: in its
-    own savepoint, so a concurrent insert of the same key loses with an ``IntegrityError`` that
-    rolls back only that insert (the shape of ``review_findings_store._mint_scope_if_unseen``).
-    The ``UPDATE`` then locks a row that exists: on Postgres, a concurrent locker of the same key
-    queues behind this transaction's commit. Rows are never deleted."""
-    stmts = statements_of(conn)
-    lock = s.keyed_locks
-    for key in sorted(set(keys)):
-        named = (lock.c.namespace == namespace) & (lock.c.key == key)
-        if conn.execute(stmts.select(lock, lock.c.key).where(named)).first() is None:
-            try:
-                with conn.begin_nested():
-                    conn.execute(stmts.insert(lock).values(namespace=namespace, key=key))
-            except IntegrityError:
-                pass
-        conn.execute(stmts.update(lock).where(named).values(key=key))
-
-
-class _LockedConnection(Protocol):
-    """The write token every ``*_locked`` store method needs — the real capability
-    :class:`ILockedChunkRead` deliberately does not expose to the domain layer, so a fake
-    handle satisfying that Protocol structurally still cannot satisfy this one too."""
-
-    conn: Connection
-
-
-def conn_of(handle: ILockedChunkRead) -> Connection:
-    """Recover the connection from a domain-held :class:`ILockedChunkRead`.
-
-    Real handles are store-built ``LockedChunkTransaction`` instances; this cast
-    keeps their concrete type out of the domain and avoids a cyclic import."""
-    return cast(_LockedConnection, handle).conn
-
-
-def work_ref_conn_of(handle: ILockedWorkRefRead) -> Connection:
-    """:func:`conn_of`'s sibling for a domain-held :class:`ILockedWorkRefRead`."""
-    return cast(_LockedConnection, handle).conn
 
 
 def next_route_seq(conn: Connection, chunk_id: str) -> int:

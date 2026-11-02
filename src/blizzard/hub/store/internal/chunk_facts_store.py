@@ -41,8 +41,12 @@ from blizzard.hub.domain.chunk.model import (
     UsageFact,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Reads decision closure ids from the decisions adapter.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import currently_promoted_ats, ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import (
@@ -53,6 +57,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import (
 )
 from blizzard.hub.store.internal.fact_families import Projection, families, tables
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 ALL_FAMILIES: frozenset[str] = families(Projection.FACTS)
@@ -123,8 +128,9 @@ class ChunkFactsStore:
         self._store = store
         self._clock = clock
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
-        with self._store.read("load_facts") as conn:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        connection = connection_in(self._store, transaction, "load_facts")
+        with connection as conn:
             result = self._load(conn, [chunk_id])
         return result.get(chunk_id)
 

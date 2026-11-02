@@ -34,6 +34,9 @@ from blizzard.hub.domain.garden.findings.model import (
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
+
+# Resolves or creates scope ids on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of

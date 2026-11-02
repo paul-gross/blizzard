@@ -23,6 +23,9 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlugTaken,
 )
 from blizzard.hub.domain.projects.resolve import resolve
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.schema import project_former_slugs, projects

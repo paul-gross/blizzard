@@ -19,16 +19,12 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import (
-    conn_of,
-    ephemeral_ids_select,
-    fence,
-    lock_chunk_row,
-    record_hub_lease,
-)
+from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, fence, record_hub_lease
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 
 class ChunkEscalationsStore:
@@ -104,7 +100,13 @@ class ChunkEscalationsStore:
         at: datetime,
     ) -> bool:
         return self._bounce_conn(
-            conn_of(handle), chunk_id, epoch=epoch, admission=admission, cause=cause, envelope=envelope, at=at
+            chunk_handle_connection(handle, self._store, chunk_id),
+            chunk_id,
+            epoch=epoch,
+            admission=admission,
+            cause=cause,
+            envelope=envelope,
+            at=at,
         )
 
     def _bounce_conn(
@@ -149,7 +151,7 @@ class ChunkEscalationsStore:
         detail: str,
     ) -> BounceEscalationOutcome:
         return self._bounce_escalation_conn(
-            conn_of(handle),
+            chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
             epoch=epoch,
             admission=admission,

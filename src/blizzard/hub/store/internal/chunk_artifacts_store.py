@@ -28,11 +28,11 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
     is_landing_marker,
-    lock_chunk_row,
     next_artifact_seq,
     write_landing_rows,
 )
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 
 

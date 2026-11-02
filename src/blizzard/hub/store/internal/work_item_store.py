@@ -18,27 +18,32 @@ from blizzard.foundation.garden_proposals import GardenProposalClosureKind, Gard
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
+from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     HubWorkItem,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemAuthorKind,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
 from blizzard.hub.store.internal.chunk_rows import (
-    conn_of,
     insert_chunk_rows,
-    record_deleted_row,
 )
+
+# Inserts the proposal closure in the work-item write's transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
+
+# Inserts the run context in the work-item write's transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 
 class WorkItemStore:
@@ -267,23 +272,10 @@ class WorkItemStore:
             ).one()
         return self._record(row)
 
-    def delete_chunk_and_withdraw_hub_items_locked(
-        self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
-    ) -> int:
-        """Delete ``chunk`` and withdraw its open ``hub:`` items in one write
-        (``bzh:store-exclusive-write``) — the delete's own write, on ``handle``'s
-        already-locked connection."""
-        return self._delete_chunk_and_withdraw_hub_items_conn(conn_of(handle), chunk, by=by, at=at)
-
-    def _delete_chunk_and_withdraw_hub_items_conn(
-        self, conn: Connection, chunk: Chunk, *, by: str, at: datetime
-    ) -> int:
-        deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)
-        release_outgoing_edges_conn(conn, chunk.chunk_id, by=by, at=at)
-        for pointer in chunk.work_refs:
-            if pointer.source == RESERVED_HUB_SOURCE_NAME:
-                self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
-        return deleted_id
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
+        connection = connection_in(self._store, transaction, "withdraw_open", write=True)
+        with connection as conn:
+            self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
 
     def accept_create(
         self,
@@ -407,3 +399,6 @@ class WorkItemStore:
 
 
 _work_item_store_conforms: type[IWriteWorkItemRepository] = WorkItemStore
+_work_item_read_conforms: type[IReadWorkItemRepository] = WorkItemStore
+_work_item_project_conforms: type[IWorkItemProjectRead] = WorkItemStore
+_work_item_withdrawals_conform: type[IHubItemWithdrawals] = WorkItemStore

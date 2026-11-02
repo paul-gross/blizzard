@@ -50,6 +50,7 @@ from blizzard.hub.domain.delivery.flows import (
     withdrawal_for,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.invariants import FlowLineStanding
 
@@ -462,7 +463,7 @@ class _Facts:
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return {chunk_id: self.by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.by_id}
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         raise NotImplementedError
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:

@@ -74,6 +74,10 @@ class HubStoreConnections:
     def errors(self) -> HubStoreErrorFactory:
         return self._errors
 
+    def same_store(self, other: HubStoreConnections) -> bool:
+        """Whether two connection seams address the same store."""
+        return self._engine is other._engine
+
     def scoped(self, scope: StoreScope) -> ScopedConnections:
         """These connections confined to ``scope``'s tenant — the only connections object an
         adapter over a tenant-owned table holds (``bzh:tenant-scoped-store``)."""

@@ -28,10 +28,25 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
 from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
+
+# Shares forge resolution and insertion on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import forge_record_store as forge_writes
+
+# Shares the project_link_store writes on the same connection; debt pending a domain seam.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_link_store as link_writes
+
+# Shares the repository_record_store writes on the same connection; debt pending a domain seam.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import repository_record_store as repository_writes
+
+# Shares the work_source_record_store writes on the same connection; debt pending a domain seam.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+
+# Serializes secret availability with the secret adapter's row lock.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
 from blizzard.hub.store.scoped import ScopedConnections

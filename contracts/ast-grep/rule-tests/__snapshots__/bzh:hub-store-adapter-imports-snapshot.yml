@@ -1,0 +1,64 @@
+id: bzh:hub-store-adapter-imports
+snapshots:
+  from . import chunk_rows, scope_store:
+    labels:
+    - source: from . import chunk_rows, scope_store
+      style: primary
+      start: 0
+      end: 37
+  from . import scope_store:
+    labels:
+    - source: from . import scope_store
+      style: primary
+      start: 0
+      end: 25
+  from ..internal.scope_store import scope_id_of:
+    labels:
+    - source: from ..internal.scope_store import scope_id_of
+      style: primary
+      start: 0
+      end: 46
+  from .scope_store import scope_id_of:
+    labels:
+    - source: from .scope_store import scope_id_of
+      style: primary
+      start: 0
+      end: 36
+  ? |
+    from blizzard.hub.store.internal import (
+        chunk_rows,
+        scope_store as scopes,
+    )
+  : labels:
+    - source: |-
+        from blizzard.hub.store.internal import (
+            chunk_rows,
+            scope_store as scopes,
+        )
+      style: primary
+      start: 0
+      end: 86
+  from blizzard.hub.store.internal import scope_store as scopes:
+    labels:
+    - source: from blizzard.hub.store.internal import scope_store as scopes
+      style: primary
+      start: 0
+      end: 61
+  from blizzard.hub.store.internal.scope_store import scope_id_of:
+    labels:
+    - source: from blizzard.hub.store.internal.scope_store import scope_id_of
+      style: primary
+      start: 0
+      end: 63
+  import blizzard.hub.store.internal.scope_store as scopes:
+    labels:
+    - source: import blizzard.hub.store.internal.scope_store as scopes
+      style: primary
+      start: 0
+      end: 56
+  import os, blizzard.hub.store.internal.scope_store:
+    labels:
+    - source: import os, blizzard.hub.store.internal.scope_store
+      style: primary
+      start: 0
+      end: 50

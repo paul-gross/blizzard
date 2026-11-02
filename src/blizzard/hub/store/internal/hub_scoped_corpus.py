@@ -46,10 +46,19 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus, TenantCloseIntent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import corpus_rows
+
+# Interprets the delivery adapter's deferred-attempt marker.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
+
+# Shares the chunk facts status-family tables and loader.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.open_tenants import ALL_TENANTS, OPEN_TENANTS
+
+# Reconstructs transcript event fingerprints.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
 from blizzard.hub.tenancy import TenantId
 

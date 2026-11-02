@@ -28,17 +28,12 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import (
-    conn_of,
-    enqueue_close_intents,
-    fence,
-    is_landing_marker,
-    lock_chunk_row,
-    next_artifact_seq,
-)
+from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, is_landing_marker, next_artifact_seq
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -260,7 +255,7 @@ class ChunkDecisionsStore:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
         answers ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
-        conn = conn_of(handle)
+        conn = chunk_handle_connection(handle, self._store, chunk_id)
         if self._decision_exists(conn, chunk_id, node_id=node_id, epoch=epoch):
             return False
         refusal = self._record_decision_conn(

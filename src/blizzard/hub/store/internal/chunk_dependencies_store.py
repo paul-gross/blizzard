@@ -19,9 +19,11 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
 
 
 class ChunkDependenciesStore:
@@ -30,6 +32,9 @@ class ChunkDependenciesStore:
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
+
+    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
+        release_outgoing_edges_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         with self._store.read("list_standing_edges") as conn:
@@ -66,8 +71,9 @@ class ChunkDependenciesStore:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
         return _edge(row) if row is not None else None
 
-    def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
-        with self._store.read("standing_edges_for") as conn:
+    def standing_edges_for(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
+        connection = connection_in(self._store, transaction, "standing_edges_for")
+        with connection as conn:
             return self.standing_edges_for_conn(conn, chunk_id)
 
     def standing_edges_for_conn(self, conn: Connection, chunk_id: str) -> list[DependencyEdge]:
@@ -87,12 +93,31 @@ class ChunkDependenciesStore:
         ).all()
         return [_edge(row) for row in rows]
 
+    def declare_in_transaction_locked(
+        self,
+        transaction: LockedTransaction,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+    ) -> DependencyEdge:
+        conn = connection_for(self._store, transaction, chunk=dependent_chunk_id)
+        connection_for(self._store, transaction, chunk=prerequisite_chunk_id)
+        return self._declare_conn(conn, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+
     def declare_locked(
         self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge:
         """Mint a fresh standing edge (``bzh:store-exclusive-write``) — the
         dependency declare's own write, on ``handle``'s already-locked connection."""
-        return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return self._declare_conn(
+            chunk_handle_connection(handle, self._store, dependent_chunk_id, prerequisite_chunk_id),
+            dependent_chunk_id,
+            prerequisite_chunk_id,
+            by=by,
+            at=at,
+        )
 
     def _declare_conn(
         self, conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
@@ -118,12 +143,19 @@ class ChunkDependenciesStore:
         )
 
     def release(
-        self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        self,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> DependencyEdge | None:
         """Read-then-write on the same connection, so there is no window between the
         two; see
         :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IWriteChunkDependenciesRepository.release`."""
-        with self._store.write("release") as conn:
+        connection = connection_in(self._store, transaction, "release", write=True)
+        with connection as conn:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
             if row is None:
                 return None
@@ -147,7 +179,8 @@ class ChunkDependenciesStore:
     ) -> dict[str, int]:
         """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
         the group fold's own write, on ``handle``'s already-locked connection."""
-        return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
+        conn = chunk_handle_connection(handle, self._store, grouped_into, *(target.chunk_id for target in targets))
+        return self._record_fold_conn(conn, targets, grouped_into=grouped_into, by=by, at=at)
 
     def _record_fold_conn(
         self, conn: Connection, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime

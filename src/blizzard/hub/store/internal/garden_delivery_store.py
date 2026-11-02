@@ -24,9 +24,16 @@ from blizzard.hub.domain.garden.delivery.materialize import (
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+from blizzard.hub.store.internal.chunk_rows import fence, next_artifact_seq
+
+# Shares the finding adapter's locking and scope queries in one transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
+
+# Resolves or creates scope ids on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_ids_of
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,

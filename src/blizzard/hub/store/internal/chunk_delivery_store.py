@@ -22,10 +22,10 @@ from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,
     graph_id_of,
-    lock_chunk_row,
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 
 #: The attempt outcome a rate-budget refusal writes: it holds the intent to its ``resume_at`` and spends no backoff.

@@ -454,6 +454,8 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'GET')).toHaveLength(2);
+    expect(stub.forRoute('/api/chunks/ch_deletable/work-items', 'GET')).toHaveLength(2);
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already acquired');
     expect(dismissed).toBe(false);
   });

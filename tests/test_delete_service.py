@@ -24,15 +24,17 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     DependencyEdge,
     EscalationFact,
-    IWriteWorkItemRepository,
     PauseFact,
     QuestionFact,
     RouteCreatedFact,
     TransitionFact,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 
 pytestmark = pytest.mark.unit
@@ -42,44 +44,16 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
 @dataclass
-class _FakeLockedChunkRead:
-    """Only ``facts``/``record``/``standing_edges_touching`` are live — see module docstring."""
-
-    chunk_facts: ChunkFacts | None
-    edges: list[DependencyEdge]
-    #: The locked handle's own ``record`` read — ``None`` falls back to the caller's
-    #: ``chunk``, exactly matching a real handle's first-mint identity.
-    current: Chunk | None = None
-
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.chunk_facts
-
-    def record(self, chunk_id: str) -> Chunk | None:
-        return self.current
-
-    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
-        return [e for e in self.edges if chunk_id in (e.dependent_chunk_id, e.prerequisite_chunk_id)]
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"DeleteService should not touch handle.{name!r}")
-
-
-@dataclass
 class _FakeItemsRepo:
-    """Only ``delete_chunk_and_withdraw_hub_items_locked`` is live — see module docstring."""
+    """Records the hub-item withdrawals deletion performs; any other call is a failure."""
 
     deleted: list[tuple[str, str, datetime]] = field(default_factory=list)
     work_refs_seen: list[list[WorkRef]] = field(default_factory=list)
-    _next_id: int = 1
+    withdrawals: list[tuple[WorkRef, datetime, Transaction | None]] = field(default_factory=list)
 
-    def delete_chunk_and_withdraw_hub_items_locked(
-        self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
-    ) -> int:
-        self.deleted.append((chunk.chunk_id, by, at))
-        self.work_refs_seen.append(chunk.work_refs)
-        fact_id = self._next_id
-        self._next_id += 1
-        return fact_id
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
+        self.work_refs_seen.append([pointer])
+        self.withdrawals.append((pointer, at, transaction))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DeleteService should not touch items.{name!r}")
@@ -87,16 +61,40 @@ class _FakeItemsRepo:
 
 @dataclass
 class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same facts/edges the
-    fake previously exposed as direct repositories."""
+    """One fake standing behind the facts, record, dependencies, and transaction ports
+    ``DeleteService`` consumes, over a fixed set of facts and edges."""
 
     chunk_facts: ChunkFacts | None
     edges: list[DependencyEdge]
     current: Chunk | None = None
 
+    items: _FakeItemsRepo = field(default_factory=_FakeItemsRepo)
+    releases: list[tuple[str, str, datetime, LockedTransaction]] = field(default_factory=list)
+    delete_transactions: list[LockedTransaction] = field(default_factory=list)
+
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts, self.edges, self.current))
+    def begin(self) -> Iterator[Transaction]:
+        yield cast(Transaction, self)
+
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        return cast(LockedTransaction, self)
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        return self.chunk_facts
+
+    def standing_edges_for(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
+        return self.edges
+
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        return self.current
+
+    def record_deleted(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> int:
+        self.items.deleted.append((chunk_id, by, at))
+        self.delete_transactions.append(transaction)
+        return 1
+
+    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
+        self.releases.append((chunk_id, by, at, transaction))
 
 
 def _service(
@@ -107,11 +105,14 @@ def _service(
     current: Chunk | None = None,
 ) -> tuple[DeleteService, _FakeItemsRepo]:
     items = _FakeItemsRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, standing_edges or [], current))
+    repo = _FakeExclusiveWrites(facts, standing_edges or [], current, items)
     service = DeleteService(
-        items=cast(IWriteWorkItemRepository, items),
+        items=items,
         clock=clock or FixedClock(instant=_T0),
-        exclusive=exclusive,
+        facts=cast(IReadChunkFactsRepository, repo),
+        record=cast(IWriteChunkRecordRepository, repo),
+        dependencies=cast(IWriteChunkDependenciesRepository, repo),
+        transactions=cast(IHubTransactions, repo),
         cycle_lock=threading.Lock(),
     )
     return service, items
@@ -309,3 +310,29 @@ def test_delete_withdraws_the_locked_reads_work_refs_not_the_callers_stale_ones(
     service.delete(stale_chunk, by="operator")
 
     assert items.work_refs_seen == [[fresh_ref]]
+
+
+def test_delete_shares_one_locked_transaction_and_timestamp_for_all_writes() -> None:
+    at = datetime(2026, 7, 1, tzinfo=UTC)
+    first = WorkRef(source="hub", ref="1")
+    second = WorkRef(source="hub", ref="2")
+    forge = WorkRef(source="forge", ref="3")
+    current = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[first, forge, second], minted_at=_T0)
+    items = _FakeItemsRepo()
+    repo = _FakeExclusiveWrites(_not_ready_facts(), [], current, items)
+    service = DeleteService(
+        items=items,
+        clock=FixedClock(instant=at),
+        facts=cast(IReadChunkFactsRepository, repo),
+        record=cast(IWriteChunkRecordRepository, repo),
+        dependencies=cast(IWriteChunkDependenciesRepository, repo),
+        transactions=cast(IHubTransactions, repo),
+        cycle_lock=threading.Lock(),
+    )
+
+    service.delete(_CHUNK, by="alice")
+
+    assert items.deleted == [("chk_1", "alice", at)]
+    assert repo.delete_transactions == [repo]
+    assert repo.releases == [("chk_1", "alice", at, repo)]
+    assert items.withdrawals == [(first, at, repo), (second, at, repo)]

@@ -40,7 +40,7 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys, write_landing_rows
+from blizzard.hub.store.internal.chunk_rows import write_landing_rows
 from blizzard.hub.store.internal.flow_rows import (
     close_submission,
     end_turn,
@@ -53,7 +53,9 @@ from blizzard.hub.store.internal.flow_rows import (
     write_landing,
 )
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 _sub = s.flow_submissions
 _held = s.flow_submission_flows
@@ -374,7 +376,15 @@ class FlowStore:
         event: TurnEvent | None,
         at: datetime,
     ) -> tuple[FlowFactWritten, ...] | None:
-        conn = conn_of(handle)
+        conn = chunk_handle_connection(handle, self._store)
+        submission_id = conn.execute(
+            self._store.select(_turns, _turns.c.submission_id).where(_turns.c.turn_id == turn_id)
+        ).scalar_one_or_none()
+        if submission_id is not None:
+            chunk_id = conn.execute(
+                self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission_id)
+            ).scalar_one()
+            chunk_handle_connection(handle, self._store, chunk_id)
         ended = end_turn(conn, turn_id, outcome=outcome, at=at)
         if ended is None:
             return None

@@ -31,10 +31,19 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlugTaken,
     resolve_work_source_reference,
 )
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Shares forge resolution and insertion on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.forge_record_store import StandingForge, insert_new_forge, referred_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+
+# Serializes secret availability with the secret adapter's row lock.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

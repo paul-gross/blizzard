@@ -17,8 +17,9 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 
 

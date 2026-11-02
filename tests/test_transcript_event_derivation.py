@@ -236,9 +236,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_for_calls = 0
         self.movement_facts_for_calls = 0
 
-    def load_facts(self, chunk_id: str):
+    def load_facts(self, chunk_id: str, *, transaction=None):
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
     def load_facts_for(self, chunk_ids: Sequence[str]):
         self.load_facts_for_calls += 1
@@ -255,9 +255,9 @@ class _CountingRecordStore(ChunkRecordStore):
         self.get_calls = 0
         self.graph_id_of_many_calls = 0
 
-    def get(self, chunk_id: str):
+    def get(self, chunk_id: str, *, transaction=None):
         self.get_calls += 1
-        return super().get(chunk_id)
+        return super().get(chunk_id, transaction=transaction)
 
     def graph_id_of_many(self, chunk_ids: Sequence[str]):
         self.graph_id_of_many_calls += 1

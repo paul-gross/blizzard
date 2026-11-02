@@ -19,7 +19,6 @@ from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     HubWorkItem,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
 )
@@ -40,6 +39,7 @@ from blizzard.hub.domain.garden.runs.run import (
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
 pytestmark = pytest.mark.unit
 

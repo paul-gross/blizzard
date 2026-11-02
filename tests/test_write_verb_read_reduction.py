@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.models import Session
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
@@ -41,9 +42,9 @@ class _CountingFactsStore(ChunkFactsStore):
         super().__init__(store, clock)
         self.load_facts_calls: dict[str, int] = {}
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls[chunk_id] = self.load_facts_calls.get(chunk_id, 0) + 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
 
 def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:

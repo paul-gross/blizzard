@@ -52,7 +52,6 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     CloseEnqueueDecision,
     DecisionChoice,
-    IReadWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
     decide_close_enqueue,
@@ -163,6 +162,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX

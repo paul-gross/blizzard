@@ -22,8 +22,12 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsPlan,
 )
 from blizzard.hub.domain.garden.scopes import ScopeMint
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+from blizzard.hub.store.internal.chunk_rows import fence, next_artifact_seq
+
+# Resolves or creates scope ids on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_ids_of
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.schema import artifacts, chunks, finding_facts, findings
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 

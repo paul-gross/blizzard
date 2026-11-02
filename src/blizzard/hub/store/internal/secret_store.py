@@ -31,6 +31,9 @@ from blizzard.hub.domain.config.secrets import (
     SecretRotationConflict,
     require_unreferenced,
 )
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers

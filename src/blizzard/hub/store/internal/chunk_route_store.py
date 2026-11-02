@@ -21,16 +21,16 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
-    conn_of,
     latest_epoch,
-    lock_chunk_row,
     mint_admission,
     next_route_seq,
     record_epoch_owner,
     route_of_conn,
     routes_of_conn,
 )
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 _ROUTE_PREFIX = "route"
 
@@ -114,7 +114,9 @@ class ChunkRouteStore:
         on, rather than a fresh transaction. It also reserves the chunk's next epoch for the
         claiming runner — itself a fencing write: the prior holder's writes at or below it
         are refused from this commit on."""
-        return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
+        return self._record_route_conn(
+            chunk_handle_connection(handle, self._store, route.chunk_id), route, token_hash=token_hash, at=at
+        )
 
     def _record_route_conn(self, conn: Connection, route: Route, *, token_hash: str, at: datetime) -> str:
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
@@ -151,7 +153,9 @@ class ChunkRouteStore:
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
     ) -> int:
-        return self._record_route_released_conn(conn_of(handle), chunk_id, at=at, cause=cause, reason=reason)
+        return self._record_route_released_conn(
+            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, at=at, cause=cause, reason=reason
+        )
 
     def _record_route_released_conn(
         self, conn: Connection, chunk_id: str, *, at: datetime, cause: RouteReleaseCause | None, reason: str | None
@@ -175,11 +179,12 @@ class ChunkRouteStore:
         connection (``bzh:store-exclusive-write``). Same allocator as :meth:`record_route_locked`'s own token
         fact, its own call rather than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""
-        conn_of(handle).execute(
+        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        conn.execute(
             self._store.insert(s.route_token_minted).values(
                 chunk_id=chunk_id,
                 token_hash=token_hash,
-                seq=next_route_seq(conn_of(handle), chunk_id),
+                seq=next_route_seq(conn, chunk_id),
                 minted_at=at,
             )
         )

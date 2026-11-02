@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any, NotRequired, Required, TypedDict
+from typing import IO, Any, NotRequired, Required, TypedDict, cast
 from urllib.parse import urlparse
 
 import httpx2
@@ -130,7 +130,6 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_rows import work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -151,6 +150,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
+from blizzard.hub.store.transactions import HubTransactions, work_ref_handle_connection
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -512,7 +512,7 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
     store = hub_store_connections(engine)
-    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store))
+    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store), transactions=HubTransactions(store))
 
 
 def make_graph(
@@ -2139,7 +2139,9 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     lands in the tenant's only one."""
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
         if chunk.project_id is None:
-            chunk = replace(chunk, project_id=_only_project_on(work_ref_conn_of(handle)))
+            chunk = replace(
+                chunk, project_id=_only_project_on(work_ref_handle_connection(handle, cast(Any, stores.record)._store))
+            )
         stores.record.mint_locked(handle, chunk)
 
 

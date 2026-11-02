@@ -29,19 +29,19 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
-    conn_of,
     enqueue_close_intents,
     fence,
     graph_id_of,
     is_landing_marker,
     latest_epoch,
-    lock_chunk_row,
     next_artifact_seq,
     next_route_seq,
     record_epoch_owner,
 )
 from blizzard.hub.store.internal.flow_rows import withdraw_waiting
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 
 class ChunkMovementStore:
@@ -125,7 +125,7 @@ class ChunkMovementStore:
         """:meth:`record_transition` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_transition_conn(
-            conn_of(handle),
+            chunk_handle_connection(handle, self._store, chunk_id),
             transition_id=transition_id,
             chunk_id=chunk_id,
             from_node_id=from_node_id,
@@ -271,7 +271,7 @@ class ChunkMovementStore:
         """:meth:`record_migration` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_migration_conn(
-            conn_of(handle),
+            chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             from_graph_id=from_graph_id,
@@ -393,7 +393,7 @@ class ChunkMovementStore:
         the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
         each of the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end."""
         return self.record_restart_conn(
-            conn_of(handle),
+            chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             to_node_id=to_node_id,
@@ -468,7 +468,7 @@ class ChunkMovementStore:
     def record_requeue_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None
     ) -> int:
-        conn = conn_of(handle)
+        conn = chunk_handle_connection(handle, self._store, chunk_id)
         result = conn.execute(
             self._store.insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at, requeued_by=by, note=note)
         )

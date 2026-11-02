@@ -16,13 +16,13 @@ from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     after_newest,
-    conn_of,
     currently_promoted_ats,
     insert_demote_rows,
     insert_promote_rows,
 )
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 
 class ChunkQueueStore:
@@ -73,14 +73,18 @@ class ChunkQueueStore:
     ) -> int:
         # One transaction: a crash between the two writes would otherwise let a stale
         # backlog position outrank the stamp on restart.
-        return insert_promote_rows(conn_of(handle), chunk_id, position=position, at=at)
+        return insert_promote_rows(
+            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, position=position, at=at
+        )
 
     def record_demote_with_position_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
         # One transaction: a crash between the two writes would otherwise rank the demoted chunk
         # by its stale ready-queue position, which the shared newest-wins positions would keep.
-        return insert_demote_rows(conn_of(handle), chunk_id, position=position, at=at)
+        return insert_demote_rows(
+            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, position=position, at=at
+        )
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """`src/blizzard/hub/domain/chunk/ports/queue.py`'s `IWriteChunkQueueRepository.record_queue_positions`.
