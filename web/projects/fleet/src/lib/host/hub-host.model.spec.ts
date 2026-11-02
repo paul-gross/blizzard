@@ -49,7 +49,7 @@ describe('hubSubscriptionPaces', () => {
         condition: null,
         sampledAt: '2026-07-16T11:55:00.000Z',
         refreshedLabel: 'refreshed 5m ago',
-        refreshedTag: '[5m]',
+        refreshedTag: '[5m 0s]',
         freshness: 'fresh',
         missReason: null,
       },

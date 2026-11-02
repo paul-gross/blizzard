@@ -8,6 +8,7 @@ import {
   formatRefreshedAgo,
   formatRelative,
   formatSeenAgo,
+  formatAgeTwoUnit,
   formatSeenTag,
   formatUtcYmd,
   formatWhen,
@@ -180,10 +181,16 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
 describe('formatSeenTag (bzh:utc-instants)', () => {
   const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
-  it('brackets the bare age on the same s/m/h derivation', () => {
+  it('brackets the two-unit age', () => {
     expect(formatSeenTag('2026-07-16T11:59:30.000Z', REF)).toBe('[30s]');
-    expect(formatSeenTag('2026-07-16T11:30:00.000Z', REF)).toBe('[30m]');
-    expect(formatSeenTag('2026-07-16T09:00:00.000Z', REF)).toBe('[3h]');
+    expect(formatSeenTag('2026-07-16T11:06:40.000Z', REF)).toBe('[53m 20s]');
+    expect(formatSeenTag('2026-07-16T10:07:00.000Z', REF)).toBe('[1h 53m]');
+    expect(formatSeenTag('2026-07-15T08:00:00.000Z', REF)).toBe('[1d 4h]');
+  });
+
+  it('keeps a zero lower unit rather than dropping to one unit', () => {
+    expect(formatSeenTag('2026-07-16T11:30:00.000Z', REF)).toBe('[30m 0s]');
+    expect(formatSeenTag('2026-07-16T09:00:00.000Z', REF)).toBe('[3h 0m]');
   });
 
   it('reads an absent or skewed stamp as a dash, never a confident 0s', () => {
@@ -265,5 +272,30 @@ describe('formatRelative', () => {
   it('returns an empty string for an unparseable input', () => {
     expect(formatRelative('not-a-date', NOW)).toBe('');
     expect(formatRelative('', NOW)).toBe('');
+  });
+});
+
+describe('formatAgeTwoUnit', () => {
+  const S = 1000;
+
+  it('stands seconds alone under a minute', () => {
+    expect(formatAgeTwoUnit(0)).toBe('0s');
+    expect(formatAgeTwoUnit(59 * S)).toBe('59s');
+    expect(formatAgeTwoUnit(59 * S + 999)).toBe('59s');
+  });
+
+  it('pairs minutes with seconds from a minute up to an hour', () => {
+    expect(formatAgeTwoUnit(60 * S)).toBe('1m 0s');
+    expect(formatAgeTwoUnit(3599 * S)).toBe('59m 59s');
+  });
+
+  it('pairs hours with minutes from an hour up to a day', () => {
+    expect(formatAgeTwoUnit(3600 * S)).toBe('1h 0m');
+    expect(formatAgeTwoUnit(86_399 * S)).toBe('23h 59m');
+  });
+
+  it('pairs days with hours from a day on', () => {
+    expect(formatAgeTwoUnit(86_400 * S)).toBe('1d 0h');
+    expect(formatAgeTwoUnit((30 * 86_400 + 5 * 3600) * S)).toBe('30d 5h');
   });
 });
