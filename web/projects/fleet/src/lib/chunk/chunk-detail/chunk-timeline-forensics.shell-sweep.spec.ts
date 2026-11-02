@@ -37,6 +37,7 @@ const DETAIL: ChunkDetail = chunkDetail({
       envelope: '{"verdict":"maybe","notes":"' + 'x'.repeat(400) + '"}',
       recorded_at: '2026-08-09T00:00:02Z',
       withdrawn: false,
+      rework: false,
     },
   ],
   restarts: [

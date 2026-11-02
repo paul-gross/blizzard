@@ -44,6 +44,11 @@ export function runnerBoardParts(runnerId: string, runnerName?: string | null, h
   return { host: hostName || null, name: runnerName };
 }
 
+/** A runner as the board writes it from its {@link runnerBoardParts}: `xps/r-claude`, or the bare name with no host. */
+export function runnerBoardLabel(runner: RunnerBoardParts): string {
+  return runner.host ? `${runner.host}/${runner.name}` : runner.name;
+}
+
 /** A runner reference's tooltip — the display name a surface may clip, then the full id:
  * `atlas/r-claude · rn_01KXKVVF1J3D6H6VYZ3XYNABF3`. */
 export function runnerTitle(runnerId: string, runnerName?: string | null, hostName?: string | null): string {

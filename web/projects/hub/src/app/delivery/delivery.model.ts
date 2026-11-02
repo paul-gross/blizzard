@@ -24,11 +24,12 @@ import {
   type WorkItemsView,
   type WorkLine,
   workLines,
+  runnerBoardLabel,
 } from 'fleet';
 
 import { withinDoneWindow } from '../core/done-window';
 import { ordinal } from '../core/flow-place.model';
-import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../core/step-label';
+import { graphStepLabel, STEP_RUNNER_SEP } from '../core/step-label';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;

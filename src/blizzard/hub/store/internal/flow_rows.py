@@ -42,6 +42,8 @@ def fact_of(row: Row[Any]) -> FlowFact:
         at=row.at,
         outcome=row.outcome,
         revision=row.revision,
+        # Only a read joined to its submission's closure carries one (`FlowStore._facts_with_closure`).
+        closure=getattr(row, "closure", None),
     )
 
 

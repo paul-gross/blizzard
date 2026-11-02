@@ -27,10 +27,14 @@ A flow's **record** is every entry written about it, newest first: each submissi
 landing with the revision it left the branch at, and each withdrawal with why the submission left. A flow's **last
 verdict** is its newest turn whose outcome closed its submission — `landed`, or a failure that sent the chunk back to
 build. A turn that is still polling, was interrupted, or was cut off at its deadline is not a verdict. Each `turn-ended`
-entry carries a `verdict`: `landed` when the submission landed, `bounced` for any other answer that judged it (a failure
-or a conflict), and empty when the turn judged nothing — a wait (`pending`, `awaiting-merge`), an interruption, a
-cut-off, an escalation, or a superseded turn. Its `wait` flag is set only when the turn waited, on `pending` or
-`awaiting-merge`. A flow's **last landing** is its newest `landed` entry.
+entry carries a `verdict` only when its answer closed its submission: `landed` when the submission landed, `bounced` for
+any other closing answer. It is empty for a turn that judged nothing — a wait (`pending`, `awaiting-merge`), an
+interruption, a cut-off, an escalation, or a superseded turn — and for a fenced turn, whose answer closed nothing,
+including one whose submission was later closed another way, such as by a withdrawal. Its `wait` flag is set only when
+the turn waited, on `pending` or `awaiting-merge`, and its `rework` flag only when its answer sent the submission back
+as routine rework a later step takes up rather than as a failure — today a `conflict`, a branch that no longer merges
+cleanly onto its base. The Delivery tab reads such a turn as amber waiting, not a failure. A flow's **last landing** is
+its newest `landed` entry.
 
 ## Reading flows
 

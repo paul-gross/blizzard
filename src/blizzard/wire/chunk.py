@@ -414,6 +414,9 @@ class BounceView(WireModel):
     recorded_at: str
     #: Whether the turn the bounce ended withdrew its submission from its flows.
     withdrawn: bool = False
+    #: Whether the bounce sends the chunk back as routine rework a later step takes up, such as a conflict with its
+    #: base, rather than as a failure.
+    rework: bool = False
 
 
 class HubAdvanceResponse(WireModel):

@@ -1489,6 +1489,11 @@
             "title": "Recorded At",
             "type": "string"
           },
+          "rework": {
+            "default": false,
+            "title": "Rework",
+            "type": "boolean"
+          },
           "withdrawn": {
             "default": false,
             "title": "Withdrawn",
@@ -1499,7 +1504,8 @@
           "cause",
           "envelope",
           "recorded_at",
-          "withdrawn"
+          "withdrawn",
+          "rework"
         ],
         "title": "BounceView",
         "type": "object"

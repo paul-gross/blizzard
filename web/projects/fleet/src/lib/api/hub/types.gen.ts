@@ -963,6 +963,10 @@ export type BounceView = {
      */
     recorded_at: string;
     /**
+     * Rework
+     */
+    rework: boolean;
+    /**
      * Withdrawn
      */
     withdrawn: boolean;

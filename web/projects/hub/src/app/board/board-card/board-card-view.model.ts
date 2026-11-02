@@ -15,9 +15,10 @@ import {
   STATUS_TONE,
   stepLabel,
   type WorkLine,
+  runnerBoardLabel,
 } from 'fleet';
 import type { FlowPlaceLine } from '../../core/flow-place.model';
-import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../../core/step-label';
+import { graphStepLabel, STEP_RUNNER_SEP } from '../../core/step-label';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {

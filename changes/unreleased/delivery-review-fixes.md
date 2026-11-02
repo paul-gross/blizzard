@@ -12,7 +12,9 @@ to its loading skeleton.
 `passed`, `failed` or `unvisited`; empty for a terminal chunk or a graph the hub cannot resolve), `latest_bounce` and
 `bounce_count`. Each `usage` entry of a chunk's detail carries `runner_id`, the runner that ran the invocation, or
 `null` when none was recorded. Flow record entries carry `verdict`, which is `landed` or `bounced` for a `turn-ended`
-entry that judged its submission and `null` otherwise. They also carry `wait`, which is true only on a `turn-ended`
-entry whose turn waited (`pending` or `awaiting-merge`). A bounce, on `latest_bounce` and in a chunk's `bounces`,
-carries `withdrawn`, which says whether its turn withdrew the submission from its flows. The board draws each chunk's
-graph progress and graph name from these fields, so it no longer fetches each chunk's detail or each graph.
+entry whose answer closed its submission and `null` otherwise, a fenced turn included; a flow's `last_verdict` follows
+the same rule. They also carry `wait`, true only on a `turn-ended` entry whose turn waited (`pending` or
+`awaiting-merge`), and `rework`, true only on one whose answer sent the submission back as routine rework rather than a
+failure (today a `conflict`). A bounce, on `latest_bounce` and in a chunk's `bounces`, carries `withdrawn`, whether its
+turn withdrew the submission from its flows, and `rework`, whether its cause was routine rework. The board draws each
+chunk's graph progress and graph name from these fields, so it no longer fetches each chunk's detail or each graph.

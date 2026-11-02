@@ -120,19 +120,21 @@ function stamp(at: string, now: number): Pick<HistoryEntry, 'at' | 'when' | 'whe
   return { at, when: formatWhen(at, new Date(now)), whenParts: formatWhenParts(at, new Date(now)), whenTitle: formatAbsolute(at), age: formatSeenTag(at, now) };
 }
 
-/** A history entry's colour, by meaning alone: success green (`done`), a problem red (`needs`), passive waiting and
- * context grey (`idle`), and neutral progress the default text colour (`null`). */
-export type HistoryTone = 'done' | 'needs' | 'idle' | null;
+/** A history entry's colour, by meaning alone: success green (`done`), routine rework amber (`waiting`), a problem red
+ * (`needs`), passive waiting and context grey (`idle`), and neutral progress the default text colour (`null`). */
+export type HistoryTone = 'done' | 'waiting' | 'needs' | 'idle' | null;
 
-/** The tone of a delivery event: a landing succeeds; a turn that settled without landing — sent back, or ended
- * judging nothing — a bounce, and a withdrawal are problems; a run of waits and a transition are context; anything else
- * is neutral progress. */
-function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition'): HistoryTone {
+/** The tone of a delivery event: a landing succeeds; a turn or bounce the hub marks as routine rework waits on the step
+ * that takes it up; any other turn that settled without landing — sent back, or ended judging nothing — any other
+ * bounce, and a withdrawal are problems; a run of waits and a transition are context; anything else is neutral
+ * progress. */
+function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition', rework = false): HistoryTone {
   switch (kind) {
     case 'landed':
       return 'done';
     case 'bounced':
     case 'turn-ended':
+      return rework ? 'waiting' : 'needs';
     case 'withdrawn':
       return 'needs';
     case 'polls':
@@ -166,7 +168,7 @@ function draft(id: string, at: string, now: number, repo: string | null, text: s
 /**
  * One flow's facts as history entries, oldest first. A run of waits — a turn started and ended only waiting, again and
  * again — folds into one `waiting on checks` entry; any other turn that settles reads as its outcome, the turn's start
- * folded in, a landing as the landed entry alone; a withdrawal right after the turn entry it caused joins that entry,
+ * folded in, a landing as the landed entry alone — or as its turn, when it had nothing to merge and wrote none; a withdrawal right after the turn entry it caused joins that entry,
  * and one right after a landing is the landing's own.
  */
 function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: number): Draft[] {
@@ -201,10 +203,12 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     flushPolls();
     if (fact.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', historyTone('submitted')));
     else if (fact.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', historyTone('landed')));
-    else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') return;
-    else if (fact.kind === 'turn-ended') {
+    else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') {
+      // A landing with nothing to merge writes no `landed` fact; its turn speaks for it.
+      if (!facts.some((each) => each.kind === 'landed' && each.submission_id === fact.submission_id)) out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landed · no changes', historyTone('landed')));
+    } else if (fact.kind === 'turn-ended') {
       const withdrawn = withdrawnAfter(facts, fact);
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended')));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.rework)));
     } else if (fact.kind === 'withdrawn') {
       const prev = facts[index - 1];
       if (prev?.submission_id === fact.submission_id && (prev.kind === 'landed' || (prev.kind === 'turn-ended' && !prev.wait))) return;
@@ -239,7 +243,7 @@ function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: numb
   const step = envelope?.step ?? null;
   const tail = step?.output_tail ?? null;
   return {
-    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced')),
+    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced', bounce.rework)),
     repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
     detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
     step: step ? { name: step.name, exitCode: step.exit_code, outputTail: tail, long: (tail?.split('\n').length ?? 0) > OUTPUT_TAIL_LINES } : null,

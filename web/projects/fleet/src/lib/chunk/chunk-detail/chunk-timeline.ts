@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
 import { harnessName } from '../../core/harness-name';
-import { injectRunnerHostNames, injectRunnerNames, runnerBoardParts } from '../../core/runner-display-name';
+import { injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts } from '../../core/runner-display-name';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
@@ -132,13 +132,12 @@ export class ChunkTimeline {
   private readonly runnerHosts = injectRunnerHostNames();
   private readonly runnerNames = injectRunnerNames();
 
-  /** Who ran a step — `xps/r-claude · claude code`: its runner as {@link runnerBoardParts} names it, then its
+  /** Who ran a step — `xps/r-claude · claude code`: its runner as {@link runnerBoardLabel} writes it, then its
    * harness; either alone when the other is unrecorded, `null` when neither is. */
   protected ranBy(u: StepUsageTotal): string | null {
     let runner: string | null = null;
     if (u.runnerId !== null) {
-      const parts = runnerBoardParts(u.runnerId, this.runnerNames().get(u.runnerId), this.runnerHosts().get(u.runnerId));
-      runner = parts.host ? `${parts.host}/${parts.name}` : parts.name;
+      runner = runnerBoardLabel(runnerBoardParts(u.runnerId, this.runnerNames().get(u.runnerId), this.runnerHosts().get(u.runnerId)));
     }
     const harness = u.harnessId ? harnessName(u.harnessId) : null;
     return [runner, harness].filter((part) => part !== null).join(' · ') || null;
