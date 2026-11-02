@@ -10,4 +10,4 @@ export {
   type WorkLine,
   workLines,
 } from './chunk-card.model';
-export { LaneIcon, laneIconGlyph } from './lane-icon';
+export { LaneIcon } from './lane-icon';

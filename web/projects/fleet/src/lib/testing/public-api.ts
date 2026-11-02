@@ -15,6 +15,7 @@ export {
   type StubHttpError,
 } from './stub-request-client';
 export { OPERATOR_ME_RESPONSE } from './auth-fixtures';
+export { chunkControlStub, type ChunkControlStub, type ChunkControlVerb } from './chunk-control-stub';
 export { FIXTURE_NOW, fixtureInstant } from './builders/clock';
 export {
   chunkDetail,

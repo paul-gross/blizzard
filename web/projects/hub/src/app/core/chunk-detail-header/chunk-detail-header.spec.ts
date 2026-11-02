@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from 'fleet';
-import { chunkDetail } from 'fleet/testing';
+import { chunkControlStub, chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -50,10 +50,11 @@ function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail>
 }
 
 /** The CDK renders the actions menu into an overlay attached to `document.body`, not inside the fixture's own
- * element — so the Pause/Resume items are queried there (`kit-menu.spec.ts`'s own convention). */
+ * element — so its items are queried there (`kit-menu.spec.ts`'s own convention). The menu's own
+ * gating and confirmations are `chunk-actions-menu.spec.ts`'s; this header pins only that it hosts it. */
 const inOverlay = (selector: string) => document.body.querySelector<HTMLElement>(selector);
 
-/** Open the header's ⋯ actions menu, where Pause/Resume live. */
+/** Open the header's ⋮ actions menu. */
 async function openMenu(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>>): Promise<void> {
   (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
   await fixture.whenStable();
@@ -71,7 +72,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -93,7 +94,7 @@ describe('ChunkDetailHeader', () => {
     const detail = pausedDetail('paused');
     fixture.componentRef.setInput('detail', detail);
     fixture.componentRef.setInput('renderedStatus', detail.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -104,7 +105,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -115,7 +116,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
     await fixture.whenStable();
@@ -129,7 +130,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -137,6 +138,15 @@ describe('ChunkDetailHeader', () => {
     expect(close?.querySelector('svg.glyph--x')).not.toBeNull();
     expect(close?.getAttribute('aria-label') ?? close?.querySelector('[aria-label]')?.getAttribute('aria-label')).toBe('Close');
     expect(el.querySelector('[data-testid="chunk-actions-menu"] svg.glyph--dots, .actions svg.glyph--dots')).not.toBeNull();
+  });
+
+  it('draws no ⋮ actions menu without a control port', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
   });
 
   it('draws no close button when not closable', async () => {
@@ -155,7 +165,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -166,7 +176,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -186,167 +196,6 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="route-info"]')?.getAttribute('title')).toBe('R-01.r-claude · rn_01');
   });
 
-  it('withholds Pause without chunk:control, even with a live route', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="route-info"]')?.textContent).toContain('R-01.r-claude');
-    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
-    expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
-  });
-
-  // --- Pause / Resume -------------------------------------------
-
-  it('shows Pause — not Resume — for a running chunk carrying no pause fact', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    await openMenu(fixture);
-
-    expect(inOverlay('[data-testid="pause-chunk"]')).not.toBeNull();
-    expect(inOverlay('[data-testid="resume-chunk"]')).toBeNull();
-  });
-
-  it('shows no Pause for a chunk the hub would refuse to pause (done/stopped/delivering)', async () => {
-    for (const status of ['done', 'stopped', 'delivering'] as const) {
-      const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status, pausable: false });
-      fixture.componentRef.setInput('renderedStatus', status);
-      fixture.componentRef.setInput('canControl', true);
-      await fixture.whenStable();
-      await openMenu(fixture);
-
-      expect(inOverlay('[data-testid="pause-chunk"]'), status).toBeNull();
-      fixture.destroy();
-    }
-  });
-
-  it('still offers Pause for a waiting_on_human / needs_human chunk — the lever stays broad', async () => {
-    for (const status of ['waiting_on_human', 'needs_human'] as const) {
-      const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
-      fixture.componentRef.setInput('renderedStatus', status);
-      fixture.componentRef.setInput('canControl', true);
-      await fixture.whenStable();
-      await openMenu(fixture);
-
-      expect(inOverlay('[data-testid="pause-chunk"]'), status).not.toBeNull();
-      fixture.destroy();
-    }
-  });
-
-  it('shows Resume — not Pause — for a paused chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    const detail = pausedDetail('paused');
-    fixture.componentRef.setInput('detail', detail);
-    fixture.componentRef.setInput('renderedStatus', detail.status);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    await openMenu(fixture);
-
-    expect(inOverlay('[data-testid="resume-chunk"]')).not.toBeNull();
-    expect(inOverlay('[data-testid="pause-chunk"]')).toBeNull();
-  });
-
-  it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    const detail = pausedDetail('waiting_on_human');
-    fixture.componentRef.setInput('detail', detail);
-    fixture.componentRef.setInput('renderedStatus', detail.status);
-    fixture.componentRef.setInput('canControl', true);
-    let resumed: string | undefined;
-    fixture.componentInstance.resumeChunk.subscribe((id) => (resumed = id));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    await openMenu(fixture);
-
-    expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('waiting_on_human');
-    expect(el.querySelector('[data-testid="chunk-pause-by"]')?.textContent).toContain('operator');
-    expect(inOverlay('[data-testid="resume-chunk"]')).not.toBeNull();
-    expect(inOverlay('[data-testid="pause-chunk"]')).toBeNull();
-
-    inOverlay('[data-testid="resume-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
-    expect(resumed).toBe(ROUTED_DETAIL.chunk_id);
-  });
-
-  it('emits pauseChunk with the chunk id once the operator confirms', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.pauseChunk.subscribe((id) => (emitted = id));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    await openMenu(fixture);
-
-    inOverlay('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
-
-    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-  });
-
-  it('emits nothing when the operator declines the pause confirm', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.pauseChunk.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    await openMenu(fixture);
-
-    inOverlay('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
-
-    expect(emitted).toBe(false);
-  });
-
-  it('disables Pause while the pause mutation is pending, re-enabling once it settles', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('pausePending', true);
-    await fixture.whenStable();
-    await openMenu(fixture);
-
-    expect(inOverlay('[data-testid="pause-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
-
-    fixture.componentRef.setInput('pausePending', false);
-    await fixture.whenStable();
-
-    expect(inOverlay('[data-testid="pause-chunk"]')?.getAttribute('aria-disabled')).not.toBe('true');
-  });
-
-  it('disables Resume while the pause mutation is pending, re-enabling once it settles', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    const detail = pausedDetail('paused');
-    fixture.componentRef.setInput('detail', detail);
-    fixture.componentRef.setInput('renderedStatus', detail.status);
-    fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('pausePending', true);
-    await fixture.whenStable();
-    await openMenu(fixture);
-
-    expect(inOverlay('[data-testid="resume-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
-
-    fixture.componentRef.setInput('pausePending', false);
-    await fixture.whenStable();
-
-    expect(inOverlay('[data-testid="resume-chunk"]')?.getAttribute('aria-disabled')).not.toBe('true');
-  });
-
   // --- Pending status override (`bzh:frontend-pending-override`) -----------
   //
   // The merge itself (`renderedStatus` vs. the real `detail().status`) is the
@@ -360,7 +209,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', 'paused');
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -371,7 +220,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', 'paused');
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     await fixture.whenStable();
 
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
@@ -379,42 +228,6 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe(ROUTED_DETAIL.status);
-  });
-
-  it('emits nothing when the operator declines the resume confirm', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    const detail = pausedDetail('paused');
-    fixture.componentRef.setInput('detail', detail);
-    fixture.componentRef.setInput('renderedStatus', detail.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.resumeChunk.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    await openMenu(fixture);
-
-    inOverlay('[data-testid="resume-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
-
-    expect(emitted).toBe(false);
-  });
-
-  it('does not claim the claim is given up in the pause confirm copy — that is detach', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    await openMenu(fixture);
-
-    inOverlay('[data-testid="pause-chunk"]')?.click();
-
-    await fixture.whenStable();
-    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
-    expect(message).toContain('keeps the');
-    expect(message).toContain('claim');
   });
 
   it('names no dependency edge on the identity line — the Work item box owns them', async () => {
@@ -470,7 +283,7 @@ describe('ChunkDetailHeader', () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('control', chunkControlStub());
     fixture.componentRef.setInput('runnerHosts', new Map([['rn_01', 'atlas']]));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

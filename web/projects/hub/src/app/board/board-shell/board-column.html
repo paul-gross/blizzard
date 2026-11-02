@@ -41,7 +41,7 @@
           (selectChunk)="selectChunk.emit($event)"
         >
           @if (strips().get(card.chunkId); as strip) {
-            <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress ?? []" />
+            <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />
           }
         </fleet-chunk-card>
       </div>
@@ -58,7 +58,7 @@
         (selectChunk)="selectChunk.emit($event)"
       >
         @if (strips().get(card.chunkId); as strip) {
-          <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress ?? []" />
+          <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />
         }
       </fleet-chunk-card>
     }

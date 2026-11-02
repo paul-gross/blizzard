@@ -903,6 +903,10 @@ export type BounceView = {
      * Recorded At
      */
     recorded_at: string;
+    /**
+     * Withdrawn
+     */
+    withdrawn: boolean;
 };
 
 /**
@@ -3628,10 +3632,18 @@ export type FlowFactView = {
      */
     revision: string | null;
     /**
+     * Rework
+     */
+    rework: boolean;
+    /**
      * Submission Id
      */
     submission_id: string;
     verdict: FlowVerdict | null;
+    /**
+     * Wait
+     */
+    wait: boolean;
 };
 
 /**

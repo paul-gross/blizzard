@@ -36,6 +36,7 @@ const DETAIL: ChunkDetail = chunkDetail({
       cause: 'result-envelope-failed-schema-validation',
       envelope: '{"verdict":"maybe","notes":"' + 'x'.repeat(400) + '"}',
       recorded_at: '2026-08-09T00:00:02Z',
+      withdrawn: false,
     },
   ],
   restarts: [

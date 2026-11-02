@@ -24,7 +24,7 @@
           (click)="selectChunk.emit(entry.card.chunkId)"
         />
         @if (showsNodeStrip(entry.card)) {
-          <app-node-strip chunkRowProgress [progress]="entry.card.graphProgress ?? []" />
+          <app-node-strip chunkRowProgress [progress]="entry.card.graphProgress" />
         }
         <fleet-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.status" />
       </fleet-chunk-list-row>

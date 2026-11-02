@@ -229,29 +229,10 @@ export class ChunkPage {
   );
   protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status ?? 'ready'));
   /** The daemon's chunk-control port, or `null` — the header hides its ⋮ menu. */
-  private readonly control = this.actions?.control ?? null;
-  protected readonly canControl = computed(() => this.control?.canControl() ?? false);
-  protected readonly pausePending = computed(() => this.control?.pausePending(this.chunkId() ?? '') ?? false);
-  protected readonly detachPending = computed(() => this.control?.detachPending(this.chunkId() ?? '') ?? false);
-  protected readonly completePending = computed(() => this.control?.completePending(this.chunkId() ?? '') ?? false);
-  protected readonly deletePending = computed(() => this.control?.deletePending(this.chunkId() ?? '') ?? false);
+  protected readonly control = this.actions?.control ?? null;
 
-  protected onPause(chunkId: string): void {
-    this.control?.pause(chunkId);
-  }
-  protected onResume(chunkId: string): void {
-    this.control?.resume(chunkId);
-  }
-  protected onDetach(chunkId: string): void {
-    this.control?.detach(chunkId);
-  }
-  protected onComplete(chunkId: string): void {
-    this.control?.complete(chunkId);
-  }
   /** A deleted chunk has no page left to show — back to the board, with nothing selected. */
-  protected onDelete(chunkId: string): void {
-    this.control?.delete(chunkId, () => void this.router.navigate(this.inAppLink(this.boardLinkBase()) as unknown[]));
-  }
+  protected readonly backToBoard = (): void => void this.router.navigate(this.inAppLink(this.boardLinkBase()) as unknown[]);
 
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.actions?.answer(event);

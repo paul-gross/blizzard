@@ -13,7 +13,7 @@ import pytest
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
-from blizzard.hub.domain.delivery.flows import Submission
+from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import hub_store_connections, seed_runner
 from tests.test_flow_driver import World
@@ -216,8 +216,13 @@ def test_each_turn_ended_entry_carries_its_verdict_and_a_wait_none(line: Line) -
     ended = [f for f in line.world.detail(line.first)["flow_record"] if f["kind"] == "turn-ended"]
     record = line.client.get(f"/api/flows/{line.flow_id}/record").json()["facts"]
 
-    assert [(f["outcome"], f["verdict"]) for f in ended] == [("pending", None), ("failure", "bounced")]
-    assert {f["verdict"] for f in record if f["kind"] != "turn-ended"} == {None}
+    assert [(f["outcome"], f["verdict"], f["wait"], f["rework"]) for f in ended] == [
+        ("pending", None, True, False),
+        ("failure", "bounced", False, False),
+    ]
+    assert {(f["verdict"], f["wait"], f["rework"]) for f in record if f["kind"] != "turn-ended"} == {
+        (None, False, False)
+    }
 
 
 def test_the_chunk_list_carries_the_latest_bounce_and_the_graph_progress(line: Line) -> None:
@@ -229,5 +234,37 @@ def test_the_chunk_list_carries_the_latest_bounce_and_the_graph_progress(line: L
     [bounce] = line.world.detail(line.first)["bounces"]
 
     assert (row["latest_bounce"], row["bounce_count"]) == (bounce, 1)
+    assert bounce["withdrawn"] is True
     assert row["graph_name"] == line.world.detail(line.first)["graph_name"]
     assert [(n["name"], n["state"]) for n in row["graph_progress"]] == [("build", "current"), ("merge", "failed")]
+
+
+def test_the_chunk_list_reads_every_bounced_chunks_submissions_in_one_read(
+    line: Line, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    line.world.action.answer = Pass(choice="failure")
+    line.world.poll_due()
+    line.world.tick()
+    line.world.poll_due()
+    line.world.tick()
+    batched: list[list[str]] = []
+    single: list[str] = []
+    batch_read = FlowStore.submissions_of_chunks
+
+    def spy_batch(self: FlowStore, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
+        batched.append(sorted(chunk_ids))
+        return batch_read(self, chunk_ids)
+
+    def spy_single(self: FlowStore, chunk_id: str) -> list[SubmissionRecord]:
+        single.append(chunk_id)
+        return []
+
+    monkeypatch.setattr(FlowStore, "submissions_of_chunks", spy_batch)
+    monkeypatch.setattr(FlowStore, "submissions_of", spy_single)
+
+    rows = {r["chunk_id"]: r for r in line.client.get("/api/chunks").json()["chunks"]}
+
+    assert batched == [sorted([line.first, line.second])]
+    assert single == []
+    assert rows[line.first]["latest_bounce"]["withdrawn"] is True
+    assert rows[line.second]["latest_bounce"]["withdrawn"] is True

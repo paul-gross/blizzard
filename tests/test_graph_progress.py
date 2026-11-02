@@ -1,16 +1,28 @@
 """``node_progress`` and ``order_nodes`` (unit tier) — a chunk's progress through its graph, one reading per node in
-start-to-finish order, read from its visits alone; and ``FlowFact.verdict``, a turn's verdict on its submission."""
+start-to-finish order, read from its visits alone, and as a chunk read renders it; ``FlowFact.verdict`` and
+``FlowFact.is_wait``, what a turn judged of its submission; and ``bounce_withdrew``, whether a bounce's turn withdrew
+its submission."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from blizzard.foundation.graph_progress_state import GraphProgressState
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.delivery.flows import FlowFact
+from blizzard.hub.api.chunk_views import ChunkView
+from blizzard.hub.domain.chunk.model import BounceFact, ChunkFacts, MigrationFact, TransitionFact
+from blizzard.hub.domain.delivery.flows import (
+    FlowFact,
+    SubmissionClosure,
+    SubmissionRecord,
+    bounce_withdrew,
+)
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress, order_nodes
 from tests.support import make_graph
@@ -102,6 +114,16 @@ def test_only_a_nodes_last_visit_by_epoch_counts_and_the_current_node_reads_curr
     }
 
 
+def test_discovery_order_breaks_a_tie_at_equal_depth() -> None:
+    fork = _graph(["plan", "web", "api", "join"], ["plan>web", "plan>api", "web>join", "api>join"])
+    assert order_nodes(fork) == ["nd_plan", "nd_web", "nd_api", "nd_join"]
+
+
+def test_an_entry_missing_from_the_graph_leaves_every_node_in_the_graphs_own_order() -> None:
+    missing = make_graph("gr_1", "dev", entry_node_id="nd_missing", nodes=_DEV.nodes, edges=_DEV.edges)
+    assert order_nodes(missing) == ["nd_build", "nd_review", "nd_land", "nd_orphan"]
+
+
 def test_visits_match_by_name_and_skip_a_node_the_graph_no_longer_names() -> None:
     v2 = _graph(["build", "review"], ["build>review"], prefix="v2_")
     progress = node_progress(v2, [_step(1, "build", "review"), _step(2, "retired", "build")], "nd_v2_review")
@@ -131,3 +153,127 @@ def test_a_turns_verdict_is_landed_bounced_or_none_for_a_turn_that_judged_nothin
 ) -> None:
     fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
     assert fact.verdict() == verdict
+
+
+@pytest.mark.parametrize(
+    ("kind", "outcome", "wait"),
+    [
+        ("turn-ended", "pending", True),
+        ("turn-ended", "awaiting-merge", True),
+        ("turn-ended", "cut-off", False),
+        ("turn-ended", "escalated", False),
+        ("turn-ended", "interrupted", False),
+        ("turn-ended", "failure", False),
+        ("withdrawn", "pending", False),
+    ],
+)
+def test_only_a_turn_ended_on_a_reserved_wait_is_a_wait(kind: FlowChangeKind, outcome: str, wait: bool) -> None:
+    fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
+    assert fact.is_wait() is wait
+
+
+def _submission(epoch: int, closed: str | None) -> SubmissionRecord:
+    return SubmissionRecord(
+        submission_id=f"sub_{epoch}",
+        node_id="nd_merge",
+        epoch=epoch,
+        generation=0,
+        arrival=epoch,
+        submitted_at=_AT,
+        closure=SubmissionClosure(outcome=closed, closed_at=_AT) if closed is not None else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("submissions", "withdrew"),
+    [
+        ([_submission(3, "failure")], True),
+        ([_submission(3, None)], False),
+        ([_submission(3, "stopped")], False),
+        ([_submission(2, "failure")], False),
+        ([], False),
+    ],
+)
+def test_a_bounce_withdrew_only_the_submission_its_own_visit_closed_under_its_cause(
+    submissions: list[SubmissionRecord], withdrew: bool
+) -> None:
+    bounce = BounceFact(epoch=4, cause="failure", envelope="{}", recorded_at=_AT)
+    assert bounce_withdrew(bounce, submissions) is withdrew
+
+
+@dataclass
+class _Names:
+    """The graph names a chunk read resolves against: one graph, ``None`` for any other id."""
+
+    graph_: Graph | None
+
+    def graph(self, graph_id: str | None) -> Graph | None:
+        return self.graph_ if graph_id == "gr_1" else None
+
+    def node_name(self, graph_id: str | None, node_id: str | None) -> str | None:
+        return node_id.removeprefix("nd_").removeprefix("old_") if node_id is not None else None
+
+
+def _chunk_progress(graph_id: str, facts: ChunkFacts, current: str | None = None) -> list[tuple[str, str]]:
+    view = ChunkView(
+        services=cast(Any, None),
+        chunk=cast(Any, SimpleNamespace(graph_id=graph_id)),
+        facts=facts,
+        names=cast(Any, _Names(_DEV)),
+    )
+    return [(node.name, str(node.state)) for node in view._graph_progress(current)]  # pyright: ignore[reportPrivateUsage]
+
+
+def _transition(epoch: int, src: str, dst: str) -> TransitionFact:
+    return TransitionFact(
+        to_node_id=f"nd_{dst}",
+        to_node_executor=Executor.RUNNER,
+        epoch=epoch,
+        recorded_at=_AT,
+        from_node_id=f"nd_{src}",
+        graph_id="gr_1",
+    )
+
+
+def test_a_chunk_read_takes_a_migration_as_a_visit_interleaved_by_epoch_and_named_in_its_own_graph() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[_transition(1, "build", "review"), _transition(4, "build", "review")],
+        migrations=[
+            MigrationFact(
+                from_node_id="old_review",
+                from_graph_id="gr_old",
+                to_graph_id="gr_1",
+                landed_node_id="nd_build",
+                choice_name="rework",
+                model=None,
+                epoch=2,
+                recorded_at=_AT,
+            )
+        ],
+    )
+    assert _chunk_progress("gr_1", facts) == [
+        ("build", "passed"),
+        ("review", "failed"),
+        ("land", "unvisited"),
+        ("orphan", "unvisited"),
+    ]
+
+
+def test_a_chunk_read_over_an_unresolvable_graph_has_no_progress() -> None:
+    assert _chunk_progress("gr_gone", ChunkFacts(minted=True)) == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "outcome", "rework"),
+    [
+        ("turn-ended", "conflict", True),
+        ("turn-ended", "failure", False),
+        ("turn-ended", "landed", False),
+        ("turn-ended", "pending", False),
+        ("withdrawn", "conflict", False),
+    ],
+)
+def test_only_a_turn_ended_on_a_rework_answer_is_rework(kind: FlowChangeKind, outcome: str, rework: bool) -> None:
+    fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
+    assert fact.is_rework() is rework

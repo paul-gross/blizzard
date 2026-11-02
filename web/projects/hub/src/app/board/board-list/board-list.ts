@@ -2,12 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 
-import { ChunkListRow } from 'fleet';
+import { ChunkListRow, LaneIcon } from 'fleet';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import type { BoardLaneMove, BoardReorderList, BoardReposition } from '../board-shell/board-column';
 import { resolveDrop } from '../board-shell/board-drop.model';
-import { LaneIcon } from '../lane-icon/lane-icon';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';

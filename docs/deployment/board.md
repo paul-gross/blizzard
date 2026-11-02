@@ -73,7 +73,27 @@ thousands and millions; the cost reads `~$X` for an estimate and `$X+` for a par
 ## Fleet spend
 
 The board's right rail opens on Fleet spend: the fleet's session efficiency figure for today and for yesterday, each day
-running from local midnight. The mobile board shows the same two rows.
+running from local midnight. The mobile board shows the same two rows. Below it the rail stacks the runners, open
+questions, gates, and the Activity feed.
+
+## The Delivery tab
+
+On a desktop, `/delivery` lists every chunk delivering above a divider and every chunk delivered below it, full width. A
+row leads with the chunk's lane icon and when it last moved, names the chunk's work items and its current step, draws
+the pipeline `PR open → in line → landing → landed` lit up to the furthest stage it reached — `in line` carries its best
+position — and links each repository's PR or landed commit. A chunk standing out of line after a bounce reads that
+bounce on its row as its cause, `· withdrawn` when its submission was withdrawn right after the bounced turn, how long
+ago, and its reason; a bounced chunk with no other delivery footprint drops off the list after 24 hours. A tenant with
+nothing delivering or delivered reads "Nothing delivering or delivered."
+
+Clicking a row opens the chunk in a drawer beside the list, held in the URL's `?chunk=`; clicking it again, the drawer's
+✕, or Escape closes it. The drawer lists the chunk's Repositories — each with its delivery state, branch, PRs, landed
+commit and last update — and its Delivery history newest first: its facts on every flow, its bounces with their cause
+and reason, and the graph transitions around them. A landing attempt whose submission was then withdrawn reads
+`· withdrawn`.
+
+On a phone, `/delivery` lists the same chunks as cards, and `/delivery/chunk/:chunkId` opens one chunk's delivery on a
+screen of its own; that route resolves on a desktop too, so a shared link still opens.
 
 ## On a phone
 

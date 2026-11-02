@@ -19,9 +19,26 @@ const FORGES: ReadonlyMap<string, string> = new Map([
   ['fl_b', 'paul-gross/blizzard-context'],
 ]);
 
-/** The verdict the hub sends a `turn-ended` fact for these fixtures' outcomes: `landed`, none for a wait, else `bounced`. */
-const verdictOf = (kind: FlowFactView['kind'], outcome: string | null | undefined): FlowFactView['verdict'] =>
-  kind !== 'turn-ended' || !outcome || outcome === 'pending' ? null : outcome === 'landed' ? 'landed' : 'bounced';
+/** What the hub sends a `turn-ended` fact for each outcome these fixtures use, as its `NOT_VERDICTS` and reserved waits
+ * judge it: `landed` lands, the reserved waits wait, an interruption, a cut-off, an escalation, or a supersession
+ * judges nothing, any other answer bounces, and a conflict bounces as rework. */
+const JUDGED: Readonly<Record<string, Pick<FlowFactView, 'verdict' | 'wait' | 'rework'>>> = {
+  landed: { verdict: 'landed', wait: false, rework: false },
+  pending: { verdict: null, wait: true, rework: false },
+  'awaiting-merge': { verdict: null, wait: true, rework: false },
+  interrupted: { verdict: null, wait: false, rework: false },
+  'cut-off': { verdict: null, wait: false, rework: false },
+  escalated: { verdict: null, wait: false, rework: false },
+  superseded: { verdict: null, wait: false, rework: false },
+  failure: { verdict: 'bounced', wait: false, rework: false },
+  conflict: { verdict: 'bounced', wait: false, rework: true },
+};
+const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined): Pick<FlowFactView, 'verdict' | 'wait' | 'rework'> => {
+  if (kind !== 'turn-ended') return { verdict: null, wait: false, rework: false };
+  const judgement = outcome ? JUDGED[outcome] : undefined;
+  if (judgement === undefined) throw new Error(`no hub judgement for the turn outcome ${String(outcome)}`);
+  return judgement;
+};
 
 let factId = 0;
 /** A flow fact `minutesAgo` before the fixture's now, under submission `sub`. */
@@ -34,7 +51,7 @@ const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fi
   outcome: null,
   revision: null,
   submission_id: 'sub_1',
-  verdict: verdictOf(kind, fields.outcome),
+  ...judged(kind, fields.outcome),
   ...fields,
 });
 
@@ -81,10 +98,38 @@ describe('deliveryHistory', () => {
     expect(texts(detail({ flow_record: [fact('fl_a', 'turn-ended', 4, { outcome: 'conflict' })] }))).toEqual(['landing attempt conflict']);
   });
 
-  it('reads a withdrawal on its own with its reason, and drops one that followed a landing', () => {
+  it('reads a withdrawal on its own with its reason, and drops one that followed a landing into the landing', () => {
     expect(texts(detail({ flow_record: [fact('fl_a', 'withdrawn', 2, { outcome: 'parked' })] }))).toEqual(['withdrawn (parked)']);
     expect(texts(detail({ flow_record: [fact('fl_a', 'withdrawn', 2)] }))).toEqual(['withdrawn']);
-    expect(texts(detail({ flow_record: [fact('fl_a', 'withdrawn', 2, { outcome: 'landed' })] }))).toEqual([]);
+    const landing = [fact('fl_a', 'turn-ended', 4, { outcome: 'landed' }), fact('fl_a', 'landed', 4), fact('fl_a', 'withdrawn', 3, { outcome: 'landed' })];
+    expect(texts(detail({ flow_record: landing }))).toEqual(['landed']);
+  });
+
+  it('reads a turn that ended judging nothing as its own problem entry, never as a poll', () => {
+    for (const outcome of ['escalated', 'cut-off', 'interrupted']) {
+      const record = [fact('fl_a', 'turn-started', 6), fact('fl_a', 'turn-ended', 5, { outcome: 'pending' }), fact('fl_a', 'turn-started', 4), fact('fl_a', 'turn-ended', 3, { outcome })];
+      const history = deliveryHistory(detail({ flow_record: record }), FORGES, FIXTURE_NOW);
+      expect(history.map((entry) => [entry.text, entry.tone])).toEqual([
+        [`landing attempt ${outcome}`, 'needs'],
+        [expect.stringMatching(/^waiting on checks · 1 poll · /), 'idle'],
+      ]);
+    }
+  });
+
+  it('folds a turn waiting on a merge into the run of waits', () => {
+    const record = [fact('fl_a', 'turn-started', 6), fact('fl_a', 'turn-ended', 5, { outcome: 'pending' }), fact('fl_a', 'turn-started', 4), fact('fl_a', 'turn-ended', 3, { outcome: 'awaiting-merge' })];
+    expect(texts(detail({ flow_record: record }))).toEqual([expect.stringMatching(/^waiting on checks · 2 polls · /)]);
+  });
+
+  it('joins a withdrawal to the cut-off turn before it, and shows one after a wait on its own', () => {
+    const cutOff = [fact('fl_a', 'turn-started', 5), fact('fl_a', 'turn-ended', 4, { outcome: 'cut-off' }), fact('fl_a', 'withdrawn', 3, { outcome: 'stopped' })];
+    expect(texts(detail({ flow_record: cutOff }))).toEqual(['landing attempt cut-off · withdrawn']);
+    const afterWait = [fact('fl_a', 'turn-started', 5), fact('fl_a', 'turn-ended', 4, { outcome: 'pending' }), fact('fl_a', 'withdrawn', 3, { outcome: 'stopped' })];
+    const history = deliveryHistory(detail({ flow_record: afterWait }), FORGES, FIXTURE_NOW);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([
+      ['withdrawn (stopped)', 'needs'],
+      [expect.stringMatching(/^waiting on checks · 1 poll · /), 'idle'],
+    ]);
   });
 
   it('merges the same entry said on several flows at once, naming every repository', () => {
@@ -168,6 +213,14 @@ describe('deliveryDrawerView', () => {
     )!;
     expect(view.repos.map((repo) => repo.state)).toEqual(['bounced · conflict', 'not submitted']);
     expect(view.repos[0].lastAttempt).toMatchObject({ outcome: 'conflict', age: '[5m 0s]' });
+  });
+
+  it('reads a bounce the hub marks as rework waiting, and any other bounce stale', () => {
+    const repo = (outcome: string) => deliveryDrawerView(detail({ flow_record: [fact('fl_a', 'turn-ended', 5, { outcome })] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!.repos[0];
+    expect([repo('conflict').tone, repo('conflict').lastAttempt?.tone]).toEqual(['waiting', 'waiting']);
+    expect([repo('failure').tone, repo('failure').lastAttempt?.tone]).toEqual(['stale', 'stale']);
+    const history = deliveryHistory(detail({ flow_record: [fact('fl_a', 'turn-started', 6), fact('fl_a', 'turn-ended', 5, { outcome: 'conflict' })] }), FORGES, FIXTURE_NOW);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt conflict', 'needs']]);
   });
 
   it('sums the attempts and bounces, and spans the delivery from first submission to landing once every repository has landed', () => {

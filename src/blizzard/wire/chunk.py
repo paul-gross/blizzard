@@ -405,13 +405,15 @@ class ArtifactView(WireModel):
     branch_url: str | None = None
 
 
-class BounceView(BaseModel):
+class BounceView(WireModel):
     """One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
     ``envelope`` is the raw JSON kick-back payload verbatim."""
 
     cause: str
     envelope: str
     recorded_at: str
+    #: Whether the turn the bounce ended withdrew its submission from its flows.
+    withdrawn: bool = False
 
 
 class HubAdvanceResponse(WireModel):

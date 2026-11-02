@@ -12,6 +12,8 @@ const BASE: BoardCard = {
   promotable: false,
   node: 'done',
   nodeId: 'nd_done',
+  graphName: null,
+  graphProgress: [],
   workLines: [],
   itemsRead: true,
   costUsd: 0,

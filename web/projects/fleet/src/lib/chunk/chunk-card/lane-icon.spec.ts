@@ -1,7 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { type ChunkStatus, STATUS_TONE, toneColor, UNKNOWN_LANE } from 'fleet';
+import type { ChunkStatus } from '../../api/hub';
+import { STATUS_TONE, UNKNOWN_LANE } from '../../core/chunk-lanes';
+import { toneColor } from '../../kit/kit-badge';
 import { LaneIcon, laneIconGlyph } from './lane-icon';
 
 describe('laneIconGlyph', () => {

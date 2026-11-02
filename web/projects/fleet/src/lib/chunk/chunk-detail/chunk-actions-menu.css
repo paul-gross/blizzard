@@ -1,0 +1,43 @@
+/* No box of its own: the trigger sits in the host header's own action row. */
+:host {
+  display: contents;
+}
+/* The ⋮ trigger: a fixed 30×30 square target, the glyph centred in it, matching the
+   dock header's close button beside it. */
+.actions ::ng-deep .trigger {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: var(--fs-lg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+/* The glyph is drawn, not typeset, so it centres on its own ink rather than a fallback font's line box. */
+.glyph {
+  display: block;
+}
+.glyph--dots {
+  fill: currentColor;
+}
+/* The divider between the claim actions and Complete/Delete — a hairline on `--line`. */
+.menu-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant, so
+   this caller applies the `--red` token. The `:hover`/`:focus` pair outranks
+   `KitMenuItem`'s own `:host(:hover)` cyan (equal specificity, one more class) so the
+   danger tint holds under a pointer too. */
+.danger {
+  color: var(--red);
+}
+.danger:hover,
+.danger:focus {
+  color: var(--red);
+}

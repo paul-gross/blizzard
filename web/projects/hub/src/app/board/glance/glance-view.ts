@@ -21,11 +21,11 @@ import {
   type FleetSpendView,
   type KitAsyncStateValue,
   type WorkLine,
+  LaneIcon,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 import { FleetSpend } from '../fleet-spend/fleet-spend';
-import { LaneIcon } from '../lane-icon/lane-icon';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { graphStepLabel } from '../../core/step-label';

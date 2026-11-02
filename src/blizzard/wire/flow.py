@@ -29,6 +29,12 @@ class FlowFactView(WireModel):
     #: A ``turn-ended`` entry's verdict on its submission — it landed, or it was sent back; ``None`` for a turn that
     #: judged nothing (a wait, an interruption, a cut-off, an escalation) and for every other kind.
     verdict: Annotated[FlowVerdict | Unrecognized, OPEN] | None = None
+    #: Whether a ``turn-ended`` entry's turn only waited — on checks, or on a merge outside the hub — judging nothing;
+    #: ``False`` for every other turn and kind.
+    wait: bool = False
+    #: Whether a ``turn-ended`` entry sent its submission back as routine rework a later step takes up, such as a
+    #: conflict with its base, rather than as a failure; ``False`` for every other turn and kind.
+    rework: bool = False
 
 
 class FlowTurnView(WireModel):

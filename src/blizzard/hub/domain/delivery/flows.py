@@ -22,16 +22,14 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
+from blizzard.hub.domain.chunk.model import BounceFact, ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryResolution
-from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
+from blizzard.hub.domain.graph.actions import LANDED, RESERVED_WAITS, REWORK_ANSWERS, ActionSpec
 from blizzard.hub.domain.graph.model import Node
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
-#: The outcome of a turn whose pass landed its submission — the landing action's one success answer.
-TURN_LANDED = "landed"
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
@@ -154,7 +152,16 @@ class FlowFact:
         among them — and for every other kind."""
         if self.kind != "turn-ended" or self.outcome is None or self.outcome in NOT_VERDICTS:
             return None
-        return FlowVerdict.LANDED if self.outcome == TURN_LANDED else FlowVerdict.BOUNCED
+        return FlowVerdict.LANDED if self.outcome == LANDED else FlowVerdict.BOUNCED
+
+    def is_wait(self) -> bool:
+        """Whether this is a ``turn-ended`` fact whose turn only waited — its outcome one of the reserved waits."""
+        return self.kind == "turn-ended" and self.outcome in RESERVED_WAITS
+
+    def is_rework(self) -> bool:
+        """Whether this is a ``turn-ended`` fact that sent its submission back as routine rework — its outcome one of
+        :data:`REWORK_ANSWERS` — rather than as a failure."""
+        return self.kind == "turn-ended" and self.outcome in REWORK_ANSWERS
 
 
 @domain_model
@@ -300,6 +307,16 @@ NOT_VERDICTS = frozenset(
         *get_args(Withdrawal.__value__),
     }
 )
+
+
+def bounce_withdrew(bounce: BounceFact, submissions: Sequence[SubmissionRecord]) -> bool:
+    """Whether the turn that bounced withdrew its submission: a bounce is written at its visit's epoch plus one, in the
+    transaction that ends the visit's turn and, when it routes, closes the visit's submission under the bounce's cause.
+    A bounce that crossed its cap escalated instead, and one no turn owned closed nothing."""
+    return any(
+        sub.epoch == bounce.epoch - 1 and sub.closure is not None and sub.closure.outcome == bounce.cause
+        for sub in submissions
+    )
 
 
 def stamp_terms(

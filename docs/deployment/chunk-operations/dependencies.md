@@ -95,6 +95,64 @@ replacement for it.
 
 ## On the board
 
+The blocked marking renders beside a chunk's unchanged status on the desktop board card and on a row of the board's list
+layout, where it is plain text that selects nothing. A chunk's dependencies show in its Work item box — in the board's
+chunk dock and on the routed chunk page the hub's mobile board and the runner app share — as two lists, Depends on and
+Blocks, each chunk in them led by its lane's icon. Each entry links to that chunk's own page.
+[`blizzard-context/domain/work/statuses.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/statuses.md#the-blocked-marking)'s
+to say. Satisfaction is not stored: an edge is met when its prerequisite reads `done`, read fresh at the point something
+consults it rather than cached on the edge itself, so declaring onto an already-`done` prerequisite is an ordinary
+accepted edge that names no marking. A prerequisite absent from the fleet's statuses still blocks, the conservative read
+— but deletion now refuses a standing edge onto a live prerequisite, so this conservative read only guards the accepted
+residual race between a status read and a concurrent write, not an ordinary reachable path.
+
+A chunk currently named as another's prerequisite cannot itself be deleted while that edge stands: deletion is refused
+409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
+chunk's own outgoing standing edges as part of the same delete, rather than refusing.
+
+Grouping a chunk away carries its standing edges onto the survivor rather than dropping them: each edge naming the
+folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. A
+re-minted edge keeps the source edge's `declared_at`, which `GET /api/chunks/{id}/dependencies` shows; a later-declared
+standing survivor edge that duplicates it is released and re-minted at the earlier instant. The whole fold is refused
+409 if carrying its edges would close a cycle in the resulting standing graph.
+
+## The neighborhood
+
+`GET /api/chunks/{chunk_id}` also carries a `neighborhood` field: `prerequisites` and `dependents`, each a list of
+`{chunk_id, status, satisfied}`, empty rather than null when a chunk names neither. What the two directions mean,
+`status`'s one residual-race null case, and how `satisfied` is derived are
+[`blizzard-context/domain/work/statuses.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/statuses.md#the-neighborhood)'s
+to say.
+
+## What a standing edge does to claiming
+
+A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409` with
+the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict, terminal, and
+incompatibility `409`s a claim can otherwise answer with — re-derived fresh under the row lock the claim's whole
+check-then-act runs inside, rather than trusted from an earlier read, so a peek-then-claim race can never slip a blocked
+chunk through. A runner whose registered capabilities can no longer run every statically reachable node from the chunk's
+current position is denied the same way, with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of
+the marking's `prerequisite_chunk_id` — re-derived fresh under the same row lock, for the same reason: a capability
+change landing between a runner's peek and its claim is denied rather than raced. A registration carrying no
+capabilities at all fits no chunk, so every claim it makes meets this denial.
+
+A runner's own FILL step does not have to run into that denial to make progress. The legacy `GET /api/fleet/queue/peek`
+carries the marking on every entry it returns, and a runner filling from that unfiltered order reaches past a marked
+head for the first unmarked entry in the peeked list by default, rather than spending a claim attempt it already knows
+will be refused. A runner peeking matched to its own capability snapshot (`POST /api/fleet/queue/peek`) gets at most one
+entry back instead, with that same hold-or-pass-over choice already applied hub-side to the blocked marking and to
+capability eligibility together — there is no local list left to scan, so the runner's own reach-ahead plays no part on
+that path.
+
+`[runner.queue] strict = true` under the runner's `[[runner]]` is the hold half of that choice on either verb: set, a
+runner filling from the legacy order lets a marked head yield no entry and idles the tick rather than trying a later
+one, and a runner peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather
+than scanning past it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still
+stands as the structural guarantee: reach-ahead — local or hub-side — is an efficiency over the peek, never a
+replacement for it.
+
+## On the board
+
 The blocked marking renders beside a chunk's unchanged status everywhere the board lists one: the desktop board card,
 the chunk detail dock's header, the routed chunk page header the hub's mobile board and the runner app share, and a row
 of the board's list layout, where it is plain text that selects nothing. Clicking it selects the named prerequisite into

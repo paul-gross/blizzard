@@ -17,6 +17,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'build',
   nodeId: 'nd_build',
+  graphName: null,
+  graphProgress: [],
   workLines: [{ label: 'hub#1', title: null }],
   itemsRead: true,
   costUsd: 0,

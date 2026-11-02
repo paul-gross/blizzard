@@ -32,6 +32,8 @@ def fact_view(fact: FlowFact) -> FlowFactView:
         outcome=fact.outcome,
         revision=fact.revision,
         verdict=fact.verdict(),
+        wait=fact.is_wait(),
+        rework=fact.is_rework(),
     )
 
 

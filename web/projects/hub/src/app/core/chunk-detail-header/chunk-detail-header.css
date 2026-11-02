@@ -102,9 +102,8 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-/* The ⋯ trigger and the close button, matched as two same-size square targets large enough to hit without aiming —
-   a fixed box with the glyph centred in it, so neither glyph's own metrics sets the height. */
-.actions ::ng-deep .trigger,
+/* The close button, the same size square target as the ⋮ trigger beside it (`chunk-actions-menu.css`) —
+   a fixed box with the glyph centred in it, so the glyph's own metrics never set the height. */
 .close ::ng-deep .act {
   box-sizing: border-box;
   width: 30px;
@@ -118,7 +117,7 @@
   border: 1px solid var(--line);
   border-radius: 3px;
 }
-/* Both glyphs are drawn, not typeset, so each centres on its own ink rather than a fallback font's line box. */
+/* The glyph is drawn, not typeset, so it centres on its own ink rather than a fallback font's line box. */
 .glyph {
   display: block;
 }
@@ -128,26 +127,3 @@
   stroke-width: 1.5;
   stroke-linecap: round;
 }
-.glyph--dots {
-  fill: currentColor;
-}
-/* The ⋯ menu panel's own divider between the claim actions and Complete/Delete — a hairline,
-   on the same `--line` token `.d-head`'s own border uses. */
-.menu-divider {
-  border: none;
-  border-top: 1px solid var(--line);
-  margin: 4px 0;
-}
-/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant, so
-   this caller applies the `--red` token, scoped to this header's own template.
-   The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
-   `:host(:hover)` cyan (equal specificity, one more class) so the danger tint holds
-   under a pointer too. */
-.danger {
-  color: var(--red);
-}
-.danger:hover,
-.danger:focus {
-  color: var(--red);
-}
-

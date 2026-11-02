@@ -5,7 +5,6 @@ from __future__ import annotations
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.combine import (
     FAILURE,
-    LANDED,
     combine,
     in_landing_order,
     refuses_before_checks,
@@ -28,7 +27,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.graph.actions import LAND
+from blizzard.hub.domain.graph.actions import LAND, LANDED
 from blizzard.hub.forge.landing import ForgeUnavailable, VisitForges
 
 

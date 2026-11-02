@@ -1,14 +1,12 @@
 <header class="cp-hdr">
   <div class="cp-top">
   <span class="cid" data-testid="mobile-chunk-ref">{{ chunkId() }}</span>
-  <!-- The dock header's own right-hand controls: the ⋮ actions menu. -->
+  <!-- The dock header's own right-hand controls: the ⋮ actions menu (`ChunkActionsMenu`). -->
   <div class="cp-meta">
-    @if (menuVisible()) {
-      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu">
-        <svg trigger class="glyph glyph--dots" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-          <circle cx="8" cy="3.5" r="1.4" /><circle cx="8" cy="8" r="1.4" /><circle cx="8" cy="12.5" r="1.4" />
-        </svg>
-      </fleet-kit-menu>
+    @if (detail(); as d) {
+      @if (control(); as c) {
+        <fleet-chunk-actions-menu [detail]="d" [control]="c" [claimant]="claimant()" [afterDelete]="afterDelete()" />
+      }
     }
   </div>
   </div>
@@ -42,53 +40,3 @@
   </span>
 </header>
 
-<ng-template #actionsMenu>
-  <fleet-kit-menu-panel testid="chunk-actions-panel">
-    @if (pause()) {
-      @let resume = resumeCopy(claimant());
-      <fleet-kit-menu-item testid="resume-chunk" [disabled]="pausePending()" (triggered)="onResume()">
-        <span fleetKitMenuItemSubtitle>{{ resume.subtitle }}</span>
-        {{ resume.label }}
-      </fleet-kit-menu-item>
-    } @else if (pausable()) {
-      @let pauseAction = pauseCopy(claimant());
-      <fleet-kit-menu-item testid="pause-chunk" [disabled]="pausePending()" (triggered)="onPause()">
-        <span fleetKitMenuItemSubtitle>{{ pauseAction.subtitle }}</span>
-        {{ pauseAction.label }}
-      </fleet-kit-menu-item>
-    }
-    @if (claimant(); as runner) {
-      @let detach = detachCopy(runner, currentNodeName());
-      <fleet-kit-menu-item testid="detach-chunk" [disabled]="detachPending()" (triggered)="onDetach()">
-        <span fleetKitMenuItemSubtitle>{{ detach.subtitle }}</span>
-        {{ detach.label }}
-      </fleet-kit-menu-item>
-    }
-    @if (pause() || pausable() || claimant()) {
-      <hr class="menu-divider" />
-    }
-    @let complete = completeCopy();
-    <fleet-kit-menu-item class="danger" testid="complete-chunk" [disabled]="!completable() || completePending()" (triggered)="onComplete()">
-      <span fleetKitMenuItemSubtitle>{{ complete.subtitle }}</span>
-      {{ complete.label }}
-    </fleet-kit-menu-item>
-    @let del = deleteCopy();
-    <fleet-kit-menu-item class="danger" testid="delete-chunk" [disabled]="deleteDisabled() || deletePending()" (triggered)="onDelete()">
-      <span fleetKitMenuItemSubtitle>{{ deleteSubtitle() }}</span>
-      {{ del.label }}
-    </fleet-kit-menu-item>
-  </fleet-kit-menu-panel>
-</ng-template>
-
-@if (pendingConfirm(); as confirm) {
-  <fleet-kit-confirm-dialog
-    [open]="true"
-    [heading]="confirm.heading"
-    [message]="confirm.message"
-    [confirmLabel]="confirm.confirmLabel"
-    [variant]="confirm.variant"
-    testid="confirm-dialog"
-    (confirmed)="onConfirmed()"
-    (cancelled)="onCancelled()"
-  />
-}

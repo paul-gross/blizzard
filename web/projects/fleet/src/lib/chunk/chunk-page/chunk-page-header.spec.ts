@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail, RouteView, WorkRefView } from '../../api/hub';
-import { chunkDetail, routeView } from 'fleet/testing';
+import type { ChunkControl } from '../chunk-detail/chunk-control';
+import { chunkControlStub, chunkDetail, routeView } from 'fleet/testing';
 import { ChunkPageHeader } from './chunk-page-header';
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
@@ -20,7 +21,7 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
     [projectColor]="projectColor"
     [route]="route"
     [detail]="detail"
-    [canControl]="canControl"
+    [control]="control"
   />`,
 })
 class TestHost {
@@ -32,7 +33,7 @@ class TestHost {
   projectColor: string | null = null;
   route: RouteView | null = null;
   detail: ChunkDetail | null = null;
-  canControl = false;
+  control: ChunkControl | null = null;
 }
 
 describe('ChunkPageHeader', () => {
@@ -109,12 +110,12 @@ describe('ChunkPageHeader', () => {
     expect(el.querySelectorAll('.cp-sub .sep')).toHaveLength(0);
   });
 
-  it('draws the ⋮ actions menu only with control and a detail to act on', async () => {
+  it('draws the ⋮ actions menu only with a control port and a detail to act on', async () => {
     expect((await render({ detail: chunkDetail() })).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
     TestBed.resetTestingModule();
-    expect((await render({ canControl: true })).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
+    expect((await render({ control: chunkControlStub() })).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
     TestBed.resetTestingModule();
-    const el = await render({ canControl: true, detail: chunkDetail() });
+    const el = await render({ control: chunkControlStub(), detail: chunkDetail() });
     const menu = el.querySelector('[data-testid="chunk-actions-menu"]');
     expect(menu).not.toBeNull();
     expect(menu?.querySelector('svg')).not.toBeNull();

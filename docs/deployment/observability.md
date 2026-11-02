@@ -131,14 +131,14 @@ filters and `--json` printing the raw rows, `detail` included. A chunk's timelin
 cause, and its restarts, with who restarted it and from where to where, among its transitions and migrations in time
 order.
 
-`GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging durable chunk
-occurrences (including distinct claims and node transitions), questions and decisions, event-log rows, and runner
-pause/resume facts — newest-first, bounded by `since` (default 24 hours back) and `limit` (default 200, refused past
-200), gated like `GET /api/events`. Activity orders by pure recency, the event log being the triage view. The rail
-continues live over the same stream: only chunk frames with causes represented in the durable activity read enter the
-feed. Lease and usage telemetry still refresh chunk and spend views but do not repeat a transition row. Frames sharing a
-fact-identity key occupy one row across event types, replay, and backfill; a claim reads as “claimed” rather than as the
-chunk's previous transition.
+`GET /api/activity` is a second read the Activity feed at the foot of the board's right rail backfills from on page
+load, merging durable chunk occurrences (including distinct claims and node transitions), questions and decisions,
+event-log rows, and runner pause/resume facts — newest-first, bounded by `since` (default 24 hours back) and `limit`
+(default 200, refused past 200), gated like `GET /api/events`. Activity orders by pure recency, the event log being the
+triage view. The rail continues live over the same stream: only chunk frames with causes represented in the durable
+activity read enter the feed. Lease and usage telemetry still refresh chunk and spend views but do not repeat a
+transition row. Frames sharing a fact-identity key occupy one row across event types, replay, and backfill; a claim
+reads as “claimed” rather than as the chunk's previous transition.
 
 ## List pagination
 

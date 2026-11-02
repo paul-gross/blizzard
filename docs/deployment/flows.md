@@ -26,8 +26,11 @@ that flow that may take a turn now, so a paused chunk or one waiting on a poll d
 A flow's **record** is every entry written about it, newest first: each submission, each turn's start and end, each
 landing with the revision it left the branch at, and each withdrawal with why the submission left. A flow's **last
 verdict** is its newest turn whose outcome closed its submission — `landed`, or a failure that sent the chunk back to
-build. A turn that is still polling, was interrupted, or was cut off at its deadline is not a verdict. Its **last
-landing** is its newest `landed` entry.
+build. A turn that is still polling, was interrupted, or was cut off at its deadline is not a verdict. Each `turn-ended`
+entry carries a `verdict`: `landed` when the submission landed, `bounced` for any other answer that judged it (a failure
+or a conflict), and empty when the turn judged nothing — a wait (`pending`, `awaiting-merge`), an interruption, a
+cut-off, an escalation, or a superseded turn. Its `wait` flag is set only when the turn waited, on `pending` or
+`awaiting-merge`. A flow's **last landing** is its newest `landed` entry.
 
 ## Reading flows
 

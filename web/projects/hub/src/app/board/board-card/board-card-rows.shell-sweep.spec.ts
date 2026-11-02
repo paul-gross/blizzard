@@ -20,6 +20,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'verify',
   nodeId: 'nd_verify',
+  graphName: null,
+  graphProgress: [],
   workLines: [{ label: 'hub#7', title: 'Migrate the event log onto the new store' }],
   itemsRead: true,
   costUsd: 1.23,

@@ -15,6 +15,13 @@ from blizzard.foundation.roles import domain_model
 # Answers that end a pass without moving the chunk: never authored, never routed, never a
 # verdict. A later reserved wait joins this set rather than adding a second rule.
 RESERVED_WAITS: frozenset[str] = frozenset({"pending", "awaiting-merge"})
+#: The landing actions' one success answer — the outcome of a turn whose pass landed its submission.
+LANDED = "landed"
+#: The landing actions' answer for a branch that no longer merges cleanly onto its base.
+CONFLICT = "conflict"
+#: Answers that send a submission back as routine rework — a step the graph authors to take it up — rather than a
+#: failure of the work.
+REWORK_ANSWERS: frozenset[str] = frozenset({CONFLICT})
 
 
 @domain_model

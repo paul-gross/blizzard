@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
+import { type ChunkControl, type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
 import { settle, OPERATOR_ME_RESPONSE, chunkDetail, decisionView, questionView, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
@@ -552,7 +552,7 @@ describe('ChunkDetail container', () => {
 
     // A sibling action on the same chunk — fired through its handler, since the dock's
     // pause control is not rendered for a waiting_on_human chunk.
-    (fixture.componentInstance as unknown as { onPause(id: string): void }).onPause('ch_routed');
+    (fixture.componentInstance as unknown as { control: ChunkControl }).control.pause('ch_routed');
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();

@@ -2492,6 +2492,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
     (IReadFlows, "submissions_of"): lambda w: w.hub.services.flows.submissions_of(w.flow_chunk),
+    (IReadFlows, "submissions_of_chunks"): lambda w: w.hub.services.flows.submissions_of_chunks([w.flow_chunk]),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
     (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1

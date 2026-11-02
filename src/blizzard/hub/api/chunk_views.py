@@ -35,7 +35,7 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
-from blizzard.hub.domain.delivery.flows import PollPolicy
+from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_withdrew
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
 from blizzard.hub.domain.operations.complete import is_completion_replay
@@ -183,6 +183,8 @@ class ChunkView:
     sources: SelectedWorkSources | None = None
     #: Flow places by chunk id — the caller's own read; ``None`` makes each render read the chunk's own.
     flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
+    #: Submissions by chunk id — the caller's own batched read; ``None`` makes a bounced chunk's render read its own.
+    submissions: Mapping[str, list[SubmissionRecord]] | None = None
 
     @classmethod
     def of(
@@ -224,6 +226,7 @@ class ChunkView:
         projects: Mapping[ProjectId, Project] | None = None,
         sources: SelectedWorkSources | None = None,
         flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
+        submissions: Mapping[str, list[SubmissionRecord]] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route, pointer live-holders, runner names and projects, skipping
@@ -242,6 +245,7 @@ class ChunkView:
             projects=projects,
             sources=sources,
             flow_places=flow_places,
+            submissions=submissions,
         )
 
     def _flow_places(self) -> list[ChunkFlowPlaceView]:
@@ -580,9 +584,23 @@ class ChunkView:
         ]
 
     def _bounces(self) -> list[BounceView]:
+        """The chunk's bounces, oldest first, each marked with whether its turn withdrew its submission — one read of
+        the chunk's submissions, only when it has bounced, unless the caller injected its own batched read."""
+        bounces = sorted(self.facts.bounces, key=lambda b: b.recorded_at)
+        if not bounces:
+            submissions: list[SubmissionRecord] = []
+        elif self.submissions is not None:
+            submissions = self.submissions.get(self.chunk.chunk_id, [])
+        else:
+            submissions = self.services.flows.submissions_of(self.chunk.chunk_id)
         return [
-            BounceView(cause=b.cause, envelope=b.envelope, recorded_at=iso_utc(b.recorded_at))
-            for b in sorted(self.facts.bounces, key=lambda b: b.recorded_at)
+            BounceView(
+                cause=b.cause,
+                envelope=b.envelope,
+                recorded_at=iso_utc(b.recorded_at),
+                withdrawn=bounce_withdrew(b, submissions),
+            )
+            for b in bounces
         ]
 
     def _branch_links(self, rows: list[StoredArtifact]) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:

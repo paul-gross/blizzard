@@ -21,6 +21,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'build',
   nodeId: 'nd_build',
+  graphName: null,
+  graphProgress: [],
   workLines: [{ label: 'owner/repo#1', title: null }],
   itemsRead: true,
   costUsd: 1,

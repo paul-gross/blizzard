@@ -34,9 +34,8 @@ from blizzard.hub.delivery.actions.landing.repo import (
 )
 from blizzard.hub.domain.actions.effects import Pass
 from blizzard.hub.domain.config.landing_policies import landing_sort_key
+from blizzard.hub.domain.graph.actions import CONFLICT, LANDED
 
-LANDED = "landed"
-CONFLICT = "conflict"
 FAILURE = "failure"
 
 # The marker a terminal failure or a substantive wait writes its findings under.

@@ -124,18 +124,17 @@ function stamp(at: string, now: number): Pick<HistoryEntry, 'at' | 'when' | 'whe
  * context grey (`idle`), and neutral progress the default text colour (`null`). */
 export type HistoryTone = 'done' | 'needs' | 'idle' | null;
 
-/** The tone of a delivery event: a landing succeeds; a turn the hub judged bounced, a bounce, and a withdrawal not
- * from a landing are problems; a turn that judged nothing is waiting; anything else is neutral progress. */
-function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition', outcome: string | null = null): HistoryTone {
+/** The tone of a delivery event: a landing succeeds; a turn that settled without landing — sent back, or ended
+ * judging nothing — a bounce, and a withdrawal are problems; a run of waits and a transition are context; anything else
+ * is neutral progress. */
+function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition'): HistoryTone {
   switch (kind) {
     case 'landed':
       return 'done';
     case 'bounced':
-      return 'needs';
     case 'turn-ended':
-      return outcome === 'landed' ? 'done' : outcome === null ? 'idle' : 'needs';
     case 'withdrawn':
-      return outcome === 'landed' ? null : 'needs';
+      return 'needs';
     case 'polls':
     case 'transition':
       return 'idle';
@@ -144,10 +143,11 @@ function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | '
   }
 }
 
-/** A settled turn's tone: a landing done, a conflict waiting on its resolution, any other bounce stale. */
+/** A settled turn's tone: a landing done, routine rework waiting on the step that takes it up, any other verdict
+ * stale. */
 function verdictTone(turn: FlowFactView): Tone {
   if (turn.verdict === 'landed') return 'done';
-  return turn.outcome === 'conflict' ? 'waiting' : 'stale';
+  return turn.rework ? 'waiting' : 'stale';
 }
 
 /** `HH:MM` of an instant. */
@@ -164,9 +164,10 @@ function draft(id: string, at: string, now: number, repo: string | null, text: s
 }
 
 /**
- * One flow's facts as history entries, oldest first. A run of polls — a turn started and ended judging nothing, again
- * and again — folds into one `waiting on checks` entry; a turn that settles reads as its outcome, the turn's start folded
- * in; a withdrawal right after the turn that caused it joins that entry.
+ * One flow's facts as history entries, oldest first. A run of waits — a turn started and ended only waiting, again and
+ * again — folds into one `waiting on checks` entry; any other turn that settles reads as its outcome, the turn's start
+ * folded in, a landing as the landed entry alone; a withdrawal right after the turn entry it caused joins that entry,
+ * and one right after a landing is the landing's own.
  */
 function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: number): Draft[] {
   const out: Draft[] = [];
@@ -184,7 +185,7 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
   facts.forEach((fact, index) => {
     const next = facts[index + 1];
     if (fact.kind === 'turn-started') {
-      if (next?.kind === 'turn-ended' && next.verdict !== null) return;
+      if (next?.kind === 'turn-ended' && !next.wait) return;
       if (next?.kind === 'turn-ended' || polls.length > 0) {
         polls.push(fact);
         return;
@@ -193,7 +194,7 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', historyTone('started')));
       return;
     }
-    if (fact.kind === 'turn-ended' && fact.verdict === null) {
+    if (fact.kind === 'turn-ended' && fact.wait) {
       polls.push(fact);
       return;
     }
@@ -203,12 +204,11 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') return;
     else if (fact.kind === 'turn-ended') {
       const withdrawn = withdrawnAfter(facts, fact);
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.verdict)));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended')));
     } else if (fact.kind === 'withdrawn') {
       const prev = facts[index - 1];
-      if (prev?.kind === 'turn-ended' && prev.submission_id === fact.submission_id && prev.verdict !== 'landed') return;
-      if (fact.outcome === 'landed') return;
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `withdrawn${fact.outcome ? ` (${fact.outcome})` : ''}`, historyTone('withdrawn', fact.outcome ?? null)));
+      if (prev?.submission_id === fact.submission_id && (prev.kind === 'landed' || (prev.kind === 'turn-ended' && !prev.wait))) return;
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `withdrawn${fact.outcome ? ` (${fact.outcome})` : ''}`, historyTone('withdrawn')));
     } else out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.kind, null));
   });
   flushPolls();

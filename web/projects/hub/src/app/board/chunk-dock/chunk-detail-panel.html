@@ -3,18 +3,9 @@
     [detail]="detail()"
     [projectColor]="projectColor()"
     [runnerHosts]="runnerHosts()"
-    [canControl]="canControl()"
-    [pausePending]="pausePending()"
-    [detachPending]="detachPending()"
-    [completePending]="completePending()"
-    [deletePending]="deletePending()"
+    [control]="control()"
     [renderedStatus]="renderedStatus()"
     (dismiss)="dismiss.emit()"
-    (detach)="detach.emit($event)"
-    (pauseChunk)="pauseChunk.emit($event)"
-    (resumeChunk)="resumeChunk.emit($event)"
-    (complete)="complete.emit($event)"
-    (delete)="delete.emit($event)"
   />
 
   <fleet-kit-error-line class="action-notice" [message]="actionError()" testid="action-error" />
