@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.landing import CommitPresence, Comparison, VisitForges
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -361,7 +362,7 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
 
     flag = TurnCutOff()
     gate = BudgetGate(
-        ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))),
+        ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC)), dialects=rate_dialect),
         BudgetKey("frg_fixture", None),
         ForgePriority.LANDING,
     )

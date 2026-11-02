@@ -14,8 +14,9 @@ the chunk submitted, plus base merges it makes itself, so a commit you push onto
 chunk back for repair instead of landing.
 
 An open PR alone does not mean you must merge it: automatic delivery can have a reviewable PR while CI or merge runs.
-“Awaiting your merge” appears only when delivery explicitly parks for an external merge. If a repository has no known
-forge web address, its landed repository and commit remain readable as text instead of a link.
+“Awaiting your merge” appears only when delivery explicitly parks for an external merge. A landed commit links through
+its pull request's forge, or else through the forge of the repository record it resolves to. If neither gives a web
+address, its landed repository and commit remain readable as text instead of a link.
 
 ## Routing
 

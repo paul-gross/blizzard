@@ -22,12 +22,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome
+from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemCloseOutcome
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks, no_commit_link
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -161,8 +161,10 @@ class CloseIntentDrainer:
         events: EventLogService,
         work_sources: IWorkSourceRegistry,
         clock: IClock,
+        commit_links: IReadLandedCommitLinks,
         public_url: str | None = None,
     ) -> None:
+        self._commit_links = commit_links
         self._delivery = delivery
         self._artifacts = artifacts
         self._public_url = public_url
@@ -171,35 +173,31 @@ class CloseIntentDrainer:
         self._work_sources = work_sources
         self._clock = clock
 
-    def _traces(self, chunk_ids: set[str]) -> dict[str, DeliveryTrace | None]:
-        """One batched delivery read for the tenant's share of the pass (``bzh:bulk-reconstitution``)."""
+    def _traces(self, chunk_ids: set[str], records: Sequence[Chunk]) -> dict[str, DeliveryTrace | None]:
+        """One batched delivery read, and one batched commit-link read over ``records``, for the tenant's share of
+        the pass (``bzh:bulk-reconstitution``)."""
         if not chunk_ids:
             return {}
         sources = self._artifacts.delivery_sources_for(sorted(chunk_ids))
+        links = self._commit_links.for_chunks(records)
         return {
             chunk_id: DeliveryTrace.of(
                 chunk_id,
                 sources.get(chunk_id, DeliverySources()),
                 board_url=board_chunk_url(self._public_url, chunk_id),
+                commit_link=links.get(chunk_id, no_commit_link),
             )
             for chunk_id in chunk_ids
         }
-
-    def _projects(self, chunk_ids: set[str]) -> dict[str, ProjectId]:
-        """The project of each of the pass's chunks, in one batched read (``bzh:bulk-reconstitution``); a chunk the
-        record no longer holds is absent."""
-        if not chunk_ids:
-            return {}
-        chunks = self._chunks.get_many(sorted(chunk_ids))
-        return {chunk_id: chunk.project_id for chunk_id, chunk in chunks.items() if chunk.project_id is not None}
 
     def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
         """Attempt each of ``due`` — this tenant's due intents, in intent order — counting each
         outcome into ``tally``. A per-ref failure is caught and counted rather than raised: a
         ``gone`` or ``failed`` outcome is itself an informative result."""
         chunk_ids = {intent.chunk_id for intent in due}
-        traces = self._traces(chunk_ids)
-        projects = self._projects(chunk_ids)
+        records = self._chunks.get_many(sorted(chunk_ids)) if chunk_ids else {}
+        traces = self._traces(chunk_ids, list(records.values()))
+        projects = {chunk_id: chunk.project_id for chunk_id, chunk in records.items() if chunk.project_id is not None}
         for intent in due:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ import pytest
 from sqlalchemy import event
 
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.store import schema as s
 from tests.support import build_hub, count_queries, create_repositories, fixture_repository, ingest, stamp
 
@@ -77,6 +79,40 @@ def test_delivery_survives_reread_and_partial_multi_repo_land(tmp_path: Path) ->
         assert not page["awaiting_external_merge"]
 
 
+def test_a_landing_with_no_pr_links_its_commit_through_the_repository_records_forge_in_list_and_detail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fixture repository ``acme/widget`` is linked on the fixture forge; ``acme/unknown`` names no record."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
+    with hub.engine.begin() as conn:
+        _marker(conn, chunk_id, "merged/acme/widget", "widget-sha", 1)
+        _marker(conn, chunk_id, "merged/acme/unknown", "unknown-sha", 2)
+
+    def urls() -> list[dict[str, str | None]]:
+        page = hub.client.get("/api/chunks").json()["chunks"][0]
+        detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+        assert page["landed_repos"] == detail["landed_repos"]
+        return [{r["repo"]: r["url"]} for r in page["landed_repos"]]
+
+    assert urls() == [{"acme/unknown": None}, {"acme/widget": "http://forge.fixture/acme/widget/commit/widget-sha"}]
+
+    forges = hub.services.forge_records
+    get_many = forges.get_many
+
+    def moved(ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
+        return {
+            key: replace(forge, fields=replace(forge.fields, web_base="https://code.acme.example"))
+            for key, forge in get_many(ids).items()
+        }
+
+    monkeypatch.setattr(forges, "get_many", moved)
+    assert urls()[1] == {"acme/widget": "https://code.acme.example/acme/widget/commit/widget-sha"}
+
+    monkeypatch.setattr(forges, "get_many", lambda ids: {k: replace(f, kind="other") for k, f in get_many(ids).items()})
+    assert urls()[1] == {"acme/widget": None}
+
+
 def test_replacement_pr_is_open_and_previous_pr_is_closed_in_list_and_detail(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
@@ -112,7 +148,7 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
         for i in range(size):
             chunk_id = ingest(hub, [{"source": "default", "ref": str(i)}])
             with hub.engine.begin() as conn:
-                _marker(conn, chunk_id, "merged/acme/one", f"sha-{i}", i)
+                _marker(conn, chunk_id, "merged/acme/widget", f"sha-{i}", i)
         delivery_params: list[tuple[Any, ...]] = []
 
         def watch(conn, cursor, statement, parameters, context, executemany, *, observed=delivery_params):
@@ -135,6 +171,7 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
         assert len(delivery_params) == 1
         assert sum(value.startswith("ch_") for value in delivery_params[0] if isinstance(value, str)) == 2
         assert len(result[0]["landed_repos"]) == 1
+        assert result[0]["landed_repos"][0]["url"].startswith("http://forge.fixture/acme/widget/commit/")
     assert counts[0] == counts[1]
 
 

@@ -265,8 +265,12 @@ class ChunkView:
             return self.delivery
         sources = self.services.chunks.artifacts.delivery_sources_for([self.chunk.chunk_id])
         declarations = delivery_declarations_for(self.services, [self.chunk], sources)
+        commit_links = self.services.commit_links.for_chunks([self.chunk])
         return DeliveryRead.of(
-            self.facts, sources.get(self.chunk.chunk_id, DeliverySources()), declarations.get(self.chunk.chunk_id, [])
+            self.facts,
+            sources.get(self.chunk.chunk_id, DeliverySources()),
+            declarations.get(self.chunk.chunk_id, []),
+            commit_links[self.chunk.chunk_id],
         )
 
     @staticmethod

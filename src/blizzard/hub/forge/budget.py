@@ -1,21 +1,22 @@
 """Each forge key's rate budget — one per (forge, secret) pair, held per tenant beside the forge registry.
 
-A budget learns from the ``X-RateLimit-*`` headers the forge answers with, and turns its least important callers away
-before a request is made once the remaining budget falls: ``landing`` while any remains, ``watching`` above a fifth of
-the limit, ``sweeping`` above two fifths. A budget with no live reading — never heard from, answered without rate
-headers, past its reset, or just restarted — admits every caller; one marked spent by a forge refusal refuses every
-caller until that refusal lifts. The rule for whether an answer is a rate refusal and when it lifts lives here too, free
-of any HTTP library, so every adapter that speaks to a forge reads it the same way."""
+A budget learns from the readings its forge's answers carry, and turns its least important callers away before a
+request is made once the remaining budget falls: ``landing`` while any remains, ``watching`` above a fifth of the limit,
+``sweeping`` above two fifths. A budget with no live reading — never heard from, answered without a reading, past its
+reset, or just restarted — admits every caller; one marked spent by a forge refusal refuses every caller until that
+refusal lifts. How a forge's answer becomes a reading or a refusal verdict is its kind's :class:`IForgeRateDialect`;
+this module holds only the arithmetic over readings, free of any HTTP library."""
 
 from __future__ import annotations
 
 # Guards each budget's own reading, never a store write, and never held across a request.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
@@ -23,8 +24,6 @@ from blizzard.hub.forge.landing import ForgeRateLimited
 
 #: The bucket every seam call is admitted against, and the one a reading lands in when the answer names none.
 CORE_BUCKET = "core"
-#: A rate limit that names no usable instant, and the floor of a secondary limit.
-DEFAULT_RESUME = timedelta(seconds=60)
 
 
 class ForgePriority(StrEnum):
@@ -58,6 +57,19 @@ class BudgetReading:
     limit: int
     remaining: int
     reset: datetime
+
+
+class IForgeRateDialect(Protocol):
+    """One forge kind's way of reading its answers: the rate reading an answer carries, and whether it is a rate
+    refusal."""
+
+    def reading(self, headers: Mapping[str, str], now: datetime) -> BudgetReading | None:
+        """The reading an answer's headers carry; ``None`` when they carry no whole reading."""
+        ...
+
+    def refusal(self, status: int, headers: Mapping[str, str], message: str, now: datetime) -> datetime | None:
+        """The instant a rate refusal lifts; ``None`` when the answer is no rate refusal."""
+        ...
 
 
 @domain_model
@@ -103,8 +115,9 @@ class ForgeBudgets:
     """Every budget of one tenant, each made on its key's first use. It outlives every adapter, so an edit that
     rebuilds one keeps the budget its calls spend."""
 
-    def __init__(self, *, clock: IClock) -> None:
+    def __init__(self, *, clock: IClock, dialects: Callable[[str], IForgeRateDialect]) -> None:
         self._clock = clock
+        self._dialects = dialects
         self._budgets: dict[BudgetKey, _Budget] = {}
         self._notices: list[BudgetNotice] = []
         self._guard = threading.Lock()
@@ -127,20 +140,11 @@ class ForgeBudgets:
             reading.reset, f"{key.forge_id}: {reading.remaining}/{reading.limit} left is too low for {priority}"
         )
 
-    def learn(self, key: BudgetKey, headers: Mapping[str, str], bucket: str = CORE_BUCKET) -> None:
-        """Take the reading an answer's rate headers carry into the bucket ``X-RateLimit-Resource`` names, or into
-        ``bucket`` when it names none; an answer without a whole reading teaches nothing."""
-        lowered = {name.lower(): value for name, value in headers.items()}
-        try:
-            limit = int(lowered["x-ratelimit-limit"])
-            remaining = int(lowered["x-ratelimit-remaining"])
-            reset = datetime.fromtimestamp(int(lowered["x-ratelimit-reset"]), tz=self._clock.now().tzinfo)
-        except (KeyError, ValueError, OverflowError, OSError):
-            return
-        named = lowered.get("x-ratelimit-resource") or bucket
+    def learn(self, key: BudgetKey, reading: BudgetReading) -> None:
+        """Take ``reading`` as ``key``'s latest of its bucket."""
         budget = self._budget(key)
         with budget.lock:
-            budget.readings[named] = BudgetReading(named, limit, remaining, reset)
+            budget.readings[reading.bucket] = reading
 
     def spent(self, key: BudgetKey, resume_at: datetime, bucket: str = CORE_BUCKET) -> None:
         """Mark ``key``'s budget spent until ``resume_at``: the forge refused a call for its rate."""
@@ -163,9 +167,10 @@ class ForgeBudgets:
             keys = sorted((key for key in self._budgets if key.forge_id == forge_id), key=_by_secret)
         return tuple((key, reading) for key in keys for reading in self.readings(key))
 
-    def sweeping(self, forge_id: str, secret_name: str | None) -> SweepingGate:
-        """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, secret_name)``'s budget through."""
-        return SweepingGate(self, BudgetKey(forge_id, secret_name), self._clock)
+    def sweeping(self, forge_id: str, secret_name: str | None, forge_kind: str) -> SweepingGate:
+        """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, secret_name)``'s budget through,
+        reading answers in ``forge_kind``'s dialect."""
+        return SweepingGate(self, BudgetKey(forge_id, secret_name), self._clock, self._dialects(forge_kind))
 
     def drain_notices(self) -> tuple[BudgetNotice, ...]:
         """Every notice queued since the last drain, oldest first."""
@@ -214,11 +219,13 @@ def _by_secret(key: BudgetKey) -> tuple[bool, str]:
 
 @dataclass(frozen=True)
 class SweepingGate:
-    """One key's budget bound at ``sweeping``: admission answered rather than raised, refusals read by the one rule."""
+    """One key's budget bound at ``sweeping``: admission answered rather than raised, answers read in its forge kind's
+    dialect."""
 
     budgets: ForgeBudgets
     key: BudgetKey
     clock: IClock
+    dialect: IForgeRateDialect
 
     def admit(self) -> datetime | None:
         try:
@@ -228,42 +235,12 @@ class SweepingGate:
         return None
 
     def learn(self, headers: Mapping[str, str]) -> None:
-        self.budgets.learn(self.key, headers)
+        reading = self.dialect.reading(headers, self.clock.now())
+        if reading is not None:
+            self.budgets.learn(self.key, reading)
 
     def refused(self, status: int, headers: Mapping[str, str], message: str) -> datetime | None:
-        resume_at = rate_refusal_resume_at(status, headers, message, self.clock.now())
+        resume_at = self.dialect.refusal(status, headers, message, self.clock.now())
         if resume_at is not None:
             self.budgets.spent(self.key, resume_at)
         return resume_at
-
-
-def rate_refusal_resume_at(status: int, headers: Mapping[str, str], message: str, now: datetime) -> datetime | None:
-    """When a forge's answer says to come back, or ``None`` when the answer is no rate refusal. Only a ``403`` or a
-    ``429`` can be one: with no budget left, a ``Retry-After``, or a secondary limit named in ``message`` — the last
-    never lifting sooner than :data:`DEFAULT_RESUME`."""
-    if status not in (403, 429):
-        return None
-    lowered = {name.lower(): value for name, value in headers.items()}
-    secondary = "secondary rate limit" in message.lower()
-    retry_after = lowered.get("retry-after")
-    if lowered.get("x-ratelimit-remaining") != "0" and retry_after is None and not secondary:
-        return None
-    resume = _seconds_from(now, retry_after) or _reset_at(now, lowered.get("x-ratelimit-reset"))
-    resume = resume or now + DEFAULT_RESUME
-    return max(resume, now + DEFAULT_RESUME) if secondary else resume
-
-
-def _seconds_from(now: datetime, raw: str | None) -> datetime | None:
-    try:
-        seconds = int(raw) if raw is not None else 0
-    except ValueError:
-        return None
-    return now + timedelta(seconds=seconds) if seconds > 0 else None
-
-
-def _reset_at(now: datetime, raw: str | None) -> datetime | None:
-    try:
-        reset = datetime.fromtimestamp(int(raw), tz=now.tzinfo) if raw is not None else None
-    except (ValueError, OverflowError, OSError):
-        return None
-    return reset if reset is not None and reset > now else None

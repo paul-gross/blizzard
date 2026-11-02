@@ -13,7 +13,8 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.secrets import SecretValue
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
-from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -43,10 +44,16 @@ def _rate(remaining: int, *, limit: int = 100) -> dict[str, str]:
     }
 
 
+def _reading(headers: dict[str, str]) -> BudgetReading:
+    reading = rate_dialect("github").reading(headers, _NOW)
+    assert reading is not None
+    return reading
+
+
 class _World:
     def __init__(self, answer: Callable[[httpx2.Request], httpx2.Response] | None = None) -> None:
         self.clock = FixedClock(_NOW)
-        self.budgets = ForgeBudgets(clock=self.clock)
+        self.budgets = ForgeBudgets(clock=self.clock, dialects=rate_dialect)
         self.requests: list[httpx2.Request] = []
         self._answer = answer or _issue
 
@@ -55,7 +62,7 @@ class _World:
         return self._answer(request)
 
     def source(self, secret: str | None = "gh") -> GitHubWorkSource:
-        gate = self.budgets.sweeping(_FORGE, secret)
+        gate = self.budgets.sweeping(_FORGE, secret, "github")
         client = httpx2.Client(base_url="http://forge", transport=httpx2.MockTransport(self._handle))
         client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
         return GitHubWorkSource(client, source_id="widget", slug="widget", repo="acme/widget", web_base="x", gate=gate)
@@ -82,7 +89,7 @@ def _calls(source: GitHubWorkSource) -> list[tuple[Callable[[], object], type[Ex
 
 def test_every_call_is_turned_away_below_sweeping_s_threshold_with_no_request() -> None:
     world = _World()
-    world.budgets.learn(_KEY, _rate(40))
+    world.budgets.learn(_KEY, _reading(_rate(40)))
     for call, error in _calls(world.source()):
         with pytest.raises(error) as raised:
             call()
@@ -92,7 +99,7 @@ def test_every_call_is_turned_away_below_sweeping_s_threshold_with_no_request() 
 
 def test_a_call_goes_out_above_sweeping_s_threshold_and_teaches_the_budget() -> None:
     world = _World(lambda request: _issue(request, _rate(41)))
-    world.budgets.learn(_KEY, _rate(41))
+    world.budgets.learn(_KEY, _reading(_rate(41)))
     world.source().fetch(_POINTER)
     assert len(world.requests) == 2
     assert [reading.remaining for reading in world.budgets.readings(_KEY)] == [41]
@@ -139,7 +146,7 @@ def test_a_gone_item_leaves_retry_after_unset() -> None:
 
 def test_a_source_with_no_secret_spends_the_forge_s_anonymous_budget() -> None:
     world = _World()
-    world.budgets.learn(BudgetKey(_FORGE, None), _rate(10))
+    world.budgets.learn(BudgetKey(_FORGE, None), _reading(_rate(10)))
     with pytest.raises(WorkSourceError):
         world.source(secret=None).fetch(_POINTER)
     world.source(secret="gh").fetch(_POINTER)
@@ -174,13 +181,13 @@ _CONFIGURED_FORGE = ConfiguredForge(
 
 @pytest.mark.parametrize("secret", ["gh", None])
 def test_the_factory_binds_each_source_to_its_forge_key_s_budget(secret: str | None) -> None:
-    budgets = ForgeBudgets(clock=FixedClock(_NOW))
+    budgets = ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect)
     entry = WorkSourceEntry.of(_record(secret), _CONFIGURED_FORGE, SecretValue("token"), budgets=budgets)
-    assert entry.gate == budgets.sweeping(_FORGE, secret)
+    assert entry.gate == budgets.sweeping(_FORGE, secret, "github")
 
 
 def test_the_factory_s_client_teaches_the_budget_from_each_answer() -> None:
-    budgets = ForgeBudgets(clock=FixedClock(_NOW))
+    budgets = ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect)
     client = WorkSourceEntry.of(_record("gh"), _CONFIGURED_FORGE, SecretValue("token"), budgets=budgets).client
     for hook in client.event_hooks["response"]:
         hook(httpx2.Response(200, headers=_rate(7)))

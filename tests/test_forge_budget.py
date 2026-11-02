@@ -1,6 +1,6 @@
 """``ForgeBudgets`` — each forge key's rate budget: its thresholds by priority, the cases that admit every caller, bucket
-routing by ``X-RateLimit-Resource``, spent-marking, once-per-window notices — and ``rate_refusal_resume_at``, the one
-rule for whether a forge's answer is a rate refusal and when it lifts (unit tier)."""
+routing by the reading's bucket, spent-marking, once-per-window notices (unit tier). Readings come from GitHub-shaped
+answers read through the GitHub rate dialect, as a live budget's do."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from blizzard.hub.forge.budget import (
     ForgeBudgetLow,
     ForgeBudgets,
     ForgePriority,
-    rate_refusal_resume_at,
 )
 from blizzard.hub.forge.landing import ForgeRateLimited
+from blizzard.hub.forge.rates import rate_dialect
 
 pytestmark = pytest.mark.unit
 
@@ -27,17 +27,13 @@ _RESET = _NOW + timedelta(seconds=600)
 _KEY = BudgetKey("frg_github", "gh")
 
 
-def _rate(remaining: int, *, limit: int = 100, reset: datetime = _RESET) -> dict[str, str]:
-    return {
-        "X-RateLimit-Limit": str(limit),
-        "X-RateLimit-Remaining": str(remaining),
-        "X-RateLimit-Reset": str(int(reset.timestamp())),
-    }
+def _rate(remaining: int, *, limit: int = 100, reset: datetime = _RESET, bucket: str = "core") -> BudgetReading:
+    return BudgetReading(bucket, limit, remaining, reset)
 
 
 def _budgets() -> tuple[ForgeBudgets, FixedClock]:
     clock = FixedClock(_NOW)
-    return ForgeBudgets(clock=clock), clock
+    return ForgeBudgets(clock=clock, dialects=rate_dialect), clock
 
 
 def _admitted(budgets: ForgeBudgets, priority: ForgePriority, key: BudgetKey = _KEY) -> bool:
@@ -73,15 +69,6 @@ def test_an_unheard_budget_admits_every_caller() -> None:
     assert all(_admitted(budgets, priority) for priority in ForgePriority)
 
 
-def test_an_answer_without_rate_headers_teaches_nothing() -> None:
-    budgets, _ = _budgets()
-
-    budgets.learn(_KEY, {"Content-Type": "application/json", "X-RateLimit-Remaining": "0"})
-
-    assert budgets.readings(_KEY) == ()
-    assert all(_admitted(budgets, priority) for priority in ForgePriority)
-
-
 def test_a_reading_past_its_reset_admits_every_caller() -> None:
     budgets, clock = _budgets()
     budgets.learn(_KEY, _rate(0))
@@ -92,10 +79,10 @@ def test_a_reading_past_its_reset_admits_every_caller() -> None:
     assert all(_admitted(budgets, priority) for priority in ForgePriority)
 
 
-def test_a_reading_lands_in_the_bucket_the_answer_names() -> None:
+def test_a_reading_lands_in_its_bucket() -> None:
     budgets, _ = _budgets()
 
-    budgets.learn(_KEY, {**_rate(0), "X-RateLimit-Resource": "search"})
+    budgets.learn(_KEY, _rate(0, bucket="search"))
 
     assert budgets.readings(_KEY) == (BudgetReading("search", 100, 0, _RESET),)
     assert _admitted(budgets, ForgePriority.SWEEPING)
@@ -108,14 +95,6 @@ def _admitted_bucket(budgets: ForgeBudgets, bucket: str) -> bool:
     except ForgeBudgetLow:
         return False
     return True
-
-
-def test_a_reading_naming_no_bucket_lands_in_the_declared_one() -> None:
-    budgets, _ = _budgets()
-
-    budgets.learn(_KEY, _rate(5), bucket="graphql")
-
-    assert [reading.bucket for reading in budgets.readings(_KEY)] == ["graphql"]
 
 
 def test_a_spent_budget_refuses_every_caller_until_it_lifts() -> None:
@@ -170,45 +149,3 @@ def test_a_forge_refusal_is_noticed_once_per_window() -> None:
     clock.advance(timedelta(seconds=60))
     budgets.spent(_KEY, resume_at + timedelta(seconds=60))
     assert [n.kind for n in budgets.drain_notices()] == [BudgetNoticeKind.RATE_LIMITED]
-
-
-@pytest.mark.parametrize(
-    ("status", "headers", "message", "resume_after"),
-    [
-        (403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": str(int(_NOW.timestamp()) + 600)}, "", 600),
-        (429, {"Retry-After": "30"}, "", 30),
-        (403, {"retry-after": "30", "x-ratelimit-reset": str(int(_NOW.timestamp()) + 600)}, "", 30),
-        (403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(int(_NOW.timestamp()) - 5)}, "", 60),
-        (429, {"retry-after": "0"}, "", 60),
-        (403, {}, "You have exceeded a secondary rate limit.", 60),
-        (403, {"retry-after": "10"}, "You have exceeded a secondary rate limit.", 60),
-        (403, {"retry-after": "120"}, "You have exceeded a secondary rate limit.", 120),
-    ],
-    ids=[
-        "reset",
-        "retry-after",
-        "retry-after-wins",
-        "past-reset",
-        "zero-retry-after",
-        "secondary",
-        "secondary-floor",
-        "secondary-later",
-    ],
-)
-def test_a_rate_refusal_says_when_it_lifts(
-    status: int, headers: dict[str, str], message: str, resume_after: int
-) -> None:
-    assert rate_refusal_resume_at(status, headers, message, _NOW) == _NOW + timedelta(seconds=resume_after)
-
-
-@pytest.mark.parametrize(
-    ("status", "headers", "message"),
-    [
-        (403, {"x-ratelimit-remaining": "12"}, "Resource not accessible"),
-        (404, {"x-ratelimit-remaining": "0"}, ""),
-        (200, {"retry-after": "30"}, ""),
-    ],
-    ids=["forbidden", "not-found", "ok"],
-)
-def test_any_other_answer_is_no_rate_refusal(status: int, headers: dict[str, str], message: str) -> None:
-    assert rate_refusal_resume_at(status, headers, message, _NOW) is None

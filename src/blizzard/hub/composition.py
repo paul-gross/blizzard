@@ -77,6 +77,7 @@ from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRefLabel
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
@@ -204,7 +205,9 @@ from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
+from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
@@ -367,6 +370,8 @@ class TenantServices:
     repository_records: IReadRepositoryRecordRepository
     #: Stored forge records (the read half).
     forge_records: IReadForgeRepository
+    #: Each chunk's landed-commit address on its repository record's forge.
+    commit_links: IReadLandedCommitLinks
     #: Each branch's delivery line and the visits submitted to it (the read half).
     flows: IReadFlows
     #: What the surfaces read of the tenant's flows and the newest of their records.
@@ -996,7 +1001,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_exclusive = chunk_stores.exclusive
     live = build_live_config(stores, cipher=parts.secret_cipher)
     # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
-    forge_budgets = ForgeBudgets(clock=clock)
+    forge_budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
     work_sources = parts.work_sources(stores, live, forge_budgets)
     forges = parts.forges(stores, live, forge_budgets)
     transcript_caps = parts.transcript_caps
@@ -1049,6 +1054,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_run_store = GardenRunStore(tenant_connections)
     finding_bucket = FindingBucketReader(finding_store)
     garden_formats = GardenFormats()
+    commit_links = LandedCommitLinks(
+        project_links=stores.project_links,
+        repository_records=stores.repository_records,
+        forge_records=stores.forge_records,
+    )
     # A project to a plain `delivery.validation.CommitResolver` callable.
     commit_resolver_for = SeamCommitResolver(
         repositories=stores.repository_records,
@@ -1290,6 +1300,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
+        commit_links=commit_links,
         flows=stores.flows,
         flow_views=stores.flows,
         flow_line_factory=flow_line_factory,
@@ -1392,6 +1403,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             events=event_log,
             work_sources=work_sources,
             clock=clock,
+            commit_links=commit_links,
             public_url=parts.public_url,
         ),
         event_derivation=TenantEventDerivation(service=event_derivation_service, events=event_store, clock=clock),

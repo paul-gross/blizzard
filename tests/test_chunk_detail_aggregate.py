@@ -219,6 +219,25 @@ def test_a_commit_in_a_repository_its_project_does_not_link_or_no_record_names_h
     }
 
 
+def test_the_commit_link_binding_resolves_a_landed_name_through_the_chunks_linked_records_forge(
+    tmp_path: Path,
+) -> None:
+    """The same resolution the branch link uses: a linked record on a GitHub-kind forge links its commit; an unlinked
+    or unknown name, and a chunk with no project, link none."""
+    hub = build_hub(tmp_path)
+    create_repositories(hub.client, [fixture_repository("gadget", "http://forge.fixture", owner="acme")], project=None)
+    chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT])
+    chunk = hub.services.chunks.record.get_many([chunk_id])[chunk_id]
+
+    links = hub.services.commit_links.for_chunks([chunk, replace(chunk, chunk_id="ch_orphan", project_id=None)])
+
+    link = links[chunk_id]
+    assert link("acme/widget", "abc") == "http://forge.fixture/acme/widget/commit/abc"
+    assert link("acme/gadget", "abc") is None
+    assert link("acme/unknown", "abc") is None
+    assert links["ch_orphan"]("acme/widget", "abc") is None
+
+
 def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:
     """``ChunkDetail`` carries the pinned graph's name and mint instant;
     asserts it matches what `GET /api/graphs` independently reports."""
