@@ -285,6 +285,16 @@ def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(worl
     assert world.corpus.step_facts_for([chunk], _tenant_label) == {}
 
 
+def test_step_facts_issue_the_same_statements_whatever_the_chunk_count_within_a_batch(world: _World) -> None:
+    one = [_live(world.carried)]
+    three = [_live(t) for t in (world.carried, _OPEN, _CLOSED)]
+    counts = {
+        len(ids): count_queries(world.engine, lambda ids=ids: world.corpus.step_facts_for(ids, _tenant_label))
+        for ids in (one, three)
+    }
+    assert counts[1] == counts[3]
+
+
 def test_usage_pages_are_the_open_tenants_rows_each_with_its_tenant(world: _World) -> None:
     rows = {(row.tenant, row.chunk_id) for row in world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)}
     assert rows == {(world.carried, _live(world.carried)), (_OPEN, _live(_OPEN))}

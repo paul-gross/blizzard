@@ -27,6 +27,15 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site
     with `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
+- **`bzh:sweep-acts-in-row-tenant`** (`rules/sweep-acts-in-row-tenant.yml`) — a cross-tenant read builds its statements
+  through `OPEN_TENANTS` (or the named opt-out `ALL_TENANTS`) in `src/blizzard/hub/store/internal/open_tenants.py`,
+  never a raw SQLAlchemy constructor. The rule's prose home is
+  `blizzard-context:/architecture/system-shape/tenancy.md`; this file states only what the rule mechanically checks.
+  - Scoped to `corpus_rows.py`, the `hub_scoped_*.py` modules, `trace_store.py` and `egress_store.py` under
+    `src/blizzard/hub/store/internal/`; `open_tenants.py` is the rule's only ignore.
+  - Matches a call of `select`, `exists`, `join`, `outerjoin`, `union` or `union_all`, bare or as an attribute of `sa`
+    or `sqlalchemy`. The same names called on a builder pass.
+
 - **`bzh:cli-httpx-confined`** (`rules/cli-httpx-confined.yml`) — the CLI trees import httpx2 only in
   `src/blizzard/cli/collaborators.py`, which builds the client factory and re-exports the httpx2 types the commands
   name. The rule's own prose home is `blizzard-context:/architecture/clean-architecture.md` § Dependency injection; this

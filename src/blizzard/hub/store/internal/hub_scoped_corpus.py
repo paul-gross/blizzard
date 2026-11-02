@@ -48,6 +48,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
+from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.open_tenants import ALL_TENANTS, OPEN_TENANTS
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
 from blizzard.hub.tenancy import TenantId
@@ -56,7 +57,7 @@ from blizzard.hub.tenancy import TenantId
 #: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
-_EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
+_EPHEMERAL_TABLES = ephemeral_tables()
 
 
 def _ephemeral_chunk_ids() -> CompoundSelect[Any]:

@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, ColumnElement, Connection, Row, Select, and_, or_, true
+from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, or_, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -20,6 +21,8 @@ from blizzard.foundation.event_log import (
     narrow_event_log_kind,
     narrow_event_log_severity,
 )
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.model import (
     DEFAULT_EVENT_LIST_LIMIT,
     ActivityEntry,
@@ -29,6 +32,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.fact_families import FactTable, entry_of
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
@@ -313,6 +317,76 @@ def chunk_deleted_activity_stmt(stmts: ScopedStatements) -> Select[Any]:
     )
 
 
+@adapter_model
+@dataclass(frozen=True)
+class _EventSource:
+    """How one fact table reads as feed entries: its base statement and what each row's entry says. The key, instant
+    and paging columns come from the table's registry entry, never from here."""
+
+    statement: Callable[[ScopedStatements, Select[Any]], Select[Any]]
+    cause: ActivityChunkChangeCause | Callable[[Row[Any]], ActivityChunkChangeCause]
+    graph_column: str = "graph_id"
+    runner: bool = False
+    by_column: str | None = None
+    entry: Callable[[Row[Any]], ActivityEntry] | None = None
+
+
+def _event_builder(source: _EventSource, entry: FactTable) -> Callable[[Row[Any]], ActivityEntry]:
+    """The row-to-entry mapper of ``source``, keyed and timed by the registry ``entry``."""
+    if source.entry is not None:
+        return source.entry
+    assert entry.fact_time is not None
+    pk, at = entry.row_id.key, entry.fact_time.key
+
+    def build(r: Row[Any]) -> ActivityEntry:
+        return ActivityEntry(
+            type="chunk-changed",
+            key=f"{entry.table.name}:{getattr(r, pk)}",
+            at=getattr(r, at),
+            chunk_id=r.chunk_id,
+            runner_id=r.runner_id if source.runner else None,
+            cause=source.cause(r) if callable(source.cause) else source.cause,
+            graph_id=getattr(r, source.graph_column),
+            by=getattr(r, source.by_column) if source.by_column else None,
+        )
+
+    return build
+
+
+def _transition_cause(r: Row[Any]) -> ActivityChunkChangeCause:
+    return "hub-advanced" if r.runner_id == _HUB_RUNNER_ID else "node-completed"
+
+
+def _pause_cause(r: Row[Any]) -> ActivityChunkChangeCause:
+    return "paused" if r.paused else "resumed"
+
+
+#: The activity feed's fact-table sources, in feed order. The keys equal the registry's events narrowing
+#: (``tests/test_fact_families.py``); ``chunks`` is the feed's root and is read apart.
+EVENT_SOURCES: dict[Table, _EventSource] = {
+    s.chunk_promoted: _EventSource(chunk_promoted_stmt, "promoted"),
+    s.chunk_demoted: _EventSource(_chunk_demoted_stmt, "demoted"),
+    s.chunk_grouped: _EventSource(lambda stmts, _deleted: chunk_grouped_stmt(stmts), "grouped"),
+    s.route_created: _EventSource(route_created_activity_stmt, "claimed", runner=True),
+    s.transitions: _EventSource(transitions_activity_stmt, _transition_cause, runner=True),
+    s.chunk_migrations: _EventSource(chunk_migrations_activity_stmt, "migrated", graph_column="to_graph_id"),
+    s.chunk_restarts: _EventSource(chunk_restarts_activity_stmt, "restarted"),
+    s.decisions: _EventSource(decisions_activity_stmt, "decision-submitted"),
+    s.decision_resolutions: _EventSource(decision_resolutions_activity_stmt, "decision-resolved"),
+    s.questions: _EventSource(questions_activity_stmt, "question-asked", runner=True),
+    s.question_answers: _EventSource(question_answers_activity_stmt, "question-answered"),
+    s.escalations: _EventSource(escalations_activity_stmt, "escalated"),
+    s.requeues: _EventSource(requeues_activity_stmt, "requeued"),
+    s.route_released: _EventSource(route_released_activity_stmt, "released", entry=_route_released_entry),
+    s.chunk_pause_facts: _EventSource(chunk_pause_facts_activity_stmt, _pause_cause),
+    s.chunk_stopped: _EventSource(chunk_stopped_activity_stmt, "stopped"),
+    s.chunk_completed: _EventSource(chunk_completed_activity_stmt, "completed"),
+    s.chunk_deleted: _EventSource(
+        lambda stmts, _deleted: chunk_deleted_activity_stmt(stmts), "deleted", by_column="deleted_by"
+    ),
+}
+
+
 class ChunkEventsStore:
     """The fleet's operational event log and the per-chunk change-activity feed."""
 
@@ -420,309 +494,19 @@ class ChunkEventsStore:
                     graph_id=r.graph_id,
                 ),
             )
-            rows += self._bounded(
-                conn,
-                chunk_promoted_stmt(self._store, deleted),
-                ts_col=s.chunk_promoted.c.promoted_at,
-                pk_col=s.chunk_promoted.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_promoted:{r.id}",
-                    at=r.promoted_at,
-                    chunk_id=r.chunk_id,
-                    cause="promoted",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                _chunk_demoted_stmt(self._store, deleted),
-                ts_col=s.chunk_demoted.c.demoted_at,
-                pk_col=s.chunk_demoted.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_demoted:{r.id}",
-                    at=r.demoted_at,
-                    chunk_id=r.chunk_id,
-                    cause="demoted",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_grouped_stmt(self._store),
-                ts_col=s.chunk_grouped.c.grouped_at,
-                pk_col=s.chunk_grouped.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_grouped:{r.id}",
-                    at=r.grouped_at,
-                    chunk_id=r.chunk_id,
-                    cause="grouped",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                route_created_activity_stmt(self._store, deleted),
-                ts_col=s.route_created.c.created_at,
-                pk_col=s.route_created.c.route_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"route_created:{r.route_id}",
-                    at=r.created_at,
-                    chunk_id=r.chunk_id,
-                    runner_id=r.runner_id,
-                    cause="claimed",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                transitions_activity_stmt(self._store, deleted),
-                ts_col=s.transitions.c.recorded_at,
-                pk_col=s.transitions.c.transition_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"transitions:{r.transition_id}",
-                    at=r.recorded_at,
-                    chunk_id=r.chunk_id,
-                    runner_id=r.runner_id,
-                    cause="hub-advanced" if r.runner_id == _HUB_RUNNER_ID else "node-completed",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_migrations_activity_stmt(self._store, deleted),
-                ts_col=s.chunk_migrations.c.recorded_at,
-                pk_col=s.chunk_migrations.c.migration_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_migrations:{r.migration_id}",
-                    at=r.recorded_at,
-                    chunk_id=r.chunk_id,
-                    cause="migrated",
-                    graph_id=r.to_graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_restarts_activity_stmt(self._store, deleted),
-                ts_col=s.chunk_restarts.c.recorded_at,
-                pk_col=s.chunk_restarts.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_restarts:{r.id}",
-                    at=r.recorded_at,
-                    chunk_id=r.chunk_id,
-                    cause="restarted",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                decisions_activity_stmt(self._store, deleted),
-                ts_col=s.decisions.c.submitted_at,
-                pk_col=s.decisions.c.decision_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"decisions:{r.decision_id}",
-                    at=r.submitted_at,
-                    chunk_id=r.chunk_id,
-                    cause="decision-submitted",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                decision_resolutions_activity_stmt(self._store, deleted),
-                ts_col=s.decision_resolutions.c.resolved_at,
-                pk_col=s.decision_resolutions.c.decision_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"decision_resolutions:{r.decision_id}",
-                    at=r.resolved_at,
-                    chunk_id=r.chunk_id,
-                    cause="decision-resolved",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                questions_activity_stmt(self._store, deleted),
-                ts_col=s.questions.c.asked_at,
-                pk_col=s.questions.c.question_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"questions:{r.question_id}",
-                    at=r.asked_at,
-                    chunk_id=r.chunk_id,
-                    runner_id=r.runner_id,
-                    cause="question-asked",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                question_answers_activity_stmt(self._store, deleted),
-                ts_col=s.question_answers.c.answered_at,
-                pk_col=s.question_answers.c.question_id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"question_answers:{r.question_id}",
-                    at=r.answered_at,
-                    chunk_id=r.chunk_id,
-                    cause="question-answered",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                escalations_activity_stmt(self._store, deleted),
-                ts_col=s.escalations.c.recorded_at,
-                pk_col=s.escalations.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"escalations:{r.id}",
-                    at=r.recorded_at,
-                    chunk_id=r.chunk_id,
-                    cause="escalated",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                requeues_activity_stmt(self._store, deleted),
-                ts_col=s.requeues.c.requeued_at,
-                pk_col=s.requeues.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"requeues:{r.id}",
-                    at=r.requeued_at,
-                    chunk_id=r.chunk_id,
-                    cause="requeued",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                route_released_activity_stmt(self._store, deleted),
-                ts_col=s.route_released.c.released_at,
-                pk_col=s.route_released.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=_route_released_entry,
-            )
-            rows += self._bounded(
-                conn,
-                chunk_pause_facts_activity_stmt(self._store, deleted),
-                ts_col=s.chunk_pause_facts.c.set_at,
-                pk_col=s.chunk_pause_facts.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_pause_facts:{r.id}",
-                    at=r.set_at,
-                    chunk_id=r.chunk_id,
-                    cause="paused" if r.paused else "resumed",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_stopped_activity_stmt(self._store, deleted),
-                ts_col=s.chunk_stopped.c.stopped_at,
-                pk_col=s.chunk_stopped.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_stopped:{r.id}",
-                    at=r.stopped_at,
-                    chunk_id=r.chunk_id,
-                    cause="stopped",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_completed_activity_stmt(self._store, deleted),
-                ts_col=s.chunk_completed.c.completed_at,
-                pk_col=s.chunk_completed.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_completed:{r.id}",
-                    at=r.completed_at,
-                    chunk_id=r.chunk_id,
-                    cause="completed",
-                    graph_id=r.graph_id,
-                ),
-            )
-            rows += self._bounded(
-                conn,
-                chunk_deleted_activity_stmt(self._store),
-                ts_col=s.chunk_deleted.c.deleted_at,
-                pk_col=s.chunk_deleted.c.id,
-                since=since,
-                limit=limit,
-                chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"chunk_deleted:{r.id}",
-                    at=r.deleted_at,
-                    chunk_id=r.chunk_id,
-                    cause="deleted",
-                    graph_id=r.graph_id,
-                    by=r.deleted_by,
-                ),
-            )
+            for table, source in EVENT_SOURCES.items():
+                entry = entry_of(table)
+                assert entry.fact_time is not None
+                rows += self._bounded(
+                    conn,
+                    source.statement(self._store, deleted),
+                    ts_col=entry.fact_time,
+                    pk_col=entry.row_id,
+                    since=since,
+                    limit=limit,
+                    chunks=chunks,
+                    builder=_event_builder(source, entry),
+                )
             return rows
 
     @staticmethod

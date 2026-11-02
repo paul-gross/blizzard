@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import itertools
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from typing import Any
@@ -59,33 +59,25 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.fact_families import FactTable, Projection, entries, trace_order
 from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
 from blizzard.hub.tenancy import TenantId
 
-# --- closing candidates --------------------------------------------------------------
+TraceReader = Callable[[Connection, FactTable, Sequence[str]], dict[str, list[Any]]]
 
-#: Closing-fact tables, (time, id)-indexed (blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md §Closing).
-_CLOSING_TABLES: tuple[tuple[Table, Column[Any], Column[Any]], ...] = (
-    (s.transitions, s.transitions.c.recorded_at, s.transitions.c.transition_id),
-    (s.decisions, s.decisions.c.submitted_at, s.decisions.c.decision_id),
-    (s.chunk_migrations, s.chunk_migrations.c.recorded_at, s.chunk_migrations.c.migration_id),
-    (s.escalations, s.escalations.c.recorded_at, s.escalations.c.id),
-    (s.chunk_restarts, s.chunk_restarts.c.recorded_at, s.chunk_restarts.c.id),
-    (s.route_released, s.route_released.c.released_at, s.route_released.c.id),
-    (s.chunk_stopped, s.chunk_stopped.c.stopped_at, s.chunk_stopped.c.id),
-    (s.chunk_completed, s.chunk_completed.c.completed_at, s.chunk_completed.c.id),
-    (s.epoch_owners, s.epoch_owners.c.recorded_at, s.epoch_owners.c.id),
-)
+
+# --- closing candidates --------------------------------------------------------------
 
 
 def closing_candidates(conn: Connection, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
-    """Every open tenant's chunks with a closing fact in ``[since, until]``; a chunk's tenant is the one
-    :func:`step_facts_for` tags its facts with."""
+    """Every open tenant's chunks with a closing fact in ``[since, until]`` — a fact of a table the registry
+    marks closing (``fact_families.py``); a chunk's tenant is the one :func:`step_facts_for` tags its facts with."""
     chunk_ids: dict[str, None] = {}
     frontiers: list[datetime] = []
     newest: list[datetime] = []
-    for table, at, row_id in _CLOSING_TABLES:
-        rows, saturated = _closing_rows(conn, table, at, row_id, since, until, limit)
+    for entry in entries(Projection.CLOSING):
+        assert entry.fact_time is not None
+        rows, saturated = _closing_rows(conn, entry.table, entry.fact_time, entry.row_id, since, until, limit)
         chunk_ids.update((r.chunk_id, None) for r in rows)
         if rows:
             newest.append(rows[-1].at)
@@ -149,30 +141,15 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
     if not chunk_rows:
         return {}
     ids = list(chunk_rows)
-    work_refs = _by_chunk(conn, s.chunk_work_refs, ids, s.chunk_work_refs.c.id)
-    leases = _by_chunk(conn, s.lease_facts, ids, s.lease_facts.c.id)
-    owners = _by_chunk(conn, s.epoch_owners, ids, s.epoch_owners.c.id)
-    transitions = _by_chunk(conn, s.transitions, ids, s.transitions.c.recorded_at)
-    migrations = _by_chunk(conn, s.chunk_migrations, ids, s.chunk_migrations.c.recorded_at)
-    restarts = _by_chunk(conn, s.chunk_restarts, ids, s.chunk_restarts.c.id)
-    escalations = _by_chunk(conn, s.escalations, ids, s.escalations.c.id)
-    decisions = _by_chunk(conn, s.decisions, ids, s.decisions.c.submitted_at)
-    resolutions = _resolutions(conn, ids)
-    requeues = _by_chunk(conn, s.requeues, ids, s.requeues.c.id)
-    released = _by_chunk(conn, s.route_released, ids, s.route_released.c.id)
-    stopped = _by_chunk(conn, s.chunk_stopped, ids, s.chunk_stopped.c.id)
-    completed = _by_chunk(conn, s.chunk_completed, ids, s.chunk_completed.c.id)
-    questions = _questions(conn, ids)
-    pauses = _by_chunk(conn, s.chunk_pause_facts, ids, s.chunk_pause_facts.c.id)
-    turns = _turns(conn, ids)
-    slots = _slots(conn, ids)
-    polls = _by_chunk(conn, s.hub_node_poll, ids, s.hub_node_poll.c.id)
-    bounces = _by_chunk(conn, s.chunk_bounces, ids, s.chunk_bounces.c.id)
-    created = _by_chunk(conn, s.route_created, ids, s.route_created.c.created_at)
-    promoted = _by_chunk(conn, s.chunk_promoted, ids, s.chunk_promoted.c.id)
-    demoted = _by_chunk(conn, s.chunk_demoted, ids, s.chunk_demoted.c.id)
-    usage = _by_chunk(conn, s.usage_facts, ids, s.usage_facts.c.id)
-    met = _prerequisites_met(conn, ids)
+    read: dict[str, dict[str, list[Any]]] = {}
+    for entry in entries(Projection.TRACE):
+        field, reader = TRACE_READERS[entry.table]
+        read[field] = reader(conn, entry, ids)
+    work_refs = read.pop("work_refs")
+
+    def fields_of(chunk_id: str) -> dict[str, Any]:
+        return {field: tuple(by_chunk.get(chunk_id, ())) for field, by_chunk in read.items()}
+
     return {
         chunk_id: (
             TenantId(chunk.tenant_id),
@@ -182,39 +159,61 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
                 project=chunk.project_id,
                 pin_graph_id=chunk.graph_id,
                 minted_at=chunk.minted_at,
-                lease_facts=tuple(TracedLease(r.epoch, r.minted_at) for r in leases[chunk_id]),
-                epoch_owners=tuple(TracedEpochOwner(r.epoch, r.runner_id, r.recorded_at) for r in owners[chunk_id]),
-                transitions=tuple(_transition(r) for r in transitions[chunk_id]),
-                migrations=tuple(_migration(r) for r in migrations[chunk_id]),
-                restarts=tuple(_restart(r) for r in restarts[chunk_id]),
-                escalations=tuple(
-                    TracedEscalation(r.epoch, r.recorded_at, r.decision_id) for r in escalations[chunk_id]
-                ),
-                decisions=tuple(
-                    TracedDecision(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id)
-                    for r in decisions[chunk_id]
-                ),
-                decision_resolutions=tuple(resolutions[chunk_id]),
-                requeues=tuple(TracedRequeue(r.requeued_at) for r in requeues[chunk_id]),
-                route_released=tuple(TracedRouteRelease(r.released_at) for r in released[chunk_id]),
-                chunk_stopped=tuple(TracedChunkStop(r.stopped_at) for r in stopped[chunk_id]),
-                chunk_completed=tuple(TracedChunkCompletion(r.completed_at) for r in completed[chunk_id]),
-                questions=tuple(questions[chunk_id]),
-                pauses=tuple(TracedPause(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
-                hub_turns=tuple(turns[chunk_id]),
-                hub_exec_slots=tuple(slots[chunk_id]),
-                hub_polls=tuple(TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
-                bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
-                routes_created=tuple(TracedRouteCreation(r.created_at) for r in created[chunk_id]),
-                promotions=tuple(TracedPromotion(r.promoted_at) for r in promoted[chunk_id]),
-                demotions=tuple(TracedDemotion(r.demoted_at) for r in demoted[chunk_id]),
-                prerequisites_met=tuple(met[chunk_id]),
-                usage=tuple(_usage(r) for r in usage[chunk_id]),
+                **fields_of(chunk_id),
             ),
-            [WorkRef(source=r.source, ref=r.ref) for r in work_refs[chunk_id]],
+            list(work_refs.get(chunk_id, ())),
         )
         for chunk_id, chunk in chunk_rows.items()
     }
+
+
+def _mapped(field: str, mapper: Callable[[Row[Any]], Any]) -> tuple[str, TraceReader]:
+    """A trace table read once for the batch and mapped row by row, ordered as the registry says."""
+
+    def read(conn: Connection, entry: FactTable, ids: Sequence[str]) -> dict[str, list[Any]]:
+        rows = _by_chunk(conn, entry.table, ids, trace_order(entry))
+        return {chunk_id: [mapper(r) for r in group] for chunk_id, group in rows.items()}
+
+    return field, read
+
+
+def _bespoke(field: str, read: Callable[[Connection, Sequence[str]], dict[str, list[Any]]]) -> tuple[str, TraceReader]:
+    """A trace table whose read joins or reaches the chunk through another table."""
+    return field, lambda conn, _entry, ids: read(conn, ids)
+
+
+#: Each trace-carried table's :class:`StepFacts` field and the read that fills it. ``chunk_work_refs`` fills the refs
+#: beside the facts rather than a field. The keys equal the registry's trace narrowing
+#: (``tests/test_fact_families.py``).
+TRACE_READERS: dict[Table, tuple[str, TraceReader]] = {
+    s.chunk_work_refs: _mapped("work_refs", lambda r: WorkRef(source=r.source, ref=r.ref)),
+    s.lease_facts: _mapped("lease_facts", lambda r: TracedLease(r.epoch, r.minted_at)),
+    s.epoch_owners: _mapped("epoch_owners", lambda r: TracedEpochOwner(r.epoch, r.runner_id, r.recorded_at)),
+    s.transitions: _mapped("transitions", lambda r: _transition(r)),
+    s.chunk_migrations: _mapped("migrations", lambda r: _migration(r)),
+    s.chunk_restarts: _mapped("restarts", lambda r: _restart(r)),
+    s.escalations: _mapped("escalations", lambda r: TracedEscalation(r.epoch, r.recorded_at, r.decision_id)),
+    s.decisions: _mapped(
+        "decisions",
+        lambda r: TracedDecision(r.decision_id, r.node_id, r.epoch, r.submitted_at, r.imposed_by_runner_id),
+    ),
+    s.decision_resolutions: _bespoke("decision_resolutions", lambda conn, ids: _resolutions(conn, ids)),
+    s.requeues: _mapped("requeues", lambda r: TracedRequeue(r.requeued_at)),
+    s.route_released: _mapped("route_released", lambda r: TracedRouteRelease(r.released_at)),
+    s.chunk_stopped: _mapped("chunk_stopped", lambda r: TracedChunkStop(r.stopped_at)),
+    s.chunk_completed: _mapped("chunk_completed", lambda r: TracedChunkCompletion(r.completed_at)),
+    s.questions: _bespoke("questions", lambda conn, ids: _questions(conn, ids)),
+    s.chunk_pause_facts: _mapped("pauses", lambda r: TracedPause(str(r.id), r.paused, r.set_at)),
+    s.flow_submissions: _bespoke("hub_turns", lambda conn, ids: _turns(conn, ids)),
+    s.hub_exec_slot: _bespoke("hub_exec_slots", lambda conn, ids: _slots(conn, ids)),
+    s.hub_node_poll: _mapped("hub_polls", lambda r: TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at)),
+    s.chunk_bounces: _mapped("bounces", lambda r: TracedBounce(r.epoch, r.cause, r.recorded_at)),
+    s.route_created: _mapped("routes_created", lambda r: TracedRouteCreation(r.created_at)),
+    s.chunk_promoted: _mapped("promotions", lambda r: TracedPromotion(r.promoted_at)),
+    s.chunk_demoted: _mapped("demotions", lambda r: TracedDemotion(r.demoted_at)),
+    s.chunk_dependencies: _bespoke("prerequisites_met", lambda conn, ids: _prerequisites_met(conn, ids)),
+    s.usage_facts: _mapped("usage", lambda r: _usage(r)),
+}
 
 
 def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedDecisionResolution]]:
