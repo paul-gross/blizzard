@@ -95,9 +95,9 @@ class InlineVocabulary:
 
 class ToleratedRequestVocabulary(OpenVocabulary):
     """The annotation that reads a request vocabulary tolerantly, for a field whose server reads every unknown value as
-    a declared default (``bzh:open-response-vocabulary``'s request carve-out). It parses ``E | Unrecognized`` as
-    :class:`OpenVocabulary` does, but its JSON schema stays a plain ``string``: a request property that moved from
-    ``string`` to an enum would read as narrowed to every older client. ``title`` is the field's title."""
+    a declared default. A value outside the vocabulary parses as an unrecognized one and serializes back raw, and the
+    field's JSON schema stays a plain string: a request property that moved from string to an enum would read as
+    narrowed to every older client. ``title`` is the field's title."""
 
     def __init__(self, title: str) -> None:
         self.title = title
