@@ -58,6 +58,7 @@ from blizzard.hub.domain.chunk.model import (
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
@@ -2780,6 +2781,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         ProjectSlug.parse("default")
     ),
     (IReadProjectRepository, "resolve"): lambda w: w.hub.services.projects.resolve("default"),
+    (IReadLandedCommitLinks, "for_chunks"): lambda w: w.hub.services.commit_links.for_chunks(
+        [chunk for chunk in [w.hub.services.chunks.record.get(w.flow_chunk)] if chunk is not None]
+    ),
     (IReadProjectLinks, "source_link"): lambda w: w.hub.services.project_links.source_link(
         w.project_id, w.work_source_id
     ),
