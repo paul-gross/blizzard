@@ -16,16 +16,16 @@ from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DI
 from blizzard.tools.compat.gate import BREAKING_COMMIT_MARKER
 from blizzard.tools.compat.registry import DOCUMENTS, STORE_SURFACE
 
-#: The CLI contract documents the trigger watches beyond the compat registry.
-CLI_DOCUMENTS = ("contracts/cli/hub.json", "contracts/cli/runner.json")
 WAIVER = re.compile(r"^none\s+—\s+(\S.*)$")
 WAIVER_FORM = "Change-Note: none — <reason>"
 UNRELEASED_PREFIX = f"{CHANGES_DIR}/{UNRELEASED}/"
 
 
-def watched_documents() -> frozenset[str]:
-    """Every contract document whose change an operator may notice: the registry's, less the store's."""
-    return frozenset(d.path for d in DOCUMENTS if d.surface != STORE_SURFACE) | frozenset(CLI_DOCUMENTS)
+def is_watched(path: str) -> bool:
+    """Whether a change to ``path`` changes a contract document an operator may notice.
+
+    That is every registry document but the store's."""
+    return any(d.covers(path) for d in DOCUMENTS if d.surface != STORE_SURFACE)
 
 
 @domain_model
@@ -102,8 +102,7 @@ def _has_upgrade(note: Note) -> bool:
 
 def _surface_trigger(facts: Facts) -> tuple[list[str], list[str]]:
     """``(failures, honoured)`` for the surface rule."""
-    watched = watched_documents()
-    touched = sorted({c.path for c in facts.changes if c.path in watched})
+    touched = sorted({c.path for c in facts.changes if is_watched(c.path)})
     if not touched or _added_or_edited(facts.changes):
         return [], []
     cuts = sorted({v for c in facts.commits for v in c.release_cuts})

@@ -123,6 +123,34 @@ class TestCorpusClosure:
         assert set(_manifest(scope)["kinds"]) == set(scope.frame_models)
 
 
+_KINDS = [(scope, kind) for scope in _SCOPES for kind in _manifest(scope)["kinds"]]
+
+
+def _case_fields(scope: Scope, kind: str) -> set[str]:
+    return {field for payload in _golden(scope, kind).values() for field in payload}
+
+
+class TestFieldCompleteness:
+    """The compat classifier's view of a kind is the union of its cases' keys, so that union must be
+    the wire model's whole field set."""
+
+    @pytest.mark.parametrize("scope,kind", _KINDS, ids=[f"{sc.name}:{k}" for sc, k in _KINDS])
+    def test_case_keys_union_equals_model_fields(self, scope: Scope, kind: str) -> None:
+        assert _case_fields(scope, kind) == set(scope.frame_models[kind].model_fields)
+
+
+class TestDeprecatedMarks:
+    """A manifest's optional ``deprecated`` list names a kind or ``kind.field`` the goldens still carry."""
+
+    @pytest.mark.parametrize("scope", _SCOPES, ids=[s.name for s in _SCOPES])
+    def test_every_entry_resolves(self, scope: Scope) -> None:
+        manifest = _manifest(scope)
+        for entry in manifest.get("deprecated", []):
+            kind, _, field = entry.partition(".")
+            assert kind in manifest["kinds"], entry
+            assert not field or field in _case_fields(scope, kind), entry
+
+
 class TestFramedLayout:
     @pytest.mark.parametrize("scope", _SCOPES, ids=[s.name for s in _SCOPES])
     def test_reserved_comment_matches_manifest_and_names_its_own_daemon(self, scope: Scope) -> None:

@@ -55,11 +55,11 @@ the same text.
 `blizzard-change-notes owed --against <ref>` judges the commits in `merge-base(HEAD, <ref>)..HEAD` and prints every
 waiver it honours, then each failure with its rule and remedy.
 
-- **A contract document changed.** A range that changes an OpenAPI document, a configuration, trace, egress or CLI
-  contract document adds or edits a note under `changes/unreleased/`. The store schema documents are left out. A change
-  an operator would not notice, such as a reordered enum or a corrected description, waives this with a trailer on any
-  commit of the range: `Change-Note: none — <reason>`. The reason is required, after the em dash. A release cut, the
-  range with a `Release-Cut:` trailer, is exempt.
+- **A contract document changed.** A range that changes an OpenAPI document, a configuration, trace, egress,
+  event-stream or CLI contract document adds or edits a note under `changes/unreleased/`. The store schema documents are
+  left out. A change an operator would not notice, such as a reordered enum or a corrected description, waives this with
+  a trailer on any commit of the range: `Change-Note: none — <reason>`. The reason is required, after the em dash. A
+  release cut, the range with a `Release-Cut:` trailer, is exempt.
 - **`!` and `breaking: true` travel together.** A commit with the `!` marker needs an added note with `breaking: true`
   and an `## Upgrade` section, and an added note with `breaking: true` needs a `!` commit. Editing an existing note to
   `breaking: true` counts as adding one. No trailer waives this.
@@ -78,7 +78,7 @@ The file opens with a `---` delimited YAML block. A repeated key and an unknown 
 | Field           | Rule                                                                                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind`          | Required: `added`, `changed`, `deprecated`, `removed`, `fixed` or `security`.                                                                           |
-| `surfaces`      | Distinct values from `http-api`, `wire`, `config`, `store`, `trace`, `egress`, `cli`, `board`.                                                          |
+| `surfaces`      | Distinct values from `http-api`, `wire`, `config`, `store`, `trace`, `egress`, `event-stream`, `cli`, `board`.                                          |
 | `breaking`      | `true` or `false`, default `false`. `true` only on `changed` or `removed`.                                                                              |
 | `breaks`        | A list of strings naming what breaks; the cut and `render --breaks` match one equal to a `blizzard-compat` finding's `where`. Only on `breaking: true`. |
 | `removes-in`    | A quoted major (`"2"`) or pre-1.0 minor (`"0.12"`). Required on `deprecated` and on a note that `postpones`; refused elsewhere.                         |

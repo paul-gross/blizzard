@@ -66,6 +66,8 @@ train day. A date moves only by being republished later with its reason, and nev
 | Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                                                           |
 | Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                                                               |
 | Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                                                                   |
+| Event stream    | removes a frame kind, or removes a payload field from a kind, on either daemon's `GET /api/events/stream`                                                                                                    |
+| CLI             | removes a `blizzard hub` or `blizzard runner` command, alias, option spelling or argument, retypes one, makes an optional one required, or adds a required option or argument                                |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
@@ -80,8 +82,14 @@ declared-closed field gaining a value, a closed response enum widened to a plain
 member all stay breaking against every release.
 
 Adding an optional config key, a new route, a new event type, a new trace attribute or span, a new nullable egress
-column, a new value of an enumerated egress column, a new value of a response enum every supported release reads open,
-or a migration that walks back cleanly is not breaking.
+column, a new value of an enumerated egress column, a new value of a response enum every supported release reads open, a
+new event-stream frame kind or payload field, a new CLI command or optional option, or a migration that walks back
+cleanly is not breaking.
+
+A consumer of the event stream ignores a frame kind and a payload field it does not know, which is what makes an added
+kind or field additive. A surface's deprecation mark is how a removal becomes one the window admits: a config key's
+`deprecated`, a CLI command or option marked `deprecated` in click (recorded in `contracts/cli/`), and for the stream a
+`deprecated` list in the scope's `manifest.json` naming a `<kind>` or `<kind>.<field>`.
 
 A release carries a surface whether or not a feature flag has it on, so it is held to these rules from that release on.
 

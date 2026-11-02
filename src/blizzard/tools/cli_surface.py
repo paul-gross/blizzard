@@ -43,6 +43,8 @@ def _param_shape(param: click.Parameter) -> dict[str, Any]:
     }
     if isinstance(param, click.Option):
         shape["help"] = inspect.cleandoc(param.help) if param.help else ""
+        if param.deprecated:
+            shape["deprecated"] = True
     return shape
 
 
@@ -59,6 +61,8 @@ def _node_shape(command: click.Command, path: str) -> dict[str, Any]:
         "short_help": command.get_short_help_str(limit=_SHORT_HELP_LIMIT),
         "params": [_param_shape(p) for p in command.params],
     }
+    if command.deprecated:
+        node["deprecated"] = True
     if isinstance(command, click.Group):
         if isinstance(command, GetGroup) and command.aliases():
             node["aliases"] = list(command.aliases())

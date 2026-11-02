@@ -16,6 +16,8 @@ pytestmark = pytest.mark.unit
 _HUB = "openapi/hub.openapi.json"
 _RUNNER_CLI = "contracts/cli/runner.json"
 _STORE = "contracts/store/hub.json"
+_SSE_RUNNER_KIND = "contracts/sse/runner/lease-changed.json"
+_SSE_README = "contracts/sse/README.md"
 _UNRELEASED = "changes/unreleased/new-thing.md"
 _RELEASED = "changes/0.2.0/old-thing.md"
 _WAIVER = "Change-Note: none — reorders an enum, nothing an operator sees"
@@ -100,6 +102,18 @@ def test_a_waiver_without_a_reason_fails(repo, monkeypatch: pytest.MonkeyPatch) 
 def test_a_changed_cli_contract_owes_a_note(repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat: a verb", {_RUNNER_CLI: '{"commands": []}'})
     assert _owed(repo, monkeypatch).exit_code == 1
+
+
+def test_a_changed_sse_golden_owes_a_note(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo.commit("feat: a field", {_SSE_RUNNER_KIND: '{"case": {"x": 1}}'})
+    result = _owed(repo, monkeypatch)
+    assert result.exit_code == 1
+    assert _SSE_RUNNER_KIND in result.output
+
+
+def test_a_changed_sse_readme_alone_owes_nothing(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo.commit("docs: reword", {_SSE_README: "# SSE\n"})
+    assert _owed(repo, monkeypatch).exit_code == 0
 
 
 def test_a_changed_store_document_alone_owes_nothing(repo, monkeypatch: pytest.MonkeyPatch) -> None:

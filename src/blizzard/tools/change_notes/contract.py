@@ -38,6 +38,7 @@ class Surface(StrEnum):
     STORE = "store"
     TRACE = "trace"
     EGRESS = "egress"
+    EVENT_STREAM = "event-stream"
     CLI = "cli"
     BOARD = "board"
 
