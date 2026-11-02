@@ -125,7 +125,13 @@ from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, Ru
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.graph.model import Graph, IReadGraphBodies, IReadGraphRepository, IReadManyGraphs
+from blizzard.hub.domain.graph.model import (
+    Graph,
+    IReadGraphBodies,
+    IReadGraphRepository,
+    IReadManyGraphs,
+    IReadNodeExecutors,
+)
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -2665,6 +2671,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGraphRepository, "graph_id_of_enabled_name"): lambda w: w.hub.services.graphs.graph_id_of_enabled_name(
         _HUB_GRAPH_NAME
     ),
+    (IReadNodeExecutors, "executors_by_node_name"): lambda w: w.hub.services.graphs.executors_by_node_name(),
     (IReadManyGraphs, "get_many"): lambda w: w.hub.services.graphs.get_many(
         [w.graph.graph_id, w.default_graph.graph_id]
     ),

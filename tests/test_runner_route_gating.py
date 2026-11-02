@@ -36,6 +36,7 @@ pytestmark = pytest.mark.unit
 #: unauthenticated TCP request under an oauth-mode hub is ``401``.
 _HUMAN: set[tuple[str, str]] = {
     ("GET", "/runners/{runner_id}/api/asks"),
+    ("GET", "/runners/{runner_id}/api/gate-decisions"),
     ("GET", "/runners/{runner_id}/api/leases"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/transcript"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/usage"),

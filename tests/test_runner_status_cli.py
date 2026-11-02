@@ -142,6 +142,11 @@ def _no_hub(*allow_base_urls: str) -> Bound:
     return bind_local_only(allow_base_urls=allow_base_urls)
 
 
+def _screen(output: str) -> list[str]:
+    """What `status` prints, less the structured log lines the local API emits when its forward to the hub finds none."""
+    return [line for line in output.splitlines() if not line.startswith('{"')]
+
+
 @pytest.mark.component
 def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -> None:
     root = init_runner_home(tmp_path)
@@ -286,7 +291,7 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(tmp_path: Path) 
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    headline = result.output.splitlines()[0]
+    headline = _screen(result.output)[0]
     assert headline.startswith("runner r-one (rn_1)  workspace="), headline
     assert "tenant=" not in result.output
 
@@ -305,7 +310,7 @@ def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path) -> N
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert result.output.splitlines()[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
+    assert _screen(result.output)[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
 
 
 @pytest.mark.component
@@ -706,7 +711,7 @@ def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(tmp_path:
 
     for result in results:
         assert result.exit_code == 0, result.output
-    assert results[1].output == results[0].output == results[2].output
+    assert _screen(results[1].output) == _screen(results[0].output) == _screen(results[2].output)
 
 
 @pytest.mark.component
