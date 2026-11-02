@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:sweep-acts-in-row-tenant
+language: Python
+severity: error
+message: >-
+  A cross-tenant read builds its statements through OPEN_TENANTS, so a closed tenant's rows are left out by
+  construction; a read that deliberately sees closed tenants builds through ALL_TENANTS. A raw SQLAlchemy statement
+  constructor skips both
+  (blizzard-context:/architecture/system-shape/tenancy.md, bzh:sweep-acts-in-row-tenant).
+note: >-
+  Refuses select, exists, join, outerjoin, union and union_all, called bare or as an attribute of sa or sqlalchemy.
+  The same names called on OPEN_TENANTS or ALL_TENANTS are the builders and pass.
+files:
+  - src/blizzard/hub/store/internal/corpus_rows.py
+  - src/blizzard/hub/store/internal/hub_scoped_*.py
+  - src/blizzard/hub/store/internal/trace_store.py
+  - src/blizzard/hub/store/internal/egress_store.py
+ignores:
+  # The builders themselves.
+  - src/blizzard/hub/store/internal/open_tenants.py
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: identifier
+        regex: ^(select|exists|join|outerjoin|union|union_all)$
+      - kind: attribute
+        all:
+          - has:
+              field: object
+              kind: identifier
+              regex: ^(sa|sqlalchemy)$
+          - has:
+              field: attribute
+              regex: ^(select|exists|join|outerjoin|union|union_all)$

@@ -265,6 +265,26 @@ def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_
     }
 
 
+def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(world: _World) -> None:
+    """The closed tenant holds a row beside its chunk in each fact table the read hydrates: none comes back."""
+    chunk = _live(_CLOSED)
+    tenant = {"tenant_id": _CLOSED, "chunk_id": chunk}
+    for table, values in {
+        s.chunk_pause_facts: {"paused": True, "set_at": _AT, "set_by": "test"},
+        s.requeues: {"requeued_at": _AT},
+        s.chunk_promoted: {"promoted_at": _AT},
+        s.chunk_demoted: {"demoted_at": _AT},
+        s.chunk_stopped: {"stopped_at": _AT},
+        s.chunk_completed: {"completed_at": _AT, "completed_by": "test"},
+        s.route_released: {"released_at": _AT, "seq": 1},
+        s.epoch_owners: {"epoch": 1, "runner_id": "r1", "recorded_at": _AT},
+        s.chunk_bounces: {"epoch": 1, "cause": "c", "envelope": "{}", "recorded_at": _AT},
+        s.hub_node_poll: {"node_id": "nd_1", "epoch": 1, "polled_at": _AT, "kind": "k"},
+    }.items():
+        world.insert(table, **tenant, **values)
+    assert world.corpus.step_facts_for([chunk], _tenant_label) == {}
+
+
 def test_usage_pages_are_the_open_tenants_rows_each_with_its_tenant(world: _World) -> None:
     rows = {(row.tenant, row.chunk_id) for row in world.corpus.usage_after(UsagePosition(_BEFORE), _AFTER, 50)}
     assert rows == {(world.carried, _live(world.carried)), (_OPEN, _live(_OPEN))}

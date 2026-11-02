@@ -96,13 +96,13 @@ def execute_time_rows(multiparams: Sequence[object], params: Mapping[str, Any]) 
     return rows or [params]
 
 
-def _preserved(from_: FromClause) -> Iterator[FromClause]:
+def preserved(from_: FromClause) -> Iterator[FromClause]:
     """The tables (or aliases) in ``from_`` whose rows a read of it returns unconditionally: both sides of an inner
     join, only the left side of an outer join."""
     if isinstance(from_, Join):
-        yield from _preserved(from_.left)
+        yield from preserved(from_.left)
         if not from_.isouter:
-            yield from _preserved(from_.right)
+            yield from preserved(from_.right)
     elif base_table(from_) is not None:
         yield from_
 
@@ -120,7 +120,7 @@ class KeyedStatements:
         """``<key> = <value>`` for each keyed table a read of ``from_`` returns rows of unconditionally — empty for an
         unkeyed table or a derived FROM."""
         column, equality = self._scoping.key_column, self._scoping.key_equality
-        return [equality(t.c[column], self._key) for t in _preserved(from_) if self._scoping.is_keyed(t)]
+        return [equality(t.c[column], self._key) for t in preserved(from_) if self._scoping.is_keyed(t)]
 
     def select(self, from_: FromClause, *cols: Any) -> Select[Any]:
         """``SELECT cols`` (every column of ``from_`` when none are named) ``FROM from_``, confined to the key.

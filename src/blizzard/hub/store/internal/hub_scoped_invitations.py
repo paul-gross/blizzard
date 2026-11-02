@@ -10,9 +10,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 
 from blizzard.hub.auth.invitations import TenantInvitation
+from blizzard.hub.store.internal.open_tenants import ALL_TENANTS
 from blizzard.hub.store.schema import invitations
 from blizzard.hub.tenancy import TenantId
 
@@ -31,7 +32,7 @@ class InvitationReads:
         """The invitation whose token hashes to ``token_hash``, or ``None`` when none does."""
         with self._read("resolve an invitation token") as conn:
             row = conn.execute(
-                select(invitations.c.tenant_id, invitations.c.invitation_id).where(
+                ALL_TENANTS.select(invitations, invitations.c.tenant_id, invitations.c.invitation_id).where(
                     invitations.c.token_hash == token_hash
                 )
             ).first()

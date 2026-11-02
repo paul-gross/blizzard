@@ -1,0 +1,31 @@
+id: bzh:sweep-acts-in-row-tenant
+valid:
+  - |
+    stmt = OPEN_TENANTS.select(table, table.c.id).where(table.c.id > 1)
+  - |
+    stmt = ALL_TENANTS.select(table)
+  - |
+    superseded = OPEN_TENANTS.exists(successor, successor.c.supersedes == segment.c.segment_id)
+  - |
+    both = OPEN_TENANTS.union_all(first, second)
+  - |
+    joined = OPEN_TENANTS.join(left, right, left.c.id == right.c.id, isouter=True)
+  - |
+    label = ", ".join(names)
+invalid:
+  - |
+    stmt = select(table).where(table.c.id > 1)
+  - |
+    stmt = sa.select(table.c.id)
+  - |
+    stmt = sqlalchemy.select(table)
+  - |
+    exists_ = exists().where(table.c.id == 1)
+  - |
+    both = union_all(first, second)
+  - |
+    both = sa.union(first, second)
+  - |
+    joined = sa.join(left, right, left.c.id == right.c.id)
+  - |
+    joined = outerjoin(left, right, left.c.id == right.c.id)

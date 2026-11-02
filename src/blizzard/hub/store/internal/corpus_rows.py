@@ -1,9 +1,8 @@
 """The statements and row mappers behind the trace and egress sweeps' corpus reads (package-private).
 
 Every function here runs on a connection it is handed, marked hub-scoped, and never opens one.
-Each statement reads across every tenant and leaves out every closed one through
-:func:`open_tenant`, the one closed-tenant filter every corpus read applies, and answers each
-row's ``tenant_id`` beside it. Chunk ids are
+Each statement reads across every tenant and leaves out every closed one by being built through
+``OPEN_TENANTS`` (``open_tenants.py``), and answers each row's ``tenant_id`` beside it. Chunk ids are
 hub-minted, so a filter on chunk ids needs no tenant beside it; a question or segment id is
 runner-minted, so a statement matching one row to another by such an id matches the tenant too.
 Hydration is a fixed set of batched statements per id batch, whatever the chunk count
@@ -18,8 +17,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Connection, Row, Select, Table, and_, func, not_, or_, select
-from sqlalchemy.sql import ColumnElement
+from sqlalchemy import Column, Connection, Row, Select, Table, and_, func, not_, or_
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.batching import id_batches
@@ -61,25 +59,8 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
 from blizzard.hub.tenancy import TenantId
-
-
-def open_tenant(table: Table) -> ColumnElement[bool]:
-    """``table``'s rows that belong to an open tenant — one with no ``tenant_deletions`` row, whether
-    a closed tenant's drain is still running or done. A row naming no tenant belongs to none, so it
-    is left out whatever ``tenant_deletions`` holds: ``NOT IN`` alone would admit it while that
-    table is empty."""
-    tenant = table.c.tenant_id
-    return and_(tenant.is_not(None), tenant.not_in(select(s.tenant_deletions.c.tenant_id)))
-
-
-def of_chunks(table: Table, chunk_id: Column[Any], chunk_ids: Sequence[str]) -> ColumnElement[bool]:
-    """``table``'s open-tenant rows naming one of ``chunk_ids`` by ``chunk_id``, qualified by those chunks' own
-    tenants: a chunk's rows share its tenant, and naming it lets the read seek the table's tenant-led chunk index
-    rather than walk the table."""
-    chunk_tenants = select(s.chunks.c.tenant_id).where(s.chunks.c.chunk_id.in_(chunk_ids))
-    return and_(open_tenant(table), table.c.tenant_id.in_(chunk_tenants), chunk_id.in_(chunk_ids))
-
 
 # --- closing candidates --------------------------------------------------------------
 
@@ -119,7 +100,7 @@ def _closing_rows(
     """One table's rows in ``(time, id)`` order. A full page that never left ``since`` pages on past
     it, so the frontier it sets is always later than ``since``."""
     columns = (table.c.tenant_id, table.c.chunk_id, at.label("at"), row_id.label("row_id"))
-    window = select(*columns).where(open_tenant(table), at <= until).order_by(at, row_id).limit(limit)
+    window = OPEN_TENANTS.select(table, *columns).where(at <= until).order_by(at, row_id).limit(limit)
     page = conn.execute(window.where(at >= since)).all()
     rows = list(page)
     while len(page) == limit and rows[-1].at == since:
@@ -156,14 +137,14 @@ def with_work_refs(facts: StepFacts, refs: Sequence[WorkRef], label: WorkRefLabe
 
 def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Column[Any]) -> dict[str, list[Row[Any]]]:
     grouped: dict[str, list[Row[Any]]] = defaultdict(list)
-    stmt = select(table).where(of_chunks(table, table.c.chunk_id, batch)).order_by(*order)
+    stmt = OPEN_TENANTS.select(table).where(OPEN_TENANTS.within_chunks(table, table.c.chunk_id, batch)).order_by(*order)
     for row in conn.execute(stmt).all():
         grouped[row.chunk_id].append(row)
     return grouped
 
 
 def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId, StepFacts, list[WorkRef]]]:
-    chunk_stmt = select(s.chunks).where(open_tenant(s.chunks), s.chunks.c.chunk_id.in_(batch))
+    chunk_stmt = OPEN_TENANTS.select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))
     chunk_rows = {r.chunk_id: r for r in conn.execute(chunk_stmt)}
     if not chunk_rows:
         return {}
@@ -237,10 +218,11 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
 
 
 def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedDecisionResolution]]:
-    stmt = (
-        select(s.decisions.c.chunk_id, s.decision_resolutions)
-        .join(s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id)
-        .where(open_tenant(s.decision_resolutions), of_chunks(s.decisions, s.decisions.c.chunk_id, ids))
+    decided = OPEN_TENANTS.join(
+        s.decision_resolutions, s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id
+    )
+    stmt = OPEN_TENANTS.select(decided, s.decisions.c.chunk_id, s.decision_resolutions).where(
+        OPEN_TENANTS.within_chunks(s.decisions, s.decisions.c.chunk_id, ids)
     )
     grouped: dict[str, list[TracedDecisionResolution]] = defaultdict(list)
     for r in conn.execute(stmt).all():
@@ -250,13 +232,15 @@ def _resolutions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedD
 
 def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedQuestion]]:
     question, answer = s.questions, s.question_answers
+    answered = OPEN_TENANTS.join(
+        question,
+        answer,
+        and_(answer.c.question_id == question.c.question_id, answer.c.tenant_id == question.c.tenant_id),
+        isouter=True,
+    )
     stmt = (
-        select(question, answer.c.answered_at)
-        .outerjoin(
-            answer,
-            and_(answer.c.question_id == question.c.question_id, answer.c.tenant_id == question.c.tenant_id),
-        )
-        .where(of_chunks(question, question.c.chunk_id, ids))
+        OPEN_TENANTS.select(answered, question, answer.c.answered_at)
+        .where(OPEN_TENANTS.within_chunks(question, question.c.chunk_id, ids))
         .order_by(question.c.asked_at)
     )
     grouped: dict[str, list[TracedQuestion]] = defaultdict(list)
@@ -271,17 +255,17 @@ def _turns(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubTurn
     visits = {
         r.submission_id: (r.chunk_id, r.node_id)
         for r in conn.execute(
-            select(submission.submission_id, submission.chunk_id, submission.node_id).where(
-                of_chunks(s.flow_submissions, submission.chunk_id, ids)
-            )
+            OPEN_TENANTS.select(
+                s.flow_submissions, submission.submission_id, submission.chunk_id, submission.node_id
+            ).where(OPEN_TENANTS.within_chunks(s.flow_submissions, submission.chunk_id, ids))
         ).all()
     }
     grouped: dict[str, list[TracedHubTurn]] = defaultdict(list)
-    chunk_tenants = select(s.chunks.c.tenant_id).where(s.chunks.c.chunk_id.in_(ids))
+    chunk_tenants = OPEN_TENANTS.select(s.chunks, s.chunks.c.tenant_id).where(s.chunks.c.chunk_id.in_(ids))
     for batch in id_batches(sorted(visits)):
         rows = conn.execute(
-            select(s.hub_turns)
-            .where(open_tenant(s.hub_turns), turn.tenant_id.in_(chunk_tenants), turn.submission_id.in_(batch))
+            OPEN_TENANTS.select(s.hub_turns)
+            .where(turn.tenant_id.in_(chunk_tenants), turn.submission_id.in_(batch))
             .order_by(turn.started_at)
         ).all()
         for r in rows:
@@ -292,7 +276,7 @@ def _turns(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubTurn
 
 def _slots(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubExecSlot]]:
     slot = s.hub_exec_slot
-    stmt = select(slot).where(open_tenant(slot), slot.c.holder_chunk_id.in_(ids)).order_by(slot.c.acquired_at)
+    stmt = OPEN_TENANTS.select(slot).where(slot.c.holder_chunk_id.in_(ids)).order_by(slot.c.acquired_at)
     grouped: dict[str, list[TracedHubExecSlot]] = defaultdict(list)
     for r in conn.execute(stmt).all():
         grouped[r.holder_chunk_id].append(TracedHubExecSlot(r.slot_id, r.node_id, r.acquired_at, r.released_at))
@@ -304,20 +288,23 @@ def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[T
     terminal, or its first operator completion, whichever came first."""
     edge = s.chunk_dependencies.c
     edges = conn.execute(
-        select(edge.dependent_chunk_id, edge.prerequisite_chunk_id).where(
-            of_chunks(s.chunk_dependencies, edge.dependent_chunk_id, ids)
+        OPEN_TENANTS.select(s.chunk_dependencies, edge.dependent_chunk_id, edge.prerequisite_chunk_id).where(
+            OPEN_TENANTS.within_chunks(s.chunk_dependencies, edge.dependent_chunk_id, ids)
         )
     ).all()
     prerequisites = sorted({e.prerequisite_chunk_id for e in edges})
     done_at: dict[str, datetime] = {}
     transition, completion = s.transitions.c, s.chunk_completed.c
     for batch in id_batches(prerequisites):
-        terminal = select(transition.chunk_id, func.min(transition.recorded_at).label("at")).where(
-            of_chunks(s.transitions, transition.chunk_id, batch), transition.to_node_id == RESERVED_TERMINAL
+        terminal = OPEN_TENANTS.select(
+            s.transitions, transition.chunk_id, func.min(transition.recorded_at).label("at")
+        ).where(
+            OPEN_TENANTS.within_chunks(s.transitions, transition.chunk_id, batch),
+            transition.to_node_id == RESERVED_TERMINAL,
         )
-        completed = select(completion.chunk_id, func.min(completion.completed_at).label("at")).where(
-            of_chunks(s.chunk_completed, completion.chunk_id, batch)
-        )
+        completed = OPEN_TENANTS.select(
+            s.chunk_completed, completion.chunk_id, func.min(completion.completed_at).label("at")
+        ).where(OPEN_TENANTS.within_chunks(s.chunk_completed, completion.chunk_id, batch))
         for stmt in (terminal.group_by(transition.chunk_id), completed.group_by(completion.chunk_id)):
             for r in conn.execute(stmt).all():
                 done_at[r.chunk_id] = min(r.at, done_at.get(r.chunk_id, r.at))
@@ -395,8 +382,8 @@ def usage_after(conn: Connection, position: UsagePosition, until: datetime, limi
         u.recorded_at > position.recorded_at, and_(u.recorded_at == position.recorded_at, u.id > position.usage_id)
     )
     stmt = (
-        select(s.usage_facts)
-        .where(open_tenant(s.usage_facts), past, u.recorded_at <= until)
+        OPEN_TENANTS.select(s.usage_facts)
+        .where(past, u.recorded_at <= until)
         .order_by(u.recorded_at, u.id)
         .limit(limit)
     )
@@ -439,9 +426,7 @@ def markers_after(
             _d.tenant_id > position.tenant,
         )
         past = or_(later, beside)
-    stmt = select(s.transcript_event_derivations).where(
-        open_tenant(s.transcript_event_derivations), past, _d.derived_at <= until
-    )
+    stmt = OPEN_TENANTS.select(s.transcript_event_derivations).where(past, _d.derived_at <= until)
     if extractor_version is not None:
         stmt = stmt.where(_d.extractor_version == extractor_version)
     order = (_d.derived_at, _d.segment_id, _d.extractor_version, _d.tenant_id)
@@ -459,8 +444,8 @@ def drops_after(conn: Connection, position: EventsPosition, until: datetime, lim
         )
         past = or_(past, beside)
     stmt = (
-        select(s.transcript_event_drops)
-        .where(open_tenant(s.transcript_event_drops), past, _x.dropped_at <= until)
+        OPEN_TENANTS.select(s.transcript_event_drops)
+        .where(past, _x.dropped_at <= until)
         .order_by(_x.dropped_at, _x.segment_id, _x.tenant_id, _x.id)
         .limit(limit)
     )
@@ -511,8 +496,8 @@ def derivations(conn: Connection, markers: Sequence[DerivationMarker]) -> list[E
 
 def _events_stmt(segment_ids: Sequence[str], versions: Sequence[str]) -> Select[Any]:
     return (
-        select(s.transcript_events)
-        .where(open_tenant(s.transcript_events), _e.segment_id.in_(segment_ids), _e.extractor_version.in_(versions))
+        OPEN_TENANTS.select(s.transcript_events)
+        .where(_e.segment_id.in_(segment_ids), _e.extractor_version.in_(versions))
         .order_by(_e.tenant_id, _e.segment_id, _e.extractor_version, _e.id)
     )
 
@@ -520,7 +505,8 @@ def _events_stmt(segment_ids: Sequence[str], versions: Sequence[str]) -> Select[
 def _segment_contexts_stmt(segment_ids: Sequence[str]) -> Select[Any]:
     """The columns a derivation's identity needs, never ``content``; ordered so a segment's first record leads."""
     return (
-        select(
+        OPEN_TENANTS.select(
+            s.transcript_segments,
             _g.tenant_id,
             _g.segment_id,
             _g.chunk_id,
@@ -532,22 +518,22 @@ def _segment_contexts_stmt(segment_ids: Sequence[str]) -> Select[Any]:
             _g.model,
             _g.effort,
         )
-        .where(open_tenant(s.transcript_segments), _g.segment_id.in_(segment_ids))
+        .where(_g.segment_id.in_(segment_ids))
         .order_by(_g.tenant_id, _g.segment_id, _g.turn_range_start)
     )
 
 
 def _marker_times_stmt(segment_ids: Sequence[str]) -> Select[Any]:
-    return select(_d.tenant_id, _d.segment_id, _d.extractor_version, _d.derived_at).where(
-        open_tenant(s.transcript_event_derivations), _d.segment_id.in_(segment_ids)
-    )
+    return OPEN_TENANTS.select(
+        s.transcript_event_derivations, _d.tenant_id, _d.segment_id, _d.extractor_version, _d.derived_at
+    ).where(_d.segment_id.in_(segment_ids))
 
 
 def epochs_minted_between(
     conn: Connection, since: datetime, until: datetime, after: EpochKey | None, limit: int
 ) -> list[EpochKey]:
-    stmt = select(_l.tenant_id, _l.chunk_id, _l.epoch).where(
-        open_tenant(s.lease_facts), _l.minted_at >= since, _l.minted_at < until
+    stmt = OPEN_TENANTS.select(s.lease_facts, _l.tenant_id, _l.chunk_id, _l.epoch).where(
+        _l.minted_at >= since, _l.minted_at < until
     )
     if after is not None:
         stmt = stmt.where(
@@ -571,10 +557,13 @@ def epoch_markers(
 
 def _epoch_markers_stmt(chunk_ids: Sequence[str], extractor_version: str | None) -> Select[Any]:
     segment = s.transcript_segments
-    stmt = (
-        select(s.transcript_event_derivations, _g.chunk_id, _g.epoch)
-        .join(segment, and_(_g.segment_id == _d.segment_id, _g.tenant_id == _d.tenant_id))
-        .where(open_tenant(s.transcript_event_derivations), of_chunks(segment, _g.chunk_id, chunk_ids))
+    marked = OPEN_TENANTS.join(
+        s.transcript_event_derivations,
+        segment,
+        and_(_g.segment_id == _d.segment_id, _g.tenant_id == _d.tenant_id),
+    )
+    stmt = OPEN_TENANTS.select(marked, s.transcript_event_derivations, _g.chunk_id, _g.epoch).where(
+        OPEN_TENANTS.within_chunks(segment, _g.chunk_id, chunk_ids)
     )
     if extractor_version is not None:
         stmt = stmt.where(_d.extractor_version == extractor_version)
@@ -586,8 +575,8 @@ def epoch_drops(conn: Connection, epochs: Sequence[EpochKey]) -> list[DropFact]:
     drops: list[DropFact] = []
     for batch in id_batches(sorted({epoch.chunk_id for epoch in epochs})):
         stmt = (
-            select(s.transcript_event_drops)
-            .where(of_chunks(s.transcript_event_drops, _x.chunk_id, batch))
+            OPEN_TENANTS.select(s.transcript_event_drops)
+            .where(OPEN_TENANTS.within_chunks(s.transcript_event_drops, _x.chunk_id, batch))
             .order_by(_x.dropped_at, _x.segment_id, _x.id)
         )
         drops.extend(_drop(row) for row in conn.execute(stmt) if EpochKey(row.chunk_id, row.epoch) in wanted)

@@ -1,0 +1,122 @@
+id: bzh:sweep-acts-in-row-tenant
+snapshots:
+  ? |
+    both = sa.union(first, second)
+  : labels:
+    - source: sa.union(first, second)
+      style: primary
+      start: 7
+      end: 30
+    - source: sa
+      style: secondary
+      start: 7
+      end: 9
+    - source: union
+      style: secondary
+      start: 10
+      end: 15
+    - source: sa.union
+      style: secondary
+      start: 7
+      end: 15
+  ? |
+    both = union_all(first, second)
+  : labels:
+    - source: union_all(first, second)
+      style: primary
+      start: 7
+      end: 31
+    - source: union_all
+      style: secondary
+      start: 7
+      end: 16
+  ? |
+    exists_ = exists().where(table.c.id == 1)
+  : labels:
+    - source: exists()
+      style: primary
+      start: 10
+      end: 18
+    - source: exists
+      style: secondary
+      start: 10
+      end: 16
+  ? |
+    joined = outerjoin(left, right, left.c.id == right.c.id)
+  : labels:
+    - source: outerjoin(left, right, left.c.id == right.c.id)
+      style: primary
+      start: 9
+      end: 56
+    - source: outerjoin
+      style: secondary
+      start: 9
+      end: 18
+  ? |
+    joined = sa.join(left, right, left.c.id == right.c.id)
+  : labels:
+    - source: sa.join(left, right, left.c.id == right.c.id)
+      style: primary
+      start: 9
+      end: 54
+    - source: sa
+      style: secondary
+      start: 9
+      end: 11
+    - source: join
+      style: secondary
+      start: 12
+      end: 16
+    - source: sa.join
+      style: secondary
+      start: 9
+      end: 16
+  ? |
+    stmt = sa.select(table.c.id)
+  : labels:
+    - source: sa.select(table.c.id)
+      style: primary
+      start: 7
+      end: 28
+    - source: sa
+      style: secondary
+      start: 7
+      end: 9
+    - source: select
+      style: secondary
+      start: 10
+      end: 16
+    - source: sa.select
+      style: secondary
+      start: 7
+      end: 16
+  ? |
+    stmt = select(table).where(table.c.id > 1)
+  : labels:
+    - source: select(table)
+      style: primary
+      start: 7
+      end: 20
+    - source: select
+      style: secondary
+      start: 7
+      end: 13
+  ? |
+    stmt = sqlalchemy.select(table)
+  : labels:
+    - source: sqlalchemy.select(table)
+      style: primary
+      start: 7
+      end: 31
+    - source: sqlalchemy
+      style: secondary
+      start: 7
+      end: 17
+    - source: select
+      style: secondary
+      start: 18
+      end: 24
+    - source: sqlalchemy.select
+      style: secondary
+      start: 7
+      end: 24

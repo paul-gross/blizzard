@@ -12,9 +12,10 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Connection, Row, select
+from sqlalchemy import Connection, Row
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.store.internal.open_tenants import ALL_TENANTS
 from blizzard.hub.store.schema import host_token_revocations, hosts, runner_registrations, runner_token_revocations
 from blizzard.hub.tenancy import TenantId
 
@@ -52,9 +53,9 @@ class CredentialReads:
         """The runner whose current token hashes to ``token_hash``, or ``None`` when none does."""
         with self._read("resolve a runner token") as conn:
             row = conn.execute(
-                select(runner_registrations.c.tenant_id, runner_registrations.c.runner_id).where(
-                    runner_registrations.c.token_hash == token_hash
-                )
+                ALL_TENANTS.select(
+                    runner_registrations, runner_registrations.c.tenant_id, runner_registrations.c.runner_id
+                ).where(runner_registrations.c.token_hash == token_hash)
             ).one_or_none()
         return _tenant_runner(row)
 
@@ -63,7 +64,9 @@ class CredentialReads:
         or ``None`` when the hash was never revoked, whether revoked outright or rotated away from."""
         with self._read("resolve a revoked runner token") as conn:
             row = conn.execute(
-                select(runner_token_revocations.c.tenant_id, runner_token_revocations.c.runner_id)
+                ALL_TENANTS.select(
+                    runner_token_revocations, runner_token_revocations.c.tenant_id, runner_token_revocations.c.runner_id
+                )
                 .where(runner_token_revocations.c.token_hash == token_hash)
                 .order_by(runner_token_revocations.c.id.desc())
                 .limit(1)
@@ -75,9 +78,9 @@ class CredentialReads:
         ``None`` when no tenant does."""
         with self._read("resolve a runner id") as conn:
             row = conn.execute(
-                select(runner_registrations.c.tenant_id, runner_registrations.c.runner_id).where(
-                    runner_registrations.c.runner_id == runner_id
-                )
+                ALL_TENANTS.select(
+                    runner_registrations, runner_registrations.c.tenant_id, runner_registrations.c.runner_id
+                ).where(runner_registrations.c.runner_id == runner_id)
             ).one_or_none()
         return _tenant_runner(row)
 
@@ -86,7 +89,7 @@ class CredentialReads:
         tenant does."""
         with self._read("resolve a host id") as conn:
             row = conn.execute(
-                select(hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.host_id == host_id)
+                ALL_TENANTS.select(hosts, hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.host_id == host_id)
             ).one_or_none()
         return _tenant_host(row)
 
@@ -94,7 +97,7 @@ class CredentialReads:
         """The host whose current token hashes to ``token_hash``, or ``None`` when none does."""
         with self._read("resolve a host token") as conn:
             row = conn.execute(
-                select(hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.token_hash == token_hash)
+                ALL_TENANTS.select(hosts, hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.token_hash == token_hash)
             ).one_or_none()
         return _tenant_host(row)
 
@@ -103,7 +106,9 @@ class CredentialReads:
         ``None`` when the hash was never revoked, whether revoked outright or rotated away from."""
         with self._read("resolve a revoked host token") as conn:
             row = conn.execute(
-                select(host_token_revocations.c.tenant_id, host_token_revocations.c.host_id)
+                ALL_TENANTS.select(
+                    host_token_revocations, host_token_revocations.c.tenant_id, host_token_revocations.c.host_id
+                )
                 .where(host_token_revocations.c.token_hash == token_hash)
                 .order_by(host_token_revocations.c.id.desc())
                 .limit(1)
