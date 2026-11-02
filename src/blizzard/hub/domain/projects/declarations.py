@@ -342,7 +342,9 @@ class _Entry:
         facts = whole_order(
             links, [repository_id for repository_id, _ in ordered], project=project.slug, field=LANDING_ORDER_FIELD
         )
-        if not facts:
+        before = [link.slug for link in in_landing_order(links) if link.position is not None]
+        after = [slug for _, slug in ordered]
+        if not facts or before == after:
             return
         self.positions.extend(
             PlannedPosition(
@@ -350,8 +352,6 @@ class _Entry:
             )
             for fact in facts
         )
-        before = [link.slug for link in in_landing_order(links) if link.position is not None]
-        after = [slug for _, slug in ordered]
         self.outcomes.append(
             EntryOutcome(
                 RecordKind.PROJECT, project.slug, ChangeOp.EDIT, (FieldChange(LANDING_ORDER_FIELD, before, after),)
