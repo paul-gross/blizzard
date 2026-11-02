@@ -256,3 +256,26 @@ test.describe('no ambient credentials', () => {
     await expect(runnerHosts.create({ runnerEnv: { BLIZZARD_MOCK_HARNESS_FENCE: '0' } })).rejects.toThrow(/runnerEnv BLIZZARD_MOCK_HARNESS_FENCE/);
   });
 });
+
+test('several hosts are all disposed at once, and their statement-guard refusals are reported in one error', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
+  const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  try {
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
+    const hosts = [await builder.create(), await builder.create()];
+    const pids = hosts.map((host) => host.pid as number);
+    hosts.forEach((host, at) => {
+      fs.appendFileSync(host.logPath, `${JSON.stringify({ event: 'sweep pass failed', error: `UnscopedRunnerStatement: host ${at}` })}\n`);
+    });
+    const error = await builder.disposeAll().then(
+      () => undefined,
+      (caught: unknown) => caught as Error,
+    );
+    expect(error?.message).toMatch(/a statement guard refused in a runner host/);
+    expect(error?.message).toContain('UnscopedRunnerStatement: host 0');
+    expect(error?.message).toContain('UnscopedRunnerStatement: host 1');
+    for (const pid of pids) expect(isAlive(pid)).toBe(false);
+    expect(fs.readdirSync(scratchRoot)).toEqual([]);
+  } finally {
+    fs.rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
