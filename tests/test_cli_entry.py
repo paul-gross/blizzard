@@ -58,6 +58,9 @@ def test_real_binary_success_and_usage_error_codes() -> None:
     assert bad.returncode == 2
     assert "No such option" in bad.stderr
     for name in ("blizzard-hub", "blizzard-runner"):
+        usage = subprocess.run([_BIN / name, "--no-such-flag"], capture_output=True, text=True, timeout=60, check=False)
+        assert usage.returncode == 2
+        assert "No such option" in usage.stderr
         done = subprocess.run([_BIN / name, "--help"], capture_output=True, text=True, timeout=60, check=False)
         assert done.returncode == 0
         assert "Usage" in done.stdout
@@ -106,3 +109,8 @@ log.info("flushed-on-close")
     result = _run_child(body)
     assert result.returncode == 0
     assert "flushed-on-close" in result.stdout
+
+
+def test_detached_stdio_does_not_block_the_fast_exit() -> None:
+    body = "import sys\nsys.stdout = None\nsys.stderr = None"
+    assert _run_child(body).returncode == 0

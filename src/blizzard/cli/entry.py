@@ -33,8 +33,9 @@ def _arm_fast_exit() -> Callable[[BaseException | None], None]:
 
     def fast_exit() -> NoReturn:
         try:
-            sys.stdout.flush()
-            sys.stderr.flush()
+            for stream in (sys.stdout, sys.stderr):
+                if stream is not None:  # detached stdio has nothing to flush
+                    stream.flush()
         except (OSError, ValueError):
             os._exit(_FLUSH_FAILED)
         os._exit(code[0])
