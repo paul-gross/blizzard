@@ -764,9 +764,15 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     create,
     async disposeAll() {
       const failed = testInfo.status !== testInfo.expectedStatus;
-      const refusals: string[] = [];
-      for (const host of made.splice(0).reverse()) refusals.push(...(await host.dispose(failed)));
-      if (refusals.length > 0) throw new Error(`a statement guard refused in a runner host:\n${refusals.join('\n')}`);
+      // The hosts are independent processes: every one is disposed, and one's failure leaves the others disposed.
+      const settled = await Promise.allSettled(made.splice(0).reverse().map((host) => host.dispose(failed)));
+      const failures = settled.flatMap((result) => (result.status === 'rejected' ? [result.reason as unknown] : []));
+      const refusals = settled.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+      if (refusals.length > 0) {
+        throw new Error(`a statement guard refused in a runner host:\n${refusals.join('\n')}`, failures.length > 0 ? { cause: failures[0] } : undefined);
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) throw new AggregateError(failures, 'several runner hosts failed to dispose');
     },
   };
 }

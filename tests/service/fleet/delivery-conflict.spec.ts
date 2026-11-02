@@ -64,8 +64,11 @@ traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_bu
     catch { return false; }
   }, { timeout: 30000 }).toBe(true);
   const cutoff = BigInt(traces[2]!.root.endTimeUnixNano);
-  const passes = traceSink.spans().filter((span) => span.traceId === traceId && span.name === 'hub action pass' && BigInt(span.startTimeUnixNano) < cutoff);
-  expect(passes.length).toBeGreaterThan(0);
+  const passesBeforeCutoff = (): ReturnType<typeof traceSink.spans> =>
+    traceSink.spans().filter((span) => span.traceId === traceId && span.name === 'hub action pass' && BigInt(span.startTimeUnixNano) < cutoff);
+  // The hub exports its spans in batches, so the pass span arrives after the nesting spans may already have.
+  await expect.poll(() => passesBeforeCutoff().length, { timeout: 30000 }).toBeGreaterThan(0);
+  const passes = passesBeforeCutoff();
   const hubExecs = new Set(traces.flatMap((trace) => trace.children.filter((child) => child.name === 'hub exec').map((span) => span.spanId)));
   expect(passes.every((span) => span.parentSpanId !== null && hubExecs.has(span.parentSpanId) && span.attributes['blizzard.hub.action.name'] === 'land')).toBe(true);
   const tokens = (await state.host.mockSessions()).flatMap((session) => {

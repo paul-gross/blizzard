@@ -195,7 +195,7 @@ async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaem
     }
     await sleep(POLL_MS);
   }
-  await stopDaemon({ pid: child.pid as number, group: spec.group });
+  await stopDaemon({ pid: child.pid as number, group: spec.group, exited: ended });
   throw new Error(`${spec.name} did not answer ${spec.healthPath} within ${START_TIMEOUT_MS / 1000}s:\n${logTail(spec.logPath)}`);
 }
 
@@ -239,8 +239,11 @@ export async function killLive(daemon: LiveDaemon): Promise<number | string> {
   return daemon.exited;
 }
 
-/** `SIGTERM`, then `SIGKILL` if the daemon has not exited ten seconds later. */
-export async function stopDaemon(daemon: { pid: number; group?: boolean }): Promise<void> {
+/**
+ * `SIGTERM`, then `SIGKILL` if the daemon has not exited ten seconds later. A daemon this process started carries its
+ * `exited` promise and is waited on through it; a bare record, which another process started, is polled.
+ */
+export async function stopDaemon(daemon: { pid: number; group?: boolean; exited?: Promise<number | string> }): Promise<void> {
   if (!isAlive(daemon.pid)) {
     // A dead leader can leave workers in its group; reap them.
     if (daemon.group === true) {
@@ -253,10 +256,15 @@ export async function stopDaemon(daemon: { pid: number; group?: boolean }): Prom
     return;
   }
   signalDaemon(daemon, 'SIGTERM');
-  const deadline = Date.now() + STOP_GRACE_MS;
-  while (Date.now() < deadline) {
-    if (!isAlive(daemon.pid)) return;
-    await sleep(POLL_MS);
+  if (daemon.exited !== undefined) {
+    const grace = sleep(STOP_GRACE_MS).then(() => undefined);
+    if ((await Promise.race([daemon.exited, grace])) !== undefined) return;
+  } else {
+    const deadline = Date.now() + STOP_GRACE_MS;
+    while (Date.now() < deadline) {
+      if (!isAlive(daemon.pid)) return;
+      await sleep(POLL_MS);
+    }
   }
   try {
     signalDaemon(daemon, 'SIGKILL');
