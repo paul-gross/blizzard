@@ -492,6 +492,30 @@ def _assert_delivery_matches_declarations(
 # `claim.*` fires inside the HUB — the one `_GENERIC_POINTS` family that
 # arms the hub rather than the runner; `test_kill9_at_crash_point` reads this to pick.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
+_MINT_POINT = "spawn.after-lease-mint.before-spawn"
+
+
+def _assert_mint_whole(runner_dir: Path, chunk_id: str) -> None:
+    """On the killed store, the newest lease carries its owner, its token hash and its buffered ``lease.minted`` fact
+    — the mint committed as one transaction, so a kill at its armed boundary finds every part of it."""
+    with _audit_connection(runner_dir) as conn:
+        lease = conn.execute(
+            select(runner_schema.leases.c.lease_id, runner_schema.leases.c.harness_id)
+            .where(runner_schema.leases.c.chunk_id == chunk_id)
+            .order_by(runner_schema.leases.c.epoch.desc())
+            .limit(1)
+        ).one()
+        token = conn.execute(
+            select(runner_schema.lease_tokens.c.token_hash).where(runner_schema.lease_tokens.c.lease_id == lease[0])
+        ).scalar_one_or_none()
+        facts = conn.execute(
+            select(runner_schema.outbound_buffer.c.seq)
+            .where(runner_schema.outbound_buffer.c.lease_id == lease[0])
+            .where(runner_schema.outbound_buffer.c.kind == "lease.minted")
+        ).all()
+    assert lease[1] is not None, "the newest lease was committed without its mint owner"
+    assert token is not None, "the newest lease was committed without its token hash"
+    assert len(facts) == 1, f"the newest lease buffered {len(facts)} lease.minted facts, not one"
 
 
 @pytest.mark.parametrize("point", _POINTS)
@@ -523,6 +547,8 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
 
         # Invariant checker green right after the crash — the durable facts are consistent.
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        if point == _MINT_POINT:
+            _assert_mint_whole(runner_dir, chunk_id)
 
         # Restart the killed daemon unarmed (startup = REAP first, for the runner) and
         # let it converge.

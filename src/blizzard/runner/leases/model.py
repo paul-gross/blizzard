@@ -47,6 +47,20 @@ class NewLease:
 
 @domain_model
 @dataclass(frozen=True)
+class NewMint:
+    """A lease mint in full — everything that commits with the lease or not at all: its owner
+    (``None`` for an escalation-only mint, which chooses none), the hash of its capability token,
+    and the rendered ``lease.minted`` fact bound for the hub."""
+
+    lease: NewLease
+    harness_id: str | None
+    token_hash: str
+    fact_kind: str
+    fact_payload: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class PoolHead:
     """A named session pool's current head. ``resolved_model``/
     ``resolved_effort`` are the head's own **stamps**, not a fresh resolution; ``None``

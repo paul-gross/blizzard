@@ -1,6 +1,6 @@
 """The runner's own mirror of a graph mint's ``artifacts:`` declarations — pinned at
 lease mint, insert-if-absent, keyed on the mint's own ``graph_id`` rather than the lease.
-``Spawner._mint`` is the only write site, ordered before ``record_lease``."""
+``Spawner._mint`` is the only write site, ordered before the mint transaction."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import NewLease, NewMint
 from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
@@ -155,9 +155,9 @@ def test_fill_pins_the_mints_graph_artifacts_keyed_on_the_envelopes_graph_id(tmp
 
 @pytest.mark.component
 def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """The pin must land BEFORE ``record_lease``, so a crash between the two leaves only
+    """The pin must land BEFORE the mint transaction, so a crash between the two leaves only
     an orphan row a retry re-writes identically. Swap the order and this reds: at the
-    instant ``record_lease`` runs, the pin would not exist yet."""
+    instant the mint transaction runs, the pin would not exist yet."""
     store = _store(tmp_path)
     env = make_envelope(
         "ch_1",
@@ -169,14 +169,63 @@ def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path: Path, 
     ctx = _fill_ctx(store, env)
 
     seen_at_lease_write: list[list[PinnedGraphArtifact]] = []
-    original_record_lease = store.record_lease
+    original_record_mint = store.record_mint
 
-    def _spy(lease: NewLease) -> None:
-        seen_at_lease_write.append(store.graph_artifacts_for_graph(lease.graph_id))
-        original_record_lease(lease)
+    def _spy(mint: NewMint) -> int:
+        seen_at_lease_write.append(store.graph_artifacts_for_graph(mint.lease.graph_id))
+        return original_record_mint(mint)
 
-    monkeypatch.setattr(store, "record_lease", _spy)
+    monkeypatch.setattr(store, "record_mint", _spy)
     Fill(ctx).run()
 
     assert len(seen_at_lease_write) == 1
     assert [a.name for a in seen_at_lease_write[0]] == ["docket"]
+
+
+@pytest.mark.component
+def test_a_fault_inside_the_mint_transaction_leaves_no_lease_owner_token_or_fact(tmp_path: Path):
+    """The lease, its owner, its token hash and its ``lease.minted`` fact commit together: a fault at
+    the last write (a repeated token for the lease is no fault, so the outbox row is forced to fail)
+    rolls the first three back with it."""
+    store = _store(tmp_path)
+    mint = _a_mint()
+    bad = NewMint(
+        lease=mint.lease,
+        harness_id=mint.harness_id,
+        token_hash=mint.token_hash,
+        fact_kind=None,  # type: ignore[arg-type]  # NOT NULL column: the outbox insert, last of the four, fails
+        fact_payload=mint.fact_payload,
+    )
+
+    with pytest.raises(SQLAlchemyError):
+        store.record_mint(bad)
+
+    assert store.lease(mint.lease.lease_id) is None
+    assert store.lease_token_hash(mint.lease.lease_id) is None
+    assert store.pending_outbound() == []
+
+    seq = store.record_mint(mint)
+    lease = store.lease(mint.lease.lease_id)
+    assert lease is not None
+    assert lease.harness_id == "claude-code"
+    assert store.lease_token_hash(mint.lease.lease_id) == "hash-1"
+    assert [f.seq for f in store.pending_outbound()] == [seq]
+
+
+def _a_mint() -> NewMint:
+    return NewMint(
+        lease=NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        ),
+        harness_id="claude-code",
+        token_hash="hash-1",
+        fact_kind="lease.minted",
+        fact_payload="{}",
+    )
