@@ -4,6 +4,9 @@ import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, type RunnerHost, runnerTest as test } from '../../../harness/fixtures';
 
+// The subject is what a freshly initialized runner host looks like, so `init` runs for real.
+test.use({ coldInit: true });
+
 // A host directory has one graduated shape and one owner, proven on real `blizzard-runner` processes: `host` and
 // `migrate` refuse a directory that has not graduated and leave it byte for byte; while a running host holds
 // `data/host.lock` — or another process does — a second `host`, adoption, `migrate --down`, `store reset` and `init`'s

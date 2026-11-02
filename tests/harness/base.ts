@@ -76,6 +76,11 @@ interface BaseFixtures {
    * its result, or its failure. Refused in a test that holds no stack.
    */
   once: <T>(name: string, produce: () => Promise<T>) => Promise<T>;
+  /**
+   * `true` starts the test's fresh hub and runner hosts by running `init` for real, instead of from the per-run template
+   * the harness built with the same CLIs; for a spec whose subject is what `init` produces.
+   */
+  coldInit: boolean;
   ledger: Ledger;
   attachLatency: void;
   /** Starts a loopback OTLP/HTTP receiver, closed when the test ends. */
@@ -97,6 +102,8 @@ export const base = playwrightTest.extend<BaseFixtures, WorkerFixtures>({
   ],
 
   held: [undefined, { option: true }],
+
+  coldInit: [false, { option: true }],
 
   once: async ({ held, heldStacks }, use) => {
     await use((name, produce) => {

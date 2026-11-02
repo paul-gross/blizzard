@@ -1,5 +1,8 @@
 import { expect, runnerTest as test } from '../../harness/fixtures';
 
+// The subject is what a freshly initialized runner host looks like, so `init` runs for real.
+test.use({ coldInit: true });
+
 // A runner added to a registered host with no hub session, and retired from it, on real `blizzard-runner` processes and a
 // test-owned mock hub: `runner add` holds no session, yet the mock holds the runner under the host and the host runs it
 // after a restart; `runner retire` halts it on the running host at its next tick and removes its entry, after which
