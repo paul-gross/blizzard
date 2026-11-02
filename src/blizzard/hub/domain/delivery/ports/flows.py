@@ -183,6 +183,16 @@ class IWriteFlows(IReadFlows, Protocol):
         turn, whose end writes the closure."""
         ...
 
+    def lock_submission_locked(self, handle: ILockedChunkRead, submission: Submission) -> bool:
+        """Lock the submission's flow decisions on its chunk's locked transaction."""
+        ...
+
+    def close_locked(
+        self, handle: ILockedChunkRead, submission: Submission, *, outcome: Withdrawal, at: datetime
+    ) -> tuple[FlowFactWritten, ...] | None:
+        """Close on the locked transaction, unless absent, closed or turning."""
+        ...
+
     def take_turn(
         self,
         submission_id: str,

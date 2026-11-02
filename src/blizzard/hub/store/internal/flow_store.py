@@ -378,6 +378,29 @@ class FlowStore:
                 return None
             return close_submission(conn, submission_id, outcome=outcome, at=at)
 
+    def lock_submission_locked(self, handle: ILockedChunkRead, submission: Submission) -> bool:
+        if submission.chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        conn = conn_of(handle)
+        chunk_id = conn.execute(
+            self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission.submission_id)
+        ).scalar()
+        if chunk_id is None:
+            return False
+        if chunk_id != submission.chunk_id:
+            raise ValueError("submission's chunk does not match")
+        return lock_flow_submission(conn, submission.submission_id)
+
+    def close_locked(
+        self, handle: ILockedChunkRead, submission: Submission, *, outcome: Withdrawal, at: datetime
+    ) -> tuple[FlowFactWritten, ...] | None:
+        if not self.lock_submission_locked(handle, submission):
+            return None
+        conn = conn_of(handle)
+        if has_open_turn(conn, submission.submission_id):
+            return None
+        return close_submission(conn, submission.submission_id, outcome=outcome, at=at)
+
     def take_turn(
         self,
         submission_id: str,

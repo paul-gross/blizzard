@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -266,6 +267,25 @@ def _submitted_once(world: _World, chunk_id: str) -> Submission:
     subs = world.submissions(chunk_id)
     assert len(subs) == 1 and subs[0].closed is None
     return subs[0]
+
+
+def test_departure_keeps_a_current_visit_and_a_turning_departure(world: _World) -> None:
+    chunk_id = world.at_merge()
+    sub = _submitted_once(world, chunk_id)
+    reconciler = world.lines(world.tenant)
+
+    closed, remaining = reconciler._close_departed([sub])
+    assert closed == [] and remaining == [sub]
+
+    flows = FlowStore(hub_store_connections(world.hub.engine), world.hub.clock)
+    turn = flows.take_turn(sub.submission_id, passed_over=frozenset(), terms=(), at=world.hub.clock.now())
+    assert turn is not None
+    # A different visit is departed, but an open turn owns its eventual closure.
+    departed = replace(sub, node_id="another-node")
+    closed, remaining = reconciler._close_departed([departed])
+    assert closed == [] and remaining == [departed]
+    current = flows.submission_for_visit(chunk_id, node_id=sub.node_id, epoch=sub.epoch)
+    assert current is not None and current.closed is None
 
 
 # --- every path in -----------------------------------------------------------------------------------------------

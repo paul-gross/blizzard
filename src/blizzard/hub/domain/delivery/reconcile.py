@@ -144,7 +144,7 @@ class FlowLineReconciler:
             if (standing.chunk.chunk_id, standing.node.node_id, standing.epoch) not in in_line
             and (sub := self._submit_isolated(standing, facts_by_id[standing.chunk.chunk_id])) is not None
         ]
-        withdrawn, still_open = self._close_departed(open_subs, facts_by_id)
+        withdrawn, still_open = self._close_departed(open_subs)
         arrivals = [sub.arrival for sub in (*still_open, *submitted)]
         return LineReconciliation(
             submitted=len(submitted),
@@ -387,24 +387,28 @@ class FlowLineReconciler:
         return latest.generation + 1 if latest.closed == TURN_SUPERSEDED else None
 
     def _close_departed(
-        self, open_subs: Sequence[Submission], facts_by_id: Mapping[str, ChunkFacts]
+        self, open_subs: Sequence[Submission]
     ) -> tuple[list[tuple[FlowFactWritten, ...]], list[Submission]]:
         """Close each open submission with no open turn whose chunk has left its visit; the ``withdrawn`` facts of
         each closure it wrote, and the submissions it left open."""
-        turning = {turn.submission_id for turn in self._flows.open_turns()}
-        outside = sorted({sub.chunk_id for sub in open_subs} - facts_by_id.keys())
-        facts = {**facts_by_id, **(self._facts.load_facts_for(outside) if outside else {})}
         now = self._clock.now()
         closed: list[tuple[FlowFactWritten, ...]] = []
         still_open: list[Submission] = []
         for sub in open_subs:
-            withdrawal = withdrawal_for(ChunkFacts.or_default(facts.get(sub.chunk_id)), sub)
-            if sub.submission_id in turning or withdrawal is None:
-                still_open.append(sub)
-            elif (written := self._flows.close(sub.submission_id, outcome=withdrawal, at=now)) is not None:
-                closed.append(written)
-            else:
-                still_open.append(sub)
+            with self._exclusive.locked([sub.chunk_id]) as handle:
+                if not self._flows.lock_submission_locked(handle, sub):
+                    still_open.append(sub)
+                    continue
+                withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
+                written = (
+                    self._flows.close_locked(handle, sub, outcome=withdrawal, at=now)
+                    if withdrawal is not None
+                    else None
+                )
+                if written is not None:
+                    closed.append(written)
+                else:
+                    still_open.append(sub)
         return closed, still_open
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:
