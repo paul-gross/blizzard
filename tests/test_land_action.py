@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -19,6 +19,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Marker, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
@@ -59,6 +60,7 @@ from blizzard.hub.forge.landing import (
 )
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
+from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
 from tests.support import (
@@ -1063,6 +1065,30 @@ def test_land_lands_each_repository_through_its_own_handle_and_records_each_land
     )
     assert _artifact(hub, chunk_id, f"merged/{_WIDGET}") == f"merge-{_WIDGET}-1"
     assert set(double.tokens) == {_WIDGET, _GADGET}
+
+
+def test_pending_landing_resumes_across_landing_policy_migration(tmp_path: Path) -> None:
+    double = _forge(checks={_SUBMITTED: (check(outcome=CheckOutcome.PENDING, detail="queued"),)})
+    hub = _hub(tmp_path, double)
+    chunk_id = _chunk(hub, _WIDGET)
+    assert _take(hub, chunk_id) == "pending"
+    assert _artifact(hub, chunk_id, f"merged/{_WIDGET}") is None
+
+    hub.engine.dispose()
+    migrations = Migrations(HubConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'hub.db'}"), hub.clock).runner
+    migrations.downgrade("20261029_0900_close_attempt_resume_at")
+    migrations.upgrade("head")
+
+    double.repos[_WIDGET].checks[_SUBMITTED] = GREEN
+    reopened = _hub(tmp_path, double)
+    assert (
+        reopened.services.repository_records.list_all(include_retired=False)[0].fields.landing_policy
+        == "merge-on-checks"
+    )
+    reopened.clock.advance(timedelta(seconds=3601))
+    assert _take(reopened, chunk_id) == "landed"
+    assert _artifact(reopened, chunk_id, f"merged/{_WIDGET}") == f"merge-{_WIDGET}-1"
+    assert _landed_rows(reopened, chunk_id) == [(_WIDGET, f"merge-{_WIDGET}-1", _record_id(reopened, "widget"))]
 
 
 def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landing_and_spares_the_second(
