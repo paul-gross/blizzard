@@ -2671,7 +2671,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGraphRepository, "graph_id_of_enabled_name"): lambda w: w.hub.services.graphs.graph_id_of_enabled_name(
         _HUB_GRAPH_NAME
     ),
-    (IReadNodeExecutors, "executors_by_node_name"): lambda w: w.hub.services.graphs.executors_by_node_name(),
+    (IReadNodeExecutors, "executors_by_node_name"): lambda w: w.hub.services.node_executors.executors_by_node_name(),
     (IReadManyGraphs, "get_many"): lambda w: w.hub.services.graphs.get_many(
         [w.graph.graph_id, w.default_graph.graph_id]
     ),
