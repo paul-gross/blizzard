@@ -14,7 +14,7 @@ from blizzard.hub.domain.chunk.model import HubNodePollFact, decide_close_enqueu
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import PollPolicy
-from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ANSWER
+from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ANSWER, HubActionCatalogue
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store import schema as s
@@ -46,7 +46,7 @@ def _deliver(**overrides: Unpack[_DeliverKeys]) -> dict[str, object]:
     return node
 
 
-def _errors(deliver: dict[str, object], *, catalogue=TEST_CATALOGUE) -> list[str]:
+def _errors(deliver: dict[str, object], *, catalogue: HubActionCatalogue = TEST_CATALOGUE) -> list[str]:
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": {"build": _BUILD, "deliver": deliver}})
     return Validator.of(doc, catalogue).result.errors
 
@@ -77,24 +77,33 @@ def test_an_unknown_action_is_refused() -> None:
 
 
 def test_a_test_action_is_unknown_to_the_shipped_catalogue() -> None:
-    node = {"executor": "hub", "action": "test.answer", "with": {"choice": "failure"}, "judgement": _choices("failure")}
+    node: dict[str, object] = {
+        "executor": "hub",
+        "action": "test.answer",
+        "with": {"choice": "failure"},
+        "judgement": _choices("failure"),
+    }
     assert _errors(node) == []
     assert any("unknown action `test.answer`" in e for e in _errors(node, catalogue=SHIPPED_CATALOGUE))
 
 
 def test_an_undeclared_with_key_is_refused() -> None:
-    node = {"executor": "hub", "action": "garden-deliver", "with": {"bogus": "x"}}
+    node: dict[str, object] = {"executor": "hub", "action": "garden-deliver", "with": {"bogus": "x"}}
     node["judgement"] = _choices("recorded", "invalid", "failure")
     assert any("declares no argument `bogus`" in e for e in _errors(node))
 
 
 def test_a_missing_required_with_key_is_refused() -> None:
-    node = {"executor": "hub", "action": "test.answer", "judgement": _choices("failure")}
+    node: dict[str, object] = {"executor": "hub", "action": "test.answer", "judgement": _choices("failure")}
     assert any("requires argument `with.choice`" in e for e in _errors(node))
 
 
 def test_a_with_value_that_is_not_a_string_or_list_of_strings_is_refused() -> None:
-    node = {"executor": "hub", "action": "garden-deliver", "with": {"delta": 3, "proposals": ["docket", 4]}}
+    node: dict[str, object] = {
+        "executor": "hub",
+        "action": "garden-deliver",
+        "with": {"delta": 3, "proposals": ["docket", 4]},
+    }
     node["judgement"] = _choices("recorded", "invalid", "failure")
     errors = _errors(node)
     assert any("`with.delta` must be a string or a list of strings" in e for e in errors)
@@ -102,7 +111,7 @@ def test_a_with_value_that_is_not_a_string_or_list_of_strings_is_refused() -> No
 
 
 def test_with_on_a_hub_node_naming_no_action_is_refused() -> None:
-    node = {"executor": "hub", "with": {"x": "y"}, "judgement": _choices("failure")}
+    node: dict[str, object] = {"executor": "hub", "with": {"x": "y"}, "judgement": _choices("failure")}
     assert any("`with:` is only legal on a node that names an `action:`" in e for e in _errors(node))
 
 
@@ -113,7 +122,7 @@ def test_an_answer_the_node_authors_no_choice_for_is_refused() -> None:
 
 
 def test_a_garden_deliver_node_without_invalid_proposals_is_refused() -> None:
-    node = {
+    node: dict[str, object] = {
         "executor": "hub",
         "action": "garden-deliver",
         "with": {"delta": "delta", "proposals": "docket"},
@@ -123,7 +132,12 @@ def test_a_garden_deliver_node_without_invalid_proposals_is_refused() -> None:
 
 
 def test_a_test_actions_answers_are_its_arguments_values() -> None:
-    node = {"executor": "hub", "action": "test.answer", "with": {"choice": "landed"}, "judgement": _choices("failure")}
+    node: dict[str, object] = {
+        "executor": "hub",
+        "action": "test.answer",
+        "with": {"choice": "landed"},
+        "judgement": _choices("failure"),
+    }
     assert any("can answer `landed`" in e for e in _errors(node))
     assert TEST_ANSWER.answers_for({"choice": ("landed",)}) == frozenset({"landed"})
 
@@ -136,12 +150,17 @@ def test_a_choice_named_by_a_reserved_wait_is_refused() -> None:
 @pytest.mark.parametrize("action", ["record-findings", "garden-deliver", "pass"])
 def test_poll_keys_on_an_action_that_cannot_wait_are_refused(action: str) -> None:
     answers = SHIPPED_CATALOGUE.specs[action].answers
-    node = {"executor": "hub", "action": action, "poll_interval": 30, "judgement": _choices(*answers, "failure")}
+    node: dict[str, object] = {
+        "executor": "hub",
+        "action": action,
+        "poll_interval": 30,
+        "judgement": _choices(*answers, "failure"),
+    }
     assert any("`poll_interval`/`poll_timeout` are only legal" in e for e in _errors(node))
 
 
 def test_poll_keys_on_a_test_action_that_can_answer_a_wait_mint() -> None:
-    node = {
+    node: dict[str, object] = {
         "executor": "hub",
         "action": "test.sequence",
         "with": {"choices": ["pending", "failure"]},

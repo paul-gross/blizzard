@@ -81,14 +81,14 @@ class _FakeChunkRepo:
     bug. ``ready``/``not_ready`` are independent candidate sets — never merged — mirroring
     the two lists :class:`QueueList` names (``bzh:ranking-is-per-list``)."""
 
-    ready: list[Chunk] = field(default_factory=list)
-    not_ready: list[Chunk] = field(default_factory=list)
-    positions: dict[str, float] = field(default_factory=dict)
-    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
-    stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
+    ready: list[Chunk] = field(default_factory=list[Chunk])
+    not_ready: list[Chunk] = field(default_factory=list[Chunk])
+    positions: dict[str, float] = field(default_factory=dict[str, float])
+    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
+    stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
     #: Chunks promoted since candidates were resolved — makes
     #: :meth:`record_backlog_positions` a no-op for them, mirroring the real store.
-    promoted_chunk_ids: set[str] = field(default_factory=set)
+    promoted_chunk_ids: set[str] = field(default_factory=set[str])
 
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready

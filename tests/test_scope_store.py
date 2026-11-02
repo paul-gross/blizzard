@@ -53,6 +53,18 @@ def _ensure(store: ScopeStore, project: str, slug: str, *, description: str = ""
     return store.ensure(record, change=change)
 
 
+def _edit(scope: Scope, edit: ScopeEdit) -> tuple[Scope, ConfigChange]:
+    result = scope.edit(edit, _CTX, if_match=None, at=_NOW)
+    assert result is not None
+    return result
+
+
+def _set_retired(scope: Scope, retired: bool) -> tuple[Scope, ConfigChange]:
+    result = scope.set_retired(retired, _CTX, if_match=None, at=_NOW)
+    assert result is not None
+    return result
+
+
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
     """The change log past the store's default project, whose ``create`` row the migration wrote."""
     past_the_project = config_changes.c.record_kind != "project"
@@ -93,7 +105,9 @@ def test_ensure_on_an_existing_slug_reads_back_the_existing_row_and_writes_nothi
     second = _ensure(store, project, "blizzard", description="clobber attempt")
 
     assert second == first
-    assert store.get(project, "blizzard").description == "original"  # type: ignore[union-attr]
+    stored = store.get(project, "blizzard")
+    assert stored is not None
+    assert stored.description == "original"
     assert len(_changes(engine)) == 1
 
 
@@ -101,12 +115,13 @@ def test_update_writes_the_description_revision_and_change_together(tmp_path: Pa
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     scope = _ensure(store, project, "blizzard", description="original")
-    edited, change = scope.edit(ScopeEdit(description="revised"), _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    edited, change = _edit(scope, ScopeEdit(description="revised"))
 
     store.update(edited, from_revision=1, change=change)
 
     stored = store.get(project, "blizzard")
-    assert (stored.description, stored.revision) == ("revised", 2)  # type: ignore[union-attr]
+    assert stored is not None
+    assert (stored.description, stored.revision) == ("revised", 2)
     assert _changes(engine)[-1] == ("scope", "blizzard", 2, "edit")
 
 
@@ -114,7 +129,7 @@ def test_update_from_a_moved_revision_conflicts_and_writes_nothing(tmp_path: Pat
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     scope = _ensure(store, project, "blizzard", description="original")
-    edited, change = scope.edit(ScopeEdit(description="revised"), _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    edited, change = _edit(scope, ScopeEdit(description="revised"))
     store.update(edited, from_revision=1, change=change)
 
     with pytest.raises(ConfigRevisionConflict) as exc_info:
@@ -133,7 +148,7 @@ def test_list_all_orders_newest_first_and_marks_retired(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
     old = _ensure(store, project, "old")
     _ensure(store, project, "new", at=_NOW.replace(hour=13))
-    retired, change = old.set_retired(True, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    retired, change = _set_retired(old, True)
     store.record_lifecycle(retired, retired=True, from_revision=1, at=_NOW, by="paul", change=change)
 
     assert [(s.slug, s.retired) for s in store.list_all()] == [("new", False), ("old", True)]
@@ -150,14 +165,15 @@ def test_retire_then_enable_appends_facts_moves_the_revision_and_logs_each(tmp_p
     project = default_project(engine)
     scope = _ensure(store, project, "blizzard", description="d")
 
-    retired, change = scope.set_retired(True, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    retired, change = _set_retired(scope, True)
     store.record_lifecycle(retired, retired=True, from_revision=1, at=_NOW, by="paul", change=change)
     assert store.get(project, "blizzard") == retired
-    enabled, change = retired.set_retired(False, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    enabled, change = _set_retired(retired, False)
     store.record_lifecycle(enabled, retired=False, from_revision=2, at=_NOW, by="paul", change=change)
 
     stored = store.get(project, "blizzard")
-    assert (stored.retired, stored.revision, stored.description) == (False, 3, "d")  # type: ignore[union-attr]
+    assert stored is not None
+    assert (stored.retired, stored.revision, stored.description) == (False, 3, "d")
     assert _facts(engine) == [("blizzard", True, "paul"), ("blizzard", False, "paul")]
     assert [op for *_, op in _changes(engine)] == ["create", "retire", "enable"]
 
@@ -166,7 +182,7 @@ def test_record_lifecycle_from_a_moved_revision_appends_no_fact(tmp_path: Path) 
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     scope = _ensure(store, project, "blizzard")
-    retired, change = scope.set_retired(True, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    retired, change = _set_retired(scope, True)
 
     with pytest.raises(ConfigRevisionConflict):
         store.record_lifecycle(retired, retired=True, from_revision=5, at=_NOW, by="paul", change=change)
@@ -211,9 +227,9 @@ def test_every_scope_change_row_names_the_scopes_project(tmp_path: Path) -> None
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     scope = _ensure(store, project, "blizzard", description="d")
-    edited, change = scope.edit(ScopeEdit(description="e"), _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    edited, change = _edit(scope, ScopeEdit(description="e"))
     store.update(edited, from_revision=1, change=change)
-    retired, change = edited.set_retired(True, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    retired, change = _set_retired(edited, True)
     store.record_lifecycle(retired, retired=True, from_revision=2, at=_NOW, by="paul", change=change)
 
     with engine.connect() as conn:

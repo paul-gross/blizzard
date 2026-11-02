@@ -65,7 +65,7 @@ def _seed_spawned_lease(store: SqlAlchemyRunnerStore):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store: SqlAlchemyRunnerStore, *, probe=None, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, *, probe: FakeProbe | None = None, clock: FixedClock | None = None):
     return make_context(
         store,
         hub=FakeHub(),
@@ -256,7 +256,7 @@ def test_open_pause_parks_reads_a_re_parked_leases_newest_park(tmp_path: Path):
 def test_open_pause_parks_reads_one_row_per_lease_whatever_the_repark_depth(tmp_path: Path):
     from tests.support import count_rows_read
 
-    def parks_at(depth: int, path):
+    def parks_at(depth: int, path: Path):
         path.mkdir()
         store = _store(path)
         for lease in ("lease_a", "lease_b"):

@@ -14,6 +14,8 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.api import chunk_dependencies as chunk_dependencies_module
+from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp
 
@@ -258,7 +260,7 @@ def test_declare_against_a_dependent_deleted_between_resolution_and_the_write_is
     before = _rows(hub)
     real_resolve_prerequisite = chunk_dependencies_module.resolve_prerequisite
 
-    def _delete_dependent_then_resolve(services, chunk_id):
+    def _delete_dependent_then_resolve(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
         assert hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={}).status_code == 202
         return real_resolve_prerequisite(services, chunk_id)
 

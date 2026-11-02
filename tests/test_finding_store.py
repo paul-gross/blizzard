@@ -41,6 +41,12 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     return FindingStore(hub_store_connections(engine)), engine
 
 
+def _get(store: FindingStore, finding_id: str) -> Finding:
+    finding = store.get(finding_id)
+    assert finding is not None
+    return finding
+
+
 def _store(tmp_path: Path) -> FindingStore:
     store, _ = _store_and_engine(tmp_path)
     return store
@@ -78,10 +84,10 @@ def test_add_then_get_round_trips(tmp_path: Path) -> None:
 
     added = _add(store, project)
 
-    fetched = store.get("fin_1")
+    fetched = _get(store, "fin_1")
     assert fetched == added
-    assert fetched.live is True  # type: ignore[union-attr]
-    assert fetched.observed_count == 0  # type: ignore[union-attr]
+    assert fetched.live is True
+    assert fetched.observed_count == 0
 
 
 def test_get_unknown_id_is_none(tmp_path: Path) -> None:
@@ -140,11 +146,11 @@ def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
         store.record_facts(
             [
                 FactEntry(finding_id="fin_1", kind="observed", at=_LATER, note=None),
-                FactEntry(finding_id="fin_1", kind="observed", at=None, note=None),  # type: ignore[arg-type]
+                FactEntry(finding_id="fin_1", kind="observed", at=None, note=None),  # pyright: ignore[reportArgumentType]  # a null timestamp is the store failure under test
             ]
         )
 
-    assert store.get("fin_1").observed_count == 0  # type: ignore[union-attr]
+    assert _get(store, "fin_1").observed_count == 0
 
 
 def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expected_state(tmp_path: Path) -> None:
@@ -163,8 +169,8 @@ def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expect
     )
 
     assert moved == ["fin_1"]
-    assert store.get("fin_1").state == "resolved"  # type: ignore[union-attr]
-    assert store.get("fin_2").state == "live"  # type: ignore[union-attr]
+    assert _get(store, "fin_1").state == "resolved"
+    assert _get(store, "fin_2").state == "live"
 
 
 def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state(tmp_path: Path) -> None:
@@ -177,7 +183,7 @@ def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state
     )
 
     assert moved == []
-    assert store.get("fin_1").state == "wont-fix"  # type: ignore[union-attr]
+    assert _get(store, "fin_1").state == "wont-fix"
 
 
 def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> None:
@@ -192,7 +198,9 @@ def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> 
     with pytest.raises(FindingAlreadyExited):
         service.resolve([stale], note="fixed again", actor="b")
 
-    _finding, facts = store.get_with_facts("fin_1")  # type: ignore[misc]
+    with_facts = store.get_with_facts("fin_1")
+    assert with_facts is not None
+    _finding, facts = with_facts
     assert [f.kind for f in facts].count("resolved") == 1
 
 
@@ -205,9 +213,9 @@ def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
 
     store.record_fact("fin_1", kind="observed", at=_LATER)
 
-    fetched = store.get("fin_1")
-    assert fetched.observed_count == 1  # type: ignore[union-attr]
-    assert fetched.last_seen_at == _LATER  # type: ignore[union-attr]
+    fetched = _get(store, "fin_1")
+    assert fetched.observed_count == 1
+    assert fetched.last_seen_at == _LATER
 
 
 def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
@@ -234,8 +242,8 @@ def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Pat
 
     store.record_fact("fin_1", kind="delivered", at=_LATER, actor="pgross")
 
-    fetched = store.get("fin_1")
-    assert fetched.actor == "pgross"  # type: ignore[union-attr]
+    fetched = _get(store, "fin_1")
+    assert fetched.actor == "pgross"
 
 
 def test_a_gone_finding_is_excluded_from_list_for_unless_include_gone(tmp_path: Path) -> None:

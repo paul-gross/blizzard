@@ -4,6 +4,7 @@ bulk verbs' batch order, and a run's `gone` settling a delivered finding."""
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime
 
 import pytest
@@ -202,7 +203,7 @@ def test_supersede_of_an_exited_finding_is_refused() -> None:
 
 
 def test_supersede_into_an_absorber_in_another_scope_is_legal() -> None:
-    absorber = Finding(**{**_finding("fin_2").__dict__, "scope_slug": "hub", "routine_name": "weekly"})
+    absorber = dataclasses.replace(_finding("fin_2"), scope_slug="hub", routine_name="weekly")
 
     fact = _finding("fin_1").supersede_into(absorber, note="n", actor="u1", at=_AT)
 

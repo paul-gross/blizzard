@@ -8,6 +8,7 @@ and its ``{source}/items``/``{source}/items/{ref}`` children."""
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -62,7 +63,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         self.find_live_holder_calls += 1
         return super().find_live_holder(pointer)
 
-    def live_holders(self, pointers):
+    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
         self.live_holders_calls += 1
         return super().live_holders(pointers)
 

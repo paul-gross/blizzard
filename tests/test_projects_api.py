@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, TypedDict, Unpack
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -23,7 +24,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path, link=False)
 
 
-def _ok(response, status: int = 200) -> dict[str, Any]:
+def _ok(response: httpx2.Response, status: int = 200) -> dict[str, Any]:
     assert response.status_code == status, response.text
     return response.json()
 
@@ -33,7 +34,7 @@ class _ProjectExtras(TypedDict, total=False):
     color: str
 
 
-def _create(client: TestClient, slug: str, name: str | None = None, **extra: Unpack[_ProjectExtras]) -> dict:
+def _create(client: TestClient, slug: str, name: str | None = None, **extra: Unpack[_ProjectExtras]) -> dict[str, Any]:
     return _ok(client.post("/api/projects", json={"slug": slug, "name": name or slug.title(), **extra}), 201)
 
 
@@ -366,7 +367,7 @@ def test_a_link_belongs_to_its_project_alone(hub: HubHarness) -> None:
 # --- Permissions -------------------------------------------------------------------------------------------------
 
 _READS = ["/api/projects", "/api/projects/default", "/api/projects/default/source-links"]
-_WRITES = [
+_WRITES: list[tuple[str, str, dict[str, object] | None]] = [
     ("POST", "/api/projects", {"slug": "widgets", "name": "Widgets"}),
     ("PATCH", "/api/projects/default", {"description": "d"}),
     ("PUT", "/api/projects/default/source-links/hub", None),

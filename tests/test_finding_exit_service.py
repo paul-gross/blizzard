@@ -57,11 +57,11 @@ class _FakeFindingRepo:
     """`conflicts` scripts each `record_facts` call's lost-guard ids (none once exhausted);
     `get_many` answers from `reloaded`, recording the ids it was asked for."""
 
-    batches: list[list[FactEntry]] = field(default_factory=list)
-    conflicts: list[list[str]] = field(default_factory=list)
-    reloaded: dict[str, Finding] = field(default_factory=dict)
-    expects: list[dict[str, str] | None] = field(default_factory=list)
-    reloads: list[list[str]] = field(default_factory=list)
+    batches: list[list[FactEntry]] = field(default_factory=list[list[FactEntry]])
+    conflicts: list[list[str]] = field(default_factory=list[list[str]])
+    reloaded: dict[str, Finding] = field(default_factory=dict[str, Finding])
+    expects: list[dict[str, str] | None] = field(default_factory=list[dict[str, str] | None])
+    reloads: list[list[str]] = field(default_factory=list[list[str]])
 
     def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         self.batches.append(list(entries))

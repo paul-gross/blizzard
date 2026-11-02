@@ -3,19 +3,24 @@ engine nor a core itself — stamped from the runtime's clock."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.domain.observability.hub_events import (
+    HubEvent,
+    HubEventEntry,
+    HubEventKind,
+    HubEventLogService,
+)
 from tests.config_inputs import FLAG_REGISTRY, STRICT, init_hub
 
 pytestmark = pytest.mark.unit
@@ -25,18 +30,32 @@ _AT = datetime(2026, 3, 4, 5, 6, tzinfo=UTC)
 
 @dataclass
 class _AppendedRow:
-    severity: str
-    kind: str
+    severity: EventLogSeverity
+    kind: HubEventKind
     message: str
-    detail: dict[str, Any] | None
+    detail: Mapping[str, object] | None
     at: datetime
 
 
 @dataclass
 class _FakeEvents:
-    rows: list[_AppendedRow] = field(default_factory=list)
+    rows: list[_AppendedRow] = field(default_factory=list[_AppendedRow])
 
-    def append(self, *, severity: str, kind: str, message: str, detail: dict[str, Any] | None, at: datetime) -> int:
+    def recent(self, limit: int) -> list[HubEventEntry]:
+        raise AssertionError("the runtime only appends to the hub event log")
+
+    def newest(self, kinds: Sequence[HubEventKind]) -> HubEvent | None:
+        raise AssertionError("the runtime only appends to the hub event log")
+
+    def append(
+        self,
+        *,
+        severity: EventLogSeverity,
+        kind: HubEventKind,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+    ) -> int:
         self.rows.append(_AppendedRow(severity, kind, message, detail, at))
         return len(self.rows)
 
@@ -48,10 +67,10 @@ class _FakeOpener:
     closed: int = 0
 
     @contextmanager
-    def __call__(self, config: HubConfig) -> Iterator[HubEventLogService]:
+    def __call__(self, config: HubConfig) -> Generator[HubEventLogService]:
         self.opened += 1
         try:
-            yield HubEventLogService(events=self.events)  # type: ignore[arg-type]
+            yield HubEventLogService(events=self.events)
         finally:
             self.closed += 1
 

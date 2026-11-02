@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import AuthConfig, ConfigError, OAuthProviderConfig
+from blizzard.hub.config import AuthConfig, ConfigError, HubConfig, OAuthProviderConfig
 from blizzard.hub.store import schema as s
 from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
 
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _seed_orphan_identity(config, *, provider_name: str) -> None:
+def _seed_orphan_identity(config: HubConfig, *, provider_name: str) -> None:
     engine = create_engine_from_url(config.db_url)
     with engine.begin() as conn:
         conn.execute(insert(s.users).values(id="usr_1", username="a", display_name="A", email=None, created_at=_T0))

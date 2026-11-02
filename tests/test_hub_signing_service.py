@@ -11,7 +11,7 @@ from typing import cast
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.hub.auth.signing import SigningKeyService
@@ -34,9 +34,10 @@ def test_sign_and_verify_round_trip(tmp_path: Path) -> None:
     matching = [k for k in _jwks_keys(jwks) if k["kid"] == kid]
     assert len(matching) == 1
     public_key = RSAAlgorithm.from_jwk(matching[0])
+    assert isinstance(public_key, rsa.RSAPublicKey)
     claims = jwt.decode(
         token,
-        key=public_key,  # type: ignore[arg-type]
+        key=public_key,
         algorithms=["RS256"],
         audience="runner-a",
         options={"verify_exp": False},
@@ -91,9 +92,10 @@ def test_token_signed_before_rotation_still_verifies_against_published_jwks(tmp_
     matching = [k for k in _jwks_keys(service.public_jwks()) if k["kid"] == header["kid"]]
     assert len(matching) == 1  # still published as "previous"
     public_key = RSAAlgorithm.from_jwk(matching[0])
+    assert isinstance(public_key, rsa.RSAPublicKey)
     jwt.decode(
         token,
-        key=public_key,  # type: ignore[arg-type]
+        key=public_key,
         algorithms=["RS256"],
         audience="runner-a",
         options={"verify_exp": False},

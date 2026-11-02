@@ -8,6 +8,7 @@ unknown to the store is silently omitted rather than answered with a 404."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -158,7 +159,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.status_facts_for_calls = 0
         self.load_facts_calls = 0
 
-    def status_facts_for(self, chunk_ids) -> dict[str, ChunkFacts]:
+    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         self.status_facts_for_calls += 1
         return super().status_facts_for(chunk_ids)
 
@@ -175,7 +176,7 @@ class _CountingRouteStore(ChunkRouteStore):
         self.routes_for_calls = 0
         self.route_of_calls = 0
 
-    def routes_for(self, chunk_ids) -> dict[str, Route]:
+    def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
         self.routes_for_calls += 1
         return super().routes_for(chunk_ids)
 
@@ -192,7 +193,7 @@ class _CountingDecisionsStore(ChunkDecisionsStore):
         self.live_decisions_for_calls = 0
         self.decision_for_chunk_calls = 0
 
-    def live_decisions_for(self, chunk_ids) -> dict[str, LiveDecisionStatus]:
+    def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         self.live_decisions_for_calls += 1
         return super().live_decisions_for(chunk_ids)
 

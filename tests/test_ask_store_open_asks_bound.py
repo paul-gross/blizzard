@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
+from sqlalchemy import Row, Select
 
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.schema import lease_closures
@@ -29,7 +31,7 @@ class _RowCountingConnections(RunnerStoreConnections):
 
     rows_read = 0
 
-    def all(self, stmt):
+    def all(self, stmt: Select[Any]) -> list[Row[Any]]:
         rows = super().all(stmt)
         self.rows_read += len(rows)
         return rows

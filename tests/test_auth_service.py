@@ -8,7 +8,7 @@ work; the real SQLAlchemy adapters are exercised at component tier
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict, Unpack
@@ -236,7 +236,7 @@ class _FakeTransactions:
         self.writes = writes
 
     @contextmanager
-    def begin(self) -> Iterator[IdentityWrites]:
+    def begin(self) -> Generator[IdentityWrites]:
         yield self.writes
 
 

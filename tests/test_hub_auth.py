@@ -4,11 +4,14 @@ Bearer-token resolution is exercised at component tier (``tests/test_runner_enro
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 
 from blizzard.hub.api.auth import RunnerPrincipal
 from blizzard.hub.api.fleet import FleetRequest
+from blizzard.hub.config import HubConfig
 from blizzard.hub.tenancy import StoreScope, TenantId
 
 pytestmark = pytest.mark.unit
@@ -18,8 +21,15 @@ _PRINCIPAL = RunnerPrincipal(runner_id="runner-a", runner_name="r-claude", works
 
 
 def _fleet(principal: RunnerPrincipal) -> FleetRequest:
-    # No config and no services: `assert_owns` reads only the principal.
-    return FleetRequest(principal, config=None, scope=StoreScope(_TENANT), tenant_name="acme", services=None)  # type: ignore[arg-type]
+    return FleetRequest(
+        principal,
+        config=HubConfig(root=Path("."), db_url="sqlite://"),
+        scope=StoreScope(_TENANT),
+        tenant_name="acme",
+        # A unit-tier stand-in: `assert_owns` reads only the principal, and a real
+        # TenantServices bag needs a provisioned tenant store.
+        services=None,  # pyright: ignore[reportArgumentType]  # unit tier wires no tenant services
+    )
 
 
 def test_the_callers_own_runner_id_is_never_a_mismatch() -> None:

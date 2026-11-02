@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import sqlalchemy as sa
+from httpx2 import Response
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.models import ProviderIdentity, User
@@ -240,7 +241,7 @@ def test_provider_handle_rename_refreshes_without_reminting(tmp_path: Path) -> N
 # --- invite-only --------------------------------------------------------------------
 
 
-def _callback(hub: HubHarness, provider: FakeOAuthProvider, code: str) -> Any:
+def _callback(hub: HubHarness, provider: FakeOAuthProvider, code: str) -> Response:
     authorize_resp = hub.client.get(f"/api/auth/{provider.name}/authorize", follow_redirects=False)
     state = state_from_redirect(authorize_resp.headers["location"])
     return hub.client.get(f"/api/auth/{provider.name}/callback?code={code}&state={state}", follow_redirects=False)
@@ -251,7 +252,7 @@ def _rows(hub: HubHarness, table: sa.Table) -> list[sa.Row[Any]]:
         return list(conn.execute(hub_scoped(sa.select(table))).all())
 
 
-def _assert_refused_invite_only(resp: Any) -> None:
+def _assert_refused_invite_only(resp: Response) -> None:
     assert resp.status_code == 302, resp.text
     location = urlsplit(resp.headers["location"])
     assert (location.path, parse_qs(location.query)) == ("/login", {"refusal": ["invite_only"]})

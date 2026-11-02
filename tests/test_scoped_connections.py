@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -148,7 +148,7 @@ def _sql(stmt: Any) -> str:
 def test_the_scope_is_the_tenant_and_nothing_narrower() -> None:
     assert [f.name for f in dataclasses.fields(StoreScope)] == ["tenant"]
     with pytest.raises(dataclasses.FrozenInstanceError):
-        StoreScope(TEN_A).tenant = TEN_B  # type: ignore[misc]
+        StoreScope(TEN_A).tenant = TEN_B  # pyright: ignore[reportAttributeAccessIssue]  # the refused write is the point
 
 
 def test_scoped_connections_are_hub_store_connections_bound_to_the_scope(
@@ -324,18 +324,26 @@ def test_an_insert_from_select_stamps_the_tenant_into_each_row(
         assert list(copied) == ["c1", "c2"]
 
 
+def _tenant_by_row_name(b: ScopedConnections) -> object:
+    return b.insert_rows(notes, [{"chunk_id": "c9", "body": "x"}, {"chunk_id": "c9", "tenant_id": TEN_B}])
+
+
+def _tenant_by_row_column(b: ScopedConnections) -> object:
+    return b.insert_rows(notes, [{notes.c.tenant_id: TEN_B, "chunk_id": "c9", "body": "x"}])
+
+
+def _tenant_by_select_names(b: ScopedConnections) -> object:
+    return b.insert_from_select(notes, ["chunk_id", "tenant_id"], sa.select(sa.literal("c9"), sa.literal(TEN_B)))
+
+
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda b: b.insert_rows(notes, [{"chunk_id": "c9", "body": "x"}, {"chunk_id": "c9", "tenant_id": TEN_B}]),
-        lambda b: b.insert_rows(notes, [{notes.c.tenant_id: TEN_B, "chunk_id": "c9", "body": "x"}]),
-        lambda b: b.insert_from_select(
-            notes, ["chunk_id", "tenant_id"], sa.select(sa.literal("c9"), sa.literal(TEN_B))
-        ),
-    ],
+    [_tenant_by_row_name, _tenant_by_row_column, _tenant_by_select_names],
     ids=["row-name", "row-column", "select-names"],
 )
-def test_a_tenant_id_supplied_to_a_multi_row_builder_is_refused(scoped: ScopedConnections, build: Any) -> None:
+def test_a_tenant_id_supplied_to_a_multi_row_builder_is_refused(
+    scoped: ScopedConnections, build: Callable[[ScopedConnections], object]
+) -> None:
     with pytest.raises(TenantKeySupplied, match="notes"):
         build(scoped)
 
