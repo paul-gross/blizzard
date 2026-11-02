@@ -46,13 +46,12 @@ class Document:
     classify: Classifier
     scope: str | None = None
 
-    @property
-    def composed(self) -> bool:
+    def is_composed(self) -> bool:
         return self.scope is not None
 
     def covers(self, path: str) -> bool:
         """Whether a change to ``path`` changes this document."""
-        if not self.composed:
+        if not self.is_composed():
             return path == self.path
         directory, _, name = path.rpartition("/")
         return directory == self.path.rpartition("/")[0] and name.endswith(".json")
@@ -62,9 +61,9 @@ class Document:
         text = fetch(self.path)
         if text is None:
             return None
-        document = json.loads(text)
-        if not self.composed:
-            return document  # type: ignore[no-any-return]
+        document: dict[str, Any] = json.loads(text)
+        if not self.is_composed():
+            return document
         directory = self.path.rpartition("/")[0]
         cases = {kind: json.loads(fetch(f"{directory}/{kind}.json") or "{}") for kind in document.get("kinds", [])}
         return {"scope": self.scope, "manifest": document, "cases": cases}
