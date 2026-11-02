@@ -53,20 +53,22 @@ test('test_fast_forward_stands_when_second_forge_refuses_merge_method', async ({
   expect(await pulls(secondForge, second, 'open')).toHaveLength(1);
 });
 
-test('test_candidate_without_checks_exhausts_pending_timeout_without_advancing', async ({ repository, issue, api, forge, runnerHosts }) => {
+test('test_candidate_without_checks_exhausts_pending_timeout_without_advancing', async ({ repository, issue, api, forge, runnerHosts, workerCheckpoint }) => {
   test.setTimeout(180_000);
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'fast-forward' } })).status).toBe(200);
-  const extra = [
-    'import json, urllib.request',
-    `request = urllib.request.Request(${JSON.stringify(`${forge.url}/_levers/ref_checks`)}, data=json.dumps({'repo': ${JSON.stringify(fullName(repo))}, 'ref': commit, 'checks': []}).encode(), headers={'Content-Type': 'application/json'}, method='POST')`,
-    'urllib.request.urlopen(request).close()',
-  ].join('\n');
-  expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], extra, 2) } })).status).toBe(201);
+  expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 2) } })).status).toBe(201);
   const { chunk } = await issue('NO-CHECKS.md', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
   const original = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
+  let arrived = false;
+  void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+  await stepUntil(host, async () => arrived, Boolean, 80);
+  const candidate = await host.originHead(repo.name, 'feature/diverged');
+  expect(candidate).toBeTruthy();
+  expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+  workerCheckpoint.release('pushed');
   await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending?.kind === 'pending', 80);
   await expect.poll(async () => (await detail(api, chunk.chunk_id)).history.some((row) => row.from_node_name === 'deliver' && row.choice_name === 'failure'), { timeout: 30_000 }).toBe(true);
   const result = await detail(api, chunk.chunk_id);
