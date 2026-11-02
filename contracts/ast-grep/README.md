@@ -119,6 +119,15 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated fully onto
     the row lock and import `threading` no longer.
 
+- **`bzh:hub-store-adapter-imports`** (`rules/hub-store-adapter-imports.yml`) — a store adapter does not import a sibling
+  adapter to perform another repository's mutation. The prose home is `bzh:sibling-adapter-independence` in
+  `blizzard-context:/architecture/repository-access.md`.
+  - Scoped to `src/blizzard/hub/store/internal/**`, `*factory.py` composition roots exempt.
+  - Matches an absolute or relative import of a `*_store` module, by `from` or plain `import`, including
+    `from . import x_store`. Shared plumbing modules (`chunk_rows`, `newest_fact`, `store.locking`,
+    `store.transactions`) are not adapters and do not match.
+  - Existing imports carry a reasoned `ast-grep-ignore` at the site as recorded debt; a new one fails the gate.
+
 - **`bzh:store-no-for-update`** (`rules/store-no-for-update.yml`) — a guarded write never takes its lock with
   `.with_for_update()`: it renders nothing on SQLite. The prose home is the `bzh:store-exclusive-write` rule's **Do** in
   `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` before decision guard reads).

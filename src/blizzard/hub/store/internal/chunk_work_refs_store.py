@@ -24,6 +24,9 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     resolve_live_holders,
 )
 from blizzard.hub.store import schema as s
+
+# Shares the chunk facts status-family tables and loader.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids, ephemeral_ids_in
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live

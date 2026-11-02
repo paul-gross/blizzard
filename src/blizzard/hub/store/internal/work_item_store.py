@@ -34,7 +34,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
 )
+
+# Inserts the proposal closure in the work-item write's transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
+
+# Inserts the run context in the work-item write's transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import connection_in

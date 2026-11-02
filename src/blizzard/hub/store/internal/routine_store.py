@@ -24,8 +24,14 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+
+# Resolves or creates scope ids on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of

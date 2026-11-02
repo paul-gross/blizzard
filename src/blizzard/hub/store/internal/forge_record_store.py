@@ -40,6 +40,9 @@ from blizzard.hub.domain.config.forges import (
     require_unused,
     resolve_forge_reference,
 )
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_referrers import active_referrers
 from blizzard.hub.store.internal.former_slugs import SlugTables

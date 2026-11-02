@@ -1,0 +1,16 @@
+id: bzh:hub-store-adapter-imports
+language: Python
+severity: error
+message: A store adapter must not import a sibling adapter (a `*_store` module); coordinate through domain seams or shared plumbing.
+files:
+  - src/blizzard/hub/store/internal/**
+ignores:
+  - src/blizzard/hub/store/internal/*factory.py
+rule:
+  any:
+    - kind: import_from_statement
+      regex: '^from\s+(?:blizzard\.hub\.store\.internal\.|\.|\.\.internal\.)[a-zA-Z_]\w*_store(?:\.[\w.]+)?\s+import\b'
+    - kind: import_statement
+      regex: '\bblizzard\.hub\.store\.internal\.[a-zA-Z_]\w*_store\b'
+    - kind: import_from_statement
+      regex: '^from\s+(?:blizzard\.hub\.store\.internal|\.|\.\.internal)\s+import\b[\s\S]*\b[a-zA-Z_]\w*_store\b'

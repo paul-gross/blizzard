@@ -14,8 +14,17 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
+
+# Appends the config audit record on the caller's connection, atomically with the write.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Shares the routine adapter's revision and link writes.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.routine_store import link_scope, move_revision
+
+# Resolves or creates scope ids on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import routine_scopes, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
