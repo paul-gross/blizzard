@@ -14,7 +14,14 @@ class GraduationError(TransactionMisuse):
 
 
 class Transaction(Protocol):
-    """An open write unit, opaque to domain callers."""
+    """An open write unit, opaque to domain callers.
+
+    Graduation: a unit declares the resources it locks exactly once — through one ``lock_*``
+    call, made before any repository statement runs in it — and receives a
+    :class:`LockedTransaction`. A second declaration, or one after a statement, raises
+    :class:`GraduationError`; a token used after its unit closes raises
+    :class:`TransactionMisuse`. Repositories refuse a chunk or key the unit does not lock.
+    """
 
     def lock_chunks(self, chunk_ids: Sequence[str]) -> "LockedTransaction": ...
 
@@ -24,11 +31,18 @@ class Transaction(Protocol):
 
 
 class LockedTransaction(Transaction, Protocol):
-    """A graduated unit; store adapters must additionally check resource coverage."""
+    """A graduated unit; store adapters must additionally check resource coverage.
+
+    It still carries the ``lock_*`` methods of :class:`Transaction`, but a graduated unit cannot
+    lock again: every one raises :class:`GraduationError`."""
 
     @property
     def locked(self) -> bool: ...
 
 
 class IHubTransactions(Protocol):
-    def begin(self) -> AbstractContextManager[Transaction]: ...
+    """Opens tenant-scoped units of work."""
+
+    def begin(self) -> AbstractContextManager[Transaction]:
+        """Open one write unit that commits when the block exits cleanly and rolls back otherwise."""
+        ...

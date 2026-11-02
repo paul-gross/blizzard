@@ -1,4 +1,4 @@
-"""Compatibility read handles backed by the shared transaction service."""
+"""Locked read handles over the shared transaction service."""
 
 from __future__ import annotations
 
@@ -14,36 +14,15 @@ from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTran
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
-
-# Legacy exclusive handle composes dependency reads on its locked connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
-
-# Legacy exclusive handle composes fact reads on its locked connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-
-# Legacy exclusive handle composes record reads on its locked connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-
-# Legacy exclusive reads share chunk route and ephemeral-row queries.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, route_of_conn
-
-# Legacy exclusive handle composes work-reference reads on its locked connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-
-# Legacy pointer locking also reads project-source links in the same transaction.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_link_store import (
     PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
     projects_linking_sources_conn,
 )
-
-# Legacy exclusive handle composes registry reads on its locked connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import ChunkHandle, WorkRefHandle, connection_for, pointer_lock_key

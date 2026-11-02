@@ -22,21 +22,18 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-
-# Legacy hub execution writes share chunk row operations.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
-    conn_of,
     enqueue_close_intents,
     fence,
     graph_id_of,
     is_landing_marker,
-    lock_chunk_row,
     next_artifact_seq,
     next_route_seq,
     record_hub_lease,
 )
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import chunk_handle_connection
 
 
 class ChunkHubExecStore:
@@ -64,7 +61,7 @@ class ChunkHubExecStore:
         close_decision: CloseEnqueueDecision,
     ) -> bool:
         return self._transition_conn(
-            conn_of(handle, self._store, chunk_id),
+            chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             to_node_id=to_node_id,
@@ -162,7 +159,7 @@ class ChunkHubExecStore:
         next_poll_at: datetime | None = None,
     ) -> None:
         """Record a wait on the locked connection, coalescing consecutive parked polls."""
-        conn = conn_of(handle, self._store, chunk_id)
+        conn = chunk_handle_connection(handle, self._store, chunk_id)
         if kind == "awaiting-merge":
             previous = conn.execute(
                 self._store.select(s.hub_node_poll)

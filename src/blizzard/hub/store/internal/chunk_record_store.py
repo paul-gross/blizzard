@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
-from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -27,29 +26,26 @@ from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-
-# Legacy record reads and writes share chunk row operations.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_HARNESSES,
     DEFAULT_MODEL,
     INTENDED_MIGRATION,
     chunk_row,
-    conn_of,
     ephemeral_ids,
     ephemeral_ids_in,
     graph_id_of_batch,
     insert_chunk_rows,
     is_ephemeral_id,
     record_deleted_row,
-    work_ref_conn_of,
 )
-
-# Legacy record reads share chunk terminal-state predicates.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
-from blizzard.hub.store.transactions import connection_for
+from blizzard.hub.store.transactions import (
+    chunk_handle_connection,
+    connection_for,
+    connection_in,
+    work_ref_handle_connection,
+)
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -109,9 +105,7 @@ class ChunkRecordStore:
         return record_deleted_row(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
 
     def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
-        connection = (
-            self._store.read("get") if transaction is None else nullcontext(connection_for(self._store, transaction))
-        )
+        connection = connection_in(self._store, transaction, "get")
         with connection as conn:
             return self.get_conn(conn, chunk_id)
 
@@ -307,12 +301,12 @@ class ChunkRecordStore:
     def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
         """Insert a freshly minted chunk's rows on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``)."""
-        insert_chunk_rows(work_ref_conn_of(handle, self._store, *chunk.work_refs), chunk)
+        insert_chunk_rows(work_ref_handle_connection(handle, self._store, *chunk.work_refs), chunk)
 
     def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``)."""
-        self._set_graph_conn(conn_of(handle, self._store, chunk_id), chunk_id, graph_id=graph_id)
+        self._set_graph_conn(chunk_handle_connection(handle, self._store, chunk_id), chunk_id, graph_id=graph_id)
 
     def _set_graph_conn(self, conn: Connection, chunk_id: str, *, graph_id: str) -> None:
         conn.execute(self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
@@ -330,7 +324,7 @@ class ChunkRecordStore:
         all three in one write, on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``)."""
         self._set_defaults_conn(
-            conn_of(handle, self._store, chunk_id),
+            chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
             default_model=default_model,
             default_effort=default_effort,
@@ -361,7 +355,9 @@ class ChunkRecordStore:
     ) -> None:
         """`src/blizzard/hub/domain/chunk/ports/record.py`'s
         `IWriteChunkRecordRepository.set_intended_migration_locked`."""
-        self._set_intended_migration_conn(conn_of(handle, self._store, chunk_id), chunk_id, intended=intended)
+        self._set_intended_migration_conn(
+            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, intended=intended
+        )
 
     def _set_intended_migration_conn(
         self, conn: Connection, chunk_id: str, *, intended: IntendedMigration | None

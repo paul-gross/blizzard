@@ -16,11 +16,10 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.borrowed import BorrowedConnections, PinnedConnections
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_rows import conn_of, work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.store.transactions import HubTransactions, chunk_handle_connection, work_ref_handle_connection
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
@@ -174,15 +173,15 @@ def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> 
         with pytest.raises(TransactionMisuse):
             other_chunks.record.set_graph_locked(handle, "ch_a", graph_id="gr_1")
         with pytest.raises(TransactionMisuse):
-            work_ref_conn_of(handle, store)  # type: ignore[arg-type]
+            work_ref_handle_connection(handle, store)  # type: ignore[arg-type]
     with pytest.raises(TransactionMisuse):
-        conn_of(handle, store)
+        chunk_handle_connection(handle, store)
     with pytest.raises(TransactionMisuse):
         handle.record("ch_a")
     with chunks.exclusive.locked_work_refs([]) as refs:
-        assert work_ref_conn_of(refs, store) is not None
+        assert work_ref_handle_connection(refs, store) is not None
     with pytest.raises(TransactionMisuse):
-        work_ref_conn_of(refs, store)
+        work_ref_handle_connection(refs, store)
     pointer = WorkRef(source="source", ref="1")
     with chunks.exclusive.locked_work_refs([]) as refs:
         assert refs.live_holders([pointer]) == {}

@@ -1,7 +1,7 @@
 """Chunk deletion — the operator's withdrawal of an unacquired chunk's hub items, and
 the chunk itself. A hub item and its chunk live and die together: deleting
-the chunk withdraws every open ``hub:``-source pointer it holds, in one composite store
-write.
+the chunk withdraws every open ``hub:``-source pointer it holds, in one locked
+transaction across the chunk, dependency, and item repositories.
 Gated the same way grouping is: a paused or human-held chunk is refused too, not only a
 runner-held one."""
 

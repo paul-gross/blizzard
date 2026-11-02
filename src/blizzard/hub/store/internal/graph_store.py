@@ -36,14 +36,8 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
-
-# Legacy graph writes share keyed locking with chunk writes.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.chunk_rows import lock_keys
-
-# Legacy graph reads share the latest-retirement selector.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,

@@ -43,6 +43,8 @@ class PinnedConnections(HubStoreConnections):
 class PinnedScopedConnections(ScopedConnections, PinnedConnections):
     """Tenant builders and write guards over a connection owned by an outer transaction."""
 
+    _opens_own_units = False
+
     def __init__(self, conn: Connection, errors: HubStoreErrorFactory, scope: StoreScope) -> None:
         ScopedConnections.__init__(self, conn.engine, errors, scope)
         self._conn = conn

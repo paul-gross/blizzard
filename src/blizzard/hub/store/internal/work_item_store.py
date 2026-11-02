@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from collections.abc import Sequence
-from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -32,22 +31,13 @@ from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s
-
-# Legacy work-item creation inserts chunk rows atomically.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
 )
-
-# Legacy acceptance inserts the proposal closure with the work item atomically.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
-
-# Legacy work-item creation inserts its run context in the same transaction.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import connection_for
+from blizzard.hub.store.transactions import connection_in
 
 
 class WorkItemStore:
@@ -277,11 +267,7 @@ class WorkItemStore:
         return self._record(row)
 
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
-        connection = (
-            self._store.write("withdraw_open")
-            if transaction is None
-            else nullcontext(connection_for(self._store, transaction))
-        )
+        connection = connection_in(self._store, transaction, "withdraw_open", write=True)
         with connection as conn:
             self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
 

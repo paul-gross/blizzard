@@ -37,30 +37,19 @@ from blizzard.hub.domain.chunk.model import (
     WorkRef,
     is_landed_revision,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-
-# Legacy chunk row queries share the terminal-state predicate.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 
 # Legacy chunk row queries share the newest-fact predicate.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.locking import lock_chunk_row as lock_chunk_row
-from blizzard.hub.store.locking import lock_keys as lock_keys
-from blizzard.hub.store.scoped import (
-    ScopedConnections,
-    ScopedStatements,
-    after_commit,
-    event_publisher,
-    statements_of,
-)
+from blizzard.hub.store.locking import lock_chunk_row
+from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
 
 
 @adapter_model
@@ -415,20 +404,6 @@ def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[st
         )
         for chunk_id, row in live.items()
     }
-
-
-def conn_of(handle: ILockedChunkRead, store: ScopedConnections, *chunks: str) -> Connection:
-    """Resolve a store-issued chunk handle while its transaction is active."""
-    from blizzard.hub.store.transactions import chunk_handle_connection
-
-    return chunk_handle_connection(handle, store, *chunks)
-
-
-def work_ref_conn_of(handle: ILockedWorkRefRead, store: ScopedConnections, *pointers: WorkRef) -> Connection:
-    """Resolve a store-issued work-ref handle while its transaction is active."""
-    from blizzard.hub.store.transactions import work_ref_handle_connection
-
-    return work_ref_handle_connection(handle, store, *pointers)
 
 
 def next_route_seq(conn: Connection, chunk_id: str) -> int:

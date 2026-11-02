@@ -114,7 +114,6 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapab
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
-from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -131,7 +130,6 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_rows import work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -152,7 +150,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
-from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.store.transactions import HubTransactions, work_ref_handle_connection
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -2142,7 +2140,7 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
         if chunk.project_id is None:
             chunk = replace(
-                chunk, project_id=_only_project_on(work_ref_conn_of(handle, cast(Any, stores.record)._store))
+                chunk, project_id=_only_project_on(work_ref_handle_connection(handle, cast(Any, stores.record)._store))
             )
         stores.record.mint_locked(handle, chunk)
 

@@ -44,36 +44,12 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
 @dataclass
-class _FakeLockedChunkRead:
-    """Only ``facts``/``record``/``standing_edges_touching`` are live — see module docstring."""
-
-    chunk_facts: ChunkFacts | None
-    edges: list[DependencyEdge]
-    #: The locked handle's own ``record`` read — ``None`` falls back to the caller's
-    #: ``chunk``, exactly matching a real handle's first-mint identity.
-    current: Chunk | None = None
-
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.chunk_facts
-
-    def record(self, chunk_id: str) -> Chunk | None:
-        return self.current
-
-    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
-        return [e for e in self.edges if chunk_id in (e.dependent_chunk_id, e.prerequisite_chunk_id)]
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"DeleteService should not touch handle.{name!r}")
-
-
-@dataclass
 class _FakeItemsRepo:
-    """Only ``delete_chunk_and_withdraw_hub_items_locked`` is live — see module docstring."""
+    """Records the hub-item withdrawals deletion performs; any other call is a failure."""
 
     deleted: list[tuple[str, str, datetime]] = field(default_factory=list)
     work_refs_seen: list[list[WorkRef]] = field(default_factory=list)
     withdrawals: list[tuple[WorkRef, datetime, Transaction | None]] = field(default_factory=list)
-    _next_id: int = 1
 
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
         self.work_refs_seen.append([pointer])
@@ -85,8 +61,8 @@ class _FakeItemsRepo:
 
 @dataclass
 class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same facts/edges the
-    fake previously exposed as direct repositories."""
+    """One fake standing behind the facts, record, dependencies, and transaction ports
+    ``DeleteService`` consumes, over a fixed set of facts and edges."""
 
     chunk_facts: ChunkFacts | None
     edges: list[DependencyEdge]

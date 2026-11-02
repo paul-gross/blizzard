@@ -22,7 +22,8 @@ from structlog import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, next_route_seq
+from blizzard.hub.store.internal.chunk_rows import next_route_seq
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import hub_store_connections, migrated_hub_at, stamp

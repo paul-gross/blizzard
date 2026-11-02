@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any
 
 from sqlalchemy import Connection, event
@@ -135,6 +135,16 @@ def connection_for(
     if key is not None and (not isinstance(transaction, _LockedTransaction) or key not in unit.keys):
         raise TransactionMisuse("transaction does not lock this key")
     return unit.conn
+
+
+def connection_in(
+    store: ScopedConnections, transaction: Transaction | None, operation: str, *, write: bool = False
+) -> AbstractContextManager[Connection]:
+    """The connection an operation runs on: the caller's unit when it passes one, else a fresh
+    scoped ``read`` (or ``write``) that closes with the operation."""
+    if transaction is not None:
+        return nullcontext(connection_for(store, transaction))
+    return store.write(operation) if write else store.read(operation)
 
 
 _transactions_conform: type[IHubTransactions] = HubTransactions

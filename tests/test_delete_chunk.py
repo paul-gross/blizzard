@@ -1,5 +1,4 @@
-"""Chunk delete (component tier) — ``DeleteService`` and the composite
-``WorkItemStore.delete_chunk_and_withdraw_hub_items`` write, driven against a real,
+"""Chunk delete (component tier) — ``DeleteService`` driven against a real,
 migrated store. Every case here reaches the domain service and the stores directly, the
 way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly — the
 ``DELETE /chunks/{id}`` route itself is covered over HTTP by
