@@ -14681,6 +14681,20 @@
             ],
             "title": "Tenant Name"
           },
+          "unenforceable_gates": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/UnenforceableGateView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unenforceable Gates"
+          },
           "window": {
             "anyOf": [
               {
@@ -14703,7 +14717,8 @@
           "subscription",
           "subscription_unrostered",
           "hub_version",
-          "window"
+          "window",
+          "unenforceable_gates"
         ],
         "title": "RunnerRegistrationResponse",
         "type": "object"
@@ -27357,6 +27372,49 @@
           }
         },
         "summary": "Get Runner",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/runners/{runner_id}/decisions": {
+      "get": {
+        "description": "The calling runner's own open gate decisions \u2014 the unresolved ones its configuration imposed, whole rather than\npaged; 403 when the path names another runner.",
+        "operationId": "list_runner_decisions_api_fleet_runners__runner_id__decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenDecisionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runner Decisions",
         "tags": [
           "fleet"
         ]

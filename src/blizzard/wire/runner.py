@@ -188,6 +188,8 @@ class RunnerRegistrationResponse(WireModel):
     hub_version: str | None = None
     #: The window the hub judged this runner's version under; ``None`` from a hub that predates the handshake.
     window: VersionWindowView | None = None
+    #: The registered gates the hub reports as not enforceable; ``None`` from a hub that predates the report.
+    unenforceable_gates: list[UnenforceableGateView] | None = None
 
 
 class RunnerEnrollmentResponse(BaseModel):

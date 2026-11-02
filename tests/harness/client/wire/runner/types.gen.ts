@@ -2834,6 +2834,18 @@ export type MigrationView = {
 };
 
 /**
+ * OpenDecisionsResponse
+ *
+ * The fleet's open (unresolved) decisions.
+ */
+export type OpenDecisionsResponse = {
+    /**
+     * Decisions
+     */
+    decisions: Array<DecisionView>;
+};
+
+/**
  * OpenTakeoverListResponse
  *
  * Every takeover still open across this runner's held chunks.
@@ -3418,6 +3430,10 @@ export type RunnerStatusView = {
      */
     tenant_name: string | null;
     throttle: ThrottleStatusView | null;
+    /**
+     * Unenforceable Gates
+     */
+    unenforceable_gates: Array<UnenforceableGateView> | null;
     /**
      * Unmatched Bindings
      */
@@ -4209,6 +4225,25 @@ export type TurnSegmentView = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UnenforceableGateReason
+ */
+export type UnenforceableGateReason = 'hub-executed' | 'unknown-node';
+
+/**
+ * UnenforceableGateView
+ *
+ * One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a
+ * runner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one.
+ */
+export type UnenforceableGateView = {
+    /**
+     * Node
+     */
+    node: string;
+    reason: UnenforceableGateReason;
 };
 
 /**
@@ -5540,6 +5575,38 @@ export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses = {
 };
 
 export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponse = GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses[keyof GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses];
+
+export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/gate-decisions';
+};
+
+export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetError = ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetErrors[keyof ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetErrors];
+
+export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OpenDecisionsResponse;
+};
+
+export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetResponse = ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetResponses[keyof ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetResponses];
 
 export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetData = {
     body?: never;

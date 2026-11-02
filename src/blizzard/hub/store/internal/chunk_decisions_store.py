@@ -176,16 +176,21 @@ class ChunkDecisionsStore:
             for row in rows
         }
 
-    def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
+    def list_open_decisions(
+        self, *, project: ProjectId | None = None, imposed_by_runner_id: str | None = None
+    ) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
         The SQL drops resolved gates, fact-closed gates, and gates whose chunk has ended — mirroring
         :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
-        while :attr:`GateDecision.is_open` remains the exact final check. ``project`` narrows to one project's gates."""
+        while :attr:`GateDecision.is_open` remains the exact final check. ``project`` narrows to one project's gates,
+        and ``imposed_by_runner_id`` to those that runner's configuration imposed."""
         not_resolved = ~self._store.exists(
             s.decision_resolutions, s.decision_resolutions.c.decision_id == s.decisions.c.decision_id
         )
         if project is not None:
             not_resolved &= s.decisions.c.project_id == project
+        if imposed_by_runner_id is not None:
+            not_resolved &= s.decisions.c.imposed_by_runner_id == imposed_by_runner_id
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
                 self._store.select(s.decisions)

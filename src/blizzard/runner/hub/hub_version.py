@@ -1,5 +1,5 @@
-"""The hub's version and window, as the latest registration reply answered them — held for the process alone,
-never stored, since every registration answers them afresh."""
+"""What the latest registration reply answered — the hub's version and window, and the gates it reports as not
+enforceable — held for the process alone, never stored, since every registration answers them afresh."""
 
 from __future__ import annotations
 
@@ -8,16 +8,17 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.hub.client import HubVersionWindow, RegistrationReply
+from blizzard.runner.hub.client import HubVersionWindow, RegistrationReply, UnenforceableGate
 
 
 @domain_model
 @dataclass(frozen=True)
 class HubVersion:
-    """The hub's version and its window — each ``None`` until a hub that names it answers."""
+    """The hub's version, its window, and the gates it flags — each ``None`` until a hub that names it answers."""
 
     hub_version: str | None = None
     window: HubVersionWindow | None = None
+    unenforceable_gates: tuple[UnenforceableGate, ...] | None = None
 
 
 class ICurrentHubVersion(Protocol):
@@ -37,7 +38,9 @@ class HubVersionHolder:
 
     def hold(self, reply: RegistrationReply) -> None:
         with self._lock:
-            self._current = HubVersion(hub_version=reply.hub_version, window=reply.window)
+            self._current = HubVersion(
+                hub_version=reply.hub_version, window=reply.window, unenforceable_gates=reply.unenforceable_gates
+            )
 
 
 _current_hub_version_conforms: type[ICurrentHubVersion] = HubVersionHolder

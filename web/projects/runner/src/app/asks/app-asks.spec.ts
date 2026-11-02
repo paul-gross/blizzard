@@ -42,6 +42,7 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
       gates: [],
+      unenforceable_gates: null,
       identity: null,
       routing_conflicts: [],
       runner_name: null,

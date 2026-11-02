@@ -5192,6 +5192,24 @@
         "title": "MigrationView",
         "type": "object"
       },
+      "OpenDecisionsResponse": {
+        "description": "The fleet's open (unresolved) decisions.",
+        "properties": {
+          "decisions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DecisionView"
+            },
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "OpenDecisionsResponse",
+        "type": "object"
+      },
       "OpenTakeoverListResponse": {
         "description": "Every takeover still open across this runner's held chunks.",
         "properties": {
@@ -6184,6 +6202,20 @@
               }
             ]
           },
+          "unenforceable_gates": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/UnenforceableGateView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unenforceable Gates"
+          },
           "unmatched_bindings": {
             "default": [],
             "items": {
@@ -6209,6 +6241,7 @@
           "hub",
           "last_tick_at",
           "gates",
+          "unenforceable_gates",
           "identity",
           "served_projects",
           "unmatched_bindings",
@@ -7523,6 +7556,33 @@
           "truncated"
         ],
         "title": "TurnSegmentView",
+        "type": "object"
+      },
+      "UnenforceableGateReason": {
+        "enum": [
+          "hub-executed",
+          "unknown-node"
+        ],
+        "title": "UnenforceableGateReason",
+        "type": "string"
+      },
+      "UnenforceableGateView": {
+        "description": "One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a\nrunner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one.",
+        "properties": {
+          "node": {
+            "title": "Node",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/UnenforceableGateReason",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "node",
+          "reason"
+        ],
+        "title": "UnenforceableGateView",
         "type": "object"
       },
       "UnmatchedBindingView": {
@@ -9582,6 +9642,51 @@
           }
         },
         "summary": "Get Fleet Summary",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/gate-decisions": {
+      "get": {
+        "description": "The unresolved decisions this runner's configuration imposed, as the hub holds them. A runner that has not\nregistered has imposed none.",
+        "operationId": "list_gate_decisions_runners__runner_id__api_gate_decisions_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenDecisionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Gate Decisions",
         "tags": [
           "runner"
         ]

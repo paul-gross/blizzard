@@ -54,8 +54,11 @@ class IReadChunkDecisionsRepository(Protocol):
         """Every resolution of a gate decision on the chunk, oldest first."""
         ...
 
-    def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
-        """Every unresolved decision across the fleet, or only the given project's."""
+    def list_open_decisions(
+        self, *, project: ProjectId | None = None, imposed_by_runner_id: str | None = None
+    ) -> list[GateDecision]:
+        """Every unresolved decision across the fleet, or only the given project's, or only those the given runner's
+        configuration imposed — a graph-declared gate is imposed by no runner."""
         ...
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:

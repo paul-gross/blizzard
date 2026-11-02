@@ -131,6 +131,17 @@ class _UnmatchedBinding(TypedDict):
     held_since: str
 
 
+class _GateDecision(TypedDict):
+    chunk_id: str
+    node_name: str
+    submitted_at: str
+
+
+class _UnenforceableGate(TypedDict):
+    node: str
+    reason: str
+
+
 class _RunnerView(_Tenant):
     runner_name: str
     runner_id: NotRequired[str | None]
@@ -143,6 +154,7 @@ class _RunnerView(_Tenant):
     hub: _Hub
     last_tick_at: str | None
     gates: list[str]
+    unenforceable_gates: NotRequired[list[_UnenforceableGate] | None]
     served_projects: NotRequired[list[_ServedProject] | None]
     unmatched_bindings: NotRequired[list[_UnmatchedBinding] | None]
 
@@ -249,6 +261,25 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
             " `blizzard hub runner list` to resume it there"
         )
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
+
+
+def gate_decision_lines(decisions: list[_GateDecision] | None) -> list[str]:
+    """The ``gate decisions`` section: each open decision this runner's gates imposed, or a single ``hub unreachable``
+    line when the hub could not answer (``None``)."""
+    if decisions is None:
+        return ["", "gate decisions: hub unreachable"]
+    return [
+        "",
+        f"gate decisions ({len(decisions)}):",
+        *(f"  chunk={d['chunk_id']}  node={d['node_name']}  parked at {d['submitted_at']}" for d in decisions),
+    ]
+
+
+def _gates_line(gates: list[str], unenforceable: list[_UnenforceableGate] | None) -> str:
+    """The configured gates, each the hub flagged annotated with why it can never hold a chunk; plain until a hub that
+    reports flags has answered."""
+    reasons = {flag["node"]: flag["reason"] for flag in unenforceable or []}
+    return ", ".join(f"{g} (not enforceable: {reasons[g]})" if g in reasons else g for g in gates) or "none"
 
 
 def _served_line(served: list[_ServedProject] | None) -> str | None:
@@ -362,6 +393,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
             harness_health = health_data.get("items", [])
         # Not raised on: a runner that cannot serve its trace status still renders every other section.
         traces_resp = daemon.send("get", "/api/traces/status")
+        # Not raised on: the decisions live on the hub, so a hub that cannot answer costs only this section.
+        decisions_resp = daemon.send("get", "/api/gate-decisions")
 
     click.echo(
         f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'}){_tenant_part(view)}"
@@ -393,7 +426,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     contact = hub["last_contact_at"] or "never"
     click.echo(f"  hub: {reachability} (last contact {contact}), {hub['buffer_depth']} fact(s) buffered")
     click.echo(f"  last tick: {view['last_tick_at'] or 'never'}")
-    click.echo(f"  gates: {', '.join(view['gates']) or 'none'}")
+    click.echo(f"  gates: {_gates_line(view['gates'], view.get('unenforceable_gates'))}")
     served = _served_line(view.get("served_projects"))
     if served is not None:
         click.echo(served)
@@ -432,6 +465,9 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     for ask in asks:
         opts = f"  [{'|'.join(ask.get('options') or [])}]" if ask.get("options") else ""
         click.echo(f"  {ask['question_id']}  (chunk {ask['chunk_id']}): {ask['question']}{opts}")
+
+    for line in gate_decision_lines(decisions_resp.json().get("decisions") if decisions_resp.is_success else None):
+        click.echo(line)
 
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:

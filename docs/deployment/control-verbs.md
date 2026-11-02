@@ -287,6 +287,11 @@ An open gate decision shows wherever a waiting chunk does, derived from the deci
   when there is one. A resolve that loses the race to another person shows the same line.
 
 `blizzard runner status` prints a `gates:` line too, which reads from the runner's own configuration and so works with
-the hub unreachable.
+the hub unreachable. It annotates each gate the hub flagged, as in `deliver (not enforceable: hub-executed)`, using the
+answer to the runner's latest registration; until a hub has answered, no gate is annotated.
+
+Right after the open asks, `status` lists a `gate decisions (N)` section: each unresolved decision this runner's gates
+imposed, with its chunk, node, and the time it parked. The hub holds those decisions, so the section needs it; with the
+hub unreachable it reads `hub unreachable`, and the rest of `status` still renders.
 
 A runner that predates gate reporting shows none until it is redeployed.

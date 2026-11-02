@@ -23,6 +23,7 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.control import _GateDecision, _gates_line, _UnenforceableGate, gate_decision_lines
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -786,3 +787,53 @@ def test_a_name_shared_by_two_runners_fails_naming_their_ids(tmp_path: Path, mon
     assert "matches several runners" in result.output
     assert "rn_a" in result.output and "rn_b" in result.output
     assert paths == ["/api/host/runners"]
+
+
+@pytest.mark.unit
+def test_the_gates_line_annotates_each_gate_the_hub_flagged() -> None:
+    flags: list[_UnenforceableGate] = [{"node": "deliver", "reason": "hub-executed"}]
+
+    assert _gates_line(["build", "deliver"], flags) == "build, deliver (not enforceable: hub-executed)"
+
+
+@pytest.mark.unit
+def test_the_gates_line_is_plain_until_a_hub_that_flags_has_answered() -> None:
+    assert _gates_line(["build", "deliver"], None) == "build, deliver"
+    assert _gates_line([], []) == "none"
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_lists_each_open_decision() -> None:
+    decisions: list[_GateDecision] = [
+        {"chunk_id": "ch_1", "node_name": "build", "submitted_at": "2026-07-16T12:00:00Z"}
+    ]
+
+    assert gate_decision_lines(decisions) == [
+        "",
+        "gate decisions (1):",
+        "  chunk=ch_1  node=build  parked at 2026-07-16T12:00:00Z",
+    ]
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_counts_none() -> None:
+    assert gate_decision_lines([]) == ["", "gate decisions (0):"]
+
+
+@pytest.mark.unit
+def test_the_gate_decisions_section_is_one_line_when_the_hub_could_not_answer() -> None:
+    assert gate_decision_lines(None) == ["", "gate decisions: hub unreachable"]
+
+
+@pytest.mark.component
+def test_status_renders_every_section_with_the_hub_unreachable_and_reports_the_decisions_as_unreachable(
+    tmp_path: Path,
+) -> None:
+    root = init_runner_home(tmp_path)
+    bound = _no_hub()
+    with serve_local_api(root):
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "gate decisions" in result.output
+    assert "open asks (0):" in result.output

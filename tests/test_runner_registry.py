@@ -21,6 +21,7 @@ from tests.support import (
     count_queries,
     emitted_events,
     mint_graph,
+    seed_runner,
 )
 
 pytestmark = pytest.mark.component
@@ -395,8 +396,8 @@ def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path
     fleet of few."""
     (tmp_path / "few").mkdir()
     (tmp_path / "many").mkdir()
-    few = build_hub(_sub(tmp_path, "few"))
-    many = build_hub(_sub(tmp_path, "many"))
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
 
     for i in range(2):
         _seed_runner_with_every_fact_family(few, f"runner-{i}")
@@ -522,3 +523,12 @@ def _sub(root: Path, name: str) -> Path:
     path = root / name
     path.mkdir()
     return path
+
+
+def test_a_runners_fleet_decisions_read_is_empty_while_it_has_imposed_none(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = seed_runner(hub, "runner-a")
+
+    resp = hub.client.get("/api/fleet/runners/runner-a/decisions", headers={"Authorization": f"Bearer {token}"})
+
+    assert (resp.status_code, resp.json()) == (200, {"decisions": []})

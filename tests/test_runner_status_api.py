@@ -14,6 +14,7 @@ from typing import Unpack
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -21,7 +22,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.client import BindingDeclaration, HubVersionWindow, RegistrationReply
+from blizzard.runner.hub.client import BindingDeclaration, HubVersionWindow, RegistrationReply, UnenforceableGate
 from blizzard.runner.hub.hub_version import HubVersionHolder, ICurrentHubVersion
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
@@ -1261,3 +1262,30 @@ def test_facts_asks_and_escalations_name_their_chunks_project_from_its_binding(t
     }
     fact_projects = {f["chunk_id"]: f["project_id"] for f in facts}
     assert (fact_projects["ch_bound"], fact_projects["ch_unbound"], fact_projects[None]) == ("proj_a", None, None)
+
+
+@pytest.mark.component
+def test_summary_reports_the_gates_the_latest_registration_flagged(tmp_path: Path) -> None:
+    held = HubVersionHolder()
+    held.hold(
+        RegistrationReply(
+            runner_id="rn_status",
+            runner_name="runner-local",
+            first_registration=False,
+            unenforceable_gates=(UnenforceableGate("deliver", UnenforceableGateReason.HUB_EXECUTED),),
+        )
+    )
+    app, _store = _app_with_status(tmp_path, gates=("build", "deliver"), hub_version=held)
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unenforceable_gates"] == [{"node": "deliver", "reason": "hub-executed"}]
+
+
+@pytest.mark.component
+def test_summary_reports_no_flags_before_any_hub_has_answered(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, gates=("build",), hub_version=HubVersionHolder())
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unenforceable_gates"] is None

@@ -79,6 +79,7 @@ from blizzard.runner.hub.client import (
     TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
+    UnenforceableGate,
     VersionRefusal,
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -569,6 +570,7 @@ class FakeHub:
         self.served_projects: tuple[ServedProject, ...] | None = None
         self.hub_version: str | None = None
         self.window: HubVersionWindow | None = None
+        self.unenforceable_gates: tuple[UnenforceableGate, ...] | None = None
         # Raised by every registration while set; the call is still recorded.
         self.version_refusal: VersionRefusal | None = None
         self.queue: list[QueueEntry] = []
@@ -866,6 +868,7 @@ class FakeHub:
             projects=self.served_projects,
             hub_version=self.hub_version,
             window=self.window,
+            unenforceable_gates=self.unenforceable_gates,
         )
 
     def identity(self) -> TokenIdentity | TokenRefusal:

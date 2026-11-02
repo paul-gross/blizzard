@@ -12,11 +12,12 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
-from blizzard.runner.hub.client import BindingDeclaration, RegistrationReply
+from blizzard.runner.hub.client import BindingDeclaration, RegistrationReply, UnenforceableGate
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
@@ -394,3 +395,18 @@ def test_a_runner_of_a_registered_host_sends_no_roster_of_its_own(
     Registration(ctx).run()
 
     assert hub.registered_subscriptions == [sent]
+
+
+def test_the_flags_a_registration_reply_carries_are_held_and_a_failed_registration_leaves_them(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="rn_minted")
+    flag = UnenforceableGate("deliver", UnenforceableGateReason.HUB_EXECUTED)
+    hub.unenforceable_gates = (flag,)
+    ctx = _ctx(tmp_path / "runner.db", hub)
+
+    Registration(ctx).run()
+    assert ctx.hub_version.current().unenforceable_gates == (flag,)
+
+    hub.down = True
+    hub.unenforceable_gates = None
+    Registration(ctx).run()
+    assert ctx.hub_version.current().unenforceable_gates == (flag,)
