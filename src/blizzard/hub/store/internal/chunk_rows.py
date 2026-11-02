@@ -44,9 +44,6 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
-
-# Legacy chunk row queries share the newest-fact predicate.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
