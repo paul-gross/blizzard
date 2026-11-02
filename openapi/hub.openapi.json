@@ -14943,6 +14943,14 @@
             "title": "Subscriptions",
             "type": "array"
           },
+          "unenforceable_gates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UnenforceableGateView"
+            },
+            "title": "Unenforceable Gates",
+            "type": "array"
+          },
           "version": {
             "anyOf": [
               {
@@ -15010,6 +15018,7 @@
           "retired_at",
           "retired_by",
           "gates",
+          "unenforceable_gates",
           "projects",
           "bindings",
           "subscription",
@@ -17396,6 +17405,33 @@
           "truncated"
         ],
         "title": "TurnSegmentView",
+        "type": "object"
+      },
+      "UnenforceableGateReason": {
+        "enum": [
+          "hub-executed",
+          "unknown-node"
+        ],
+        "title": "UnenforceableGateReason",
+        "type": "string"
+      },
+      "UnenforceableGateView": {
+        "description": "One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a\nrunner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one.",
+        "properties": {
+          "node": {
+            "title": "Node",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/UnenforceableGateReason",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "node",
+          "reason"
+        ],
+        "title": "UnenforceableGateView",
         "type": "object"
       },
       "UserIdentityView": {

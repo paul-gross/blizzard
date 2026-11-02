@@ -139,6 +139,7 @@ def retire_host_runner(
             now=services.clock.now(),
             projects=served_projects(services, refreshed.served),
             hosts=hosts_of(services, [refreshed]),
+            executors=services.node_executors.executors_by_node_name(),
         ),
         released_chunk_ids=[r.chunk_id for r in outcome.released],
     )

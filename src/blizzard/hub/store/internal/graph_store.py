@@ -360,6 +360,19 @@ class GraphStore:
                 )
         return found
 
+    def executors_by_node_name(self) -> dict[str, frozenset[Executor]]:
+        """One select over every node of a graph outside :func:`newest_retired_select`'s retired set."""
+        retired = newest_retired_select(self._store, graph_lifecycle_facts, graph_lifecycle_facts.c.graph_id)
+        found: defaultdict[str, set[Executor]] = defaultdict(set)
+        with self._store.read("executors_by_node_name") as conn:
+            for name, executor in conn.execute(
+                self._store.select(graph_nodes, graph_nodes.c.name, graph_nodes.c.executor)
+                .where(graph_nodes.c.graph_id.not_in(retired))
+                .distinct()
+            ):
+                found[str(name)].add(Executor(executor))
+        return {name: frozenset(executors) for name, executors in found.items()}
+
     def graph_id_of_enabled_name(self, name: str) -> str | None:
         """``get_enabled_by_name``'s narrow sibling — the same select, naming only ``graph_id`` and
         never reifying a row."""

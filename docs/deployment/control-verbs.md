@@ -267,6 +267,11 @@ The runner reports its gates on every registration, so they show in two places:
 - the Fleet tab's runner rows, as a "Gates:" badge row beside the harness badges;
 - the runner's row on the runner panel's host page.
 
+A gate can name a node that no graph will ever run on a runner: a node the hub executes, or one no active graph has. The
+hub flags such a gate as not enforceable, with the reason `hub-executed` or `unknown-node`, in the registry read
+(`GET /api/runners` and `GET /api/runners/{id}`). It works the flag out from the current graphs on every read, so a
+graph that adds the node as a runner node clears it. The hub refuses no gate; the flag only reports it.
+
 An open gate decision shows wherever a waiting chunk does, derived from the decision rather than from the registration:
 
 - the board rail's Open gates section, which lists every open gate fleet-wide with its node, origin, and choices;

@@ -9109,6 +9109,10 @@ export type RunnerRegistryView = {
      */
     subscriptions: Array<SubscriptionUsageView>;
     /**
+     * Unenforceable Gates
+     */
+    unenforceable_gates: Array<UnenforceableGateView>;
+    /**
      * Version
      */
     version: string | null;
@@ -10618,6 +10622,30 @@ export type TurnSegmentViewOutput = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UnenforceableGateReason
+ */
+export const UnenforceableGateReason = { HUB_EXECUTED: 'hub-executed', UNKNOWN_NODE: 'unknown-node' } as const;
+
+/**
+ * UnenforceableGateReason
+ */
+export type UnenforceableGateReason = typeof UnenforceableGateReason[keyof typeof UnenforceableGateReason];
+
+/**
+ * UnenforceableGateView
+ *
+ * One of a runner's configured gates the hub reports as not enforceable: no non-retired graph runs ``node`` on a
+ * runner, so the gate can never park a chunk. The hub never refuses a gate; this only reports one.
+ */
+export type UnenforceableGateView = {
+    /**
+     * Node
+     */
+    node: string;
+    reason: UnenforceableGateReason;
 };
 
 /**

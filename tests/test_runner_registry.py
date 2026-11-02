@@ -13,7 +13,15 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.runners.registration import STALE_AFTER
-from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, count_queries, emitted_events
+from tests.support import (
+    HubHarness,
+    assert_all_timestamps_utc,
+    build_hub,
+    capture_statements,
+    count_queries,
+    emitted_events,
+    mint_graph,
+)
 
 pytestmark = pytest.mark.component
 
@@ -387,8 +395,8 @@ def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path
     fleet of few."""
     (tmp_path / "few").mkdir()
     (tmp_path / "many").mkdir()
-    few = build_hub(tmp_path / "few")
-    many = build_hub(tmp_path / "many")
+    few = build_hub(_sub(tmp_path, "few"))
+    many = build_hub(_sub(tmp_path, "many"))
 
     for i in range(2):
         _seed_runner_with_every_fact_family(few, f"runner-{i}")
@@ -474,3 +482,43 @@ def test_a_dropped_subscription_slugs_reports_survive_re_registration_and_resume
     assert after["anthropic"]["condition"] == "credential_lapsed"
     assert after["openai"]["windows"] == before["openai"]["windows"]
     assert after["openai"]["sampled_at"] == before["openai"]["sampled_at"]
+
+
+def _register_gated(hub: HubHarness, runner_id: str, gates: list[str]) -> None:
+    body = {"runner_id": runner_id, "workspace_id": "ws-a", "gates": gates}
+    assert hub.client.post("/api/fleet/runners", json=body).status_code == 201
+
+
+def test_registry_flags_gates_no_graph_runs_on_a_runner_and_clears_them_when_one_does(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    mint_graph(hub.engine, "gr_gate", name="gate-graph", nodes={"nd_gate_0": "build"}, at=hub.clock.now())
+    _register_gated(hub, "runner-a", ["build", "no-such-node"])
+
+    flagged = hub.client.get("/api/runners/runner-a").json()["unenforceable_gates"]
+    assert flagged == [{"node": "no-such-node", "reason": "unknown-node"}]
+    assert hub.client.get("/api/runners").json()["runners"][0]["unenforceable_gates"] == flagged
+
+    # A graph minted later with the node as a runner node clears the flag — nothing was stored.
+    mint_graph(hub.engine, "gr_late", name="late-graph", nodes={"nd_late_0": "no-such-node"}, at=hub.clock.now())
+    assert hub.client.get("/api/runners/runner-a").json()["unenforceable_gates"] == []
+
+
+def test_registry_list_reads_node_executors_once_however_many_runners(tmp_path: Path) -> None:
+    few = build_hub(_sub(tmp_path, "few"))
+    many = build_hub(_sub(tmp_path, "many"))
+    _register_gated(few, "runner-0", ["x"])
+    for i in range(5):
+        _register_gated(many, f"runner-{i}", ["x"])
+
+    def executor_reads(hub: HubHarness) -> int:
+        with capture_statements(hub.engine) as statements:
+            hub.client.get("/api/runners")
+        return sum("graph_nodes" in statement for statement, _ in statements)
+
+    assert executor_reads(few) == executor_reads(many) == 1
+
+
+def _sub(root: Path, name: str) -> Path:
+    path = root / name
+    path.mkdir()
+    return path

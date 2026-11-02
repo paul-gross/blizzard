@@ -6,7 +6,7 @@ Controllers stay read-only over the store (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +15,7 @@ from typing import Annotated, ClassVar
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.foundation.hub_event_types import RunnerChangeKind
+from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events
@@ -27,6 +28,7 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
+from blizzard.hub.domain.runners.gate_enforceability import flag_unenforceable_gates
 from blizzard.hub.domain.runners.host import Host, HostRetired
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
@@ -56,6 +58,7 @@ from blizzard.wire.runner import (
     RunnerTokenRevocationResponse,
     RunnerView,
     ServedProjectView,
+    UnenforceableGateView,
 )
 from blizzard.wire.runner import (
     RunnerCapability as RunnerCapabilityWire,
@@ -103,6 +106,7 @@ class RunnerBrake:
             now=self.services.clock.now(),
             projects=served_projects(self.services, refreshed.served),
             hosts=hosts_of(self.services, [refreshed]),
+            executors=self.services.node_executors.executors_by_node_name(),
         )
 
 
@@ -154,13 +158,26 @@ def runner_view(
     )
 
 
+def unenforceable_views(
+    gates: Collection[str], executors: Mapping[str, Collection[Executor]]
+) -> list[UnenforceableGateView]:
+    """The wire flags for those of ``gates`` no graph runs on a runner (:func:`flag_unenforceable_gates`)."""
+    return [UnenforceableGateView(node=g.node, reason=g.reason) for g in flag_unenforceable_gates(gates, executors)]
+
+
 def registry_view(
-    liveness: RunnerLiveness, *, now: datetime, projects: Mapping[ProjectId, Project], hosts: Mapping[str, Host]
+    liveness: RunnerLiveness,
+    *,
+    now: datetime,
+    projects: Mapping[ProjectId, Project],
+    hosts: Mapping[str, Host],
+    executors: Mapping[str, Collection[Executor]],
 ) -> RunnerRegistryView:
     """One runner as the operator registry shows it — a never-connected runner included, with
     no workspace, registration, contact or capabilities until it first registers. ``projects``
     holds the projects its served declaration resolved to (:func:`served_projects`), and ``hosts`` the hosts the
-    runners stand under (:func:`hosts_of`), which their bindings are flagged against."""
+    runners stand under (:func:`hosts_of`), which their bindings are flagged against. ``executors`` is where each node
+    name runs across the tenant's graphs, which the runner's gates are flagged against."""
     r = liveness.registration
     flags = flags_of(r, hosts)
     return RunnerRegistryView(
@@ -185,6 +202,7 @@ def registry_view(
         retired_at=_iso_or_none(r.retired_at),
         retired_by=r.retired_by,
         gates=list(r.gates),
+        unenforceable_gates=unenforceable_views(r.gates, executors),
         projects=served_views(r.served, projects, claimable_projects(r, host_of(r, hosts))),
         host_id=r.host_id,
         bindings=binding_views(r.bindings, flags),
@@ -333,6 +351,7 @@ def _detail(services: TenantServices, registration: RunnerRegistration) -> Runne
         now=services.clock.now(),
         projects=served_projects(services, registration.served),
         hosts=hosts_of(services, [registration]),
+        executors=services.node_executors.executors_by_node_name(),
     )
 
 
@@ -403,8 +422,9 @@ def list_runners(
     listed = services.fleet.list_with_liveness(now=now, include_retired=include_retired)
     projects = served_projects(services, (e for item in listed for e in item.registration.served))
     hosts = hosts_of(services, [item.registration for item in listed])
+    executors = services.node_executors.executors_by_node_name()
     return RunnerRegistryListResponse(
-        runners=[registry_view(item, now=now, projects=projects, hosts=hosts) for item in listed]
+        runners=[registry_view(item, now=now, projects=projects, hosts=hosts, executors=executors) for item in listed]
     )
 
 
