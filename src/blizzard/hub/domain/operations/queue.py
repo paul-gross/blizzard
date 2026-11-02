@@ -15,13 +15,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.dependencies import FoldEdgePlan, plan_fold, would_close_a_cycle
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, verb_legal_from
+from blizzard.hub.domain.chunk.model import (
+    PRE_CLAIM_STATUSES,
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DependencyEdge,
+    verb_legal_from,
+)
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
@@ -126,7 +133,7 @@ def select_matched_entry(
 
 class ChunkNotGroupable(ValueError):
     """A group op named a chunk that is not free to be folded away — outside
-    :data:`~blizzard.foundation.chunk_status.PRE_CLAIM_STATUSES`, the pre-claim window."""
+    :data:`~blizzard.hub.domain.chunk.model.PRE_CLAIM_STATUSES`, the pre-claim window."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(

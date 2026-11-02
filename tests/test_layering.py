@@ -73,6 +73,11 @@ _MOVED_HOMES = {
     "is_tenant_name": "blizzard.foundation.tenants",
     "HUB_PERMISSIONS": "blizzard.hub.auth.permissions",
     "permissions_for": "blizzard.hub.auth.permissions",
+    "Permission": "blizzard.hub.auth.permissions",
+    "ROLE_PERMISSIONS": "blizzard.hub.auth.permissions",
+    "expand": "blizzard.hub.auth.permissions",
+    "PRE_CLAIM_STATUSES": "blizzard.hub.domain.chunk.model",
+    "CLI_ATTRIBUTES": "blizzard.runner.tracing.receiver",
     "MEMBERSHIP_ROLES": "blizzard.hub.auth.memberships",
     "HubEventKind": "blizzard.hub.domain.observability.hub_events",
     "HUB_EVENT_SEVERITY": "blizzard.hub.domain.observability.hub_events",
@@ -4082,16 +4087,30 @@ def _role_scan(src_root: Path) -> _RoleScan:
     return _RoleScan(src_root)
 
 
+def _is_hand_written_record(scan: _RoleScan, site: _ClassSite) -> bool:
+    """Whether a class has no decorator and no base, defines ``__init__``, and does nothing beyond it —
+    a record written by hand, which the data-role gate cannot read."""
+    node = site.node
+    constructs = any(isinstance(item, ast.FunctionDef) and item.name == "__init__" for item in node.body)
+    return constructs and not node.decorator_list and not node.bases and not _work_methods(scan, site)
+
+
 def _role_marker_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
     """Every data class in ``paths`` (default: all under ``src_root``) without exactly one role
-    marker, every marker on a class whose role is inferred or that is no data class, and every
-    data class built by a call, which no marker can reach."""
+    marker, every marker on a class whose role is inferred or that is no data class, every
+    hand-written class that only stores fields, and every data class built by a call, which no
+    marker can reach."""
     scan = _role_scan(src_root)
     violations: list[str] = []
     for site in scan.sites_in(paths):
         inferred = scan.inferred_role(site)
         if site.markers and inferred is not None:
             violations.append(f"{scan.where(site)} has the inferred role {inferred} yet carries {list(site.markers)}")
+        elif _is_hand_written_record(scan, site):
+            violations.append(
+                f"{scan.where(site)} is a hand-written class that only stores fields; write it as a @dataclass "
+                "carrying its role"
+            )
         elif site.markers and not site.is_data:
             violations.append(f"{scan.where(site)} is no @dataclass or NamedTuple yet carries {list(site.markers)}")
         elif site.is_data and inferred is None and len(site.markers) != 1:
@@ -4365,6 +4384,7 @@ _ROLE_FIXTURE_BASE = {
         "class AppError(Exception):\n    pass\n\n"
         "class SystemClock:\n    pass\n\n"
         "class Service:\n    def __init__(self, thing: IThing) -> None:\n        self.thing = thing\n\n"
+        "    def run(self) -> None: ...\n\n"
         "from dataclasses import dataclass\nfrom blizzard.foundation.roles import collaborator\n\n"
         "@collaborator\n@dataclass\nclass Driver:\n    url: str\n\n    def go(self) -> None: ...\n"
     ),
@@ -4409,6 +4429,8 @@ def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
         "@domain_model\n@dataclass\nclass Checked:\n    conn: Connection\n",
         "@dto\n@dataclass\nclass Driven:\n    x: int\n    driver: Driver\n",
         "@collaborator\n@dataclass\nclass Held:\n    thing: IThing\n\n    def go(self) -> None: ...\n",
+        "class Record:\n    def __init__(self, x: int) -> None:\n        self.x = x\n",
+        "@dto\nclass Record:\n    def __init__(self, x: int) -> None:\n        self.x = x\n",
     ],
 )
 def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, source: str) -> None:
@@ -4441,6 +4463,9 @@ def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, sour
         "@dataclass\nclass Uses:\n    x: int\n    driver: Driver\n",
         "@dataclass\nclass Daemon:\n    verb: str\n    client: httpx2.Client\n",
         "import sqlalchemy as sa\n\n@dataclass\nclass Check:\n    conn: sa.Connection\n",
+        "class Worker:\n    def __init__(self, x: int) -> None:\n        self.x = x\n\n    def go(self) -> int:\n        return self.x\n",
+        "class Held(AppError):\n    def __init__(self, x: int) -> None:\n        self.x = x\n",
+        "def keep(cls):\n    return cls\n\n@keep\nclass Kept:\n    def __init__(self, x: int) -> None:\n        self.x = x\n",
     ],
 )
 def test_role_marker_check_admits_a_declared_or_inferred_role(tmp_path: Path, source: str) -> None:

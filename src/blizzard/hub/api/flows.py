@@ -9,12 +9,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from blizzard.auth_core import Permission
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import FlowLineRead, fact_view
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.delivery.flows import FlowOverview
 from blizzard.wire.flow import FlowListView, FlowRecordPage, FlowView
 

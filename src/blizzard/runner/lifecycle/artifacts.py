@@ -21,7 +21,35 @@ __all__ = [
     "IReadGraphArtifactRepository",
     "IWriteGraphArtifactRepository",
     "PinnedGraphArtifact",
+    "carries_content",
+    "has_producing_node",
+    "read_only_reason",
 ]
+
+
+def carries_content(kind: ArtifactKind) -> bool:
+    """Whether an artifact of ``kind`` carries text content: an asset does; a git commit
+    carries only its ref (repo, branch, commit)."""
+    return kind is not ArtifactKind.GIT_COMMIT
+
+
+def has_producing_node(scope: ArtifactScope) -> bool:
+    """Whether an artifact in ``scope`` names the node-step that produced it — only node
+    scope does; a graph declaration and a system artifact have none."""
+    return scope is ArtifactScope.NODE
+
+
+#: Why each read-only scope refuses a write — the domain fact, not just the word "read-only".
+_READ_ONLY_REASONS: dict[ArtifactScope, str] = {
+    ArtifactScope.GRAPH: "a graph's declarations are baked at mint",
+    ArtifactScope.SYSTEM: "a system artifact is published by blizzard itself",
+}
+
+
+def read_only_reason(scope: ArtifactScope) -> str | None:
+    """Why a worker cannot write into ``scope``, or ``None`` when it can: a worker writes
+    only its own node-step's artifacts."""
+    return _READ_ONLY_REASONS.get(scope)
 
 
 class ArtifactReadContradiction(Exception):
@@ -84,7 +112,7 @@ class ArtifactRead:
 
     def validate(self) -> None:
         """Refuse ``node`` paired with a scope that has no producing node."""
-        if self.node is not None and self.scope is not None and not self.scope.has_producing_node():
+        if self.node is not None and self.scope is not None and not has_producing_node(self.scope):
             raise ArtifactReadContradiction(self.node, self.scope)
 
     def searches_node(self) -> bool:

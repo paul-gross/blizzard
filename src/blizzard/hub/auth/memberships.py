@@ -16,12 +16,13 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hub_admins import IReadHubAdminRepository
 from blizzard.hub.auth.models import ResolvedIdentity, User
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.tenancy import StoreScope, TenantId
 

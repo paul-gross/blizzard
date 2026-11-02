@@ -8,11 +8,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.invariants import InvariantsInProgress
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.invariants import InvariantsResponse, InvariantViolation
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(reject_runner_principal)])

@@ -12,10 +12,17 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterable, Sequence
 
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkDeleteRefusal, ChunkStatus
+from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
+from blizzard.hub.domain.chunk.model import (
+    PRE_CLAIM_STATUSES,
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DependencyEdge,
+    IWriteWorkItemRepository,
+)
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 
 

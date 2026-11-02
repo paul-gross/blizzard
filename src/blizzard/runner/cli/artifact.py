@@ -14,6 +14,7 @@ from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
 from blizzard.runner.cli.artifact_validators import validate_artifact_content
 from blizzard.runner.cli.worker_call import WorkerCall
+from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
 
 
 @click.group("artifact", cls=GetGroup)
@@ -53,9 +54,9 @@ class ArtifactEntry:
 
 def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
     """``create``/``commit``/``staged`` are node-scope only; refuses with the scope's own
-    :attr:`~blizzard.foundation.artifacts.ArtifactScope.read_only_reason`
+    :func:`~blizzard.runner.lifecycle.artifacts.read_only_reason`
     (``blizzard-context:/standards/worker-nodes/declarations.md``)."""
-    reason = ArtifactScope(scope).read_only_reason if scope else None
+    reason = read_only_reason(ArtifactScope(scope)) if scope else None
     if reason is not None:
         raise click.ClickException(f"artifact {verb}: {scope} scope is read-only — {reason}")
 
@@ -218,7 +219,7 @@ def artifact_get(
             f"artifact get: {name!r} is a {artifact['kind']!r} artifact, a kind this CLI does not know, "
             "and carries no content (drop --content to read it whole)"
         )
-    if kind is not None and not kind.carries_content():
+    if kind is not None and not carries_content(kind):
         raise click.ClickException(
             f"artifact get: {name!r} is a git-commit artifact — it has no content (drop --content to read its ref)"
         )

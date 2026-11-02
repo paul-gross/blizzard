@@ -1,7 +1,7 @@
 """The identity domain's value objects — ``User``, ``Identity``, ``Session``,
 ``ResolvedIdentity``.
 
-``Role``/``Permission`` are imported from :mod:`blizzard.auth_core`;
+``Role`` is imported from :mod:`blizzard.auth_core` and ``Permission`` from :mod:`blizzard.hub.auth.permissions`;
 this module's only job is the hub-local *identity* shapes they attach to."""
 
 from __future__ import annotations
@@ -9,8 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.tenancy import TenantId
 
 

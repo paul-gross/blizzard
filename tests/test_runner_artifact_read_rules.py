@@ -14,6 +14,9 @@ from blizzard.runner.lifecycle.artifacts import (
     ArtifactNotFound,
     ArtifactRead,
     ArtifactReadContradiction,
+    carries_content,
+    has_producing_node,
+    read_only_reason,
 )
 from blizzard.wire.envelope import WorkerArtifact
 
@@ -29,18 +32,18 @@ _SYSTEM = WorkerArtifact(scope=ArtifactScope.SYSTEM, name="plan", kind=ArtifactK
 
 
 def test_graph_and_system_scopes_read_only() -> None:
-    assert ArtifactScope.NODE.read_only_reason is None
-    assert ArtifactScope.GRAPH.read_only_reason == "a graph's declarations are baked at mint"
-    assert ArtifactScope.SYSTEM.read_only_reason == "a system artifact is published by blizzard itself"
+    assert read_only_reason(ArtifactScope.NODE) is None
+    assert read_only_reason(ArtifactScope.GRAPH) == "a graph's declarations are baked at mint"
+    assert read_only_reason(ArtifactScope.SYSTEM) == "a system artifact is published by blizzard itself"
 
 
 def test_only_node_scope_has_a_producing_node() -> None:
-    assert [s for s in ArtifactScope if s.has_producing_node()] == [ArtifactScope.NODE]
+    assert [s for s in ArtifactScope if has_producing_node(s)] == [ArtifactScope.NODE]
 
 
 def test_git_commit_kind_carries_no_content() -> None:
-    assert ArtifactKind.ASSET.carries_content()
-    assert not ArtifactKind.GIT_COMMIT.carries_content()
+    assert carries_content(ArtifactKind.ASSET)
+    assert not carries_content(ArtifactKind.GIT_COMMIT)
 
 
 @pytest.mark.parametrize("scope", [ArtifactScope.GRAPH, ArtifactScope.SYSTEM])

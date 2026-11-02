@@ -354,12 +354,13 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
     return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes), positions=declaration.projects.positions)
 
 
+@domain_model
+@dataclass
 class _Accumulator:
     """The writes and outcome rows a reconcile has planned so far, in order."""
 
-    def __init__(self) -> None:
-        self.writes: list[PlannedWrite] = []
-        self.outcomes: list[EntryOutcome] = []
+    writes: list[PlannedWrite] = field(default_factory=list[PlannedWrite])
+    outcomes: list[EntryOutcome] = field(default_factory=list[EntryOutcome])
 
 
 class _Section[K: Hashable, D, R: WrittenRecord](Protocol):

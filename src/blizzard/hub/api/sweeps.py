@@ -1,7 +1,7 @@
 """Sweeps on request: one pass of a hub sweep, answered once it has finished. ``/api/sweeps`` runs a pass over the
-request's tenant alone, under :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`; ``/api/admin/sweeps`` runs one
-over every tenant, exactly as a timed pass runs, under the hub-level
-:attr:`~blizzard.auth_core.Permission.TENANT_ADMIN`. Both serve a sweep in either mode.
+request's tenant alone, under :attr:`~blizzard.hub.auth.permissions.Permission.ANALYTICS_ADMIN`;
+``/api/admin/sweeps`` runs one over every tenant, exactly as a timed pass runs, under the hub-level
+:attr:`~blizzard.hub.auth.permissions.Permission.TENANT_ADMIN`. Both serve a sweep in either mode.
 Each handler is sync, so the pass runs off the event loop and every write it makes lands before the answer."""
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantRequest, require, require_hub, resolve_tenant, tenant_bound
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.roster import SweepPassResult, SweepServesNoTenant, UnknownSweep
 from blizzard.wire.sweep_passes import SweepPassResponse

@@ -1,15 +1,15 @@
 """Flow-submission routes — a chunk's submissions to its flows, with their closures. Gated on
-:attr:`~blizzard.auth_core.Permission.FLEET_VIEW`."""
+:attr:`~blizzard.hub.auth.permissions.Permission.FLEET_VIEW`."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.delivery.flows import SubmissionRecord
 from blizzard.wire.flow_submissions import ChunkFlowSubmissionsView, FlowSubmissionClosureView, FlowSubmissionView
 

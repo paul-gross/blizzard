@@ -7,6 +7,8 @@ the one Python definition. Models register in serialization mode; enums and name
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pydantic import BaseModel
 
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -21,6 +23,7 @@ from blizzard.foundation.hub_event_types import (
 )
 from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.leases import LeaseClosureReason
+from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_event_types import (
     AskChangeCause,
     EnvironmentChangeCause,
@@ -62,12 +65,13 @@ from blizzard.wire.sse_runner import (
 )
 
 
+@dto
+@dataclass(frozen=True)
 class SchemaComponents:
     """One spec's extra components: payload models, plus vocabularies keyed by component name."""
 
-    def __init__(self, models: tuple[type[BaseModel], ...], enums: dict[str, object]) -> None:
-        self.models = models
-        self.enums = enums
+    models: tuple[type[BaseModel], ...]
+    enums: dict[str, object]
 
 
 HUB_SCHEMA_COMPONENTS = SchemaComponents(

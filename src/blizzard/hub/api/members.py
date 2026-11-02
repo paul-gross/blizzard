@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound
@@ -31,6 +31,7 @@ from blizzard.hub.auth.memberships import (
     revocable,
 )
 from blizzard.hub.auth.models import Identity, ResolvedIdentity
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubServices
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.wire.user import MemberRoleRequest, MemberView, UserIdentityView

@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -21,6 +21,7 @@ from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.members import change_membership, identity_views, tenant_of
 from blizzard.hub.auth.memberships import Member, assignable_roles, revocable
 from blizzard.hub.auth.models import Identity, ResolvedIdentity, wire_role
+from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.user import RoleAssignmentRequest, UserView
 
 router = APIRouter(
