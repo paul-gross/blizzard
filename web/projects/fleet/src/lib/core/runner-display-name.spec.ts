@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { RUNNER_HOST_NAMES, RUNNER_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, injectRunnerNames, runnerBoardParts, runnerDisplayName, runnerTitle } from './runner-display-name';
+import { RUNNER_HOST_NAMES, RUNNER_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts, runnerDisplayName, runnerTitle } from './runner-display-name';
 
 describe('runnerDisplayName', () => {
   it('joins the compact id to the name with the separator', () => {
@@ -79,5 +79,12 @@ describe('RUNNER_NAMES', () => {
     });
     const names = TestBed.runInInjectionContext(() => injectRunnerNames());
     expect(names().get('rn_1')).toBe('r-claude');
+  });
+});
+
+describe('runnerBoardLabel', () => {
+  it('writes host/name, or the bare name with no host', () => {
+    expect(runnerBoardLabel({ host: 'xps', name: 'r-claude' })).toBe('xps/r-claude');
+    expect(runnerBoardLabel({ host: null, name: 'r-claude' })).toBe('r-claude');
   });
 });

@@ -215,12 +215,28 @@ describe('deliveryDrawerView', () => {
     expect(view.repos[0].lastAttempt).toMatchObject({ outcome: 'conflict', age: '[5m 0s]' });
   });
 
-  it('reads a bounce the hub marks as rework waiting, and any other bounce stale', () => {
+  it('reads a turn or bounce the hub marks as rework waiting, in the repo block and the history, and any other bounce stale', () => {
     const repo = (outcome: string) => deliveryDrawerView(detail({ flow_record: [fact('fl_a', 'turn-ended', 5, { outcome })] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!.repos[0];
     expect([repo('conflict').tone, repo('conflict').lastAttempt?.tone]).toEqual(['waiting', 'waiting']);
     expect([repo('failure').tone, repo('failure').lastAttempt?.tone]).toEqual(['stale', 'stale']);
     const history = deliveryHistory(detail({ flow_record: [fact('fl_a', 'turn-started', 6), fact('fl_a', 'turn-ended', 5, { outcome: 'conflict' })] }), FORGES, FIXTURE_NOW);
-    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt conflict', 'needs']]);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt conflict', 'waiting']]);
+    const bounces = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', rework: true }), bounceView({ cause: 'failure', recorded_at: fixtureInstant(-30) })] }), FORGES, FIXTURE_NOW);
+    expect(bounces.map((entry) => [entry.text, entry.tone])).toEqual([
+      ['bounced · failure', 'needs'],
+      ['bounced · conflict', 'waiting'],
+    ]);
+  });
+
+  it('reads a landing with nothing to merge — no landed fact written — as its own landed entry, and a landing with one as the landed fact alone', () => {
+    const noChanges = [fact('fl_a', 'submitted', 9), fact('fl_a', 'turn-started', 8), fact('fl_a', 'turn-ended', 7, { outcome: 'landed' }), fact('fl_a', 'withdrawn', 7, { outcome: 'landed' })];
+    const history = deliveryHistory(detail({ flow_record: noChanges }), FORGES, FIXTURE_NOW);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([
+      ['landed · no changes', 'done'],
+      ['queued', null],
+    ]);
+    const merged = [fact('fl_a', 'turn-started', 8), fact('fl_a', 'turn-ended', 7, { outcome: 'landed' }), fact('fl_a', 'landed', 7, { revision: '9f2c4e1a7b3d5860fedcba98' })];
+    expect(texts(detail({ flow_record: merged }))).toEqual(['landed 9f2c4e1']);
   });
 
   it('sums the attempts and bounces, and spans the delivery from first submission to landing once every repository has landed', () => {

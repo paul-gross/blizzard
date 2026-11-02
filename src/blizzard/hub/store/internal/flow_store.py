@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, FromClause, Row, and_, func
+from sqlalchemy import ColumnElement, Connection, FromClause, Row, Select, and_, func
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import FlowChangeKind
@@ -122,17 +122,19 @@ class FlowStore:
         return self.submissions_of_chunks([chunk_id]).get(chunk_id, [])
 
     def submissions_of_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
-        if not chunk_ids:
-            return {}
         with self._store.read("submissions_of_chunks") as conn:
             joined = self._store.scope_join(
                 _sub, _closures, _closures.c.submission_id == _sub.c.submission_id, isouter=True
             )
-            rows = conn.execute(
-                self._store.select(joined, *_sub.c, _closures.c.outcome, _closures.c.closed_at).where(
-                    _sub.c.chunk_id.in_(sorted(set(chunk_ids)))
-                )
-            ).all()
+            rows = [
+                row
+                for batch in id_batches(sorted(set(chunk_ids)))
+                for row in conn.execute(
+                    self._store.select(joined, *_sub.c, _closures.c.outcome, _closures.c.closed_at).where(
+                        _sub.c.chunk_id.in_(batch)
+                    )
+                ).all()
+            ]
         # Sorted here, not in SQL: an ORDER BY arrival steers the planner onto the tenant-wide arrival index,
         # where the chunks' own visit index bounds the read to their rows.
         out: dict[str, list[SubmissionRecord]] = {}
@@ -155,7 +157,7 @@ class FlowStore:
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         with self._store.read("facts_of") as conn:
             rows = conn.execute(
-                self._store.select(s.flow_facts)
+                self._facts_with_closure()
                 .where(s.flow_facts.c.submission_id == submission_id)
                 .order_by(s.flow_facts.c.id)
             ).all()
@@ -213,7 +215,7 @@ class FlowStore:
 
     def record_page(self, flow_id: str, *, before: int | None, limit: int) -> list[FlowFact]:
         with self._store.read("flow_record_page") as conn:
-            query = self._store.select(_facts).where(_facts.c.flow_id == flow_id)
+            query = self._facts_with_closure().where(_facts.c.flow_id == flow_id)
             if before is not None:
                 query = query.where(_facts.c.id < before)
             return [fact_of(r) for r in conn.execute(query.order_by(_facts.c.id.desc()).limit(limit)).all()]
@@ -250,7 +252,7 @@ class FlowStore:
             facts = [
                 fact_of(row)
                 for batch in id_batches(submission_ids)
-                for row in conn.execute(self._store.select(_facts).where(_facts.c.submission_id.in_(batch))).all()
+                for row in conn.execute(self._facts_with_closure().where(_facts.c.submission_id.in_(batch))).all()
             ]
             records: dict[str, list[FlowFact]] = {}
             for fact in sorted(facts, key=lambda f: f.id):
@@ -453,7 +455,9 @@ class FlowStore:
         return ~self._store.exists(_closures, _closures.c.submission_id == _sub.c.submission_id)
 
     def _overviews(self, conn: Connection, rows: Sequence[Row[Any]]) -> list[FlowOverview]:
-        """Each flow row with the newest of its record — three batched reads over the flows' ids."""
+        """Each flow row with the newest of its record — three batched reads over the flows' ids. The last verdict is
+        the newest turn whose answer closed its submission, the rule
+        :func:`~blizzard.hub.domain.delivery.flows.closed_by_answer` states."""
         flow_ids = [r.flow_id for r in rows]
         newest: dict[str, FlowFact] = {}
         landed: dict[str, FlowFact] = {}
@@ -499,7 +503,15 @@ class FlowStore:
             .group_by(_facts.c.flow_id)
             .subquery()
         )
-        return [fact_of(r) for r in conn.execute(self._store.select(_facts).join(newest, _facts.c.id == newest.c.id))]
+        return [fact_of(r) for r in conn.execute(self._facts_with_closure().join(newest, _facts.c.id == newest.c.id))]
+
+    def _facts_with_closure(self) -> Select[Any]:
+        """Flow fact rows, each with the outcome its submission was closed under as ``closure`` — what a fact's
+        verdict reads (:func:`~blizzard.hub.domain.delivery.flows.closed_by_answer`)."""
+        joined = self._store.scope_join(
+            _facts, _closures, _closures.c.submission_id == _facts.c.submission_id, isouter=True
+        )
+        return self._store.select(joined, *_facts.c, _closures.c.outcome.label("closure"))
 
     def _take_terms(
         self, conn: Connection, row: Row[Any], flows: Sequence[Flow], candidates: Sequence[LandingTerms]

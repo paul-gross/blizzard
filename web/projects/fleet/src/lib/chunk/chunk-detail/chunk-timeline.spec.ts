@@ -185,7 +185,7 @@ const FORENSICS_DETAIL: ChunkDetail = chunkDetail({
   history: [
     transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
   ],
-  bounces: [{ cause: 'failure', envelope: '{"cause":"failure","detail":"hub node `deliver` routed `failure` to `resolve` \\u2014 delivery incomplete"}', recorded_at: '2026-07-13T00:00:02Z', withdrawn: false }],
+  bounces: [{ cause: 'failure', envelope: '{"cause":"failure","detail":"hub node `deliver` routed `failure` to `resolve` \\u2014 delivery incomplete"}', recorded_at: '2026-07-13T00:00:02Z', withdrawn: false, rework: false }],
   restarts: [
     {
       epoch: 2,
@@ -258,8 +258,8 @@ describe('ChunkTimeline', () => {
     const detail: ChunkDetail = chunkDetail({
       ...FORENSICS_DETAIL,
       bounces: [
-        { cause: 'poll-timeout', envelope: '{"cause":"poll-timeout","detail":"no verdict within 600s"}', recorded_at: '2026-07-13T00:00:02Z', withdrawn: false },
-        { cause: 'unknown', envelope: 'not json {', recorded_at: '2026-07-13T00:00:03Z', withdrawn: false },
+        { cause: 'poll-timeout', envelope: '{"cause":"poll-timeout","detail":"no verdict within 600s"}', recorded_at: '2026-07-13T00:00:02Z', withdrawn: false, rework: false },
+        { cause: 'unknown', envelope: 'not json {', recorded_at: '2026-07-13T00:00:03Z', withdrawn: false, rework: false },
       ],
       restarts: [],
       graph_name: null, current_node_name: null,

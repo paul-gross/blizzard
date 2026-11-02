@@ -498,3 +498,47 @@ def test_a_visits_standing_counts_the_open_arrivals_ahead_of_it(world: _World) -
         _OTHER.resource: 0,
     }
     assert first_standing is not None and first_standing.turning is True
+
+
+@pytest.mark.parametrize(("outcome", "closure"), [("failure", None), ("landed", None), ("landed", "superseded")])
+def test_a_fenced_turn_whose_answer_closed_nothing_has_no_verdict_on_any_read(
+    world: _World, outcome: str, closure: str | None
+) -> None:
+    submission = world.submit(world.chunk(), _MAIN)
+    turn_id = world.take(submission)
+    assert turn_id is not None
+    with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+        world.flows.end_turn_locked(
+            handle, turn_id, outcome=outcome, closure=closure, event=None, at=world.hub.clock.now()
+        )
+
+    flow_id = _flow_id(submission)
+    [ended] = [f for f in world.flows.record_page(flow_id, before=None, limit=10) if f.kind == "turn-ended"]
+    [recorded] = [
+        f for f in world.flows.chunk_records([submission.chunk_id])[submission.chunk_id] if f.kind == "turn-ended"
+    ]
+    overview = world.flows.flow_overview(flow_id)
+
+    assert (ended.outcome, ended.verdict(), recorded.verdict()) == (outcome, None, None)
+    assert overview is not None and overview.last_verdict is None
+
+
+def test_a_turn_whose_answer_closed_its_submission_reads_its_verdict_on_every_read(world: _World) -> None:
+    submission = world.submit(world.chunk(), _MAIN)
+    turn_id = world.take(submission)
+    assert turn_id is not None
+    with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+        world.flows.end_turn_locked(
+            handle, turn_id, outcome="failure", closure="failure", event=None, at=world.hub.clock.now()
+        )
+
+    flow_id = _flow_id(submission)
+    [ended] = [f for f in world.flows.record_page(flow_id, before=None, limit=10) if f.kind == "turn-ended"]
+    [recorded] = [
+        f for f in world.flows.chunk_records([submission.chunk_id])[submission.chunk_id] if f.kind == "turn-ended"
+    ]
+    overview = world.flows.flow_overview(flow_id)
+
+    assert (ended.verdict(), recorded.verdict()) == ("bounced", "bounced")
+    assert overview is not None and overview.last_verdict is not None
+    assert overview.last_verdict.verdict() == "bounced"

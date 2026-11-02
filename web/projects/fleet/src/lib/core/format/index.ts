@@ -7,7 +7,7 @@
 
 export { compactRef } from '../compact-ref';
 export { shortCommitHash } from '../commit-hash';
-export { RUNNER_HOST_NAMES, RUNNER_NAMES, injectRunnerHostNames, injectRunnerNames, runnerBoardParts, type RunnerBoardParts, runnerDisplayName, runnerTitle } from '../runner-display-name';
+export { RUNNER_HOST_NAMES, RUNNER_NAMES, injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts, type RunnerBoardParts, runnerDisplayName, runnerTitle } from '../runner-display-name';
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { type SessionEfficiencyInput } from '../session-efficiency';
 export { SessionEfficiency } from '../session-efficiency-view';

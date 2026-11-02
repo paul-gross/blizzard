@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { ChunkDetail } from '../../api/hub';
+import type { ChunkDetail, ChunkNeighborView } from '../../api/hub';
+import { STATUS_LANE, UNKNOWN_LANE } from '../../core/chunk-lanes';
 import { chunkDetail, chunkNeighborhoodView, chunkNeighborView, chunkUsageTotalView } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
 
@@ -80,6 +81,12 @@ describe('ChunkFacts', () => {
     expect(deps.map((d) => d.textContent?.trim())).toEqual(['C-00aa', 'C-00bb']);
     // A neighbor with no known status draws no icon.
     expect(deps[1].querySelector('fleet-lane-icon')).toBeNull();
+  });
+
+  it('reads a neighbor with no known status in the unknown lane, never a guessed one', () => {
+    const facts = TestBed.createComponent(ChunkFacts).componentInstance as unknown as { lane(n: ChunkNeighborView): string };
+    expect(facts.lane(chunkNeighborView({ status: null }))).toBe(UNKNOWN_LANE);
+    expect(facts.lane(chunkNeighborView({ status: 'not_ready' }))).toBe(STATUS_LANE('not_ready'));
   });
 
   it('reads `—` for the side that has no edge while the other has one', async () => {

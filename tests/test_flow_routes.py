@@ -234,7 +234,7 @@ def test_the_chunk_list_carries_the_latest_bounce_and_the_graph_progress(line: L
     [bounce] = line.world.detail(line.first)["bounces"]
 
     assert (row["latest_bounce"], row["bounce_count"]) == (bounce, 1)
-    assert bounce["withdrawn"] is True
+    assert (bounce["withdrawn"], bounce["rework"]) == (True, False)
     assert row["graph_name"] == line.world.detail(line.first)["graph_name"]
     assert [(n["name"], n["state"]) for n in row["graph_progress"]] == [("build", "current"), ("merge", "failed")]
 

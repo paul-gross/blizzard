@@ -35,7 +35,7 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
-from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_withdrew
+from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_is_rework, bounce_withdrew
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
 from blizzard.hub.domain.operations.complete import is_completion_replay
@@ -599,6 +599,7 @@ class ChunkView:
                 envelope=b.envelope,
                 recorded_at=iso_utc(b.recorded_at),
                 withdrawn=bounce_withdrew(b, submissions),
+                rework=bounce_is_rework(b),
             )
             for b in bounces
         ]

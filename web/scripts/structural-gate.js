@@ -904,6 +904,8 @@ const FLEET_LAYERS = {
   testing: ['api'],
 };
 
+/** The executable copy of the hub layer table in blizzard-context's
+ * `architecture/frontend-structure/placement.md` — the two must match row for row. */
 const HUB_LAYERS = {
   core: [],
   admin: [],

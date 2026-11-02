@@ -21,6 +21,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowFact,
     SubmissionClosure,
     SubmissionRecord,
+    bounce_is_rework,
     bounce_withdrew,
 )
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
@@ -151,8 +152,32 @@ def test_visits_match_by_name_and_skip_a_node_the_graph_no_longer_names() -> Non
 def test_a_turns_verdict_is_landed_bounced_or_none_for_a_turn_that_judged_nothing(
     kind: FlowChangeKind, outcome: str | None, verdict: str | None
 ) -> None:
-    fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
+    fact = FlowFact(
+        id=1,
+        flow_id="flw_1",
+        submission_id="sub_1",
+        chunk_id="ch_1",
+        kind=kind,
+        at=_AT,
+        outcome=outcome,
+        closure=outcome,
+    )
     assert fact.verdict() == verdict
+
+
+@pytest.mark.parametrize(("outcome", "closure"), [("failure", None), ("landed", None), ("failure", "stopped")])
+def test_a_turn_whose_answer_closed_nothing_judges_nothing(outcome: str, closure: str | None) -> None:
+    fact = FlowFact(
+        id=1,
+        flow_id="flw_1",
+        submission_id="sub_1",
+        chunk_id="ch_1",
+        kind=FlowChangeKind.TURN_ENDED,
+        at=_AT,
+        outcome=outcome,
+        closure=closure,
+    )
+    assert fact.verdict() is None
 
 
 @pytest.mark.parametrize(
@@ -277,3 +302,8 @@ def test_a_chunk_read_over_an_unresolvable_graph_has_no_progress() -> None:
 def test_only_a_turn_ended_on_a_rework_answer_is_rework(kind: FlowChangeKind, outcome: str, rework: bool) -> None:
     fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
     assert fact.is_rework() is rework
+
+
+@pytest.mark.parametrize(("cause", "rework"), [("conflict", True), ("failure", False), ("poll-timeout", False)])
+def test_only_a_bounce_on_a_rework_answer_is_rework(cause: str, rework: bool) -> None:
+    assert bounce_is_rework(BounceFact(epoch=1, cause=cause, envelope="{}", recorded_at=_AT)) is rework

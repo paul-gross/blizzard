@@ -145,12 +145,14 @@ class FlowFact:
     at: datetime
     outcome: str | None = None
     revision: str | None = None
+    #: The outcome its submission was closed under, ``None`` while it is open or when read without its closure.
+    closure: str | None = None
 
     def verdict(self) -> FlowVerdict | None:
-        """A ``turn-ended`` fact's verdict on its submission: ``landed`` for the landing's success, ``bounced`` for any
-        other answer that judged it; ``None`` for a turn that judged nothing — one of :data:`NOT_VERDICTS`, a wait
-        among them — and for every other kind."""
-        if self.kind != "turn-ended" or self.outcome is None or self.outcome in NOT_VERDICTS:
+        """A ``turn-ended`` fact's verdict on its submission — only when the turn's answer closed it
+        (:func:`closed_by_answer`): ``landed`` for the landing's success, ``bounced`` for any other answer; ``None`` for
+        a turn that judged nothing, one fenced so its answer closed nothing, and every other kind."""
+        if self.kind != "turn-ended" or not closed_by_answer(self.outcome, self.closure):
             return None
         return FlowVerdict.LANDED if self.outcome == LANDED else FlowVerdict.BOUNCED
 
@@ -309,12 +311,25 @@ NOT_VERDICTS = frozenset(
 )
 
 
+def closed_by_answer(outcome: str | None, closure: str | None) -> bool:
+    """Whether a turn's ``outcome`` judged its submission: an answer, not one of :data:`NOT_VERDICTS`, that the
+    submission was closed under. A turn fenced off its routing answers without closing, and judges nothing — the one
+    rule a fact's verdict, a flow's last verdict and a bounce's withdrawal each read."""
+    return outcome is not None and outcome not in NOT_VERDICTS and closure == outcome
+
+
+def bounce_is_rework(bounce: BounceFact) -> bool:
+    """Whether a bounce sends its chunk back as routine rework — its cause one of :data:`REWORK_ANSWERS`."""
+    return bounce.cause in REWORK_ANSWERS
+
+
 def bounce_withdrew(bounce: BounceFact, submissions: Sequence[SubmissionRecord]) -> bool:
     """Whether the turn that bounced withdrew its submission: a bounce is written at its visit's epoch plus one, in the
     transaction that ends the visit's turn and, when it routes, closes the visit's submission under the bounce's cause.
     A bounce that crossed its cap escalated instead, and one no turn owned closed nothing."""
     return any(
-        sub.epoch == bounce.epoch - 1 and sub.closure is not None and sub.closure.outcome == bounce.cause
+        sub.epoch == bounce.epoch - 1
+        and closed_by_answer(bounce.cause, sub.closure.outcome if sub.closure is not None else None)
         for sub in submissions
     )
 

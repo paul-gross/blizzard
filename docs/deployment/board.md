@@ -35,6 +35,11 @@ completion time on the left. The status word shows on the step row only where it
 paused and waiting on human, which share the waiting lane, and delivering, within running. In the list each label links
 out to its item at the work source.
 
+A card or row in the running, waiting, or needs-human lane also carries the chunk's graph-progress strip: one block per
+node of its graph, in tens, each block reading its node's state — current in pulsing cyan, passed in green, failed in
+red, and unvisited left dark. Hovering a block names the node and its state. A finished chunk carries no strip; its
+`graph_progress` is empty.
+
 The titles are a second read, made after the chunk list has answered, so the lanes fill first. The board reads its
 chunks in batches of 100, and each batch's cards gain their titles as that batch answers. Until then each title is a
 one-line placeholder under its label; a chunk whose items failed to read keeps its labels alone. While the chunk list
