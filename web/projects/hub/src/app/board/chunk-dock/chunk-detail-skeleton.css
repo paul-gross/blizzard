@@ -1,0 +1,90 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+/* The dock's own frame — `chunk-detail-panel.css`'s `.dock` surface and bezel — so the dock reads
+   as the same box loading and loaded. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+  border: 1px solid var(--bezel);
+  overflow: hidden;
+}
+/* `chunk-detail-header.css`'s header band: the id over the identity line, controls at the end. */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+  flex: none;
+}
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.id {
+  width: 30%;
+  --kit-skeleton-height: 16px;
+}
+.sub {
+  width: 45%;
+  --kit-skeleton-height: 10px;
+}
+.controls {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.control {
+  width: 32px;
+  --kit-skeleton-height: 28px;
+}
+/* `chunk-detail-panel.css`'s three equal columns, split by hairlines. */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  overflow: hidden;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  background: var(--panel-deep);
+}
+.label {
+  width: 35%;
+  margin-bottom: 4px;
+  --kit-skeleton-height: 9px;
+}
+/* A fact row: `kit-fact-list`'s fixed label column, then the value. */
+.fact {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 8px;
+  --kit-skeleton-height: 10px;
+}
+.fact-label {
+  width: 70%;
+}
+.fact-value {
+  width: 60%;
+}
+.line {
+  --kit-skeleton-height: 12px;
+}

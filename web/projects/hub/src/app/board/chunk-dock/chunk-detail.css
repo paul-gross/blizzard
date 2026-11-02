@@ -1,5 +1,8 @@
+/* `position: relative` scopes `fleet-kit-async-state`'s absolutely-centered status line (the error
+   state) to the dock; without a positioned ancestor it escapes to the viewport and reads mid-screen. */
 :host {
   display: block;
+  position: relative;
   height: 100%;
 }
 /* The dock is always mounted; when no chunk is open it holds this rest state

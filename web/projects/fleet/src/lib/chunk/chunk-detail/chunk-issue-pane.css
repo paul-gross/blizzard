@@ -13,3 +13,24 @@
   position: relative;
   min-height: 40px;
 }
+/* The loading stand-in: one row in `fleet-kit-accordion-section`'s own header band — its bezel,
+   wash and padding — with the name's bar leading and the ref's at the far end. */
+.skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+.skeleton-name {
+  flex: 1;
+  max-width: 60%;
+  --kit-skeleton-height: 12px;
+}
+.skeleton-ref {
+  flex: none;
+  width: 72px;
+  --kit-skeleton-height: 10px;
+}

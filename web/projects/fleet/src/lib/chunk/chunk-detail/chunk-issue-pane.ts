@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { ChunkIssueList } from '../chunk-issue-list';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
+import { KitSkeleton } from '../../kit/kit-skeleton';
 import { type WorkItemsState } from './work-items-state';
 
 /**
@@ -13,6 +14,9 @@ import { type WorkItemsState } from './work-items-state';
  * fetch triad, the list's is the per-issue accordion row. Presentational
  * only; the forge read itself lives in the container.
  *
+ * Loading draws a skeleton row shaped like the list's own accordion header rather
+ * than a status line, so the work-item column keeps its shape while the forge read runs.
+ *
  * `placement` forwards to the inner `fleet-kit-async-state`, defaulting to its
  * own `'center'`; `'inline'` is for a narrow host, where `'center'`'s
  * absolutely-positioned box overflows with full-sentence error copy.
@@ -20,7 +24,7 @@ import { type WorkItemsState } from './work-items-state';
 @Component({
   selector: 'fleet-chunk-detail-issue-pane',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkIssueList, KitAsyncState],
+  imports: [ChunkIssueList, KitAsyncState, KitSkeleton],
   templateUrl: './chunk-issue-pane.html',
   styleUrl: './chunk-issue-pane.css',
 })
