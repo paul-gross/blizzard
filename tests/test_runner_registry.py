@@ -532,3 +532,13 @@ def test_a_runners_fleet_decisions_read_is_empty_while_it_has_imposed_none(tmp_p
     resp = hub.client.get("/api/fleet/runners/runner-a/decisions", headers={"Authorization": f"Bearer {token}"})
 
     assert (resp.status_code, resp.json()) == (200, {"decisions": []})
+
+
+def test_registry_list_reads_no_node_executors_while_no_runner_declares_a_gate(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    with capture_statements(hub.engine) as statements:
+        hub.client.get("/api/runners")
+
+    assert not any("graph_nodes" in statement for statement, _ in statements)

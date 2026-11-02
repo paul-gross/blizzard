@@ -18,7 +18,7 @@ from blizzard.hub.api.auth import HostPrincipal, require_host_principal
 from blizzard.hub.api.auth_session import tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.ingest_broadcast import pushed_facts
-from blizzard.hub.api.runners import hosts_of, publish_retirement, registry_view, served_projects
+from blizzard.hub.api.runners import executors_for, hosts_of, publish_retirement, registry_view, served_projects
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace
@@ -139,7 +139,7 @@ def retire_host_runner(
             now=services.clock.now(),
             projects=served_projects(services, refreshed.served),
             hosts=hosts_of(services, [refreshed]),
-            executors=services.node_executors.executors_by_node_name(),
+            executors=executors_for(services, [refreshed]),
         ),
         released_chunk_ids=[r.chunk_id for r in outcome.released],
     )

@@ -106,7 +106,7 @@ class RunnerBrake:
             now=self.services.clock.now(),
             projects=served_projects(self.services, refreshed.served),
             hosts=hosts_of(self.services, [refreshed]),
-            executors=self.services.node_executors.executors_by_node_name(),
+            executors=executors_for(self.services, [refreshed]),
         )
 
 
@@ -156,6 +156,16 @@ def runner_view(
         subscription_unrostered=flags.subscription_unrostered,
         declining=declining_views(r),
     )
+
+
+def executors_for(
+    services: TenantServices, registrations: Iterable[RunnerRegistration]
+) -> Mapping[str, Collection[Executor]]:
+    """Where each node name runs across the tenant's graphs — read only when some registration declares a gate, since
+    nothing else consults it."""
+    if not any(r.gates for r in registrations):
+        return {}
+    return services.node_executors.executors_by_node_name()
 
 
 def unenforceable_views(
@@ -351,7 +361,7 @@ def _detail(services: TenantServices, registration: RunnerRegistration) -> Runne
         now=services.clock.now(),
         projects=served_projects(services, registration.served),
         hosts=hosts_of(services, [registration]),
-        executors=services.node_executors.executors_by_node_name(),
+        executors=executors_for(services, [registration]),
     )
 
 
@@ -422,7 +432,7 @@ def list_runners(
     listed = services.fleet.list_with_liveness(now=now, include_retired=include_retired)
     projects = served_projects(services, (e for item in listed for e in item.registration.served))
     hosts = hosts_of(services, [item.registration for item in listed])
-    executors = services.node_executors.executors_by_node_name()
+    executors = executors_for(services, [item.registration for item in listed])
     return RunnerRegistryListResponse(
         runners=[registry_view(item, now=now, projects=projects, hosts=hosts, executors=executors) for item in listed]
     )

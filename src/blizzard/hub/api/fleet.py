@@ -1062,7 +1062,7 @@ def register_runner(
         hub_version=registered.version.hub_version,
         window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling),
         unenforceable_gates=runners_api.unenforceable_views(
-            request.gates, services.node_executors.executors_by_node_name()
+            request.gates, services.node_executors.executors_by_node_name() if request.gates else {}
         ),
     )
 
