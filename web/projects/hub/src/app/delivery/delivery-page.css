@@ -1,0 +1,260 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+/* The list scrolls above the drawer; the drawer takes room only while a row is picked, as the board's dock does. */
+.page {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px 6px;
+}
+.scroll {
+  flex: 1.15;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* One grid for the whole list, so every column sizes across every row; each row takes the list's tracks as a
+   subgrid. The description takes the free width; the stage and links size to their content at the right. The
+   rows' left and right insets are tracks of their own (a subgrid's padding is not counted when its parent sizes the
+   tracks, so padding there lets a wide date ride over the icon): with the 12px gap, the leading 6px track sets the
+   icon 18px in, as the board list row's inset does. */
+.list {
+  display: grid;
+  grid-template-columns: 6px 18px max-content minmax(28ch, 1fr) auto auto 0;
+  column-gap: 12px;
+  /* Rows stand apart by the board list's own gap, the page showing between them. */
+  row-gap: 4px;
+}
+.row {
+  position: relative;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+  column-gap: 12px;
+  padding: 7px 0;
+  border-left: 2px solid var(--status-color);
+  --bg-resting: var(--surface-resting);
+  --bg-hover: var(--surface-hover);
+  --bg-selected: var(--surface-selected);
+  background: var(--bg-resting);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+}
+/* A project-tinted row scales its project's color toward black in linear light, as the board's list rows do. */
+.row.tinted {
+  --bg-resting: color-mix(in srgb-linear, var(--project-tint) 2%, black);
+  --bg-hover: color-mix(in srgb-linear, var(--project-tint) 3.5%, black);
+  --bg-selected: color-mix(in srgb-linear, var(--project-tint) 5%, black);
+}
+.row:hover {
+  background: var(--bg-hover);
+}
+.row.selected {
+  border-left-color: var(--cyan);
+  background: var(--bg-selected);
+}
+/* The pick control fills the row beneath its cells; the cells pass a click down to it, but for the links and the
+   fold among them. */
+.row-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.row > :not(.row-open) {
+  position: relative;
+  pointer-events: none;
+}
+.row a,
+.row app-delivery-chunk .fold {
+  pointer-events: auto;
+}
+.row:has(.row-open:focus-within) {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+.lane {
+  grid-column: 2;
+  justify-self: center;
+  margin-top: 1px;
+}
+.when {
+  grid-column: 3;
+  padding-top: 2px;
+  text-align: right;
+  color: var(--text);
+  white-space: nowrap;
+}
+.when-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.day {
+  color: var(--label);
+}
+.who {
+  grid-column: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.step {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--label);
+}
+.stage-cell {
+  grid-column: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 4px;
+  min-width: 0;
+}
+/* The stage marker is the row's main signal: the reached stage bold — cyan, or red when its latest turn bounced — the stages before it lit, the rest
+   dim, the connectors quiet. */
+.pipe {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.stage {
+  color: color-mix(in srgb, var(--label) 45%, transparent);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.connector {
+  width: 16px;
+  margin: 0 4px;
+  border-top: 1px solid color-mix(in srgb, var(--label) 35%, transparent);
+}
+.connector.lit {
+  border-top-color: color-mix(in srgb, var(--cyan) 45%, transparent);
+}
+.stage.lit {
+  color: var(--text);
+}
+.stage.at {
+  color: var(--cyan);
+  font-weight: 700;
+}
+.stage.at.bad {
+  color: var(--red);
+}
+.places {
+  color: var(--label);
+  white-space: nowrap;
+}
+.bounce {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  max-width: 52ch;
+  overflow-wrap: anywhere;
+  color: var(--red);
+}
+.reason {
+  color: color-mix(in srgb, var(--red) 70%, var(--text));
+}
+.links {
+  grid-column: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 2px;
+  min-width: 0;
+}
+.links a {
+  color: var(--cyan);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.links a:hover {
+  text-decoration: underline;
+}
+.repo {
+  color: var(--label);
+}
+.note {
+  margin: 6px 0;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.note.err {
+  color: var(--red);
+}
+/* The line between the chunks delivering and the chunks delivered, drawn as the board's list draws its ready line. */
+.divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 4px 21px;
+  background: var(--surface-resting);
+  border-bottom: 1px solid var(--line);
+  color: var(--cyan);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.divider-rule {
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed var(--cyan-dim);
+}
+/* A loading row keeps a real row's insets, gap and edge, so the swap to data holds still. */
+.skeleton-row {
+  --status-color: var(--line);
+  cursor: default;
+}
+.sk-dot {
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+}
+.sk-date {
+  display: block;
+  width: 5ch;
+}
+.sk-ref {
+  width: 9ch;
+  --kit-skeleton-height: 10px;
+}
+.sk-title {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.sk-step {
+  width: 22ch;
+  --kit-skeleton-height: 10px;
+}
+.sk-stage {
+  display: block;
+  width: 36ch;
+}
+.sk-link {
+  display: block;
+  width: 18ch;
+  --kit-skeleton-height: 10px;
+}
+.drawer {
+  flex: 1;
+  min-height: 0;
+}
