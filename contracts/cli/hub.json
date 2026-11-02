@@ -2057,6 +2057,137 @@
           "path": "hub chunk stop",
           "short_help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb."
         },
+        "transcript": {
+          "aliases": [
+            "show",
+            "read"
+          ],
+          "commands": {
+            "get": {
+              "help": "Show SEGMENT_ID of CHUNK_ID, turn by turn: each turn's time and kind, a tool turn's name, input and output,\na subagent's turns indented under the call that spawned it.\n\nUnder --json, the segment as the hub stores it.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "chunk_id",
+                  "opts": [
+                    "chunk_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "segment_id",
+                  "opts": [
+                    "segment_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub chunk transcript get",
+              "short_help": "Show SEGMENT_ID of CHUNK_ID, turn by turn: each turn's time and kind, a tool turn's name, input and output, a subagent's turns indented under the call that spawned it."
+            },
+            "list": {
+              "help": "List CHUNK_ID's transcript segments \u2014 id, node, epoch, turn range, whether it is closed or cut short, and size.\n\nA chunk no worker has run lists none. Pass a segment id to `transcript get` to read it.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "chunk_id",
+                  "opts": [
+                    "chunk_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub chunk transcript list",
+              "short_help": "List CHUNK_ID's transcript segments \u2014 id, node, epoch, turn range, whether it is closed or cut short, and size."
+            }
+          },
+          "help": "Read a chunk's recorded session transcript, as the board shows it.",
+          "params": [],
+          "path": "hub chunk transcript",
+          "short_help": "Read a chunk's recorded session transcript, as the board shows it."
+        },
         "work-items": {
           "help": "Show CHUNK's work items as their sources report them, one entry per pointer.\n\nAn item its source fails to fetch shows that error in its own entry; the rest still list.",
           "params": [
@@ -2978,10 +3109,10 @@
           "short_help": "One finding's whole record."
         },
         "list": {
-          "help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also\nsurfaces every exited finding, not just a merely `gone` one. --routine is required\nunless --source review, since a review-sourced finding carries no routine.",
+          "help": "List findings \u2014 live only, unless --include-gone, which also surfaces every\nexited finding, not just a merely `gone` one. --scope and --routine each narrow the\nlist; with neither, it lists every finding.",
           "params": [
             {
-              "help": "The routine whose findings to list. Required unless --source review.",
+              "help": "Narrow to this routine's findings.",
               "hidden": false,
               "kind": "option",
               "name": "routine",
@@ -2993,14 +3124,14 @@
               "type": "text"
             },
             {
-              "help": "The scope to filter to.",
+              "help": "Narrow to this scope.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
               "opts": [
                 "--scope"
               ],
-              "required": true,
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -3078,7 +3209,7 @@
             }
           ],
           "path": "hub finding list",
-          "short_help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
+          "short_help": "List findings \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
         },
         "not-a-finding": {
           "help": "Withdraw FINDING_IDS as not findings.",
@@ -5898,7 +6029,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
+          "help": "Create project SLUG at revision 1, named NAME, else its slug. It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
           "params": [
             {
               "hidden": false,
@@ -5912,7 +6043,7 @@
               "type": "text"
             },
             {
-              "help": "The project's display name (default: SLUG).",
+              "help": "The project's display name; its slug when omitted.",
               "hidden": false,
               "kind": "option",
               "name": "name",
@@ -5985,7 +6116,7 @@
             }
           ],
           "path": "hub project create",
-          "short_help": "Create project SLUG at revision 1, named NAME (default: SLUG)."
+          "short_help": "Create project SLUG at revision 1, named NAME, else its slug."
         },
         "edit": {
           "help": "Change only the fields given on PROJECT; every other field keeps its value. A slug the project leaves keeps\nnaming it until another project takes it. A change that leaves every field as it is writes nothing and keeps the\nrevision. Refused when the new slug is another project's, or --if-match names a stale revision.",
@@ -6912,7 +7043,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 when the secret is missing or retired, or when the forge cannot honour\n--policy. The hub resolves a chunk's commits against the record on its next deliver.",
+          "help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 when the secret is missing or retired, or when the forge cannot honour\n--policy. The hub resolves a chunk's commits against the record on its next deliver.",
           "params": [
             {
               "hidden": false,
@@ -6926,7 +7057,7 @@
               "type": "text"
             },
             {
-              "help": "The repository's display name (default: SLUG).",
+              "help": "The repository's display name; its slug when omitted.",
               "hidden": false,
               "kind": "option",
               "name": "name",
@@ -7071,7 +7202,7 @@
             }
           ],
           "path": "hub repo create",
-          "short_help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names."
+          "short_help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names."
         },
         "edit": {
           "help": "Change only the fields given on REPOSITORY; every other field keeps its value.\n\nA slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field\nas it is writes nothing and keeps the revision. Refused when the new slug is another repository's, a field is\ngiven both a value and --clear, or --if-match names a stale revision.",
@@ -10709,7 +10840,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add work source SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nWithout --forge the source names its forge the old way \u2014 --api-base, or GitHub's API when it is left out \u2014 resolved\nto the forge holding that origin, made when none does, and warned about.\n\nRefused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and\nlocator are already taken \u2014 a retired source keeps its claim \u2014 or when the secret is missing or retired. The hub\nreads the record on its next use of the source.",
+          "help": "Add work source SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nWithout --forge the source names its forge the old way \u2014 --api-base, or GitHub's API when it is left out \u2014 resolved\nto the forge holding that origin, made when none does, and warned about.\n\nRefused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and\nlocator are already taken \u2014 a retired source keeps its claim \u2014 or when the secret is missing or retired. The hub\nreads the record on its next use of the source.",
           "params": [
             {
               "hidden": false,
@@ -10723,7 +10854,7 @@
               "type": "text"
             },
             {
-              "help": "The source's display name (default: SLUG).",
+              "help": "The source's display name; its slug when omitted.",
               "hidden": false,
               "kind": "option",
               "name": "name",
@@ -10858,7 +10989,7 @@
             }
           ],
           "path": "hub source create",
-          "short_help": "Add work source SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names."
+          "short_help": "Add work source SLUG at revision 1, named NAME, else its slug, on the forge --forge names."
         },
         "edit": {
           "help": "Change only the fields given on SOURCE; every other field keeps its value.\n\nA slug the source leaves keeps naming it until another source takes it. A change that leaves every field as it is\nwrites nothing and keeps the revision. Refused when the new slug is another source's or ``hub``, when --if-match\nnames a stale revision, and for the built-in hub source.",

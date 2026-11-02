@@ -10930,7 +10930,7 @@
       },
       "ProjectCreateRequest": {
         "additionalProperties": false,
-        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``. A ``color`` is a palette name or a\n``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color.",
+        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs. Its display ``name`` is the slug when none is stated. A ``color`` is a palette name or a\n``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color.",
         "properties": {
           "color": {
             "anyOf": [
@@ -10949,8 +10949,15 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "slug": {
             "title": "Slug",
@@ -10958,8 +10965,7 @@
           }
         },
         "required": [
-          "slug",
-          "name"
+          "slug"
         ],
         "title": "ProjectCreateRequest",
         "type": "object"

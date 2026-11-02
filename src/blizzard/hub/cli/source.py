@@ -55,7 +55,7 @@ def source_group() -> None:
 
 @source_group.command("create", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--name", default=None, help="The source's display name (default: SLUG).")
+@click.option("--name", default=None, help="The source's display name; its slug when omitted.")
 @click.option("--provider", required=True, help="The provider the source reads items from, e.g. github.")
 @click.option("--locator", required=True, help="Where the items live; for github, owner/name.")
 @click.option("--secret", "secret", default=None, help="The stored secret holding the provider credential.")
@@ -87,7 +87,7 @@ def source_create(
     web_base: str | None,
     annotate: bool,
 ) -> None:
-    """Add work source SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.
+    """Add work source SLUG at revision 1, named NAME, else its slug, on the forge --forge names.
 
     Without --forge the source names its forge the old way — --api-base, or GitHub's API when it is left out — resolved
     to the forge holding that origin, made when none does, and warned about.
@@ -97,13 +97,18 @@ def source_create(
     reads the record on its next use of the source."""
     body = {
         "slug": slug,
-        "name": name if name is not None else slug,
         "provider": provider,
         "locator": locator,
         "secret": secret,
         "annotate": annotate,
     }
-    body.update({k: v for k, v in (("forge", forge), ("api_base", api_base), ("web_base", web_base)) if v is not None})
+    body.update(
+        {
+            k: v
+            for k, v in (("name", name), ("forge", forge), ("api_base", api_base), ("web_base", web_base))
+            if v is not None
+        }
+    )
     resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, on_status=_refusals(slug), door=True)
     out = resp.json()
     echo_warnings(out)

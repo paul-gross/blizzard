@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from contextlib import contextmanager
+from http import HTTPStatus
+from typing import Any
 
 import click
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.get_group import GetGroup
+from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.clock import IClock
-from blizzard.runner.cli.daemon import Door, runner_option
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store_guard import configured_ids, store_write_guard
@@ -15,10 +20,90 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.transcripts.backfill import TranscriptReshipError
 
+# The local API's own door override; `traces` and `control` declare the same variable.
+_ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 
-@click.group("transcript")
+
+@click.group("transcript", cls=GetGroup)
 def transcript_group() -> None:
-    """Operator: maintenance over this runner's own transcript lane."""
+    """Operator: read this runner's recorded transcripts, and maintain its own transcript lane."""
+
+
+def _daemon_options(command: Any) -> Any:
+    command = runner_option(command)
+    command = click.option(
+        "--runner-url",
+        "runner_url",
+        default=None,
+        envvar=_ENV_LOCAL_API_URL,
+        help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+    )(command)
+    return click.option(
+        "--dir",
+        "directory",
+        default=DEFAULT_DIR,
+        envvar=ENV_RUNNER_DIR,
+        help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+    )(command)
+
+
+def _show(body: dict[str, Any], as_json: bool, view: SegmentIndexLines | SegmentContentLines) -> None:
+    if as_json:
+        click.echo(json.dumps(body, indent=2))
+        return
+    for line in view.lines():
+        click.echo(line)
+
+
+@transcript_group.command("list")
+@click.argument("chunk_id")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print the response body as JSON.")
+@_daemon_options
+@click.pass_context
+def transcript_list(
+    ctx: click.Context, chunk_id: str, as_json: bool, directory: str, runner_url: str | None, runner: str | None
+) -> None:
+    """List the transcript segments this runner holds for CHUNK_ID — id, node, epoch, turn range, whether it is
+    closed or cut short, and size.
+
+    Reads the running runner, so the host must be up. A chunk this runner never ran lists none. Pass a segment id to
+    `transcript get` to read it."""
+    with RunnerDaemon.reach("transcript list", directory, runner_url, Door.of(ctx), runner) as daemon:
+        body = daemon.get(f"/api/chunks/{chunk_id}/transcripts").json()
+    _show(body, as_json, SegmentIndexLines(body))
+
+
+@transcript_group.command("get")
+@click.argument("chunk_id")
+@click.argument("segment_id")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print the response body as JSON.")
+@_daemon_options
+@click.pass_context
+def transcript_get(
+    ctx: click.Context,
+    chunk_id: str,
+    segment_id: str,
+    as_json: bool,
+    directory: str,
+    runner_url: str | None,
+    runner: str | None,
+) -> None:
+    """Show SEGMENT_ID of CHUNK_ID as this runner holds it, turn by turn: each turn's time and kind, a tool turn's
+    name, input and output, a subagent's turns indented under the call that spawned it.
+
+    Reads the running runner, so the host must be up. Refused when the harness that recorded the segment is not
+    installed here."""
+    with RunnerDaemon.reach("transcript get", directory, runner_url, Door.of(ctx), runner) as daemon:
+        resp = daemon.send("get", f"/api/chunks/{chunk_id}/transcripts/{segment_id}")
+    if resp.status_code == HTTPStatus.NOT_FOUND:
+        raise click.ClickException(f"this runner holds no segment {segment_id} for chunk {chunk_id}")
+    if resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE:
+        raise click.ClickException(
+            f"segment {segment_id} cannot be read here: {resp.json().get('detail', 'unavailable')}"
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _show(body, as_json, SegmentContentLines(body))
 
 
 @contextmanager

@@ -12,10 +12,13 @@ import pytest
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.flag_guard import check_declared
 from blizzard.foundation.flags import FlagRegistry
+from blizzard.hub.cli.collaborators import HubCliCollaborators
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flag_gate import hub_flag_command, hub_flag_option
+from blizzard.hub.cli.session_service import SessionService
 from blizzard.wire.flags import FlagOff
+from tests.session_store_fakes import InMemorySessionStore
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.unit
@@ -38,11 +41,6 @@ default = "off"
 )
 
 
-class _Reader:
-    def load(self, hub_url: str) -> str | None:
-        return None
-
-
 class _Response:
     def __init__(self, status_code: int, payload: object) -> None:
         self.status_code = status_code
@@ -59,7 +57,7 @@ class _Response:
 @click.pass_context
 def _hub(ctx: click.Context) -> None:
     CliCollaborators.of(ctx)
-    ctx.obj = _Reader()
+    HubCliCollaborators.resolve(ctx, lambda: SessionService(InMemorySessionStore()))
 
 
 @_hub.command("held", cls=FleetCommand)
@@ -130,7 +128,7 @@ def test_a_flag_off_404_reaching_the_response_check_renders_the_same_message() -
     bound = bind_stubs(get=lambda url, **_: _Response(404, body))
     cli = CliContext(
         hub_url="http://hub.local",
-        session_reader=_Reader(),
+        session_reader=InMemorySessionStore(),
         trace=_NoTrace(),
         client_factory=bound.collaborators.client_factory,
     )

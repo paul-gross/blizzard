@@ -8,6 +8,7 @@ import click
 
 from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.hub.cli.collaborators import HubCliCollaborators
 from blizzard.hub.cli.session_service import SessionService
 
 _CLI = "blizzard.hub.cli"
@@ -56,9 +57,9 @@ _COMMANDS = {
 @click.pass_context
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
-    # One session service every subcommand inherits; who may write through it is pinned by
-    # tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root.
-    ctx.obj = SessionService(SessionFile.of())
+    # One session service every subcommand inherits, through the carrier pinned here; who may write through it is
+    # pinned by tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root.
+    HubCliCollaborators.resolve(ctx, lambda: SessionService(SessionFile.of()))
     if ctx.invoked_subcommand is None:
         host = hub.get_command(ctx, "host")
         assert host is not None

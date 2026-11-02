@@ -6,9 +6,10 @@ from typing import Any
 
 import click
 
-from blizzard.cli.collaborators import CliCollaborators, ClientFactory
+from blizzard.cli.collaborators import ClientFactory
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.operator_sessions import IReadSessionStore
+from blizzard.hub.cli.collaborators import HubCliCollaborators
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_TENANT, ENV_HUB_URL, CliContext
 
 
@@ -58,9 +59,9 @@ class HubCommand(click.Command):
         raise NotImplementedError
 
     def invoke(self, ctx: click.Context) -> Any:
-        # `ctx.obj` is the session-store seam the `hub` group's own callback built.
+        carrier = HubCliCollaborators.of(ctx)
         ctx.params["cli"] = self.context(
-            ctx.params, ctx.obj, OperatorTrace.source(ctx), CliCollaborators.of(ctx).client_factory
+            ctx.params, carrier.sessions, OperatorTrace.source(ctx), carrier.client_factory
         )
         return super().invoke(ctx)
 
@@ -128,5 +129,5 @@ class SessionServiceCommand(AuthCommand):
     ``tests/test_cli_surface_contract.py::test_login_and_logout_keep_session_service_off_the_recorded_surface``."""
 
     def invoke(self, ctx: click.Context) -> Any:
-        ctx.params["session_service"] = ctx.obj
+        ctx.params["session_service"] = HubCliCollaborators.of(ctx).sessions
         return super().invoke(ctx)
