@@ -57,18 +57,18 @@ pytestmark = pytest.mark.component
 
 
 class _HeldLanding:
-    """A landing action answering ``answer`` — ``pending`` until told otherwise."""
+    """A landing action answering ``answer`` — ``pending`` until told otherwise — among ``pending``, ``landed``,
+    ``failure`` and any ``extra`` answers its graph authors."""
 
-    spec = ActionSpec(
-        name="test.held-landing",
-        args=frozenset(),
-        required_args=frozenset(),
-        answers=frozenset({"pending", "landed", "failure"}),
-        answers_from_arg=None,
-        lands=True,
-    )
-
-    def __init__(self) -> None:
+    def __init__(self, extra: frozenset[str] = frozenset()) -> None:
+        self.spec = ActionSpec(
+            name="test.held-landing",
+            args=frozenset(),
+            required_args=frozenset(),
+            answers=frozenset({"pending", "landed", "failure"}) | extra,
+            answers_from_arg=None,
+            lands=True,
+        )
         self.answer = Pass(choice="pending")
         self.passes: list[str] = []
 
@@ -152,8 +152,8 @@ _REPO = "acme/widget"
 
 
 class World:
-    def __init__(self, tmp_path: Path) -> None:
-        self.action = _HeldLanding()
+    def __init__(self, tmp_path: Path, *, extra_answers: frozenset[str] = frozenset()) -> None:
+        self.action = _HeldLanding(extra_answers)
         actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.action])
         self.hub = build_hub(tmp_path, actions=actions)
         self.tenant = default_tenant(self.hub.engine)
@@ -193,12 +193,12 @@ class World:
         report_lease(hub, chunk_id, epoch=1, seq=1)
         return chunk_id, claim.json()["envelope"]["node"]["node_id"]
 
-    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO) -> dict[str, Any]:
+    def complete(self, chunk_id: str, from_node_id: str, *, repo: str = _REPO, epoch: int = 1) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{chunk_id}/completions",
             json={
                 "choice": "pass",
-                "epoch": 1,
+                "epoch": epoch,
                 "runner_id": "r1",
                 "from_node_id": from_node_id,
                 "check_results": [],

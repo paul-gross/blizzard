@@ -213,13 +213,14 @@ def _submission(epoch: int, closed: str | None) -> SubmissionRecord:
     ("submissions", "withdrew"),
     [
         ([_submission(3, "failure")], True),
+        ([_submission(3, "conflict")], True),
         ([_submission(3, None)], False),
         ([_submission(3, "stopped")], False),
         ([_submission(2, "failure")], False),
         ([], False),
     ],
 )
-def test_a_bounce_withdrew_only_the_submission_its_own_visit_closed_under_its_cause(
+def test_a_bounce_withdrew_only_the_submission_its_own_visit_closed_under_an_answer(
     submissions: list[SubmissionRecord], withdrew: bool
 ) -> None:
     bounce = BounceFact(epoch=4, cause="failure", envelope="{}", recorded_at=_AT)
@@ -290,20 +291,47 @@ def test_a_chunk_read_over_an_unresolvable_graph_has_no_progress() -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "outcome", "rework"),
+    ("kind", "outcome", "closure", "rework"),
     [
-        ("turn-ended", "conflict", True),
-        ("turn-ended", "failure", False),
-        ("turn-ended", "landed", False),
-        ("turn-ended", "pending", False),
-        ("withdrawn", "conflict", False),
+        ("turn-ended", "conflict", "conflict", True),
+        ("turn-ended", "conflict", None, False),
+        ("turn-ended", "conflict", "stopped", False),
+        ("turn-ended", "failure", "failure", False),
+        ("turn-ended", "landed", "landed", False),
+        ("turn-ended", "pending", None, False),
+        ("withdrawn", "conflict", "conflict", False),
     ],
 )
-def test_only_a_turn_ended_on_a_rework_answer_is_rework(kind: FlowChangeKind, outcome: str, rework: bool) -> None:
-    fact = FlowFact(id=1, flow_id="flw_1", submission_id="sub_1", chunk_id="ch_1", kind=kind, at=_AT, outcome=outcome)
+def test_only_a_turn_that_routed_its_submission_back_on_a_rework_answer_is_rework(
+    kind: FlowChangeKind, outcome: str, closure: str | None, rework: bool
+) -> None:
+    fact = FlowFact(
+        id=1,
+        flow_id="flw_1",
+        submission_id="sub_1",
+        chunk_id="ch_1",
+        kind=kind,
+        at=_AT,
+        outcome=outcome,
+        closure=closure,
+    )
     assert fact.is_rework() is rework
 
 
-@pytest.mark.parametrize(("cause", "rework"), [("conflict", True), ("failure", False), ("poll-timeout", False)])
-def test_only_a_bounce_on_a_rework_answer_is_rework(cause: str, rework: bool) -> None:
-    assert bounce_is_rework(BounceFact(epoch=1, cause=cause, envelope="{}", recorded_at=_AT)) is rework
+@pytest.mark.parametrize(
+    ("cause", "closed", "rework"),
+    [
+        ("conflict", "conflict", True),
+        ("conflict", None, False),
+        ("failure", "failure", False),
+        ("poll-timeout", "failure", False),
+    ],
+)
+def test_only_a_bounce_routed_back_on_a_rework_answer_is_rework(cause: str, closed: str | None, rework: bool) -> None:
+    bounce = BounceFact(epoch=4, cause=cause, envelope="{}", recorded_at=_AT)
+    assert bounce_is_rework(bounce, [_submission(3, closed)]) is rework
+
+
+def test_a_poll_timeout_bounce_withdrew_the_submission_its_failure_route_closed() -> None:
+    bounce = BounceFact(epoch=4, cause="poll-timeout", envelope="{}", recorded_at=_AT)
+    assert bounce_withdrew(bounce, [_submission(3, "failure")]) is True

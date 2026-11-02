@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import type { ChunkDetail, ChunkNeighborView } from '../../api/hub';
-import { STATUS_LANE, UNKNOWN_LANE } from '../../core/chunk-lanes';
+import type { ChunkDetail, ChunkNeighborView, ChunkStatus } from '../../api/hub';
+import { STATUS_LANE } from '../../core/chunk-lanes';
 import { compactRef } from '../../core/compact-ref';
 import { LensLink } from '../../core/lens-link';
 import { type SessionEfficiencyInput } from '../../core/session-efficiency';
@@ -51,8 +51,8 @@ export class ChunkFacts {
     return compactRef(chunkId);
   }
 
-  /** The neighbor's board lane; a neighbor with no known status reads {@link UNKNOWN_LANE}, never a guessed one. */
-  protected lane(n: ChunkNeighborView): string {
-    return n.status ? STATUS_LANE(n.status) : UNKNOWN_LANE;
+  /** A neighbor's board lane — read only for a neighbor whose status is known. */
+  protected lane(status: ChunkStatus): string {
+    return STATUS_LANE(status);
   }
 }

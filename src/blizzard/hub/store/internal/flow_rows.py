@@ -32,7 +32,9 @@ def flow_of(row: Row[Any]) -> Flow:
     return Flow(flow_id=row.flow_id, repository_id=row.repository_id, branch=row.branch, created_at=row.created_at)
 
 
-def fact_of(row: Row[Any]) -> FlowFact:
+def fact_of(row: Row[Any], *, closure: str | None) -> FlowFact:
+    """A flow fact row as the domain reads it; ``closure`` is the outcome its submission was closed under, ``None``
+    while open — a read that did not join the closure has no verdict to give, and says so by passing ``None``."""
     return FlowFact(
         id=row.id,
         flow_id=row.flow_id,
@@ -42,8 +44,7 @@ def fact_of(row: Row[Any]) -> FlowFact:
         at=row.at,
         outcome=row.outcome,
         revision=row.revision,
-        # Only a read joined to its submission's closure carries one (`FlowStore._facts_with_closure`).
-        closure=getattr(row, "closure", None),
+        closure=closure,
     )
 
 

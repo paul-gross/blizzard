@@ -239,6 +239,12 @@ describe('deliveryDrawerView', () => {
     expect(texts(detail({ flow_record: merged }))).toEqual(['landed 9f2c4e1']);
   });
 
+  it('folds a landing turn fenced off its routing — no verdict — into the landed entry its merge wrote', () => {
+    const fenced = [fact('fl_a', 'turn-started', 8), fact('fl_a', 'landed', 7, { revision: '9f2c4e1a7b3d5860fedcba98' }), { ...fact('fl_a', 'turn-ended', 7, { outcome: 'landed' }), verdict: null }];
+    const history = deliveryHistory(detail({ flow_record: fenced }), FORGES, FIXTURE_NOW);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landed 9f2c4e1', 'done']]);
+  });
+
   it('sums the attempts and bounces, and spans the delivery from first submission to landing once every repository has landed', () => {
     const record = [fact('fl_a', 'submitted', 120), fact('fl_a', 'submitted', 60, { submission_id: 'sub_2' }), fact('fl_a', 'landed', 7)];
     const landed = deliveryDrawerView(detail({ flow_record: record, landed_repos: [landedRepoView()], bounces: [bounceView()] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!;

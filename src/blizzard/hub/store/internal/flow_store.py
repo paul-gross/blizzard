@@ -161,7 +161,7 @@ class FlowStore:
                 .where(s.flow_facts.c.submission_id == submission_id)
                 .order_by(s.flow_facts.c.id)
             ).all()
-            return [fact_of(r) for r in rows]
+            return [fact_of(r, closure=r.closure) for r in rows]
 
     def turn_outcomes(self, chunk_id: str, *, node_id: str, epoch: int) -> list[str]:
         with self._store.read("turn_outcomes") as conn:
@@ -218,7 +218,10 @@ class FlowStore:
             query = self._facts_with_closure().where(_facts.c.flow_id == flow_id)
             if before is not None:
                 query = query.where(_facts.c.id < before)
-            return [fact_of(r) for r in conn.execute(query.order_by(_facts.c.id.desc()).limit(limit)).all()]
+            return [
+                fact_of(r, closure=r.closure)
+                for r in conn.execute(query.order_by(_facts.c.id.desc()).limit(limit)).all()
+            ]
 
     def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
         with self._store.read("open_submissions_on") as conn:
@@ -250,7 +253,7 @@ class FlowStore:
                 ).scalars()
             ]
             facts = [
-                fact_of(row)
+                fact_of(row, closure=row.closure)
                 for batch in id_batches(submission_ids)
                 for row in conn.execute(self._facts_with_closure().where(_facts.c.submission_id.in_(batch))).all()
             ]
@@ -469,7 +472,8 @@ class FlowStore:
         )
         for batch in id_batches(flow_ids):
             newest.update(
-                (r.flow_id, fact_of(r))
+                # Read for its instant alone: no closure joined, so no verdict.
+                (r.flow_id, fact_of(r, closure=None))
                 for r in conn.execute(newest_fact_select(self._store, _facts, _facts.c.flow_id, batch)).all()
             )
             landed.update((f.flow_id, f) for f in self._newest_per_flow(conn, _facts, batch, _facts.c.kind == "landed"))
@@ -503,7 +507,10 @@ class FlowStore:
             .group_by(_facts.c.flow_id)
             .subquery()
         )
-        return [fact_of(r) for r in conn.execute(self._facts_with_closure().join(newest, _facts.c.id == newest.c.id))]
+        return [
+            fact_of(r, closure=r.closure)
+            for r in conn.execute(self._facts_with_closure().join(newest, _facts.c.id == newest.c.id))
+        ]
 
     def _facts_with_closure(self) -> Select[Any]:
         """Flow fact rows, each with the outcome its submission was closed under as ``closure`` — what a fact's

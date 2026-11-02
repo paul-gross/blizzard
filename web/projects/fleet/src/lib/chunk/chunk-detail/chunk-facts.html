@@ -16,7 +16,7 @@
   @for (n of list; track n.chunk_id) {
     <a class="edge" [attr.data-testid]="testid" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">
       @if (n.status) {
-        <fleet-lane-icon class="edge-icon" [lane]="lane(n)" [status]="n.status" />
+        <fleet-lane-icon class="edge-icon" [lane]="lane(n.status)" [status]="n.status" />
       }
       <span class="edge-ref">{{ shortId(n.chunk_id) }}</span>
     </a>

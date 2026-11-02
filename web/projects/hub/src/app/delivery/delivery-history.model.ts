@@ -168,7 +168,9 @@ function draft(id: string, at: string, now: number, repo: string | null, text: s
 /**
  * One flow's facts as history entries, oldest first. A run of waits — a turn started and ended only waiting, again and
  * again — folds into one `waiting on checks` entry; any other turn that settles reads as its outcome, the turn's start
- * folded in, a landing as the landed entry alone — or as its turn, when it had nothing to merge and wrote none; a withdrawal right after the turn entry it caused joins that entry,
+ * folded in. A turn whose submission landed on the flow folds into that landed entry, whatever its verdict — one fenced
+ * off its routing after the merge included; a landing that judged its submission with nothing to merge, so no landed
+ * fact, reads as its own `landed · no changes`. A withdrawal right after the turn entry it caused joins that entry,
  * and one right after a landing is the landing's own.
  */
 function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: number): Draft[] {
@@ -185,10 +187,11 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     polls = [];
   };
   facts.forEach((fact, index) => {
-    const next = facts[index + 1];
     if (fact.kind === 'turn-started') {
-      if (next?.kind === 'turn-ended' && !next.wait) return;
-      if (next?.kind === 'turn-ended' || polls.length > 0) {
+      // The turn's own end, past a landed fact its pass wrote on the way.
+      const end = facts.slice(index + 1).find((each) => each.kind !== 'landed');
+      if (end?.kind === 'turn-ended' && !end.wait) return;
+      if (end?.kind === 'turn-ended' || polls.length > 0) {
         polls.push(fact);
         return;
       }
@@ -203,9 +206,10 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
     flushPolls();
     if (fact.kind === 'submitted') out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'queued', historyTone('submitted')));
     else if (fact.kind === 'landed') out.push(draft(`f-${fact.id}`, fact.at, now, repo, fact.revision ? `landed ${shortCommitHash(fact.revision)}` : 'landed', historyTone('landed')));
+    else if (fact.kind === 'turn-ended' && facts.some((each) => each.kind === 'landed' && each.submission_id === fact.submission_id)) return;
     else if (fact.kind === 'turn-ended' && fact.verdict === 'landed') {
       // A landing with nothing to merge writes no `landed` fact; its turn speaks for it.
-      if (!facts.some((each) => each.kind === 'landed' && each.submission_id === fact.submission_id)) out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landed · no changes', historyTone('landed')));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landed · no changes', historyTone('landed')));
     } else if (fact.kind === 'turn-ended') {
       const withdrawn = withdrawnAfter(facts, fact);
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.rework)));
