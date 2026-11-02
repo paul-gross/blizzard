@@ -14,7 +14,9 @@ to its loading skeleton.
 `null` when none was recorded. Flow record entries carry `verdict`, which is `landed` or `bounced` for a `turn-ended`
 entry whose answer closed its submission and `null` otherwise, a fenced turn included; a flow's `last_verdict` follows
 the same rule. They also carry `wait`, true only on a `turn-ended` entry whose turn waited (`pending` or
-`awaiting-merge`), and `rework`, true only on one whose answer sent the submission back as routine rework rather than a
-failure (today a `conflict`). A bounce, on `latest_bounce` and in a chunk's `bounces`, carries `withdrawn`, whether its
-turn withdrew the submission from its flows, and `rework`, whether its cause was routine rework. The board draws each
-chunk's graph progress and graph name from these fields, so it no longer fetches each chunk's detail or each graph.
+`awaiting-merge`), and `rework`, true only on one whose answer closed the submission and sent it back as routine rework
+rather than a failure (today a `conflict`); a fenced conflict turn is not rework. A bounce, on `latest_bounce` and in a
+chunk's `bounces`, carries `withdrawn`, whether its turn routed the chunk back and withdrew the submission from its
+flows — a `poll-timeout` bounce included — and `rework`, true only for a `conflict` bounce whose turn routed it back;
+one past the bounce cap escalates and is not rework. The board draws each chunk's graph progress and graph name from
+these fields, so it no longer fetches each chunk's detail or each graph.

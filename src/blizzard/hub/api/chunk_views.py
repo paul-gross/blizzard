@@ -599,7 +599,7 @@ class ChunkView:
                 envelope=b.envelope,
                 recorded_at=iso_utc(b.recorded_at),
                 withdrawn=bounce_withdrew(b, submissions),
-                rework=bounce_is_rework(b),
+                rework=bounce_is_rework(b, submissions),
             )
             for b in bounces
         ]

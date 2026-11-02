@@ -161,9 +161,14 @@ class FlowFact:
         return self.kind == "turn-ended" and self.outcome in RESERVED_WAITS
 
     def is_rework(self) -> bool:
-        """Whether this is a ``turn-ended`` fact that sent its submission back as routine rework — its outcome one of
-        :data:`REWORK_ANSWERS` — rather than as a failure."""
-        return self.kind == "turn-ended" and self.outcome in REWORK_ANSWERS
+        """Whether this is a ``turn-ended`` fact that sent its submission back as routine rework rather than as a
+        failure: its outcome one of :data:`REWORK_ANSWERS`, and the answer closed its submission
+        (:func:`closed_by_answer`) — a fenced turn routed nothing back."""
+        return (
+            self.kind == "turn-ended"
+            and self.outcome in REWORK_ANSWERS
+            and closed_by_answer(self.outcome, self.closure)
+        )
 
 
 @domain_model
@@ -311,27 +316,36 @@ NOT_VERDICTS = frozenset(
 )
 
 
+def closed_by_verdict(closure: str | None) -> bool:
+    """Whether a submission was closed by a turn's answer — a verdict that routed it on — rather than left open, or
+    withdrawn by a lever or a move off its visit (:data:`NOT_VERDICTS`)."""
+    return closure is not None and closure not in NOT_VERDICTS
+
+
 def closed_by_answer(outcome: str | None, closure: str | None) -> bool:
-    """Whether a turn's ``outcome`` judged its submission: an answer, not one of :data:`NOT_VERDICTS`, that the
-    submission was closed under. A turn fenced off its routing answers without closing, and judges nothing — the one
-    rule a fact's verdict, a flow's last verdict and a bounce's withdrawal each read."""
-    return outcome is not None and outcome not in NOT_VERDICTS and closure == outcome
-
-
-def bounce_is_rework(bounce: BounceFact) -> bool:
-    """Whether a bounce sends its chunk back as routine rework — its cause one of :data:`REWORK_ANSWERS`."""
-    return bounce.cause in REWORK_ANSWERS
+    """Whether a turn's ``outcome`` judged its submission: the answer the submission was closed under
+    (:func:`closed_by_verdict`). A turn fenced off its routing answers without closing, and judges nothing — the one
+    rule a fact's verdict and rework, and a flow's last verdict, each read."""
+    return outcome is not None and closed_by_verdict(closure) and closure == outcome
 
 
 def bounce_withdrew(bounce: BounceFact, submissions: Sequence[SubmissionRecord]) -> bool:
-    """Whether the turn that bounced withdrew its submission: a bounce is written at its visit's epoch plus one, in the
-    transaction that ends the visit's turn and, when it routes, closes the visit's submission under the bounce's cause.
-    A bounce that crossed its cap escalated instead, and one no turn owned closed nothing."""
+    """Whether the turn that bounced routed its chunk back and withdrew its submission: a bounce is written at its
+    visit's epoch plus one, in the transaction that ends the visit's turn and, when it routes, closes the visit's
+    submission under the answer it routed — the bounce's cause, or ``failure`` for a ``poll-timeout`` kick-back. A
+    bounce that crossed its cap escalated instead, one fenced off its routing closed nothing, and one no turn owned
+    has no submission."""
     return any(
-        sub.epoch == bounce.epoch - 1
-        and closed_by_answer(bounce.cause, sub.closure.outcome if sub.closure is not None else None)
+        sub.epoch == bounce.epoch - 1 and closed_by_verdict(sub.closure.outcome if sub.closure is not None else None)
         for sub in submissions
     )
+
+
+def bounce_is_rework(bounce: BounceFact, submissions: Sequence[SubmissionRecord]) -> bool:
+    """Whether a bounce sent its chunk back as routine rework rather than as a failure: its cause one of
+    :data:`REWORK_ANSWERS`, and its turn routed it back (:func:`bounce_withdrew`) — one past its cap escalated to a
+    person instead."""
+    return bounce.cause in REWORK_ANSWERS and bounce_withdrew(bounce, submissions)
 
 
 def stamp_terms(

@@ -542,3 +542,78 @@ def test_a_turn_whose_answer_closed_its_submission_reads_its_verdict_on_every_re
     assert (ended.verdict(), recorded.verdict()) == ("bounced", "bounced")
     assert overview is not None and overview.last_verdict is not None
     assert overview.last_verdict.verdict() == "bounced"
+
+
+def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_its_generations_closed(
+    world: _World,
+) -> None:
+    """Generation 0 lands ``_MAIN`` and is superseded; generation 1 holds only the repository still unlanded —
+    reconcile's held resources leave out a landed one — and lands it. No flow carries a landed turn without its
+    landed fact, and each flow's last verdict is its own generation's."""
+    chunk_id = world.chunk()
+    first = world.submit(chunk_id, _MAIN, _OTHER)
+    main, other = first.flows
+    turn = world.take(first)
+    assert turn is not None
+    world.flows.record_landing(
+        FlowLanding.of(main, first, project_id="prj_default", node_name="deliver", revision="m1"),
+        close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
+        node_id=_NODE,
+        node_name="deliver",
+        epoch=0,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        repo="acme/widget",
+        revision="m1",
+        at=world.hub.clock.now(),
+    )
+    with world.chunks.exclusive.locked([chunk_id]) as handle:
+        world.flows.end_turn_locked(
+            handle, turn, outcome="superseded", closure="superseded", event=None, at=world.hub.clock.now()
+        )
+
+    second = world.flows.submit(
+        chunk_id, node_id=_NODE, epoch=0, generation=1, resources=[_OTHER], at=world.hub.clock.now()
+    )
+    assert second is not None
+    turn = world.take(second)
+    assert turn is not None
+    world.flows.record_landing(
+        FlowLanding.of(second.flows[0], second, project_id="prj_default", node_name="deliver", revision="o1"),
+        close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
+        node_id=_NODE,
+        node_name="deliver",
+        epoch=0,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        repo="acme/other",
+        revision="o1",
+        at=world.hub.clock.now(),
+    )
+    with world.chunks.exclusive.locked([chunk_id]) as handle:
+        world.flows.end_turn_locked(
+            handle, turn, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
+        )
+
+    record = world.flows.chunk_records([chunk_id])[chunk_id]
+
+    def ended(flow_id: str) -> list[tuple[str, str | None, str | None]]:
+        return [
+            (f.submission_id, f.outcome, f.verdict()) for f in record if f.flow_id == flow_id and f.kind == "turn-ended"
+        ]
+
+    def landed(flow_id: str) -> list[str]:
+        return [f.submission_id for f in record if f.flow_id == flow_id and f.kind == "landed"]
+
+    assert ended(main.flow_id) == [(first.submission_id, "superseded", None)]
+    assert landed(main.flow_id) == [first.submission_id]
+    assert ended(other.flow_id) == [
+        (first.submission_id, "superseded", None),
+        (second.submission_id, "landed", "landed"),
+    ]
+    assert landed(other.flow_id) == [second.submission_id]
+    main_overview, other_overview = world.flows.flow_overview(main.flow_id), world.flows.flow_overview(other.flow_id)
+    assert main_overview is not None and main_overview.last_verdict is None
+    assert other_overview is not None and other_overview.last_verdict is not None
+    assert (other_overview.last_verdict.submission_id, other_overview.last_verdict.verdict()) == (
+        second.submission_id,
+        "landed",
+    )

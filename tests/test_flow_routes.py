@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,8 +16,8 @@ from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import hub_store_connections, seed_runner
-from tests.test_flow_driver import World
+from tests.support import hub_store_connections, report_lease, seed_runner
+from tests.test_flow_driver import _GRAPH, World
 
 pytestmark = pytest.mark.component
 
@@ -268,3 +269,51 @@ def test_the_chunk_list_reads_every_bounced_chunks_submissions_in_one_read(
     assert single == []
     assert rows[line.first]["latest_bounce"]["withdrawn"] is True
     assert rows[line.second]["latest_bounce"]["withdrawn"] is True
+
+
+#: The delivery graph with a ``conflict`` choice sending ``merge`` back to ``build``, and a cap of one bounce.
+_CONFLICT_GRAPH = _GRAPH.replace(
+    "    action: test.held-landing\n", "    action: test.held-landing\n    bounce_cap: 1\n", 1
+).replace(
+    """        failure:
+          description: Failed to land.
+          to: build
+""",
+    """        failure:
+          description: Failed to land.
+          to: build
+        conflict:
+          description: Conflicts with its base.
+          to: build
+""",
+    1,
+)
+
+
+def test_a_conflict_bounce_is_rework_only_while_its_turn_routes_it_back_and_not_once_past_its_cap(
+    tmp_path: Path,
+) -> None:
+    world = World(tmp_path, extra_answers=frozenset({"conflict"}))
+    world.action.answer = Pass(choice="conflict")
+    chunk_id = world.at_merge(_CONFLICT_GRAPH)
+    world.hub.settle_turns()
+
+    def latest() -> dict[str, Any]:
+        row = {r["chunk_id"]: r for r in world.hub.client.get("/api/chunks").json()["chunks"]}[chunk_id]
+        return row["latest_bounce"]
+
+    first = latest()
+    assert (first["cause"], first["withdrawn"], first["rework"]) == ("conflict", True, True)
+    [ended] = [f for f in world.detail(chunk_id)["flow_record"] if f["kind"] == "turn-ended"]
+    assert (ended["outcome"], ended["verdict"], ended["rework"]) == ("conflict", "bounced", True)
+
+    detail = world.detail(chunk_id)
+    assert detail["current_node_name"] == "build"
+    # The bounce's transition back to ``build`` opened epoch 3 — the merge visit's 2 plus one.
+    report_lease(world.hub, chunk_id, epoch=3, seq=2)
+    world.complete(chunk_id, detail["current_node_id"], epoch=3)
+    world.hub.settle_turns()
+
+    second = latest()
+    assert world.detail(chunk_id)["status"] == "needs_human"
+    assert (second["cause"], second["withdrawn"], second["rework"]) == ("conflict", False, False)
