@@ -2490,7 +2490,8 @@ _ACTION_STDLIB = frozenset(
     }
 )
 _ACTION_FOUNDATION = frozenset(
-    f"blizzard.foundation.{name}" for name in ("roles", "escalation_causes", "findings", "garden_proposals", "repo_ref")
+    f"blizzard.foundation.{name}"
+    for name in ("roles", "escalation_causes", "findings", "garden_proposals", "landing_policy", "repo_ref")
 )
 _ACTION_BLIZZARD = frozenset(
     {

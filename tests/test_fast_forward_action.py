@@ -6,7 +6,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
 from tests.github_double import RED, check, comparison
 from tests.test_land_action import _SUBMITTED, _WIDGET, _forge, _land, _row, _Sink, _visit

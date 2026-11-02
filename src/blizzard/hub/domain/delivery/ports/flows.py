@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision
@@ -15,7 +16,6 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
     FlowFact,
-    FlowFactKind,
     FlowLanding,
     FlowOverview,
     FlowResource,
@@ -115,7 +115,7 @@ class IFlowChangePublisher(Protocol):
         self,
         flow_id: str,
         *,
-        kind: FlowFactKind,
+        kind: FlowChangeKind,
         submission_id: str,
         chunk_id: str,
         outcome: str | None = None,

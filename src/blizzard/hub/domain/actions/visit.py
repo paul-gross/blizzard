@@ -12,13 +12,14 @@ from datetime import datetime
 from types import MappingProxyType
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.no_code import no_code_marker, no_code_repos
 from blizzard.hub.domain.config.forges import ConfiguredForge
-from blizzard.hub.domain.config.landing_policies import LandingPolicy, landing_sort_key
+from blizzard.hub.domain.config.landing_policies import landing_sort_key
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     ConfiguredRepository,

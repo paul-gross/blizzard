@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
@@ -33,7 +34,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
-from blizzard.hub.domain.config.landing_policies import ForgeCapabilityMissing, LandingPolicy
+from blizzard.hub.domain.config.landing_policies import ForgeCapabilityMissing
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryDraft,

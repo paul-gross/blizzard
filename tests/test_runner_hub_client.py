@@ -17,6 +17,7 @@ from structlog.testing import capture_logs
 from blizzard import __version__
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.unrecognized import Unrecognized
@@ -103,7 +104,7 @@ def test_peek_queue_parses_entries() -> None:
         assert request.url.path == "/api/fleet/queue/peek"
         return httpx2.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
-    peek = _client(handler).peek_queue((), policy="pass-over")
+    peek = _client(handler).peek_queue((), policy=QueueMatchPolicy.PASS_OVER)
     assert [e.chunk_id for e in peek] == ["ch_1"]
 
 
@@ -116,8 +117,10 @@ def test_peek_queue_posts_the_request_body() -> None:
         seen["body"] = json.loads(request.content)
         return httpx2.Response(200, json={"entries": []})
 
-    _client(handler).peek_queue([HarnessCapability(harness_id="claude", default=True)], policy="hold")
-    expected = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
+    _client(handler).peek_queue([HarnessCapability(harness_id="claude", default=True)], policy=QueueMatchPolicy.HOLD)
+    expected = QueuePeekRequest(
+        capabilities=[RunnerCapability(harness_id="claude", default=True)], policy=QueueMatchPolicy.HOLD
+    )
     assert seen["body"] == expected.model_dump(mode="json")
 
 
@@ -316,7 +319,9 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
         ],
     )
     client.push_transcripts(_pushes(batch))
-    client.peek_queue((), policy="pass-over")  # a plain route, to prove it still rides the client's own default
+    client.peek_queue(
+        (), policy=QueueMatchPolicy.PASS_OVER
+    )  # a plain route, to prove it still rides the client's own default
 
     assert seen_timeouts[0] == 5.0  # the transcript route's own short override
     assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
@@ -581,7 +586,7 @@ def test_transport_failure_raises_hub_client_error() -> None:
         return httpx2.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
-        _client(handler).peek_queue((), policy="pass-over")
+        _client(handler).peek_queue((), policy=QueueMatchPolicy.PASS_OVER)
 
 
 @pytest.mark.unit

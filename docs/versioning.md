@@ -169,7 +169,9 @@ the value would do wrong work, as for the fields a runner dispatches a node-step
 field a server takes as input stays closed, so the server refuses a value it does not know with `422`. That includes a
 class used in both directions: `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is a closed
 `TurnKind`, because a runner ships transcript segments to the hub. A runner sending a kind an older hub does not know
-fails the whole ingest batch, so adding a value to `TurnKind` is breaking against the skew window, not additive.
+fails the whole ingest batch, so adding a value to `TurnKind` is breaking against the skew window, not additive. The one
+input read tolerantly is the fleet peek's `policy`: the server reads any value it does not know as pass-over, so a
+gained policy is additive.
 
 The capability-matched fleet peek sits on the additive side of that same window from two directions at once:
 `POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a runner that predates the route

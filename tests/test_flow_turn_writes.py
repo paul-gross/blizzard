@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Table, func, select
 
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
@@ -190,9 +191,11 @@ def test_a_verdict_commits_its_transition_with_the_turns_end_and_closure(world: 
             handle, turn_id, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
         ) == (
             FlowFactWritten(
-                _flow_id(submission), "turn-ended", submission.submission_id, submission.chunk_id, "landed"
+                _flow_id(submission), FlowChangeKind.TURN_ENDED, submission.submission_id, submission.chunk_id, "landed"
             ),
-            FlowFactWritten(_flow_id(submission), "withdrawn", submission.submission_id, submission.chunk_id, "landed"),
+            FlowFactWritten(
+                _flow_id(submission), FlowChangeKind.WITHDRAWN, submission.submission_id, submission.chunk_id, "landed"
+            ),
         )
 
     assert world.count(s.transitions) == 1
@@ -433,9 +436,9 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
     after_once = [world.count(t) for t in counts]
     replay = record()
 
-    assert first.written == (FlowFactWritten(_flow_id(submission), "landed", submission.submission_id, chunk_id),), (
-        "a landing reports its one landed fact"
-    )
+    assert first.written == (
+        FlowFactWritten(_flow_id(submission), FlowChangeKind.LANDED, submission.submission_id, chunk_id),
+    ), "a landing reports its one landed fact"
     assert replay.written == ()
 
     assert [a - b for a, b in zip(after_once, before, strict=True)] == [1, 1, 1, 1, 1]
@@ -470,7 +473,11 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
         reported.append(written.withdrawn)
 
     assert reported == [
-        (FlowFactWritten(_flow_id(waiting), "withdrawn", waiting.submission_id, waiting.chunk_id, "restarted"),),
+        (
+            FlowFactWritten(
+                _flow_id(waiting), FlowChangeKind.WITHDRAWN, waiting.submission_id, waiting.chunk_id, "restarted"
+            ),
+        ),
         (),
     ]
     assert world.closed(waiting) == "restarted"

@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Connection, FromClause, Row, and_, func
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
@@ -313,7 +314,7 @@ class FlowStore:
             flows = tuple(self._flow_for(conn, resource, at=at) for resource in dict.fromkeys(resources))
             for flow in flows:
                 conn.execute(self._store.insert(_held).values(submission_id=submission_id, flow_id=flow.flow_id))
-            write_facts(conn, flows, submission_id, chunk_id, kind="submitted", outcome=None, at=at)
+            write_facts(conn, flows, submission_id, chunk_id, kind=FlowChangeKind.SUBMITTED, outcome=None, at=at)
             return Submission(
                 submission_id=submission_id,
                 chunk_id=chunk_id,
@@ -362,7 +363,7 @@ class FlowStore:
             conn.execute(
                 self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
             )
-            write_facts(conn, flows, submission_id, row.chunk_id, kind="turn-started", outcome=None, at=at)
+            write_facts(conn, flows, submission_id, row.chunk_id, kind=FlowChangeKind.TURN_STARTED, outcome=None, at=at)
             self._take_terms(conn, row, flows, terms)
             return turn
 

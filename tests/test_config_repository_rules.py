@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,

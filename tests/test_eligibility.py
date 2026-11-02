@@ -11,11 +11,13 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.queue_policy import QueueMatchPolicy
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MigrationFact, RestartFact, TransitionFact, WorkRef
 from blizzard.hub.domain.execution import eligibility
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
-from blizzard.hub.domain.operations.queue import MatchedEntry, QueueMatchPolicy, select_matched_entry
+from blizzard.hub.domain.operations.queue import MatchedEntry, queue_match_policy, select_matched_entry
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
 
@@ -402,7 +404,7 @@ def _agreement_rows() -> list[tuple[str, Graph, Chunk, list[RunnerCapability], b
 def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None:
     from blizzard.hub.domain.chunk.model import ChunkFacts
     from blizzard.hub.domain.execution.claim import ClaimAdmission, ClaimDeniedIncompatible
-    from blizzard.hub.domain.operations.queue import QueueMatchPolicy, select_matched_entry
+    from blizzard.hub.domain.operations.queue import select_matched_entry
     from blizzard.hub.domain.runners.registration import RunnerRegistration, ServedEntry
 
     _, graph, chunk, capabilities, expected = row
@@ -562,3 +564,10 @@ def test_a_per_project_hold_never_offers_a_later_entry_of_the_stopped_project() 
         hold_per_project=True,
     )
     assert picked is None
+
+
+@pytest.mark.unit
+def test_a_peek_policy_this_build_does_not_know_reads_as_pass_over() -> None:
+    assert queue_match_policy(QueueMatchPolicy.HOLD) is QueueMatchPolicy.HOLD
+    assert queue_match_policy(QueueMatchPolicy.PASS_OVER) is QueueMatchPolicy.PASS_OVER
+    assert queue_match_policy(Unrecognized("some-future-value")) is QueueMatchPolicy.PASS_OVER

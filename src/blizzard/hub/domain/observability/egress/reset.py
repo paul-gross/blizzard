@@ -11,9 +11,9 @@ import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.egress_reset import EgressResetDirection
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -47,7 +47,7 @@ class ResetResult:
     dataset: str
     previous: datetime | None
     moved_to: datetime
-    direction: Literal["skipped", "repeated"]
+    direction: EgressResetDirection
 
 
 class EgressReset:
@@ -131,7 +131,7 @@ def plan_reset(
     to exactly the standing position included."""
     previous = cursor.position if cursor is not None else None
     standing = previous if previous is not None else now - settle
-    direction: Literal["skipped", "repeated"] = "skipped" if to > standing else "repeated"
+    direction: EgressResetDirection = "skipped" if to > standing else "repeated"
     return _moved(dataset, to, now), ResetResult(dataset, previous, to, direction)
 
 

@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.wire import is_any_operation, reachable_schemas
-from blizzard.wire.vocabulary import OPEN, DeclaredClosed, OpenVocabulary
+from blizzard.wire.vocabulary import OPEN, DeclaredClosed, OpenVocabulary, ToleratedRequestVocabulary
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -140,9 +140,13 @@ def _is_vocabulary(annotation: Any) -> bool:
 
 
 def _positions(annotation: Any, metadata: Iterable[Any] = ()) -> Iterator[str]:
-    """Each vocabulary position in a field's type: ``open``, ``closed`` (declared), or ``bare``. An open mark on a type
+    """Each vocabulary position in a field's type: ``open``, ``tolerated`` (a request field read with a default),
+    ``closed`` (declared), or ``bare``. An open mark on a type
     that is not ``E | Unrecognized`` never gets here: :class:`OpenVocabulary` refuses it when the model is built."""
     metadata = list(metadata)
+    if any(isinstance(item, ToleratedRequestVocabulary) for item in metadata):
+        yield "tolerated"
+        return
     if any(isinstance(item, OpenVocabulary) for item in metadata):
         yield "open"
         return
@@ -170,6 +174,8 @@ def vocabulary_violations(response_only: set[type[BaseModel]], universe: Iterabl
             for position in _positions(field.annotation, field.metadata):
                 if position == "open" and model not in response_only:
                     violations.add(f"{where}: open on a model outside the response-only set")
+                elif position == "tolerated" and model in response_only:
+                    violations.add(f"{where}: tolerated-request vocabulary on a response-only model, which is open")
                 elif position == "bare" and model in response_only:
                     violations.add(f"{where}: response vocabulary neither open nor declared closed")
     return sorted(violations)
@@ -236,6 +242,10 @@ class _PlantedRequest(BaseModel):
     shade: Annotated[_Shade | Unrecognized, OPEN]
 
 
+class _PlantedTolerantView(BaseModel):
+    shade: Annotated[_Shade | Unrecognized, ToleratedRequestVocabulary("Shade")] = _Shade.LIGHT
+
+
 class _PlantedRefusal(BaseModel):
     reason: Literal["one", "two"]
 
@@ -257,6 +267,7 @@ _PLANTED_INDEX = _index(
         _PlantedView,
         _PlantedOpenView,
         _PlantedRequest,
+        _PlantedTolerantView,
         _PlantedRefusal,
         _PlantedEnvelope,
         _PlantedBase,
@@ -359,3 +370,13 @@ def test_a_base_whose_subclasses_are_all_response_only_may_be_open() -> None:
     assert _violations_of([], universe=["_PlantedBase"]) == [
         "_PlantedBase.shade: open on a model outside the response-only set"
     ]
+
+
+def test_a_tolerated_request_field_on_a_response_only_model_is_caught() -> None:
+    assert _violations_of([_document(responses=["_PlantedTolerantView"])]) == [
+        "_PlantedTolerantView.shade: tolerated-request vocabulary on a response-only model, which is open"
+    ]
+
+
+def test_a_tolerated_request_field_on_a_request_model_passes() -> None:
+    assert _violations_of([_document(requests=["_PlantedTolerantView"])], universe=["_PlantedTolerantView"]) == []

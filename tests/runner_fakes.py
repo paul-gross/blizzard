@@ -24,6 +24,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
 from blizzard.foundation.invariants import Violation
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -479,7 +480,7 @@ class PeekCall:
     """One ``peek_queue`` call the fake recorded: the capabilities, the policy and the project it was sent."""
 
     capabilities: list[HarnessCapability]
-    policy: str
+    policy: QueueMatchPolicy
     project: str | None = None
     projects: list[str] | None = None
 
@@ -659,7 +660,7 @@ class FakeHub:
         self,
         capabilities: Sequence[HarnessCapability],
         *,
-        policy: str,
+        policy: QueueMatchPolicy,
         project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:

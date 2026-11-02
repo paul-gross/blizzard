@@ -1,4 +1,4 @@
-"""How work lands into a repository: the closed set of landing policies, what each needs of its forge, and the one rule
+"""How work lands into a repository: what each needs of its forge, and the one rule
 a project's repositories are ordered by.
 
 The module sits in ``config``, which imports no other domain package, so the repository record, the configuration
@@ -8,20 +8,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.errors import ConfigFieldError
-
-
-class LandingPolicy(StrEnum):
-    """How a repository's changes land."""
-
-    MERGE_ON_CHECKS = "merge-on-checks"
-    FAST_FORWARD = "fast-forward"
-    PARK = "park"
-
 
 #: The policy a repository lands by when none is stated — the store's server default too.
 DEFAULT_LANDING_POLICY = LandingPolicy.MERGE_ON_CHECKS

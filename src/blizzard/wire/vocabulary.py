@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import types
 from dataclasses import dataclass
-from typing import Any, Union, get_args, get_origin
+from enum import Enum
+from typing import Any, TypeAliasType, Union, get_args, get_origin
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler, ValidationError
 from pydantic.json_schema import JsonSchemaValue
@@ -26,10 +27,11 @@ class OpenVocabulary:
     """The annotation that parses a vocabulary tolerantly; annotate with its one instance, below."""
 
     def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        source = getattr(source, "__value__", source) if isinstance(source, TypeAliasType) else source
         if get_origin(source) not in (Union, types.UnionType) or Unrecognized not in get_args(source):
             raise TypeError(f"an open vocabulary field is typed E | Unrecognized, not {source!r}")
         known = [arg for arg in get_args(source) if arg is not Unrecognized]
-        parse_known = handler.generate_schema(known[0] if len(known) == 1 else Union[tuple(known)])  # noqa: UP007
+        parse_known = self._known_schema(known[0] if len(known) == 1 else Union[tuple(known)], handler)  # noqa: UP007
 
         def tolerate(value: Any, parse: core_schema.ValidatorFunctionWrapHandler) -> Any:
             if isinstance(value, Unrecognized):
@@ -46,6 +48,9 @@ class OpenVocabulary:
             parse_known,
             serialization=core_schema.plain_serializer_function_ser_schema(_raw, when_used="always"),
         )
+
+    def _known_schema(self, known: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        return handler.generate_schema(known)
 
     def __get_pydantic_json_schema__(
         self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
@@ -68,3 +73,42 @@ class DeclaredClosed:
     safe fallback exists — acting without knowing the value would do wrong work — so a gained value stays a break."""
 
     because: str
+
+
+class InlineVocabulary:
+    """The annotation that writes an enum's values inline at its field instead of ``$ref``-ing a component, so a
+    position a document has always carried inline stays so. ``title`` is the field's title, which the inline schema
+    carries in place of the component's."""
+
+    def __init__(self, title: str) -> None:
+        self.title = title
+
+    def __get_pydantic_json_schema__(
+        self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        resolved = handler.resolve_ref_schema(handler(schema))
+        return {
+            **{key: value for key, value in resolved.items() if key not in ("title", "description")},
+            "title": self.title,
+        }
+
+
+class ToleratedRequestVocabulary(OpenVocabulary):
+    """The annotation that reads a request vocabulary tolerantly, for a field whose server reads every unknown value as
+    a declared default. A value outside the vocabulary parses as an unrecognized one and serializes back raw, and the
+    field's JSON schema stays a plain string: a request property that moved from string to an enum would read as
+    narrowed to every older client. ``title`` is the field's title."""
+
+    def __init__(self, title: str) -> None:
+        self.title = title
+
+    def _known_schema(self, known: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        # An enum parses by its constructor, not by an enum schema, so no component enters a document for it.
+        if isinstance(known, type) and issubclass(known, Enum):
+            return core_schema.no_info_plain_validator_function(known)
+        return handler.generate_schema(known)
+
+    def __get_pydantic_json_schema__(
+        self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        return {"type": "string", "title": self.title}

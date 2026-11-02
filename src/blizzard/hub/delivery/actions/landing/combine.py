@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.checks import INHERITED_FAILURE, Findings
 from blizzard.hub.delivery.actions.landing.fast_forward import cleanup
 from blizzard.hub.delivery.actions.landing.park import Park
@@ -32,7 +33,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import Pass
-from blizzard.hub.domain.config.landing_policies import LandingPolicy, landing_sort_key
+from blizzard.hub.domain.config.landing_policies import landing_sort_key
 
 LANDED = "landed"
 CONFLICT = "conflict"

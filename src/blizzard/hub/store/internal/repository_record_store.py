@@ -15,11 +15,11 @@ from typing import Any
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeId, ForgeOriginTaken, ForgeSlugTaken, NewForge
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,

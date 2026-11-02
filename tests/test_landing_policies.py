@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.landing_policies import (
     POLICY_CAPABILITIES,
     ForgeCapabilityMissing,
-    LandingPolicy,
     landing_sort_key,
     parse_policy,
     require_offered,

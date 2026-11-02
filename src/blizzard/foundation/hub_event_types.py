@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
+from blizzard.foundation.component_name import ComponentNamed
+
 
 class HubEventType(StrEnum):
     """Every hub SSE frame kind — the ``event:`` name a frame carries."""
@@ -84,5 +86,15 @@ HostChangeKind = Literal[
     "retired",
 ]
 
+
 #: What a ``flow-changed`` frame reports: the kind of the flow fact written, one frame per fact.
-FlowChangeKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]
+class FlowChangeKind(ComponentNamed, StrEnum):
+    """What one entry of a flow's record says happened."""
+
+    __component_name__ = "FlowFactKind"
+
+    SUBMITTED = "submitted"
+    TURN_STARTED = "turn-started"
+    TURN_ENDED = "turn-ended"
+    LANDED = "landed"
+    WITHDRAWN = "withdrawn"

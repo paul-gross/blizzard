@@ -120,7 +120,15 @@ def test_no_capabilities_asserted_gets_no_entry(tmp_path: Path) -> None:
     assert resp.json()["entries"] == []
 
 
-def test_an_unrecognized_policy_value_round_trips_as_pass_over(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("policy", "passes_over"),
+    [("hold", False), ("pass-over", True), ("some-future-value", True)],
+    ids=["hold", "pass-over", "unrecognized"],
+)
+def test_a_peek_policy_holds_at_an_unusable_head_and_every_other_value_passes_over(
+    tmp_path: Path, policy: str, passes_over: bool
+) -> None:
+    """``hold`` stops at an unusable head; ``pass-over`` and a value this build does not know pass over it — never a 422."""
     hub = build_hub(tmp_path)
     token = _token(hub)
     incompatible = _ingest(hub, "1", default_harnesses=["special-harness"])
@@ -128,11 +136,11 @@ def test_an_unrecognized_policy_value_round_trips_as_pass_over(tmp_path: Path) -
 
     resp = hub.client.post(
         "/api/fleet/queue/peek",
-        json={"capabilities": _DEFAULT_CAPABILITY, "policy": "some-future-value"},
+        json={"capabilities": _DEFAULT_CAPABILITY, "policy": policy},
         headers=bearer(token),
     )
     assert resp.status_code == 200, resp.text
-    assert [e["chunk_id"] for e in resp.json()["entries"]] == [workable]
+    assert [e["chunk_id"] for e in resp.json()["entries"]] == ([workable] if passes_over else [])
     assert incompatible  # sanity: the head really was minted first
 
 

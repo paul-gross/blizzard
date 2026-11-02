@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.host_registration_state import HostRegistrationState
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HostFactPushAck,
@@ -208,9 +209,9 @@ def test_standing_changes_take_effect_within_one_host_tick(tmp_path: Path) -> No
     tenant_verdict = elsewhere.identity_verdict.verdict()
     assert tenant_verdict.state is IdentityState.TENANT_DIFFERS
     assert "tn_other" in (tenant_verdict.reason or "")
-    gates["rn_a"].peek_queue((), policy="fifo")
+    gates["rn_a"].peek_queue((), policy=QueueMatchPolicy.PASS_OVER)
     with pytest.raises(IdentityNotVerified):
-        gates["rn_b"].peek_queue((), policy="fifo")
+        gates["rn_b"].peek_queue((), policy=QueueMatchPolicy.PASS_OVER)
 
     world.hub.report_answer = _held("rn_a", "rn_b")
     world.step.run()

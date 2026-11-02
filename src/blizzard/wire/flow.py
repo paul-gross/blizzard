@@ -2,33 +2,13 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Annotated
 
+from blizzard.foundation.flow_place_state import FlowPlaceState
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
-
-
-class FlowPlaceState(StrEnum):
-    """Where an open submission stands on a flow it holds."""
-
-    LANDING = "landing"
-    NEXT = "next"
-    WAITING = "waiting"
-    POLLING = "polling"
-    AWAITING_MERGE = "awaiting-merge"
-    PASSED_OVER = "passed-over"
-
-
-class FlowFactKind(StrEnum):
-    """What one entry of a flow's record says happened."""
-
-    SUBMITTED = "submitted"
-    TURN_STARTED = "turn-started"
-    TURN_ENDED = "turn-ended"
-    LANDED = "landed"
-    WITHDRAWN = "withdrawn"
 
 
 class FlowFactView(WireModel):
@@ -39,7 +19,7 @@ class FlowFactView(WireModel):
     flow_id: str
     submission_id: str
     chunk_id: str
-    kind: Annotated[FlowFactKind | Unrecognized, OPEN]
+    kind: Annotated[FlowChangeKind | Unrecognized, OPEN]
     at: str
     #: A ``turn-ended`` entry's outcome, or why a ``withdrawn`` one left; ``None`` for every other kind.
     outcome: str | None = None

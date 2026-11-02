@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel
 
+from blizzard.foundation.egress_reset import EgressResetDirection
 from blizzard.foundation.egress_state import EgressState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.vocabulary import OPEN
@@ -62,7 +63,7 @@ class EgressResetResponse(BaseModel):
     dataset: str
     from_at: str | None
     to_at: str
-    direction: Annotated[Literal["skipped", "repeated"] | Unrecognized, OPEN]
+    direction: Annotated[EgressResetDirection | Unrecognized, OPEN]
 
 
 class EgressBackfillRequest(BaseModel):

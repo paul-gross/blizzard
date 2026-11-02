@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
@@ -58,7 +59,7 @@ class VerifiedHubClient:
         self,
         capabilities: Sequence[HarnessCapability],
         *,
-        policy: str,
+        policy: QueueMatchPolicy,
         project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:

@@ -3,11 +3,16 @@ position requests; and the chunk group request and response."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, model_validator
 
+from blizzard.foundation.queue_policy import QueueMatchPolicy
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BlockedView, WorkRefModel
 from blizzard.wire.runner import RunnerCapability
+from blizzard.wire.vocabulary import ToleratedRequestVocabulary
 
 
 class QueuePeekEntry(WireModel):
@@ -33,6 +38,11 @@ class QueuePeekResponse(WireModel):
     entries: list[QueuePeekEntry] = []
 
 
+# An alias, not the bare union: FastAPI adds every enum a field's union names to the document as a component, and a
+# tolerated request field's schema is a plain string.
+type PeekPolicy = QueueMatchPolicy | Unrecognized
+
+
 class QueuePeekRequest(BaseModel):
     """The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``. Carries
     the calling runner's capability snapshot and queue policy; never a ``runner_id``,
@@ -40,7 +50,7 @@ class QueuePeekRequest(BaseModel):
     stops at an unusable head; any other value, including an unrecognized one, is pass-over."""
 
     capabilities: list[RunnerCapability] = []
-    policy: str = "pass-over"
+    policy: Annotated[PeekPolicy, ToleratedRequestVocabulary("Policy")] = QueueMatchPolicy.PASS_OVER
     #: Narrows the peek to this one project of the runner's declaration, by the entry as declared or the project id it
     #: resolved to; a project the runner does not serve is offered nothing. ``None`` peeks every project it serves.
     project: str | None = None

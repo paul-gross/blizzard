@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:shared-kernel
+language: Python
+severity: error
+message: >-
+  A vocabulary a wire model carries is defined once, in `src/blizzard/foundation/`, and imported from there — never an
+  enum class or a `Literal` of two or more values under `src/blizzard/wire/` (`bzh:shared-kernel`,
+  blizzard-context:/architecture/clean-architecture.md).
+files:
+  - src/blizzard/wire/**
+rule:
+  any:
+    - kind: class_definition
+      has:
+        field: superclasses
+        has:
+          any:
+            - kind: identifier
+              regex: '^(Enum|StrEnum|IntEnum)$'
+            - kind: attribute
+              regex: '\.(Enum|StrEnum|IntEnum)$'
+    # A `Literal` of two or more values, as an annotation or a `type` alias.
+    - kind: generic_type
+      all:
+        - has:
+            kind: identifier
+            regex: '^Literal$'
+        - has:
+            kind: type_parameter
+            has:
+              kind: type
+              nthChild: 2
+    # The same, as a plain `X = Literal[...]` alias, which tree-sitter reads as a subscript.
+    - kind: subscript
+      all:
+        - has:
+            field: value
+            kind: identifier
+            regex: '^Literal$'
+        - has:
+            kind: string
+            nthChild: 3

@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.runner.hub.client import TokenIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
@@ -110,4 +111,4 @@ def test_a_runners_own_hub_client_registers_and_is_identified_in_another_tenant(
         runner_id="rn-bravo-1", runner_name="r-bravo", tenant_id=bravo, tenant_name="bravo"
     )
     assert runner.fetch_runner_paused("rn-bravo-1") is False
-    assert runner.peek_queue((), policy="pass-over") == []
+    assert runner.peek_queue((), policy=QueueMatchPolicy.PASS_OVER) == []

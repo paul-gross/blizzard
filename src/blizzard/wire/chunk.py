@@ -4,13 +4,14 @@ results; and the pass-through work items."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
+from blizzard.foundation.delivery_outcomes import DeliveryOutcome
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemPriority
@@ -448,7 +449,7 @@ class GardenDeliveryResponse(WireModel):
     now or replayed; ``invalid`` carries the rejection reason in
     ``detail``."""
 
-    outcome: Annotated[Literal["recorded", "invalid"] | Unrecognized, OPEN]
+    outcome: Annotated[DeliveryOutcome | Unrecognized, OPEN]
     detail: str = ""
 
 
@@ -456,7 +457,7 @@ class ReviewFindingsDeliveryResponse(WireModel):
     """The result of one `record-findings` materialization — the
     `GardenDeliveryResponse` shape."""
 
-    outcome: Annotated[Literal["recorded", "invalid"] | Unrecognized, OPEN]
+    outcome: Annotated[DeliveryOutcome | Unrecognized, OPEN]
     detail: str = ""
 
 

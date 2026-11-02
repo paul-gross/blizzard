@@ -28,6 +28,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED, RUNNER_LOCALLY_PAUSED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
@@ -1757,7 +1758,7 @@ def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_p
 
     assert len(hub.peek_queue_requests) == 1
     request = hub.peek_queue_requests[0]
-    assert request.policy == "hold"
+    assert request.policy is QueueMatchPolicy.HOLD
     assert [c.harness_id for c in request.capabilities] == ["claude_code"]
     assert request.capabilities[0].default is True
     assert request.capabilities[0].version == "1.2.3"
@@ -1779,7 +1780,7 @@ def test_fill_peeks_pass_over_by_default(tmp_path: Path):
 
     Fill(ctx).run()
 
-    assert hub.peek_queue_requests[0].policy == "pass-over"
+    assert hub.peek_queue_requests[0].policy is QueueMatchPolicy.PASS_OVER
 
 
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
