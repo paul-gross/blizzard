@@ -1,17 +1,27 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { promisify } from 'node:util';
 import { test as plain } from '@playwright/test';
 import { uniqueName } from '../base';
 import { HubInternal } from '../client/internal';
 import { stopDaemon } from '../daemons/process';
-import { runDir } from '../env';
+import { binDir, daemonEnv, requireBinary, runDir } from '../env';
 import { expect } from '../fixtures';
 import { startStack } from '../hubs';
 import { hubTemplate, RUNNER_STORE, runnerStoreTemplate } from '../init-templates';
 import { profileEnv } from '../profiles';
 import { runOnce } from '../run-once';
+
+/** `blizzard-runner init` with nothing to reach, in a fresh directory: it migrates the store, then exits non-zero by design. */
+async function runColdRunnerInit(dir: string): Promise<void> {
+  const home = path.join(path.dirname(dir), 'cold-home');
+  fs.mkdirSync(home, { recursive: true });
+  const env = daemonEnv({ HOME: home }, path.join(home, '.config'));
+  await promisify(execFile)(requireBinary(binDir(), 'blizzard-runner'), ['init', dir, '--hub', 'http://127.0.0.1:9'], { env, cwd: path.dirname(dir) }).catch(() => undefined);
+}
 
 /** The migration revision a store file stands at. */
 function revisionOf(file: string): string {
@@ -53,18 +63,26 @@ plain('the runner store template is a migrated store with no identity and no sid
   expect(store.endsWith(RUNNER_STORE)).toBe(true);
   expect(fs.existsSync(`${store}-wal`)).toBe(false);
   // Read a copy: opening the template itself would leave a sidecar beside it for the next host to copy around.
-  const copy = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'runner-store-')), 'host.db');
+  const copyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-store-'));
+  const copy = path.join(copyDir, 'host.db');
   fs.copyFileSync(store, copy);
   try {
-    expect(revisionOf(copy)).not.toBe('');
-    const tables = new DatabaseSync(copy, { readOnly: true }).prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'alembic_version'").all() as { name: string }[];
-    for (const { name } of tables) {
-      const db = new DatabaseSync(copy, { readOnly: true });
-      expect((db.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get() as { n: number }).n, `${name} holds no rows`).toBe(0);
+    const db = new DatabaseSync(copy, { readOnly: true });
+    try {
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'alembic_version'").all() as { name: string }[];
+      expect(tables.length).toBeGreaterThan(0);
+      for (const { name } of tables) {
+        expect((db.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get() as { n: number }).n, `${name} holds no rows`).toBe(0);
+      }
+    } finally {
       db.close();
     }
+    // The store stands where a cold `init` leaves one: the revision `blizzard-runner init` migrates to.
+    const cold = path.join(copyDir, 'cold');
+    await runColdRunnerInit(cold);
+    expect(revisionOf(copy)).toBe(revisionOf(path.join(cold, RUNNER_STORE)));
   } finally {
-    fs.rmSync(path.dirname(copy), { recursive: true, force: true });
+    fs.rmSync(copyDir, { recursive: true, force: true });
   }
 });
 
