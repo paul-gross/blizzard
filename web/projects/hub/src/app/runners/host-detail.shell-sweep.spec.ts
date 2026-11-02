@@ -21,6 +21,7 @@ const REGISTRY: RunnerRegistryView = {
   declining: [],
   env_capacity: null,
   gates: [],
+  unenforceable_gates: [],
   host_id: null,
   hub_paused: false,
   last_seen_at: null,

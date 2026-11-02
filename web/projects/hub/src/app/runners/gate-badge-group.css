@@ -23,3 +23,8 @@
   padding: 0;
   min-width: 0;
 }
+.unenforceable {
+  margin-left: 4px;
+  font-size: var(--fs-xs);
+  font-style: italic;
+}

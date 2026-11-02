@@ -183,6 +183,7 @@ export type {
   ProjectsListView,
   RunnerDecliningView,
   RunnerRegistryView,
+  UnenforceableGateView,
   HostRegistryView,
   ChunkFlowPlaceView,
   FlowChangedPayload,
