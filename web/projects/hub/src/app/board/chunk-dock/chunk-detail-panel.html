@@ -26,16 +26,15 @@
   <div class="d-body">
     <section class="d-sec" aria-label="Work item">
       @if (showDelivery()) {
-        <div class="s-head"><span class="tag">Delivery</span></div>
-        <fleet-chunk-delivery [detail]="detail()" />
+        <div class="d-box">
+          <div class="s-head"><span class="tag">Delivery</span></div>
+          <fleet-chunk-delivery [detail]="detail()" />
+        </div>
       }
-      <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
-      <fleet-chunk-detail-facts
-        [detail]="detail()"
-        [graphLinkBase]="graphLinkBase()"
-      >
-        <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
-      </fleet-chunk-detail-facts>
+      <div class="d-box">
+        <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
+        <fleet-chunk-detail-facts [detail]="detail()" />
+      </div>
       <fleet-chunk-detail-awaiting-human
         [detail]="detail()"
         [canAnswer]="canAnswer()"
@@ -48,7 +47,7 @@
       <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
     </section>
     <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">
-      <fleet-chunk-detail-timeline [detail]="detail()" [graphLinkBase]="graphLinkBase()" [flowLinkBase]="flowLinkBase()" />
+      <fleet-chunk-detail-timeline [detail]="detail()" [graphLinkBase]="graphLinkBase()" />
     </section>
     <section class="d-sec d-sec--flush" aria-labelledby="chunk-artifacts-heading">
       <app-chunk-detail-artifacts [detail]="detail()" />

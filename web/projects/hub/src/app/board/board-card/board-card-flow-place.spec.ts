@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { ChunkCard, ChunkListRow } from 'fleet';
 
 import { type BoardCard, boardCardView } from './board-card-view.model';
-import { placeLines } from '../flows/flow-place.model';
+import { placeLines } from '../../core/flow-place.model';
 
 const DELIVERING: BoardCard = {
   chunkId: 'ch_01deliver000000000000000000',

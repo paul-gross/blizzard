@@ -49,4 +49,4 @@ The same reads over HTTP:
 
 Flows are the tenant's, not a project's: a branch's line is shared by every project landing on it, so the flow routes
 take no `?project=`. Each entry written to a record is announced on the hub's event stream as a `flow-changed` frame,
-which is how the board's band and place lines move live.
+which is how the board's place lines and its Delivery tab move live.

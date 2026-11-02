@@ -1,8 +1,14 @@
 import { type Provider, computed, inject, signal } from '@angular/core';
-import { type AnswerQuestionEvent, type ChunkPageActions, type DaemonTarget, type ResolveDecisionEvent, FLEET_CLOCK, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
+import { type AnswerQuestionEvent, type ChunkPageActions, type ChunkPageControl, type DaemonTarget, type ResolveDecisionEvent, errorMessage, FLEET_CLOCK, hubClient, injectPendingMutationVariables, isPendingFor, provideChunkPageDaemon } from 'fleet';
+import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
+import { type DeleteVars, injectDeleteChunkMutation } from '../chunks/delete.mutations';
+import { type DetachVars, injectDetachChunkMutation } from '../chunks/detach.mutations';
+import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
 import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
-import { answerQuestionMutationKey } from '../../core/mutation-keys';
+import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkDeleteMutationKey, chunkDetachMutationKey, chunkPauseMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { injectProjectsQuery } from '../../core/projects.query';
+import { injectShowProjectColors } from '../../core/project-lens-colors';
 
 /** The graphs view's own path segments — the target every hub composition site links a
  * graph badge to. */
@@ -45,6 +51,7 @@ export function injectHubChunkActions(): ChunkPageActions {
     actionOutcome: actionOutcome.asReadonly(),
     graphLinkBase: GRAPH_LINK_BASE,
     eventsLinkBase: EVENTS_LINK_BASE,
+    control: injectHubChunkControl(meQuery, beginAction, (message) => actionError.set(message)),
     answer(event: AnswerQuestionEvent): void {
       beginAction();
       answerMutation.mutate(
@@ -74,6 +81,51 @@ export function injectHubChunkActions(): ChunkPageActions {
   };
 }
 
+/** The hub's chunk-control port for the chunk page header's ⋮ menu — the same four
+ * mutations the board dock fires, failures reported on the page's error channel. */
+function injectHubChunkControl(
+  meQuery: ReturnType<typeof injectMeQuery>,
+  beginAction: () => void,
+  fail: (message: string) => void,
+): ChunkPageControl {
+  const detachMutation = injectDetachChunkMutation();
+  const pauseMutation = injectChunkPauseMutation();
+  const completeMutation = injectCompleteChunkMutation();
+  const deleteMutation = injectDeleteChunkMutation();
+  const pendingPauses = injectPendingMutationVariables<ChunkPauseVars>(chunkPauseMutationKey);
+  const pendingDetaches = injectPendingMutationVariables<DetachVars>(chunkDetachMutationKey);
+  const pendingCompletes = injectPendingMutationVariables<CompleteVars>(chunkCompleteMutationKey);
+  const pendingDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
+  const onError = (fallback: string) => ({ onError: (error: unknown) => fail(errorMessage(error, fallback)) });
+  return {
+    canControl: computed(() => hasPermission(meQuery.data(), 'chunk:control')),
+    pausePending: (chunkId) => isPendingFor(pendingPauses(), (v) => v.chunkId === chunkId),
+    detachPending: (chunkId) => isPendingFor(pendingDetaches(), (v) => v.chunkId === chunkId),
+    completePending: (chunkId) => isPendingFor(pendingCompletes(), (v) => v.chunkId === chunkId),
+    deletePending: (chunkId) => isPendingFor(pendingDeletes(), (v) => v.chunkId === chunkId),
+    pause(chunkId) {
+      beginAction();
+      pauseMutation.mutate({ chunkId, paused: true }, onError('Pause failed.'));
+    },
+    resume(chunkId) {
+      beginAction();
+      pauseMutation.mutate({ chunkId, paused: false }, onError('Resume failed.'));
+    },
+    detach(chunkId) {
+      beginAction();
+      detachMutation.mutate({ chunkId }, onError('Detach failed.'));
+    },
+    complete(chunkId) {
+      beginAction();
+      completeMutation.mutate({ chunkId }, onError('Complete failed.'));
+    },
+    delete(chunkId, onDeleted) {
+      beginAction();
+      deleteMutation.mutate({ chunkId }, { onSuccess: onDeleted, ...onError('Delete failed.') });
+    },
+  };
+}
+
 /** The board view's own path segments — the chunk page links back there, and its chunk
  * links sit under `/board/chunk`. */
 const BOARD_LINK_BASE: readonly string[] = ['/board'];
@@ -84,9 +136,15 @@ const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
 /** The hub's daemon for the shared chunk page — its own target and board, and the
  * operator-action port above. */
 export const HUB_CHUNK_PAGE_PROVIDERS: Provider[] = [
-  provideChunkPageDaemon(() => ({
-    target: () => HUB_TARGET,
-    boardLinkBase: () => BOARD_LINK_BASE,
-    actions: injectHubChunkActions,
-  })),
+  provideChunkPageDaemon(() => {
+    const projects = injectProjectsQuery();
+    const showProjectColors = injectShowProjectColors();
+    return {
+      target: () => HUB_TARGET,
+      boardLinkBase: () => BOARD_LINK_BASE,
+      actions: injectHubChunkActions,
+      projectColor: (projectId: string) =>
+        showProjectColors() ? (projects.data()?.find((p) => p.project_id === projectId)?.color ?? null) : null,
+    };
+  }),
 ];

@@ -4,6 +4,8 @@
 :host {
   display: contents;
   --kit-master-detail-detail-inset: 8px;
+  /* The list pane takes gardening's wide master-list width (`gardening-findings-page.css`). */
+  --master-list-col: 640px;
 }
 .art {
   display: block;

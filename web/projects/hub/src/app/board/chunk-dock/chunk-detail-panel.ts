@@ -1,21 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, hasDelivery, type WorkItemsState, KitErrorLine } from 'fleet';
+import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, type WorkItemsState, KitErrorLine } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
-import { ChunkDetailHeader } from './chunk-detail-header';
+import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-header';
 
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
 
 /**
  * The chunk detail dock — a thin **composition** of presentational regions: the
  * {@link ChunkDetailHeader}, the work-item column ({@link ChunkFacts} +
- * {@link ChunkTokenBreakdown} + {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}),
+ * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}),
  * the node-history {@link ChunkTimeline}, and the artifacts column
  * ({@link ChunkArtifacts}). It forwards its inputs down to the regions that need them
  * and re-emits their outputs unchanged.
- *
- * `ChunkTokenBreakdown` is content-projected into `ChunkFacts`'s `[token-breakdown]`
- * slot so the cost/token rows land between Attempts and Graph in one `<dl class="kv">`.
  *
  * Presentational only (`bzh:frontend-container-presentational`).
  */
@@ -26,7 +23,6 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
     ChunkDetailHeader,
     ChunkDelivery,
     ChunkFacts,
-    ChunkTokenBreakdown,
     ChunkIssuePane,
     ChunkTimeline,
     ChunkAwaitingHuman,
@@ -62,13 +58,8 @@ export class ChunkDetailPanel {
    * (`chunk:control`), forwarded to {@link ChunkDetailHeader}. `null`/pending resolves to `false`. */
   readonly canControl = input(false);
 
-  /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
-   * {@link ChunkTimeline}; `null` withholds the Graph fact's and every timeline row's link. */
+  /** The graphs view's own path segments, forwarded to {@link ChunkTimeline}'s heading; `null` withholds the graph label's link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
-
-  /** The board's path segments a timeline flow row links its flow's record through (`?flow=`), forwarded to
-   * {@link ChunkTimeline}; `null` withholds the link. */
-  readonly flowLinkBase = input<readonly string[] | null>(null);
 
   /** Whether the current identity may answer an open question (`question:answer`),
    * forwarded to {@link ChunkAwaitingHuman}. */

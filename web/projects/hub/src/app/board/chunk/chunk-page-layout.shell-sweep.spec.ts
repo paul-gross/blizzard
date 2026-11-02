@@ -172,7 +172,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 
-  it('renders the token-breakdown and timeline combined cost figures without overflow at ~390px', async () => {
+  it('renders the work item and timeline session efficiency figures without overflow at ~390px', async () => {
     const fixture = await render(ESTIMATE_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -182,11 +182,11 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const breakdownCost = root.querySelector<HTMLElement>('[data-testid="cost-total-usd"]');
-      expect(breakdownCost?.textContent?.trim()).toBe('~$0.07');
+      const chunkFigure = root.querySelector<HTMLElement>('[data-testid="chunk-efficiency"]');
+      expect(chunkFigure?.textContent?.trim()).toMatch(/^~\$0\.07/);
 
-      const timelineCost = root.querySelector<HTMLElement>('[data-testid="history-step-cost"]');
-      expect(timelineCost?.textContent?.trim()).toBe('~$0.07');
+      const stepFigure = root.querySelector<HTMLElement>('[data-testid="history-step-efficiency"]');
+      expect(stepFigure?.textContent?.trim()).toMatch(/^~\$0\.07/);
 
       const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
       expect(
@@ -714,7 +714,7 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           expectNoOverflow(general, `${width}px General`);
 
           await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
-          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="history-step"]') !== null);
           let nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
           expect(
             nodeHistory.querySelector<HTMLElement>('.kmd-detail')?.checkVisibility(),
@@ -722,13 +722,13 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           ).toBe(false);
           expect(root.querySelector('[data-testid="node-history-back"]'), `${width}px: node history list has Back`).toBeNull();
           expectNoOverflow(nodeHistory, `${width}px node history list`);
-          root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
+          root.querySelector<HTMLElement>('[data-testid="history-step"]')?.click();
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="node-history-back"]') !== null);
           nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
-          expect(root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.checkVisibility(), `${width}px: node history detail retains its list`).toBe(false);
+          expect(root.querySelector<HTMLElement>('[data-testid="history-step"]')?.checkVisibility(), `${width}px: node history detail retains its list`).toBe(false);
           expectNoOverflow(nodeHistory, `${width}px node history detail`);
           root.querySelector<HTMLElement>('[data-testid="node-history-back"]')?.click();
-          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="history-step"]') !== null);
 
           await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-nav-item"]') !== null);
@@ -766,7 +766,7 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="section-node-history"]') !== null);
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
-        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="history-step"]') !== null);
         expect(
           root.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail'),
           'desktop node history lost its simultaneous detail pane',

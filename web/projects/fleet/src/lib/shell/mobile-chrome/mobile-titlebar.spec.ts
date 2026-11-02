@@ -101,3 +101,34 @@ describe('MobileTitlebar', () => {
     expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')?.nextElementSibling).toBe(detail);
   });
 });
+
+@Component({
+  selector: 'fleet-slot-host',
+  imports: [KitMenuPanel, MobileTitlebar],
+  template: `
+    <fleet-mobile-titlebar [live]="true" [menu]="shellMenu">
+      <span fleetMobileTitle data-testid="slot-title">lens</span>
+      <span fleetMobileStatus data-testid="slot-status">$1.23</span>
+    </fleet-mobile-titlebar>
+    <ng-template #shellMenu><fleet-kit-menu-panel testid="slot-menu-panel" /></ng-template>
+  `,
+})
+class SlotHost {}
+
+describe('MobileTitlebar slots', () => {
+  it('projects a fleetMobileTitle element after the wordmark and a fleetMobileStatus element before the live dot', async () => {
+    await TestBed.configureTestingModule({
+      imports: [SlotHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(SlotHost);
+    await fixture.whenStable();
+    const bar = (fixture.nativeElement as HTMLElement).querySelector('header.mt-appbar')!;
+
+    const children = [...bar.children];
+    const at = (selector: string): number => children.findIndex((c) => c.matches(selector));
+    expect(at('[data-testid="slot-title"]')).toBe(at('.word') + 1);
+    expect(at('[data-testid="slot-status"]')).toBe(at('.spacer') + 1);
+    expect(at('[data-testid="slot-status"]')).toBeLessThan(at('.livedot'));
+  });
+});

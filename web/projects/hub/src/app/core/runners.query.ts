@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubRunnersKey } from 'fleet';
+import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubRunnersKey } from 'fleet/shell';
 
 /**
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived

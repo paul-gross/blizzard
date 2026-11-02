@@ -1,8 +1,8 @@
-<app-unserved-banner />
 <app-glance-view
   [vitals]="vitals()"
   [list]="list()"
   [listState]="listState()"
   [spend]="spendToday.data() ?? null"
+  [spendYesterday]="spendYesterday.data() ?? null"
   [spendState]="spendState()"
 />

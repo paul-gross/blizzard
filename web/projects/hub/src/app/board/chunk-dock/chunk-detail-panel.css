@@ -73,3 +73,9 @@ fleet-chunk-detail-facts {
 .s-head {
   margin-bottom: 6px;
 }
+/* Delivery and the work item's facts each sit in a box, bordered like the dock and kit panels, so each reads apart from what follows. */
+.d-box {
+  border: 1px solid var(--bezel);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}

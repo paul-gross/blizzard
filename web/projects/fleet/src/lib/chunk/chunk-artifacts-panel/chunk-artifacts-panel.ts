@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ArtifactView } from '../../api/hub';
 import { ChunkArtifactBody, sortArtifacts } from '../chunk-detail';
-import { KitAsyncState, KitMasterDetail, KitSelectRow, type KitAsyncStateValue } from '../../kit';
-import { FleetWhen } from '../../core/when-display';
+import { KitAsyncState, KitMasterDetail, type KitAsyncStateValue } from '../../kit';
 
 /**
  * A chunk's artifact store as a nav list beside a viewer — daemon-agnostic,
@@ -28,7 +27,7 @@ import { FleetWhen } from '../../core/when-display';
 @Component({
   selector: 'fleet-chunk-artifacts-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, FleetWhen, KitAsyncState, KitMasterDetail, KitSelectRow],
+  imports: [ChunkArtifactBody, KitAsyncState, KitMasterDetail],
   templateUrl: './chunk-artifacts-panel.html',
   styleUrl: './chunk-artifacts-panel.css',
 })

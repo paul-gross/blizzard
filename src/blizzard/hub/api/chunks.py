@@ -289,6 +289,20 @@ def list_chunks(
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
     # up front — narrowed to the page, since nothing outside it is rendered.
     names.prime(chunk.graph_id for chunk in page_chunks)
+    # The graph progress each live row carries reads its pinned graph whole, and names its visits in the graphs they
+    # happened in: one reifying read and one more priming call, both narrowed to the page's live chunks.
+    live = [c for c in page_chunks if ChunkFacts.or_default(facts.get(c.chunk_id)).status() not in TERMINAL_STATUSES]
+    names.prime_graphs(chunk.graph_id for chunk in live)
+    names.prime(
+        graph_id
+        for chunk in live
+        for chunk_facts in [ChunkFacts.or_default(facts.get(chunk.chunk_id))]
+        for graph_id in [
+            *(t.graph_id for t in chunk_facts.transitions),
+            *(m.from_graph_id for m in chunk_facts.migrations),
+            *(m.to_graph_id for m in chunk_facts.migrations),
+        ]
+    )
     # Unlike the fleet-wide status/holder reads above, delivery belongs only to
     # rendered rows: one narrowed, batched read over this page's ids.
     delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])

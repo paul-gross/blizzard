@@ -6,7 +6,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { hubClient } from 'fleet';
-import { graphView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { fleetSpendView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { BoardPage } from './board-page';
 
 const RUNNING = 'ch_01KXKVVF1J3D6H6VYZ3XYNZPRA';
@@ -34,10 +34,10 @@ function answer(_method: string, path: string): unknown {
     case '/api/queue':
     case '/api/backlog':
       return { entries: [], next_cursor: null };
-    case '/api/graphs/gr_1':
-      return graphView({ graph_id: 'gr_1', name: 'default' });
     case '/api/questions':
       return [];
+    case '/api/spend':
+      return fleetSpendView();
     case '/api/decisions':
       return { decisions: [] };
     default:

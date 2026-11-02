@@ -7,7 +7,7 @@
   } @else {
     <ul class="artifacts" data-testid="artifacts">
       @for (art of artifacts(); track art.key) {
-        <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind">
+        <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind" [class.selected]="art.key === selectedKey()">
           <a
             class="artifact-link"
             data-testid="artifact-link"

@@ -6,7 +6,6 @@ import { page } from 'vitest/browser';
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
-import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
 /**
  * The node-history timeline's harness-provenance badges, the tooled half
@@ -69,8 +68,7 @@ const DETAIL: ChunkDetail = chunkDetail({
 
 // The same two-step history, but the second step is a subscription invocation: no
 // billed cost, only a runner-reported estimate (an estimate-only row is kept
-// non-partial). Carried by both the timeline and the Node history tab's Selection list,
-// since both render a step's usage from the same `chunk-timeline-rows.ts` fold.
+// non-partial), its usage folded by `chunk-timeline-rows.ts`.
 const ESTIMATE_DETAIL: ChunkDetail = {
   ...DETAIL,
   chunk_id: 'ch_01estimateprov0000000000000',
@@ -129,7 +127,7 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 
-  it('renders a step’s own estimate folded into its one cost figure on both the timeline and the Node history Selection list, with no overflow at ~390px', async () => {
+  it('renders a step’s own estimate folded into its one cost figure on the timeline, with no overflow at ~390px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
@@ -137,7 +135,7 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
     window.addEventListener('unhandledrejection', onRejection);
 
     await TestBed.configureTestingModule({
-      imports: [ChunkTimeline, ChunkTimelineSelection],
+      imports: [ChunkTimeline],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
 
@@ -148,24 +146,13 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
     document.body.appendChild(timelineRoot);
     await timelineFixture.whenStable();
 
-    const selectionFixture = TestBed.createComponent(ChunkTimelineSelection);
-    selectionFixture.componentRef.setInput('detail', ESTIMATE_DETAIL);
-    await selectionFixture.whenStable();
-    const selectionRoot = selectionFixture.nativeElement as HTMLElement;
-    document.body.appendChild(selectionRoot);
-    await selectionFixture.whenStable();
-
     try {
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const timelineCosts = timelineRoot.querySelectorAll<HTMLElement>('[data-testid="history-step-cost"]');
+      const timelineCosts = timelineRoot.querySelectorAll<HTMLElement>('[data-testid="history-step-efficiency"] .part:first-child');
       expect(timelineCosts[1]?.textContent?.trim()).toBe('~$0.07');
-      expect(timelineCosts[1]?.hasAttribute('title')).toBe(false);
 
-      const selectionCosts = selectionRoot.querySelectorAll<HTMLElement>('[data-testid="selection-step-cost"]');
-      expect(selectionCosts[1]?.textContent?.trim()).toBe('~$0.07');
-      expect(selectionCosts[1]?.hasAttribute('title')).toBe(false);
 
       const timelineList = timelineRoot.querySelector<HTMLElement>('.timeline') ?? timelineRoot;
       expect(
@@ -173,14 +160,8 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
         `timeline overflows horizontally at 390px (${timelineList.scrollWidth} > ${timelineList.clientWidth})`,
       ).toBeLessThanOrEqual(timelineList.clientWidth);
 
-      const selectionList = selectionRoot.querySelector<HTMLElement>('.timeline') ?? selectionRoot;
-      expect(
-        selectionList.scrollWidth,
-        `selection overflows horizontally at 390px (${selectionList.scrollWidth} > ${selectionList.clientWidth})`,
-      ).toBeLessThanOrEqual(selectionList.clientWidth);
     } finally {
       timelineRoot.remove();
-      selectionRoot.remove();
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     }
@@ -189,7 +170,7 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
   });
 
   for (const width of [390, 320]) {
-    it(`gives each step's usage its own full-width row under an unclipped verdict at ${width}px`, async () => {
+    it(`gives each step's usage its own row under an unclipped verdict, spanning every column but the stamp, at ${width}px`, async () => {
       await TestBed.configureTestingModule({
         imports: [ChunkTimeline],
         providers: [provideZonelessChangeDetection(), provideRouter([])],
@@ -213,11 +194,13 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
           const jg = step.querySelector<HTMLElement>('.jg')!;
           const usageRect = usage.getBoundingClientRect();
           const verdictRect = verdict.getBoundingClientRect();
-          const style = getComputedStyle(step);
-          const contentWidth = step.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          const stampRect = step.querySelector<HTMLElement>('[data-testid="history-when"]')!.getBoundingClientRect();
+          const markRect = step.querySelector<HTMLElement>('.att')!.getBoundingClientRect();
 
           expect(usageRect.top, 'usage shares the verdict line').toBeGreaterThanOrEqual(verdictRect.bottom - 0.5);
-          expect(usageRect.width, 'usage does not span the full row').toBeGreaterThanOrEqual(contentWidth - 1);
+          expect(usageRect.left, 'usage does not start at the row’s first column').toBeLessThanOrEqual(markRect.left + 0.5);
+          expect(usageRect.right, 'usage runs into the stamp column').toBeLessThanOrEqual(stampRect.left + 0.5);
+          expect(stampRect.top, 'the stamp does not span the entry from its main row').toBeLessThanOrEqual(verdictRect.top + 0.5);
           expect(verdictRect.right, 'verdict clipped past its cell').toBeLessThanOrEqual(jg.getBoundingClientRect().right + 0.5);
         }
       } finally {

@@ -369,6 +369,7 @@ def _usage(u: Row[Any]) -> UsageFact:
         harness_id=u.harness_id,
         harness_version=u.harness_version,
         estimated_cost_usd=u.estimated_cost_usd,
+        runner_id=u.runner_id,
     )
 
 

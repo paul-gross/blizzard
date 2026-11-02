@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import { type MeResponse, hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
+import { provideProjectLens } from '../../core/project-lens';
 import { MobileTitlebar } from './mobile-titlebar';
 
 @Component({ selector: 'app-test-titlebar-view', template: '' })
@@ -55,6 +56,7 @@ describe('MobileTitlebar', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: PAGE_RELOAD, useValue: reload },
+        provideProjectLens(),
         provideRouter([
           { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
           { path: '**', component: TestView },
@@ -121,28 +123,46 @@ describe('MobileTitlebar', () => {
     ).not.toBeNull();
   });
 
-  it('names the tenant the board is in beside the wordmark', async () => {
-    const fixture = await mountIn(TWO_TENANTS);
-
-    const caption = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="mobile-titlebar-caption"]');
-    expect(caption?.textContent?.trim()).toBe('Acme');
-  });
-
-  it('names the project the lens is on beside the tenant, with the menu closed', async () => {
-    await TestBed.inject(Router).navigateByUrl('/p/glacier/board');
+  it('names the project the lens is on beside the wordmark, linking to the picker under that lens', async () => {
+    await TestBed.inject(Router).navigateByUrl('/p/glacier/fleet');
     const fixture = await mountIn(TWO_TENANTS);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')?.textContent?.trim()).toBe('Acme');
-    expect(el.querySelector('[data-testid="mobile-titlebar-detail"]')?.textContent?.trim()).toBe('Glacier');
+    const lens = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
+    expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('Glacier');
+    expect(lens?.getAttribute('href')).toBe('/p/glacier/lens?from=%2Ffleet');
+    // The tenant is no longer named in the bar; the switcher stays in the menu.
+    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')).toBeNull();
   });
 
-  it('names no project on All, and reads none there', async () => {
+  it('names All projects on All, linking to the unlensed picker, and reads no projects there', async () => {
     await TestBed.inject(Router).navigateByUrl('/board');
     const fixture = await mountIn(TWO_TENANTS);
+    const lens = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="mobile-titlebar-detail"]')).toBeNull();
+    expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('All projects');
+    expect(lens?.getAttribute('href')).toBe('/lens?from=%2Fboard');
     expect(stub.forRoute('/api/projects', 'GET')).toHaveLength(0);
+  });
+
+  it('shows the spend today beside the live dot once it resolves, and nothing before', async () => {
+    const fixture = await mountIn(TWO_TENANTS);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="mobile-titlebar-spend"]')).toBeNull();
+
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-20T00:00:00Z',
+      until: '2026-07-20T12:00:00Z',
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 4.2,
+      cost_partial: true,
+      estimated_cost_usd: null,
+    });
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="mobile-titlebar-spend"]')?.textContent?.trim()).toBe('$4.20+');
   });
 
   it('offers no tenant switcher to a caller with one membership', async () => {

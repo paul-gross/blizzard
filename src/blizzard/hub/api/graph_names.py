@@ -26,12 +26,14 @@ def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
 class GraphNames:
     """The graph summaries and node names one read resolves, primed in bulk and
     memoised by id — backed by :class:`IReadGraphRepository`'s narrow
-    projections, never a full :class:`Graph`. An id nothing primed still resolves
-    lazily, one graph at a time, the first time it's asked for."""
+    projections; only :meth:`graph` reifies a full :class:`Graph`, primed apart by
+    :meth:`prime_graphs`. An id nothing primed still resolves lazily, one graph at a
+    time, the first time it's asked for."""
 
     graphs: IReadGraphRepository
     _summaries: dict[str, GraphSummary | None] = field(default_factory=lambda: {})
     _node_names: dict[str, dict[str, str]] = field(default_factory=lambda: {})
+    _graphs: dict[str, Graph | None] = field(default_factory=lambda: {})
 
     def prime(self, graph_ids: Iterable[str | None]) -> None:
         """Resolve every id in ``graph_ids`` not already resolved, through one
@@ -46,6 +48,23 @@ class GraphNames:
         for graph_id in unresolved:
             self._summaries[graph_id] = summaries.get(graph_id)
             self._node_names[graph_id] = node_names.get(graph_id, {})
+
+    def prime_graphs(self, graph_ids: Iterable[str | None]) -> None:
+        """Reify every graph in ``graph_ids`` not already reified, through one ``get_many`` call."""
+        unresolved = sorted({graph_id for graph_id in graph_ids if graph_id is not None} - self._graphs.keys())
+        if not unresolved:
+            return
+        graphs = self.graphs.get_many(unresolved)
+        for graph_id in unresolved:
+            self._graphs[graph_id] = graphs.get(graph_id)
+
+    def graph(self, graph_id: str | None) -> Graph | None:
+        """``graph_id`` reified in full — nodes and edges — or ``None`` when it is unknown."""
+        if graph_id is None:
+            return None
+        if graph_id not in self._graphs:
+            self.prime_graphs([graph_id])
+        return self._graphs[graph_id]
 
     def _summary(self, graph_id: str | None) -> GraphSummary | None:
         if graph_id is None:

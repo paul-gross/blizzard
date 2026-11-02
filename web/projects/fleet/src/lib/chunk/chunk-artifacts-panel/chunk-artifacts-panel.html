@@ -16,22 +16,18 @@
     >
       <ul class="art-list" [attr.data-testid]="testidPrefix() + '-nav'">
         @for (art of sortedArtifacts(); track art.key) {
-          <li>
-          <fleet-kit-select-row
-            class="art-item"
-            [selected]="art.key === effectiveKey()"
-            [testid]="testidPrefix() + '-nav-item'"
-            [attr.data-artifact-key]="art.key"
-            (picked)="pickArtifact.emit(art.key)"
-          >
-            <span class="key">{{ art.key }}</span>
-            <span class="sub">
-              @if (art.recorded_at) {
-              <fleet-when [iso]="art.recorded_at" />
-              }
-              <span class="kind">{{ art.kind }}</span>
-            </span>
-          </fleet-kit-select-row>
+          <li class="art-row" [class.selected]="art.key === effectiveKey()">
+            <!-- eslint-disable-next-line no-restricted-syntax -- A whole artifact summary is the pick target, laid out by the summary it wraps, not the kit button's own chrome. -->
+            <button
+              type="button"
+              class="art-item"
+              [attr.data-testid]="testidPrefix() + '-nav-item'"
+              [attr.data-artifact-key]="art.key"
+              [attr.aria-pressed]="art.key === effectiveKey()"
+              (click)="pickArtifact.emit(art.key)"
+            >
+              <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
+            </button>
           </li>
         }
       </ul>

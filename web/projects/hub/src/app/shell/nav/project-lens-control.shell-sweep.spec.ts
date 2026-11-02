@@ -178,7 +178,7 @@ describe('mobile titlebar lens sweep (web:shell-sweep)', () => {
     await fixture.whenStable();
 
     try {
-      const detail = root.querySelector<HTMLElement>('[data-testid="mobile-titlebar-detail"]');
+      const detail = root.querySelector<HTMLElement>('[data-testid="mobile-titlebar-lens"] .name');
       expect(detail?.textContent?.trim(), 'the lensed project is not named').toBe('Northwind Interplanetary Logistics');
       for (const width of PHONE_WIDTHS) {
         await page.viewport(width, 800);

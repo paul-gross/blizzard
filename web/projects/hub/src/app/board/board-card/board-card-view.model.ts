@@ -5,6 +5,7 @@ import {
   type ChunkStatus,
   finishedWord,
   formatCost,
+  type hubApi,
   hasCostFigure,
   type LandedRepoView,
   type PrView,
@@ -15,8 +16,8 @@ import {
   stepLabel,
   type WorkLine,
 } from 'fleet';
-import type { FlowPlaceLine } from '../flows/flow-place.model';
-import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../node-strip/node-strip.model';
+import type { FlowPlaceLine } from '../../core/flow-place.model';
+import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../../core/step-label';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -31,10 +32,10 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's graph, from `ChunkSummary.graph_id` — null when it names none. */
-  readonly graphId?: string | null;
-  /** The chunk's graph's name, once its graph is read — null until then or when unresolvable. */
+  /** The chunk's graph's name, from `ChunkSummary.graph_name` — null when unresolvable. */
   readonly graphName?: string | null;
+  /** The chunk's progress through its graph, from `ChunkSummary.graph_progress` — the strip it carries. */
+  readonly graphProgress?: readonly hubApi.GraphProgressNodeView[];
   /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
   readonly workLines: readonly WorkLine[];
   /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
@@ -109,8 +110,8 @@ export type BoardCardSurface = 'card' | 'row';
  * alone, and the blocked marking names the blocker's own status only when exactly one chunk blocks this one — a count
  * names no single chunk.
  *
- * A node step is prefixed with its graph's name (`adv-dwf/pre-push`) once that graph is read. On the card, whose step
- * row is the only place the holder is named, the holding runner follows it as the mobile card writes it
+ * A node step is prefixed with its graph's name (`adv-dwf/pre-push`) when the hub names that graph. On the card, whose
+ * step row is the only place the holder is named, the holding runner follows it as the mobile card writes it
  * (`adv-dwf/pre-push · xps/r-claude`); the list row names the holder in a cell of its own.
  */
 export function boardCardView(card: BoardCard, surface: BoardCardSurface = 'card'): ChunkCardView {

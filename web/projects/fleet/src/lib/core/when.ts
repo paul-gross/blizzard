@@ -45,6 +45,19 @@ export function formatWhen(iso: string, now: Date): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+/** {@link formatWhen}'s stamp split for a two-line display: `day` is empty today, `Yesterday` yesterday, else the
+ * `2026/07/16` date; `time` is always the local `HH:MM`. Both empty for an unparseable input. */
+export function formatWhenParts(iso: string, now: Date): { day: string; time: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { day: '', time: '' };
+  const pad = (n: number): string => `${n}`.padStart(2, '0');
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const daysAgo = localDaysAgo(d, now);
+  if (daysAgo <= 0) return { day: '', time };
+  if (daysAgo === 1) return { day: 'Yesterday', time };
+  return { day: `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`, time };
+}
+
 /** Plain-language distance between an instant and `now`, past or future —
  * `just now` inside a minute either way, then `5 minutes ago` / `in 5 minutes`,
  * hours, `yesterday` / `tomorrow`, days, weeks, months, years. Each unit is the

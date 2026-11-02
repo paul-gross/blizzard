@@ -9,7 +9,7 @@ import {
   ChunkFacts,
   ChunkIssuePane,
   ChunkTimeline,
-  ChunkTokenBreakdown,
+  chunkGraphLabel,
   type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
@@ -22,7 +22,7 @@ import { LensLink } from '../../core/lens-link';
  * The chunk detail page's General tab.
  *
  * Every section is a `fleet` presentational component (`bzh:frontend-kit`) —
- * {@link ChunkFacts} + {@link ChunkTokenBreakdown},
+ * {@link ChunkFacts},
  * {@link ChunkIssuePane}, {@link ChunkTimeline},
  * {@link ChunkAwaitingHuman} — this component only picks the arrangement: a
  * two-column grid at ≥720px — work item (its facts and, when the
@@ -40,7 +40,7 @@ import { LensLink } from '../../core/lens-link';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
@@ -67,10 +67,15 @@ export class ChunkGeneralTab {
    * {@link ChunkAwaitingHuman}. */
   readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
 
-  /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
-   * {@link ChunkTimeline} — `null` (the default) withholds
-   * the link. */
+  /** The graphs view's own path segments, the node history panel's graph label links to — `null` (the default)
+   * withholds the link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
+
+  /** The chunk page's own path segments, before the chunk id — each dependency neighbor links there. */
+  readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
+
+  /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the node history label. */
+  protected readonly graphLabel = computed(() => chunkGraphLabel(this.detail()));
 
   /** The events view's own path segments, before the `?chunk=` filter — set, the tab
    * links this chunk's own events beside its node history; `null` (the default)

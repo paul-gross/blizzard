@@ -1,9 +1,9 @@
 <div class="a-head">
   <span class="a-key" [attr.data-testid]="keyTestid()">{{ artifact().key }}</span>
+  <span class="a-kind">· {{ artifact().kind }}</span>
   @if (artifact().recorded_at; as at) {
     <fleet-when class="a-when" [attr.data-testid]="whenTestid()" [iso]="at" />
   }
-  <span class="a-kind">{{ artifact().kind }}</span>
 </div>
 @if (isAsset()) {
   @if (body() === 'full') {
@@ -22,7 +22,7 @@
     <span class="a-repo">{{ artifact().repo }}</span>
     @if (artifact().branch_name) {
       <span class="a-sep">·</span>
-      @if (artifact().branch_url) {
+      @if (artifact().branch_url && body() === 'full') {
         <a
           class="a-branch"
           [attr.data-testid]="branchTestid()"
@@ -36,6 +36,6 @@
         <span class="a-branch" [attr.data-testid]="branchTestid()">{{ artifact().branch_name }}</span>
       }
     }
-    <span class="a-commit">&#64; {{ artifact().commit_hash }}</span>
+    <span class="a-commit" [attr.title]="artifact().commit_hash">&#64; {{ shortHash() }}</span>
   </div>
 }

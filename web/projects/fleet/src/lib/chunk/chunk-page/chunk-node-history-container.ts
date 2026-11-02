@@ -10,7 +10,6 @@ import {
 } from '../../transcripts/transcript-segments.query';
 import { effectiveSegmentId, segmentFinal, stepSegments } from '../../transcripts/transcript-selection.model';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from '../../transcripts/transcript-steps';
-import { injectChunkStepSessions } from '../chunk-detail/chunk-step-sessions';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
 import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
@@ -45,7 +44,7 @@ export class ChunkNodeHistoryContainer {
   readonly chunkId = input.required<string | null>();
   readonly detail = input.required<ChunkDetail>();
   readonly selectedKey = input<string | null>(null);
-  /** {@link ChunkTimelineSelection.graphLinkBase}, forwarded — `null` leaves graph
+  /** {@link ChunkTimeline.graphLinkBase}, forwarded — `null` leaves graph
    * badges unlinked. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
   /** Opts the presentational tab into the hub phone's list/detail presentation. */
@@ -53,9 +52,6 @@ export class ChunkNodeHistoryContainer {
   readonly pickStep = output<string | null>();
 
   private readonly daemon = inject(CHUNK_PAGE_DAEMON);
-
-  /** The daemon's per-step session enrichment — empty where the app provides none. */
-  protected readonly stepSessions = injectChunkStepSessions();
 
   protected readonly indexQuery = injectChunkTranscriptsQuery(
     () => this.daemon.target(),

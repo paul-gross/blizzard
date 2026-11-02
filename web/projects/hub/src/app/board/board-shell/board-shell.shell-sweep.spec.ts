@@ -5,7 +5,6 @@ import { commands, page } from 'vitest/browser';
 import type { ChunkStatus, ChunkSummary } from 'fleet';
 import { chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /**
  * A long current-node name truncates inside its card rather than widening its lane: every
@@ -49,7 +48,6 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
   it('keeps every lane equal-width and inside a 1440px viewport and the full name on hover', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],
@@ -85,7 +83,6 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
     it(`heads a lane with an unknown raw status, its card inside it and every lane equal-width, at width ${width}`, async () => {
       await loadDesignTokens();
       TestBed.resetTestingModule();
-      stubNodeStrip();
       await TestBed.configureTestingModule({
         imports: [BoardShell],
         providers: [provideZonelessChangeDetection()],

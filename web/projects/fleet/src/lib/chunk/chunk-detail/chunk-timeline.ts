@@ -1,21 +1,24 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
-import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/cost-format';
 import { harnessName } from '../../core/harness-name';
+import { injectRunnerHostNames, injectRunnerNames, runnerBoardParts } from '../../core/runner-display-name';
+import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
-import { KitBadge } from '../../kit/kit-badge';
 import {
   deriveActiveRow,
   deriveHistoryRows,
   deriveMultiGraph,
   type HistoryRow,
+  type StepUsageTotal,
   rowChoice,
   rowMark,
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
+import { chunkGraphLabel } from './graph-label';
 import { LensLink } from '../../core/lens-link';
 import { toneColor } from '../../kit/kit-badge';
 import { verdictTone } from './verdict-tone';
@@ -36,25 +39,15 @@ import { verdictTone } from './verdict-tone';
  *
  * Each `<li>` stays a bare grid item — its own listitem role is what lets a
  * screen reader announce `.timeline` as an `<ol>` with the right item count.
- * The interactive `.step` div nested inside it, not the `<li>` itself, carries
- * `role="button"`/tabindex when {@link activatable} — a role set directly on
- * an `<li>` would override its implicit listitem role instead of layering on
- * top of it. `.step` subgrids a second time from the bare `<li>`'s own
- * subgrid, so the verdict column stays aligned across the nesting.
- *
- * A non-activatable keyed row's own link is a `.step-link` anchor stretched over
- * the whole `.step` (`position: absolute; inset: 0`), not `.step` itself made an
- * anchor — a multi-graph row already nests its own graph-badge anchor inside
- * `.step`, and an anchor cannot itself nest one. Every direct child rides above
- * the stretched link and, but for the columns that carry their own `title`
- * tooltip (the node name, the routed-to column, the recency stamp — each opts
- * back into `pointer-events: auto`, `chunk-timeline.css`), hands its own click
- * through to the link instead of claiming it.
+ * The row inside it is one interactive element: an `<a>` to the chunk page's step, a `<button>` that picks it when
+ * {@link activatable}, or a plain `<div>` for a keyless row. Its content is plain text throughout — the graph badge
+ * included — so no anchor nests another, and the whole row takes the native cursor, URL preview and tooltips. `.step`
+ * subgrids a second time from the bare `<li>`'s own subgrid, so the verdict column stays aligned across the nesting.
  */
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, RouterLink, LensLink],
+  imports: [KitAsyncState, NgTemplateOutlet, SessionEfficiency, RouterLink, LensLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })
@@ -84,14 +77,11 @@ export class ChunkTimeline {
    * {@link activatable} is `true`, since an activatable row emits instead of linking. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** The graphs view's own path segments, before the graph id — when set, a
-   * multi-graph row's own graph badge links there (`/graphs/:graphId`).
-   * `null` (the default) renders plain text, for a host with no graphs route. */
+  /** The graphs view's own path segments the heading's graph label links to; `null` leaves it plain text. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
-  /** The path segments a flow row links its flow's record through, as `?flow=<id>` — the board, on the hub. `null`
-   * (the default) withholds the link, for a host with no flow record to open. */
-  readonly flowLinkBase = input<readonly string[] | null>(null);
+  /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the heading. */
+  protected readonly graphLabel = computed(() => chunkGraphLabel(this.detail()));
 
   /** Emitted with an activated row's join key, or `null` when the already-selected
    * row is re-activated — the only way to clear a step selection from this component,
@@ -104,28 +94,19 @@ export class ChunkTimeline {
   protected readonly rowChoice = rowChoice;
   protected readonly verdictTone = verdictTone;
   protected readonly toneColor = toneColor;
-  protected readonly stepCostPartialTitle = STEP_COST_PARTIAL_TITLE;
-  protected readonly formatCost = formatCost;
-  protected readonly formatTokens = formatTokens;
-  protected readonly harnessName = harnessName;
 
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 
-  protected onActivate(key: string | null, event?: Event): void {
+  /** A history row's test id — `history-step` for a transition, `history-<kind>-step` otherwise. */
+  protected rowTestid(row: HistoryRow): string {
+    return row.kind === 'transition' ? 'history-step' : `history-${row.kind}-step`;
+  }
+
+  protected onActivate(key: string | null): void {
     if (!this.activatable() || key === null) return;
-    event?.preventDefault();
     this.pickStep.emit(key === this.selectedKey() ? null : key);
   }
 
-  /** Hands a click that landed on a row's own `pointer-events: auto` cells (node name,
-   * routed-to, timestamp, cost — kept live for their tooltips) to the row's stretched
-   * link, so the whole keyed row navigates. A click already on an anchor (the graph
-   * badge, the stretched link itself) keeps its own target. */
-  protected forwardToLink(event: Event): void {
-    const target = event.target as Element;
-    if (target.closest('a')) return;
-    (event.currentTarget as Element).querySelector<HTMLElement>('a.step-link')?.click();
-  }
 
   protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail(), new Date(this.now())));
 
@@ -146,6 +127,27 @@ export class ChunkTimeline {
    * `(nodeId, epoch)` yet — matches the row's origin node against every usage entry
    * recorded there. Multiple invocations at one step (spawn/resume/judge) fold into
    * one figure so the timeline reads one lap's cost per line. */
+  /** How many grid rows an entry takes — its main row, plus its usage line, plus a bounce's reason — which the stamp
+   * cell spans. */
+  protected rowSpan(row: HistoryRow): number {
+    return 1 + (this.usageForStep(row) ? 1 : 0) + (row.kind === 'bounce' && row.title ? 1 : 0);
+  }
+
+  private readonly runnerHosts = injectRunnerHostNames();
+  private readonly runnerNames = injectRunnerNames();
+
+  /** Who ran a step — `xps/r-claude · claude code`: its runner as {@link runnerBoardParts} names it, then its
+   * harness; either alone when the other is unrecorded, `null` when neither is. */
+  protected ranBy(u: StepUsageTotal): string | null {
+    let runner: string | null = null;
+    if (u.runnerId !== null) {
+      const parts = runnerBoardParts(u.runnerId, this.runnerNames().get(u.runnerId), this.runnerHosts().get(u.runnerId));
+      runner = parts.host ? `${parts.host}/${parts.name}` : parts.name;
+    }
+    const harness = u.harnessId ? harnessName(u.harnessId) : null;
+    return [runner, harness].filter((part) => part !== null).join(' · ') || null;
+  }
+
   protected usageForStep(row: HistoryRow) {
     return sumStepUsage(this.detail(), row);
   }

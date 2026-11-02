@@ -4,7 +4,6 @@ import { commands, page } from 'vitest/browser';
 
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 /**
  * The board list's layout under a real browser: every row — lane icon, work, step, runner, cost —
@@ -61,7 +60,6 @@ async function loadDesignTokens(): Promise<void> {
 
 async function render(width: number, groups: BoardListGroups = GROUPS, selectedChunkId: string | null = null): Promise<HTMLElement> {
   TestBed.resetTestingModule();
-  stubNodeStrip();
   await TestBed.configureTestingModule({
     imports: [BoardList],
     providers: [provideZonelessChangeDetection()],

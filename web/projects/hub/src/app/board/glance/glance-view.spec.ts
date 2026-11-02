@@ -5,13 +5,12 @@ import type { KitAsyncStateValue } from 'fleet';
 
 import type { GlanceListGroups, GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const VITALS: Vitals = {
   needsYou: 0,
   running: 0,
   ready: 0,
-  doneToday: 0,
+  doneRecent: 0,
   runnersUpLabel: '0/0',
 };
 
@@ -27,8 +26,8 @@ const row = (fields: Partial<GlanceRow> = {}): GlanceRow => ({
   node: 'build',
   nodeId: '',
   terminal: false,
-  graphId: null,
   graphName: null,
+  graphProgress: [],
   completedAt: null,
   runner: null,
   gated: false,
@@ -46,7 +45,6 @@ const text = (el: Element | null | undefined): string | undefined => el?.textCon
 
 describe('GlanceView', () => {
   beforeEach(async () => {
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [GlanceView],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
@@ -70,7 +68,7 @@ describe('GlanceView', () => {
 
   it('renders the five vitals', async () => {
     const fixture = render();
-    fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, doneToday: 5, runnersUpLabel: '1/2' });
+    fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, doneRecent: 5, runnersUpLabel: '1/2' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -82,6 +80,7 @@ describe('GlanceView', () => {
       '5',
       '1/2',
     ]);
+    expect(text(el.querySelector('[data-testid="vital-done-today"] .v-cap'))).toBe('done (48h)');
   });
 
   it('shows the list\'s loading, error, and empty states in place of the list', async () => {
@@ -209,7 +208,31 @@ describe('GlanceView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(text(el.querySelector('[data-testid="glance-cost"]'))).toBe('~$0.07');
-    expect(text(el.querySelector('[data-testid="glance-spend-value"]'))).toBe('~$0.07');
+    expect(text(el.querySelector('[data-testid="glance-spend-value"] .part'))).toBe('~$0.07');
+  });
+
+  it('adds a Yesterday row under Today once the yesterday read lands', async () => {
+    const spend = {
+      since: '2026-07-20T00:00:00Z',
+      until: '2026-07-20T12:00:00Z',
+      input_tokens: 1_000,
+      output_tokens: 500,
+      cache_read_tokens: 9_000,
+      cache_create_tokens: 0,
+      cost_usd: 1.5,
+      cost_partial: false,
+      estimated_cost_usd: null,
+    };
+    const fixture = render();
+    fixture.componentRef.setInput('spend', spend);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="glance-spend-yesterday"]')).toBeNull();
+
+    fixture.componentRef.setInput('spendYesterday', { ...spend, cost_usd: 3 });
+    await fixture.whenStable();
+    expect(text(el.querySelector('[data-testid="glance-spend-yesterday"] .part'))).toBe('$3.00');
+    expect([...el.querySelectorAll('[data-testid="glance-spend-row"] .label')].map(text)).toEqual(['Today', 'Yesterday']);
   });
 
   it('folds a billed cost and its own estimate into one card figure, marked ~', async () => {
@@ -280,7 +303,7 @@ describe('GlanceView', () => {
     expect([...card.querySelectorAll('[data-testid="glance-title"]')].map(text)).toEqual(['Rate-limit login', 'Drop moment.js']);
   });
 
-  it("names a card's step with its graph once the graph is read, and bare before", async () => {
+  it("names a card's step with its graph when the hub names the graph, and bare when it names none", async () => {
     const [named, bare] = await cards({ live: [row({ chunkId: 'ch_a', graphName: 'adv-dwf' }), row({ chunkId: 'ch_b' })] });
 
     expect(text(named.querySelector('.step'))).toBe('adv-dwf/build');
@@ -289,12 +312,12 @@ describe('GlanceView', () => {
 
   it('carries the node strip on a card mid-graph, at its current node, and none on a finished card', async () => {
     const [running, done] = await cards({
-      live: [row({ chunkId: 'ch_run', nodeId: 'nd_build', graphId: 'gr_1' })],
-      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true })],
+      live: [row({ chunkId: 'ch_run', nodeId: 'nd_build', graphProgress: [{ node_id: 'nd_build', name: 'build', state: 'current' }] })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done', terminal: true, graphProgress: [{ node_id: 'nd_build', name: 'build', state: 'passed' }] })],
     });
 
-    expect(running.querySelector('[data-testid="node-strip-stub"]')?.getAttribute('data-node')).toBe('nd_build');
-    expect(done.querySelector('[data-testid="node-strip-stub"]')).toBeNull();
+    expect(running.querySelector('[data-testid="node-strip"] .block')?.getAttribute('data-state')).toBe('current');
+    expect(done.querySelector('[data-testid="node-strip"]')).toBeNull();
   });
 
   it('stamps a done card with its completion, and no other card', async () => {
@@ -304,7 +327,9 @@ describe('GlanceView', () => {
     });
 
     expect(done.querySelector('[data-testid="glance-done-at"]')).not.toBeNull();
+    expect(done.querySelector('[data-testid="glance-done-age"]')?.textContent).toMatch(/^\[.+\]$/);
     expect(live.querySelector('[data-testid="glance-done-at"]')).toBeNull();
+    expect(live.querySelector('[data-testid="glance-done-age"]')).toBeNull();
   });
 
   describe('the vitals filter', () => {

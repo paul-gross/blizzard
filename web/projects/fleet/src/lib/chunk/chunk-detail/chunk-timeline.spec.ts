@@ -7,6 +7,11 @@ import { formatAbsolute } from '../../core/when';
 import { chunkDetail, chunkUsageTotalView, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
+/** A step usage cell's session efficiency cost, part by part. */
+function efficiencyParts(usage: Element | null | undefined): string[] {
+  return [...(usage?.querySelectorAll('[data-testid="history-step-efficiency"] .part') ?? [])].map((p) => p.textContent ?? '');
+}
+
 const REVIEW_FAIL_HISTORY = [
   transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
   transitionView({ from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
@@ -369,7 +374,7 @@ describe('ChunkTimeline', () => {
     expect(step.querySelector('.jg-to')?.textContent).toContain('nd_review');
   });
 
-  it("shows each history step's own usage inline, matched by its (node, epoch) — absent for a step with none yet (issue #60)", async () => {
+  it("shows each history step's own session efficiency cost inline, matched by its (node, epoch) — absent for a step with none yet", async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', COST_DETAIL);
     await fixture.whenStable();
@@ -379,12 +384,11 @@ describe('ChunkTimeline', () => {
     expect(steps).toHaveLength(2);
     const firstStepUsage = steps[0].querySelector('[data-testid="history-step-usage"]');
     expect(firstStepUsage).not.toBeNull();
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.42');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-tokens"]')?.textContent).toContain('2.4k');
+    expect(efficiencyParts(firstStepUsage)).toEqual(['$0.42', '· 1.30kI', '/ 800O', '× 81.3%']);
     expect(steps[1].querySelector('[data-testid="history-step-usage"]')).toBeNull();
   });
 
-  it("marks a history step's own usage as PARTIAL when its cost was absent (issue #60)", async () => {
+  it("marks a history step's own cost partial with `+` when its cost was absent", async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', PARTIAL_COST_DETAIL);
     await fixture.whenStable();
@@ -393,8 +397,8 @@ describe('ChunkTimeline', () => {
     const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
       '[data-testid="history-step-usage"]',
     );
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.00+');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.getAttribute('title')).toContain('lower bound');
+    expect(efficiencyParts(firstStepUsage)).toEqual(['$0.00+', '· 100I', '/ 50O', '× 100%']);
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-efficiency"]')?.getAttribute('title')).toContain('session efficiency cost: $0.00+');
     expect(el.querySelector('.partial-badge')).toBeNull();
   });
 
@@ -407,8 +411,7 @@ describe('ChunkTimeline', () => {
     const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
       '[data-testid="history-step-usage"]',
     );
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.hasAttribute('title')).toBe(false);
+    expect(efficiencyParts(firstStepUsage)[0]).toBe('~$0.07');
   });
 
   it('renders no ~ marker on a step with no estimate', async () => {
@@ -420,26 +423,11 @@ describe('ChunkTimeline', () => {
     const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
       '[data-testid="history-step-usage"]',
     );
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent?.trim()).toBe('$0.42');
+    expect(efficiencyParts(firstStepUsage)[0]).toBe('$0.42');
   });
 
-  it("renders a step's recorded harness as a short name beside its usage (blizzard#441)", async () => {
-    const detail: ChunkDetail = chunkDetail({
-      ...COST_DETAIL,
-      chunk_id: 'ch_01harness0000000000000000000',
-      usage: [{ ...COST_DETAIL.usage![0], harness_id: 'claude_code', harness_version: '1.2.3' }],
-      graph_name: null, current_node_name: null,
-});
-    const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', detail);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
 
-    const badge = el.querySelector('[data-testid="history-step-harness"]');
-    expect(badge?.textContent?.trim()).toBe('claude code');
-    expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
-    expect(badge?.getAttribute('aria-label')).toBe('claude code');
-  });
+
 
   it('renders no harness affordance for a step whose usage recorded none (blizzard#441)', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
@@ -470,41 +458,9 @@ describe('ChunkTimeline', () => {
     expect(el.textContent).not.toContain('Node history');
   });
 
-  it("gives a history step's token count and cost their own fixed-width, nowrap tracks so neither wraps mid-text, and lets the pair itself drop to its own line rather than overflow a tight column (issue #204)", async () => {
-    const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', COST_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
 
-    // jsdom has no layout engine, so the actual line-count at a given width is
-    // unassertable here (proven in the browser instead) — what is assertable is that
-    // the CSS shape guaranteeing it is in place: each figure is `white-space: nowrap`
-    // (a single line's text can never itself break) inside a track that does not
-    // shrink below its own fixed size (`flex-shrink: 0`), and the pair's shared row is
-    // allowed to wrap the two *items* — not their text — onto their own line
-    // (`flex-wrap: wrap`) instead of overflowing a column too narrow to hold both.
-    const tokens = el.querySelector('[data-testid="history-step-tokens"]') as HTMLElement;
-    const cost = el.querySelector('[data-testid="history-step-cost"]') as HTMLElement;
-    const usageRow = el.querySelector('[data-testid="history-step-usage"]') as HTMLElement;
 
-    const tokensStyle = getComputedStyle(tokens);
-    expect(tokensStyle.whiteSpace).toBe('nowrap');
-    expect(tokensStyle.flexShrink).toBe('0');
-    expect(tokensStyle.flexBasis).not.toBe('auto');
-    expect(tokensStyle.flexBasis).not.toBe('0px');
-
-    const costStyle = getComputedStyle(cost);
-    expect(costStyle.whiteSpace).toBe('nowrap');
-    expect(costStyle.flexShrink).toBe('0');
-    expect(costStyle.flexBasis).not.toBe('auto');
-    expect(costStyle.flexBasis).not.toBe('0px');
-
-    const usageRowStyle = getComputedStyle(usageRow);
-    expect(usageRowStyle.display).toBe('flex');
-    expect(usageRowStyle.flexWrap).toBe('wrap');
-  });
-
-  it('links a keyed row to the chunk detail page’s Node history tab when activatable is false (the default), carrying no role/tabindex and emitting nothing', async () => {
+  it('links a keyed row to the chunk detail page’s Node history tab when activatable is false (the default), the row itself the anchor, emitting nothing', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
     const emitted: (string | null)[] = [];
@@ -517,15 +473,15 @@ describe('ChunkTimeline', () => {
       expect(row.getAttribute('tabindex')).toBeNull();
     }
 
-    const transitionLink = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    const transitionLink = el.querySelector('a[data-testid="history-step"]') as HTMLAnchorElement;
     expect(transitionLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_build:1`,
     );
-    const activeLink = el.querySelector('[data-testid="history-active"] a.step-link') as HTMLAnchorElement;
+    const activeLink = el.querySelector('a[data-testid="history-active"]') as HTMLAnchorElement;
     expect(activeLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_t_build:1`,
     );
-    expect(el.querySelector('[data-testid="history-migration-step"] a.step-link')).toBeNull();
+    expect(el.querySelector('a[data-testid="history-migration-step"]')).toBeNull();
 
     const authoredFixture = TestBed.createComponent(ChunkTimeline);
     authoredFixture.componentRef.setInput('detail', {
@@ -534,7 +490,7 @@ describe('ChunkTimeline', () => {
     });
     await authoredFixture.whenStable();
     const migrationLink = (authoredFixture.nativeElement as HTMLElement).querySelector(
-      '[data-testid="history-migration-step"] a.step-link',
+      'a[data-testid="history-migration-step"]',
     ) as HTMLAnchorElement;
     expect(migrationLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_review:2`,
@@ -544,23 +500,37 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('keeps the row link and a multi-graph row’s own graph-badge link both present and independently addressable, non-activatable', async () => {
+  it('keeps a multi-graph row’s graph badge plain text inside the row link, so no anchor nests another', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
     fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
-    const rowLink = transition.querySelector('a.step-link') as HTMLAnchorElement;
-    const graphBadge = transition.querySelector('a.gr') as HTMLAnchorElement;
-    expect(rowLink).not.toBeNull();
-    expect(graphBadge).not.toBeNull();
-    expect(rowLink).not.toBe(graphBadge);
+    const rowLink = el.querySelector('a[data-testid="history-step"]') as HTMLAnchorElement;
     expect(rowLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_build:1`,
     );
-    expect(graphBadge.getAttribute('href')).toBe('/graphs/gr_src');
+    const graphBadge = rowLink.querySelector('[data-testid="history-graph"]');
+    expect(graphBadge?.tagName).toBe('SPAN');
+    expect(rowLink.querySelector('a')).toBeNull();
+  });
+
+  it("labels its heading with the chunk's graph, linked under graphLinkBase and plain text without it", async () => {
+    const detail = { ...REVIEW_FAIL_DETAIL, graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857', graph_name: 'glacier', graph_created_at: '2026-07-19T10:00:00Z' };
+    const plain = TestBed.createComponent(ChunkTimeline);
+    plain.componentRef.setInput('detail', detail);
+    await plain.whenStable();
+    const plainLabel = (plain.nativeElement as HTMLElement).querySelector('[data-testid="node-history-graph"]');
+    expect(plainLabel?.tagName).toBe('SPAN');
+    expect(plainLabel?.textContent?.trim()).toBe('G-G857#glacier-20260719');
+
+    const linked = TestBed.createComponent(ChunkTimeline);
+    linked.componentRef.setInput('detail', detail);
+    linked.componentRef.setInput('graphLinkBase', ['/graphs']);
+    await linked.whenStable();
+    const link = (linked.nativeElement as HTMLElement).querySelector('[data-testid="node-history-graph"]');
+    expect(link?.getAttribute('href')).toBe('/graphs/gr_01KXV4DP7T7NKBE8GJJ1GXG857');
   });
 
   it('builds the link under a custom linkBase, the same contract chunk-artifacts.ts establishes', async () => {
@@ -570,7 +540,7 @@ describe('ChunkTimeline', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const link = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    const link = el.querySelector('a[data-testid="history-step"]') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe(`/mobile/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=node-history&step=nd_build:1`);
   });
 
@@ -583,7 +553,7 @@ describe('ChunkTimeline', () => {
     const el = fixture.nativeElement as HTMLElement;
     const router = TestBed.inject(Router);
 
-    const link = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    const link = el.querySelector('a[data-testid="history-step"]') as HTMLAnchorElement;
     expect(link.tagName).toBe('A');
     link.focus();
     expect(document.activeElement).toBe(link);
@@ -594,13 +564,12 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('navigates when the node name, target, or timestamp of an authored-edge migration row is clicked, while the graph badge keeps its own target', async () => {
+  it('navigates when the node name, target, or timestamp of an authored-edge migration row is clicked', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', {
       ...TWO_GRAPH_DETAIL,
       migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
     });
-    fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     const router = TestBed.inject(Router);
@@ -613,13 +582,6 @@ describe('ChunkTimeline', () => {
       await fixture.whenStable();
       expect(router.url, selector).toBe(expected);
     }
-
-    await router.navigateByUrl('/board/chunk/other');
-    const graphLink = row.querySelector('a.gr') as HTMLAnchorElement;
-    expect(graphLink.getAttribute('href')).toMatch(/^\/graphs\//);
-    graphLink.click();
-    await fixture.whenStable();
-    expect(router.url).toBe('/graphs/gr_src');
   });
 
   it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a non-worker migration or an active row with no epoch yet)', async () => {
@@ -629,7 +591,7 @@ describe('ChunkTimeline', () => {
     const migrationEl = migrationFixture.nativeElement as HTMLElement;
 
     const migration = migrationEl.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
-    expect(migration.querySelector('a.step-link')).toBeNull();
+    expect(migration.tagName).toBe('DIV');
     expect(migration.getAttribute('tabindex')).toBeNull();
     expect(migration.classList.contains('keyed')).toBe(false);
 
@@ -641,7 +603,7 @@ describe('ChunkTimeline', () => {
     const activeEl = activeFixture.nativeElement as HTMLElement;
 
     const active = activeEl.querySelector('[data-testid="history-active"]') as HTMLElement;
-    expect(active.querySelector('a.step-link')).toBeNull();
+    expect(active.tagName).toBe('DIV');
     expect(active.getAttribute('tabindex')).toBeNull();
     expect(active.classList.contains('keyed')).toBe(false);
   });
@@ -657,7 +619,7 @@ describe('ChunkTimeline', () => {
     const router = TestBed.inject(Router);
     const startUrl = router.url;
 
-    expect(el.querySelector('a.step-link')).toBeNull();
+    expect(el.querySelector('a[data-testid]')).toBeNull();
     const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
     expect(transition.classList.contains('keyed')).toBe(true);
     transition.click();
@@ -677,36 +639,32 @@ describe('ChunkTimeline', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
-    expect(transition.getAttribute('role')).toBe('button');
-    expect(transition.getAttribute('tabindex')).toBe('0');
+    expect(transition.tagName).toBe('BUTTON');
     transition.click();
     expect(emitted).toEqual(['nd_s_build:1']);
 
     const migration = el.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
-    expect(migration.getAttribute('role')).toBeNull();
-    expect(migration.getAttribute('tabindex')).toBeNull();
+    expect(migration.tagName).toBe('DIV');
     migration.click();
     expect(emitted).toEqual(['nd_s_build:1']);
 
     const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
-    expect(active.getAttribute('role')).toBe('button');
+    expect(active.tagName).toBe('BUTTON');
     active.click();
     expect(emitted).toEqual(['nd_s_build:1', 'nd_t_build:1']);
   });
 
-  it('activates a row by Enter and by Space, not just by click', async () => {
+  it('makes an activatable row a native button, so Enter and Space activate it without a key handler', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
     fixture.componentRef.setInput('activatable', true);
-    const emitted: (string | null)[] = [];
-    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    const [first, second] = el.querySelectorAll('[data-testid="history-step"]');
 
-    first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    second.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-    expect(emitted).toEqual(['nd_build:1', 'nd_review:2']);
+    for (const row of el.querySelectorAll('[data-testid="history-step"]')) {
+      expect(row.tagName).toBe('BUTTON');
+      expect(row.getAttribute('type')).toBe('button');
+    }
   });
 
   it('applies the selected class only to the row matching selectedKey', async () => {
@@ -767,12 +725,12 @@ describe('ChunkTimeline', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
-    expect(active.getAttribute('role')).toBe('button');
+    expect(active.tagName).toBe('BUTTON');
     active.click();
     expect(emitted).toEqual(['nd_t_build:1']);
   });
 
-  it('keeps every row a listitem of the timeline list, even when activatable makes it a button too (review:F5)', async () => {
+  it('keeps every row a listitem of the timeline list, even when activatable makes it a button too', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
     fixture.componentRef.setInput('activatable', true);
@@ -791,7 +749,7 @@ describe('ChunkTimeline', () => {
     // The activation role lives one level down, on the child the button/keyboard
     // behavior is bound to — proven on a row known to carry a real join key.
     const transitionRow = el.querySelector('[data-testid="history-step"]') as HTMLElement;
-    expect(transitionRow.getAttribute('role')).toBe('button');
+    expect(transitionRow.tagName).toBe('BUTTON');
     expect(transitionRow.parentElement?.tagName).toBe('LI');
     expect(transitionRow.parentElement?.getAttribute('role')).toBeNull();
   });

@@ -36,6 +36,25 @@ export interface ChunkPageActions {
   readonly eventsLinkBase: readonly string[];
   answer(event: AnswerQuestionEvent): void;
   resolve(event: ResolveDecisionEvent): void;
+  /** The chunk-control actions behind the header's ⋮ menu; absent hides the menu. */
+  readonly control?: ChunkPageControl;
+}
+
+/** The header menu's chunk-control port — Pause/Resume, Detach, Complete, Delete. Each
+ * pending read is scoped to one chunk id; failures land on {@link ChunkPageActions.actionError}. */
+export interface ChunkPageControl {
+  /** Whether the identity may operate the chunk (`chunk:control`). */
+  readonly canControl: Signal<boolean>;
+  pausePending(chunkId: string): boolean;
+  detachPending(chunkId: string): boolean;
+  completePending(chunkId: string): boolean;
+  deletePending(chunkId: string): boolean;
+  pause(chunkId: string): void;
+  resume(chunkId: string): void;
+  detach(chunkId: string): void;
+  complete(chunkId: string): void;
+  /** Delete the chunk; `onDeleted` runs once the hub confirms it. */
+  delete(chunkId: string, onDeleted: () => void): void;
 }
 
 /**
@@ -53,6 +72,9 @@ export interface ChunkPageDaemon {
   /** The operator-action port's factory, called from the page's injection context;
    * absent renders the page read-only. */
   readonly actions?: () => ChunkPageActions;
+  /** A project's swatch color by project id, or `null` when unknown — absent where the
+   * daemon holds no projects list, so the header draws the project name alone. */
+  readonly projectColor?: (projectId: string) => string | null;
 }
 
 export const CHUNK_PAGE_DAEMON = new InjectionToken<ChunkPageDaemon>('CHUNK_PAGE_DAEMON');

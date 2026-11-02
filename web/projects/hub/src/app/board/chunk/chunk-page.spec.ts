@@ -163,15 +163,15 @@ describe('Mobile chunk drill-down', () => {
     let el = harness.fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="section-node-history"]')).toBeNull();
-    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="history-step"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')?.classList).toContain('kmd-pane--hidden');
 
-    (el.querySelector<HTMLButtonElement>('[data-testid="selection-step"]'))?.click();
+    (el.querySelector<HTMLButtonElement>('[data-testid="history-step"]'))?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toContain('tab=node-history&step=nd_build:1');
-    expect(el.querySelector('[data-testid="selection-step"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
+    expect(el.querySelector('[data-testid="history-step"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
     expect(el.querySelector('[data-testid="node-history-back"]')).not.toBeNull();
     expect(document.activeElement).toBe(el.querySelector('[data-testid="node-history-back"]'));
 
@@ -179,7 +179,7 @@ describe('Mobile chunk drill-down', () => {
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
-    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="history-step"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')?.classList).toContain('kmd-pane--hidden');
     expect(document.activeElement).toBe(el.querySelector('[data-step-key="nd_build:1"]'));
   });
@@ -205,21 +205,41 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('app-chunk-detail-artifacts')).toBeNull();
   });
 
-  it("mounts none of the dock's destructive or structural actions", async () => {
+  it("mounts none of the dock's own chrome, but carries the chunk actions behind its own header menu", async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('app-chunk-detail-header')).toBeNull();
-    for (const testid of [
-      'pause-chunk',
-      'resume-chunk',
-      'detach-chunk',
-      'complete-chunk',
-      'delete-chunk',
-      'chunk-actions-menu',
-      'detail-close',
-    ]) {
+    expect(el.querySelector('[data-testid="detail-close"]')).toBeNull();
+    // The page header's ⋮ holds the controls; none sits inline on the page.
+    expect(el.querySelector('[data-testid="chunk-actions-menu"]')).not.toBeNull();
+    for (const testid of ['pause-chunk', 'resume-chunk', 'detach-chunk', 'complete-chunk', 'delete-chunk']) {
       expect(el.querySelector(`[data-testid="${testid}"]`), testid).toBeNull();
     }
+  });
+
+  it('pauses the chunk from the header menu once the operator confirms, through the hub', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, pausable: true };
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await settle(harness.fixture);
+    document.body.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/pause`, 'POST')).toHaveLength(0);
+
+    const confirm = document.body.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]');
+    expect(confirm).not.toBeNull();
+    confirm!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/pause`, 'POST')).toHaveLength(1);
   });
 
   it('switches to the Artifacts tab on click, writing ?tab=artifacts with no full reload, and back again', async () => {
@@ -254,12 +274,12 @@ describe('Mobile chunk drill-down', () => {
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
     expect(el.querySelector('[data-testid="chunk-node-history-tab"]')).not.toBeNull();
 
-    (el.querySelector('[data-testid="selection-step"]') as HTMLButtonElement).click();
+    (el.querySelector('[data-testid="history-step"]') as HTMLButtonElement).click();
     await settle(harness.fixture);
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
     expect(
       harness.fixture.nativeElement
-        .querySelector('[data-testid="selection-step"]')
+        .querySelector('[data-testid="history-step"]')
         ?.classList.contains('selected'),
     ).toBe(true);
   });
@@ -354,7 +374,7 @@ describe('Mobile chunk drill-down', () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"]'));
-    expect(rows.map((r) => r.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key'))).toEqual(['build.branch.1', 'review.findings.2']);
+    expect(rows.map((r) => r.getAttribute('data-artifact-key'))).toEqual(['build.branch.1', 'review.findings.2']);
     // review.findings.2 (11:30) is the more recent of the two (build.branch.1 is 11:10).
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
   });
@@ -362,8 +382,8 @@ describe('Mobile chunk drill-down', () => {
   it('deep-links a specific artifact pre-selected — the dock link’s own contract', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.branch.1`);
 
-    const active = el.querySelector('[data-testid="artifacts-tab-nav-item"].selected');
-    expect(active?.closest('fleet-kit-select-row')?.getAttribute('data-artifact-key')).toBe('build.branch.1');
+    const active = el.querySelector('[data-testid="artifacts-tab-nav-item"][aria-pressed="true"]');
+    expect(active?.getAttribute('data-artifact-key')).toBe('build.branch.1');
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('paul-gross/blizzard');
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).not.toContain('THE FINDINGS BODY');
   });
@@ -375,7 +395,7 @@ describe('Mobile chunk drill-down', () => {
     let el = harness.fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
 
-    el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"] [data-testid="artifacts-tab-nav-item"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"][data-artifact-key="build.branch.1"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
@@ -416,7 +436,7 @@ describe('Mobile chunk drill-down', () => {
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
-    const row = el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"] button')!;
+    const row = el.querySelector<HTMLButtonElement>('button[data-artifact-key="build.branch.1"]')!;
     row.focus();
     row.click();
     await settle(harness.fixture);
@@ -425,7 +445,7 @@ describe('Mobile chunk drill-down', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-back"]')?.click();
     await settle(harness.fixture);
-    expect(document.activeElement).toBe(el.querySelector('[data-artifact-key="build.branch.1"] button'));
+    expect(document.activeElement).toBe(el.querySelector('button[data-artifact-key="build.branch.1"]'));
   });
 
   it('opens one asset artifact in full, one level deeper', async () => {

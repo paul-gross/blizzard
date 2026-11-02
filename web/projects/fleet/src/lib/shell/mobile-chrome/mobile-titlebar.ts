@@ -18,6 +18,9 @@ import { KitMenu } from '../../kit';
  * `${testid}-livedot`, `${testid}-menu`) (`bzh:frontend-kit`'s globally-unique
  * handle rule), plus the caption (`${testid}-caption`) and detail (`${testid}-detail`).
  * The panel's own handle belongs to whoever declares the panel.
+ *
+ * An element marked `fleetMobileTitle` is projected right after the wordmark — the hub's tappable project lens —
+ * and one marked `fleetMobileStatus` just before the live dot, such as the hub's spend today.
  */
 @Component({
   selector: 'fleet-mobile-titlebar',

@@ -83,9 +83,9 @@ test('test_triage_migration_selects_transcript_and_artifact', async ({ api, flee
   for (const viewport of [wideViewport, narrowViewport]) {
     await page.setViewportSize(viewport);
     await page.goto(`/board/chunk/${chunkId}?tab=node-history`);
-    const row = page.getByTestId('selection-migration-step');
+    const row = page.getByTestId('history-migration-step');
     await expect(row).toHaveAttribute('data-step-key', `${nodeId}:1`);
-    await expect(row).toHaveAttribute('role', 'button');
+    await expect(row).toHaveRole('button');
     await row.click();
     await expect(page).toHaveURL(new RegExp(`[?&]step=${nodeId}(?:%3A|:)1`));
     await expect(page.getByTestId('node-history-transcript-body')).toContainText('triage chose basic lane');
@@ -93,7 +93,7 @@ test('test_triage_migration_selects_transcript_and_artifact', async ({ api, flee
     await expect(page.getByTestId('node-history-artifact-key')).toContainText('triage-findings');
     if (viewport === narrowViewport) {
       await page.getByTestId('node-history-back').click();
-      await expect(page.getByTestId('selection-migration-step')).toBeVisible();
+      await expect(page.getByTestId('history-migration-step')).toBeVisible();
     }
   }
   expect(failures).toEqual([]);

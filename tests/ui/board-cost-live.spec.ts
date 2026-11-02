@@ -76,21 +76,18 @@ test('test_board_renders_cost_and_updates_live_over_sse', async ({ api, fleet, i
   await expect(card.getByTestId('card-cost')).toHaveText('$0.42');
   await expect(page.getByTestId('spend-today-value')).toHaveText('$0.42');
 
-  // The detail dock: the header total, and all four token classes inline, one labelled row apiece.
+  // The detail dock: the chunk's session efficiency cost — its cost first, then its token classes, spelled out in full
+  // in its title.
   await card.click();
   await expect(page.getByTestId('chunk-detail')).toBeVisible();
-  const total = page.getByTestId('cost-total-usd');
-  await expect(total).toContainText('$0.42');
-  await expect(total).not.toHaveAttribute('title', /.+/);
-  await expect(page.getByTestId('fact-tokens-input')).toHaveText('1.2k');
-  await expect(page.getByTestId('fact-tokens-output')).toHaveText('800');
-  await expect(page.getByTestId('fact-tokens-cache-read')).toHaveText('300');
-  await expect(page.getByTestId('fact-tokens-cache-creation')).toHaveText('100');
+  const efficiency = page.getByTestId('chunk-detail').getByTestId('chunk-efficiency');
+  const total = efficiency.locator('.part').first();
+  await expect(total).toHaveText('$0.42');
+  await expect(efficiency).toHaveAttribute('title', /^session efficiency cost: \$0\.42 · 1,300 input \(in \+ cache write\) · 800 output · 300 cache read · /);
 
   // A cost-absent fact, as a crash or reap path ships, makes the total a lower bound, marked live everywhere it renders.
   await pushUsage(chunkId, nodeId, 2, { cost_usd: null });
-  await expect(total).toHaveAttribute('title', /lower bound/);
-  await expect(total).toContainText('$0.42+');
+  await expect(total).toHaveText('$0.42+');
   await expect(card.getByTestId('card-cost')).toHaveText('$0.42+');
   await expect(page.getByTestId('spend-today-value')).toHaveText('$0.42+');
 
@@ -115,5 +112,4 @@ test('test_board_renders_cost_and_updates_live_over_sse', async ({ api, fleet, i
   // This chunk's own detail is marked `~` and never `+`: an estimate-only row does not make a chunk partial.
   await estimateCard.click();
   await expect(total).toHaveText('~$0.07');
-  await expect(total).not.toHaveAttribute('title', /.+/);
 });

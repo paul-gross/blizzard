@@ -5,13 +5,12 @@ import { page } from 'vitest/browser';
 
 import type { GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const VITALS: Vitals = {
   needsYou: 2,
   running: 1,
   ready: 1,
-  doneToday: 1,
+  doneRecent: 1,
   runnersUpLabel: '7/257',
 };
 
@@ -26,8 +25,8 @@ const row = (chunkId: string, fields: Partial<GlanceRow>): GlanceRow => ({
   node: 'build',
   nodeId: '',
   terminal: false,
-  graphId: null,
   graphName: null,
+  graphProgress: [],
   completedAt: null,
   runner: null,
   gated: false,
@@ -59,7 +58,6 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [GlanceView],
       providers: [provideZonelessChangeDetection(), provideRouter([])],

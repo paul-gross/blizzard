@@ -1,52 +1,40 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type FlowView, injectHubChunkDetailQuery, injectNowSignal, KitSkeleton, type RepositorySummary, toneColor } from 'fleet';
-import { LensLink } from 'fleet/shell';
-import { deliveryDrawerView, type DrawerStep, outputTail } from './delivery-history.model';
-import { STAGES, type DeliveryRow } from './delivery.model';
+import { asyncState, type FlowView, injectHubChunkDetailQuery, injectNowSignal, injectRunnerHostNames, type RepositorySummary } from 'fleet';
+import { injectProjectsQuery } from '../core/projects.query';
+import { injectShowProjectColors, openProjectColor } from '../core/project-lens-colors';
+import { deliveryDrawerView } from './delivery-history.model';
+import { DeliveryDrawerView } from './delivery-drawer-view';
 
 /**
- * The Delivery page's bottom drawer for the picked row: the chunk's header, a block per repository it delivers to,
- * and its delivery history newest first — read from the chunk's own detail, which the board's dock shares.
+ * The Delivery page's drawer for the picked row: reads the chunk's own detail, which the board's dock shares, joins it
+ * with the flows and repositories handed in ({@link deliveryDrawerView}), and hands the result to the
+ * {@link DeliveryDrawerView}.
  */
 @Component({
   selector: 'app-delivery-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitSkeleton, LensLink, RouterLink],
+  imports: [DeliveryDrawerView],
   templateUrl: './delivery-drawer.html',
   styleUrl: './delivery-drawer.css',
 })
 export class DeliveryDrawer {
-  readonly row = input.required<DeliveryRow>();
+  readonly chunkId = input.required<string>();
   readonly flows = input.required<readonly FlowView[]>();
   readonly repositories = input.required<readonly RepositorySummary[]>();
+  /** Whether the drawer draws its close button — off on the phone's screen, whose back row returns to the list. */
+  readonly closable = input(true);
+  /** Emitted when the operator closes the drawer. */
+  readonly dismiss = output<void>();
 
-  private readonly detailQuery = injectHubChunkDetailQuery(() => this.row().chunk.chunkId);
+  private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly now = injectNowSignal();
+  private readonly projectsQuery = injectProjectsQuery();
+  private readonly showProjectColors = injectShowProjectColors();
 
-  protected readonly stages = STAGES;
-  protected readonly toneColor = toneColor;
-  protected readonly pending = computed(() => this.detailQuery.isPending());
-  protected readonly failed = computed(() => this.detailQuery.isError());
-  protected readonly view = computed(() => deliveryDrawerView(this.detailQuery.data(), this.flows(), this.repositories(), this.now()));
-
-  /** The history entries whose step output is unfolded. */
-  private readonly unfolded = signal<ReadonlySet<string>>(new Set());
-
-  protected isUnfolded(id: string): boolean {
-    return this.unfolded().has(id);
-  }
-
-  protected tail(id: string, step: DrawerStep): string {
-    return outputTail(step, this.isUnfolded(id));
-  }
-
-  protected toggle(id: string): void {
-    this.unfolded.update((held) => {
-      const next = new Set(held);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }
+  protected readonly runnerHosts = injectRunnerHostNames();
+  protected readonly detail = computed(() => this.detailQuery.data());
+  protected readonly state = computed(() => asyncState(this.detailQuery, false));
+  protected readonly projectColor = computed(() => openProjectColor(this.showProjectColors(), this.detail(), this.projectsQuery.data()));
+  protected readonly view = computed(() => deliveryDrawerView(this.detail(), this.flows(), this.repositories(), this.now()));
 }

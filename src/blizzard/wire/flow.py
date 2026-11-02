@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from blizzard.foundation.flow_place_state import FlowPlaceState
+from blizzard.foundation.flow_verdict import FlowVerdict
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -25,6 +26,9 @@ class FlowFactView(WireModel):
     outcome: str | None = None
     #: The revision a ``landed`` entry left its branch at; ``None`` for every other kind.
     revision: str | None = None
+    #: A ``turn-ended`` entry's verdict on its submission — it landed, or it was sent back; ``None`` for a turn that
+    #: judged nothing (a wait, an interruption, a cut-off, an escalation) and for every other kind.
+    verdict: Annotated[FlowVerdict | Unrecognized, OPEN] | None = None
 
 
 class FlowTurnView(WireModel):

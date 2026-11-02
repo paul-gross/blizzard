@@ -48,6 +48,9 @@ export class ChunkArtifacts {
    * `false` so the label doesn't render twice. */
   readonly heading = input(true);
 
+  /** The key of the artifact the host has open, drawn with the selected row's accent; `null` (the default) marks none. */
+  readonly selectedKey = input<string | null>(null);
+
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 
   /** The artifact store, oldest attachment first — see {@link sortArtifacts}. */

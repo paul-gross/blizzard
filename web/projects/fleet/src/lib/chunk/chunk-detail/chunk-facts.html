@@ -1,43 +1,26 @@
-<!-- The pinned graph, read-only: linked to the graph page when a link base is set. -->
-<ng-template #graphValue>
-  @if (graphLinkBase(); as linkBase) {
-    <a
-      class="graph-link"
-      data-testid="graph-value"
-      [routerLink]="[...linkBase, detail().graph_id] | lensLink"
-      [title]="detail().graph_id"
-      >{{ graphLabel() }}</a
-    >
-  } @else {
-    <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
+<!-- The chunk's total session efficiency cost — the node history rows' own figure, summed over the chunk. -->
+<fleet-session-efficiency class="cf-eff" data-testid="chunk-efficiency" [usage]="usage()" />
+@if (prerequisites().length || dependents().length) {
+  <div class="cf-deps" data-testid="chunk-deps">
+    <div class="dep-col" data-testid="fact-depends-on">
+      <span class="tag">Depends on</span>
+      <ng-container [ngTemplateOutlet]="edges" [ngTemplateOutletContext]="{ $implicit: prerequisites(), testid: 'depends-on-neighbor' }" />
+    </div>
+    <div class="dep-col" data-testid="fact-blocks">
+      <span class="tag">Blocks</span>
+      <ng-container [ngTemplateOutlet]="edges" [ngTemplateOutletContext]="{ $implicit: dependents(), testid: 'blocks-neighbor' }" />
+    </div>
+  </div>
+}
+<ng-template #edges let-list let-testid="testid">
+  @for (n of list; track n.chunk_id) {
+    <a class="edge" [attr.data-testid]="testid" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">
+      @if (n.status) {
+        <fleet-lane-icon class="edge-icon" [lane]="lane(n)" [status]="n.status" />
+      }
+      <span class="edge-ref">{{ shortId(n.chunk_id) }}</span>
+    </a>
+  } @empty {
+    <span class="empty">—</span>
   }
 </ng-template>
-<!-- The chunk's standing edges, each direction its own row. Only the neighbor's ref
-     is the link — a plain anchor, underlined, so it reads as one; its status sits
-     beside it as text rather than being swallowed into the same target. -->
-<ng-template #dependsOnValue>
-  @for (n of prerequisites(); track n.chunk_id) {
-    <span class="edge">
-      <a class="edge-ref" data-testid="depends-on-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">{{
-        shortId(n.chunk_id)
-      }}</a>
-      <span class="edge-status">{{ statusLabel(n) }}</span>
-    </span>
-  }
-</ng-template>
-<ng-template #blocksValue>
-  @for (n of dependents(); track n.chunk_id) {
-    <span class="edge">
-      <a class="edge-ref" data-testid="blocks-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id] | lensLink" [title]="n.chunk_id">{{
-        shortId(n.chunk_id)
-      }}</a>
-      <span class="edge-status">{{ statusLabel(n) }}</span>
-    </span>
-  }
-</ng-template>
-<fleet-kit-fact-list class="cf-facts" testid="chunk-facts" [rows]="factRows(graphValue, dependsOnValue, blocksValue)" />
-<!-- The usage/cost breakdown — its own labelled section below the chunk
-     facts, not a sixth-and-seventh row folded into the identity table above: cost and
-     token counts are a different kind of information (derived usage, not chunk
-     identity) and now read as one. -->
-<ng-content select="[token-breakdown]" />

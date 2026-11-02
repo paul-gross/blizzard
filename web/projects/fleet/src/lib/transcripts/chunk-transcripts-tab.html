@@ -37,10 +37,14 @@
     @for (step of steps(); track step.key) {
     <div class="step" data-testid="transcript-step">
       <div class="step-head">
-        {{ stepLabel(step) }} @if (step.current) {
+        @if (step.matched) {
+        <span>{{ stepName(step) }}</span>
+        } @else {
+        <span>{{ unmatchedRef(step) }}</span><span class="dot">·</span><span class="unmatched">Unmatched</span>
+        } @if (step.epoch !== null) {
+        <span class="dot">·</span><span [attr.title]="'epoch ' + step.epoch">E{{ step.epoch }}</span>
+        } @if (step.current) {
         <fleet-kit-badge variant="pill" tone="idle">in progress</fleet-kit-badge>
-        } @if (!step.matched) {
-        <fleet-kit-badge variant="pill" tone="running">unmatched</fleet-kit-badge>
         }
       </div>
       @if (step.segments.length === 0) {
@@ -63,13 +67,11 @@
             <span class="seg-line">
               <span>Segment {{ seg.spawn_generation }}</span>
               @if (seg.harness_id) {
-              <fleet-kit-badge
-                variant="pill"
-                tone="idle"
+              <span
+                class="harness"
                 data-testid="transcript-segment-harness"
                 [attr.data-harness-id]="seg.harness_id"
-                [attr.aria-label]="harnessName(seg.harness_id)"
-                >{{ harnessName(seg.harness_id) }}</fleet-kit-badge
+                >{{ harnessName(seg.harness_id) }}</span
               >
               } @if (seg.truncated) {
               <fleet-kit-badge variant="pill" tone="running">truncated</fleet-kit-badge>
@@ -123,7 +125,6 @@
         [truncated]="segmentData()?.truncated ?? false"
         [continuedFrom]="continuedFrom()"
         [continuesIn]="continuesIn()"
-        [harnessId]="openSegmentEntry()?.harness_id ?? null"
         (pickSegment)="pickSegment.emit($event)"
         (openStandalone)="onTopLevelOpenStandalone($event)"
       />

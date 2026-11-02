@@ -12,7 +12,6 @@ import {
   chunkDetail,
   chunkSummary,
   fixtureInstant,
-  graphView,
   landedRepoView,
   prView,
   type RequestClientStub,
@@ -30,8 +29,14 @@ const IDLE = 'ch_01idle000000000000000000000';
 const PLACE = { flow_id: 'fl_a', position: 2, state: 'waiting', branch: 'master', next_poll_at: null, repository_name: 'blizzard', repository_slug: null, resource: 'rp_a:master' } as const;
 
 const CHUNKS = [
-  chunkSummary({ chunk_id: IN_LINE, graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', current_node_name: 'build', open_prs: [prView({ number: 41 })], flow_places: [PLACE] }),
-  chunkSummary({ chunk_id: BOUNCED, graph_id: 'gr_1', status: 'needs_human' }),
+  chunkSummary({ chunk_id: IN_LINE, graph_id: 'gr_1', graph_name: 'adv-dwf', status: 'running', current_node_id: 'nd_build', current_node_name: 'build', open_prs: [prView({ number: 41 })], flow_places: [PLACE] }),
+  chunkSummary({
+    chunk_id: BOUNCED,
+    graph_id: 'gr_1',
+    status: 'needs_human',
+    latest_bounce: bounceView({ cause: 'failure', envelope: JSON.stringify({ cause: 'failure', detail: 'checks failed in `lint`', unlanded: [] }), recorded_at: fixtureInstant(-600) }),
+    bounce_count: 1,
+  }),
   chunkSummary({ chunk_id: LANDED, graph_id: 'gr_1', status: 'done', terminal: true, landed: true, landed_repos: [landedRepoView()], completed_at: fixtureInstant(-3 * 3600) }),
   chunkSummary({ chunk_id: IDLE, graph_id: 'gr_1', status: 'ready' }),
 ];
@@ -45,6 +50,7 @@ const fact = (id: number, chunkId: string, kind: string, secondsAgo: number, out
   outcome,
   revision: null,
   submission_id: `sub-${chunkId}`,
+  verdict: kind === 'turn-ended' ? 'bounced' : null,
 });
 
 /** The page's reads; everything unnamed falls through to `{}`. `flows` answers the active-flows read. */
@@ -55,10 +61,9 @@ function hubRoutes(flows: () => unknown = () => ({ flows: [{ flow_id: 'fl_a', re
     if (path === '/api/repositories') return { repositories: [{ repository_id: 'rp_a', owner: 'paul-gross', repo: 'blizzard', name: 'blizzard' }] };
     if (path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
     if (path === '/api/flows/fl_a/record') {
-      return { facts: [fact(3, BOUNCED, 'turn-ended', 600, 'failure'), fact(2, IN_LINE, 'submitted', 1800), fact(1, LANDED, 'landed', 7200)], next_cursor: null };
+      return { facts: [fact(3, BOUNCED, 'turn-ended', 600, 'failure'), fact(2, IN_LINE, 'submitted', 1800), fact(1, LANDED, 'landed', 7200)], next_before: null };
     }
     if (path === '/api/work-items') return { chunks: {} };
-    if (path === '/api/graphs/gr_1') return graphView({ graph_id: 'gr_1', name: 'adv-dwf' });
     if (path === `/api/chunks/${IN_LINE}`) {
       return chunkDetail({ chunk_id: IN_LINE, open_prs: [prView({ number: 41 })], flow_places: [PLACE], bounces: [bounceView({ recorded_at: fixtureInstant(-7200) })], flow_record: [] });
     }
@@ -125,8 +130,19 @@ describe('DeliveryPage', () => {
     expect([...inLine.querySelectorAll('[data-testid="delivery-link"]')].map((link) => link.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['blizzard #41']);
     expect(inLine.querySelector('[data-testid="delivery-bounce"]')).toBeNull();
 
-    expect(row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"] .cause')?.textContent?.trim()).toBe('failure [10m 0s]');
+    const bounce = row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"]');
+    expect(bounce?.querySelector('.cause')?.textContent?.trim()).toBe('failure · [10m 0s]');
+    expect(bounce?.querySelector('.cause')?.textContent).not.toContain('withdrawn');
+    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('checks failed in lint');
     expect(row(el, LANDED).querySelector('[data-testid="delivery-link"]')?.textContent).toContain('9f2c4e1');
+  });
+
+  it('says so when nothing is delivering or delivered', async () => {
+    configure((method, path) => (path === '/api/chunks' ? { chunks: [], next_cursor: null } : hubRoutes()(method, path)));
+    const { el } = await open();
+
+    expect(el.querySelector('[data-testid="delivery-empty"]')?.textContent).toContain('Nothing delivering or delivered.');
+    expect(el.querySelector('[data-testid="delivery-divider"]')).toBeNull();
   });
 
   it('says so when the flows cannot be read', async () => {
@@ -159,16 +175,24 @@ describe('DeliveryPage', () => {
     expect(TestBed.inject(Router).url).toBe('/delivery');
   });
 
-  it('fills the drawer from the chunk\'s own detail: its repositories, summary, and history', async () => {
+  it('fills the drawer from the chunk\'s own detail: its repositories and history', async () => {
     configure();
     const { el } = await open(`/delivery?chunk=${IN_LINE}`);
 
     const drawer = el.querySelector<HTMLElement>('[data-testid="delivery-drawer"]')!;
-    expect(drawer.querySelector('[data-testid="delivery-drawer-open"]')?.getAttribute('href')).toBe(`/board/chunk/${IN_LINE}`);
+    expect(drawer.querySelector('[data-testid="detail-id"]')).not.toBeNull();
     const repos = [...drawer.querySelectorAll('[data-testid="delivery-drawer-repo"]')];
     expect(repos.map((repo) => repo.querySelector('.repo-state')?.textContent?.trim())).toEqual(['in line · 2nd']);
-    expect(drawer.querySelector('[data-testid="delivery-drawer-summary"]')?.textContent?.replace(/\s+/g, ' ')).toContain('1 bounce');
-    expect(drawer.querySelectorAll('[data-testid="delivery-history-entry"]')).toHaveLength(1);
+    const history = [...drawer.querySelectorAll('[data-testid="delivery-history-entry"] .text')].map((text) => text.textContent?.trim());
+    expect(history).toEqual([expect.stringMatching(/^bounced · /)]);
+  });
+
+  it('reads no chunk\'s own detail for the list', async () => {
+    configure();
+    await open();
+
+    expect(stub.forRoute(`/api/chunks/${IN_LINE}`, 'GET')).toHaveLength(0);
+    expect(stub.forRoute(`/api/chunks/${BOUNCED}`, 'GET')).toHaveLength(0);
   });
 
   it('draws no drawer for a chunk the list does not hold', async () => {

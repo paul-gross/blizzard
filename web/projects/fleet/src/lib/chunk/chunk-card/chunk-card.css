@@ -221,17 +221,6 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-/* The control row: Promote is its one occupant, and the row renders only with it, so it
-   never adds a visible gap on a read-only or non-backlog card. */
-.card-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.card-promote {
-  --kit-button-pad: 1px 6px;
-  --kit-button-fs: var(--fs-label);
-}
 /* The blocked marking under the titles: "BLOCKED BY" carries `.st`'s own engraved
    label style, and the prerequisite it names reads gold against it — the one part of
    the line that identifies another chunk. */

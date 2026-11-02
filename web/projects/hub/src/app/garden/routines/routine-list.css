@@ -10,7 +10,7 @@
   padding: 0;
 }
 /* One label per line, each clipping on its own rather than wrapping — the app's
-   standing rule for list rows (`chunk-card.css`, `chunk-timeline-selection.css`). */
+   standing rule for list rows (`chunk-card.css`). */
 /* Line 1 — the name, and on the right how the routine is kicked off. */
 .rt-top {
   display: flex;
@@ -32,8 +32,7 @@
   white-space: nowrap;
 }
 /* Line 2 — the graph name on the left, the routine's compact ref pinned to the
-   trailing edge (`chunk-timeline-selection.css`'s `.line2 .ts`,
-   `chunk-artifacts-panel.css`'s `.art-item .sub .kind`), so the refs form a clean
+   trailing edge (`chunk-artifacts-panel.css`'s `.art-item .sub .kind`), so the refs form a clean
    column down the list. */
 .rt-line2 {
   display: flex;

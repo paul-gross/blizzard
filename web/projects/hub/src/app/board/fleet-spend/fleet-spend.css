@@ -1,0 +1,29 @@
+:host {
+  display: grid;
+  grid-template-columns: 9ch minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 8px;
+  font-family: var(--mono);
+}
+.label {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+/* Stacked: each label on its own engraved line over its figure, the two groups a step apart. */
+:host(.stacked) {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 2px;
+}
+:host(.stacked) .label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+:host(.stacked) .label ~ .label {
+  margin-top: 8px;
+}
+.v {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}

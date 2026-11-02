@@ -92,6 +92,55 @@ describe('ChunkArtifactBody', () => {
     expect(el.querySelector('[data-testid="artifact-ref"]')?.textContent).toContain('acme/widget');
   });
 
+  it('heads the artifact with its key, then its kind', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', ASSET);
+    await fixture.whenStable();
+    const head = (fixture.nativeElement as HTMLElement).querySelector('.a-head')!;
+
+    expect(head.querySelector('.a-key')?.nextElementSibling?.classList.contains('a-kind')).toBe(true);
+    expect(head.querySelector('.a-kind')?.textContent?.trim()).toBe(`· ${ASSET.kind}`);
+  });
+
+  describe('a git_commit ref line', () => {
+    const LINKED: ArtifactView = commitArtifactView({
+      key: 'deliver.commit',
+      repo: 'acme/widget',
+      branch_name: 'feat/widget',
+      branch_url: 'https://example.test/acme/widget/tree/feat/widget',
+      commit_hash: '0123456789abcdef0123456789abcdef01234567',
+      recorded_at: null,
+    });
+
+    async function render(body: 'full' | 'summary'): Promise<HTMLElement> {
+      const fixture = TestBed.createComponent(ChunkArtifactBody);
+      fixture.componentRef.setInput('artifact', LINKED);
+      fixture.componentRef.setInput('body', body);
+      await fixture.whenStable();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('shows the commit as its first eight characters, the full hash in its title', async () => {
+      const commit = (await render('full')).querySelector('.a-commit');
+      expect(commit?.textContent?.trim()).toBe('@ 01234567');
+      expect(commit?.getAttribute('title')).toBe(LINKED.commit_hash);
+    });
+
+    it('links the branch out in full mode', async () => {
+      const branch = (await render('full')).querySelector('[data-testid="artifact-branch"]');
+      expect(branch?.tagName).toBe('A');
+      expect(branch?.getAttribute('href')).toBe(LINKED.branch_url);
+    });
+
+    it('names the branch as plain text in summary mode, since a summary sits inside its row’s own link', async () => {
+      const el = await render('summary');
+      const branch = el.querySelector('[data-testid="artifact-branch"]');
+      expect(branch?.tagName).toBe('SPAN');
+      expect(branch?.textContent?.trim()).toBe('feat/widget');
+      expect(el.querySelector('a')).toBeNull();
+    });
+  });
+
   it('renders a FindingDelta-shaped asset structurally through ChunkArtifactDelta instead of the verbatim pre', async () => {
     const delta: ArtifactView = {
       ...ASSET,

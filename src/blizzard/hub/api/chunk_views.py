@@ -37,6 +37,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
 from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.operations.promote import is_promotable
@@ -55,6 +56,7 @@ from blizzard.wire.chunk import (
     ChunkSummary,
     ChunkUsageTotalView,
     ChunkUsageView,
+    GraphProgressNodeView,
     IntendedMigrationView,
     LandedRepoView,
     MigrationView,
@@ -341,7 +343,37 @@ class ChunkView:
             flow_places=self._flow_places(),
             **self._delivery_fields(self._delivery()),
             **self._project_fields(),
+            graph_name=self.names.graph_name(self.chunk.graph_id),
+            graph_progress=[] if status in TERMINAL_STATUSES else self._graph_progress(node_id),
+            latest_bounce=bounces[-1] if (bounces := self._bounces()) else None,
+            bounce_count=self.facts.bounce_count(),
         )
+
+    def _graph_progress(self, current_node_id: str | None) -> list[GraphProgressNodeView]:
+        """The pinned graph's nodes read against the chunk's visits — its transitions and its migrations, each end
+        named in the graph it happened in; empty when the pinned graph is unresolvable."""
+        graph = self.names.graph(self.chunk.graph_id)
+        if graph is None:
+            return []
+        visits = [
+            NodeVisit(
+                epoch=t.epoch,
+                from_name=self.names.node_name(t.graph_id, t.from_node_id),
+                to_name=self.names.node_name(t.graph_id, t.to_node_id),
+            )
+            for t in self.facts.transitions
+        ] + [
+            NodeVisit(
+                epoch=m.epoch,
+                from_name=self.names.node_name(m.from_graph_id, m.from_node_id),
+                to_name=self.names.node_name(m.to_graph_id, m.landed_node_id),
+            )
+            for m in self.facts.migrations
+        ]
+        return [
+            GraphProgressNodeView(node_id=node.node_id, name=node.name, state=node.state)
+            for node in node_progress(graph, visits, current_node_id)
+        ]
 
     def current_node(self) -> tuple[str | None, str | None]:
         """The chunk's current node as ``(id, name)`` — the newest transition's target, or the
@@ -542,6 +574,7 @@ class ChunkView:
                 harness_version=u.harness_version,
                 estimated_cost_usd=u.estimated_cost_usd,
                 cost_partial=u.cost_partial(),
+                runner_id=u.runner_id,
             )
             for u in sorted(self.facts.usage, key=lambda u: u.recorded_at)
         ]

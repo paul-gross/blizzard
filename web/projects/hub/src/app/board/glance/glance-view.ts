@@ -15,7 +15,8 @@ import {
   toneColor,
   type ChunkStatus,
   formatCost,
-  formatTokens,
+  formatSeenTag,
+  injectNowSignal,
   hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
@@ -23,9 +24,11 @@ import {
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
+import { FleetSpend } from '../fleet-spend/fleet-spend';
 import { LaneIcon } from '../lane-icon/lane-icon';
 import { NodeStrip } from '../node-strip/node-strip';
-import { graphStepLabel, showsNodeStrip } from '../node-strip/node-strip.model';
+import { showsNodeStrip } from '../node-strip/node-strip.model';
+import { graphStepLabel } from '../../core/step-label';
 import { filterGlanceRows, type GlanceFilter, type GlanceListGroups, type GlanceRow } from './glance-board.model';
 
 /** What every chunk row leads with: the chunk's work items, each its work-ref label over its title. */
@@ -40,7 +43,7 @@ export interface Vitals {
   readonly needsYou: number;
   readonly running: number;
   readonly ready: number;
-  readonly doneToday: number;
+  readonly doneRecent: number;
   /** `{online}/{total}` across the fleet registry. */
   readonly runnersUpLabel: string;
 }
@@ -50,7 +53,7 @@ export interface Vitals {
  * `../docs/designs/mobile/core-flows.html`) — one scrolling column: the vitals strip
  * and the day's spend ("Fleet spend · today"), then every chunk as one list of cards,
  * read the way the desktop list reads its rows — attention and work in flight, READY
- * over a divider over BACKLOG, then done today.
+ * over a divider over BACKLOG, then done in the last 48h.
  *
  * Presentational (`bzh:frontend-container-presentational`): renders exactly what
  * it is handed and injects no query. Each chunk row carries a whole-row
@@ -61,18 +64,24 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
 export class GlanceView {
+  private readonly now = injectNowSignal();
+
+  /** A done row's bracketed age since completion, as the Delivery glance tags its rows. */
+  protected doneAge(completedAt: string): string {
+    return formatSeenTag(completedAt, this.now());
+  }
+
   protected readonly formatCost = formatCost;
   protected readonly projectTint = projectTint;
   protected readonly hasCostFigure = hasCostFigure;
-  protected readonly formatTokens = formatTokens;
   protected readonly showsNodeStrip = showsNodeStrip;
 
-  /** A card's step, named with its graph once that graph is read (`adv-dwf/pre-push`). */
+  /** A card's step, named with its graph when the hub names it (`adv-dwf/pre-push`). */
   protected stepLabel(row: GlanceRow): string {
     return graphStepLabel(row.graphName, row.node);
   }
@@ -82,6 +91,10 @@ export class GlanceView {
   readonly listState = input.required<KitAsyncStateValue>();
   readonly spend = input<FleetSpendView | null>(null);
   readonly spendState = input.required<KitAsyncStateValue>();
+
+  /** The fleet-wide spend over yesterday, `null` until it resolves — its row is withheld until then. */
+  readonly spendYesterday = input<FleetSpendView | null>(null);
+
 
   protected readonly DONE_LANE = DONE_LANE;
 
@@ -104,12 +117,5 @@ export class GlanceView {
   /** A chunk's status tone as a color — the card's left edge, as a desktop list row's. */
   protected statusColor(status: ChunkStatus): string {
     return toneColor(STATUS_TONE(status));
-  }
-
-  /** A spend total's full token count — every class summed
-   * (`ChunkUsageTotalView`/`FleetSpendView` both carry the same four fields),
-   * matching `chunk-token-breakdown.ts`'s own fold. */
-  protected totalTokens(s: FleetSpendView): number {
-    return s.input_tokens + s.output_tokens + s.cache_read_tokens + s.cache_create_tokens;
   }
 }

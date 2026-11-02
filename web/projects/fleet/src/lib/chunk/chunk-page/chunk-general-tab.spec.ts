@@ -103,19 +103,37 @@ describe('ChunkGeneralTab', () => {
     expect(el.querySelector('[data-testid="chunk-events-link"]')?.getAttribute('href')).toBe(`/events?chunk=${DETAIL.chunk_id}`);
   });
 
-  it('forwards graphLinkBase to the facts section, defaulting to no link', async () => {
+  it('labels the node history panel with the chunk graph, linked only under graphLinkBase', async () => {
+    const graphDetail = { ...DETAIL, graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857', graph_name: 'glacier', graph_created_at: '2026-07-19T10:00:00Z' };
     const unlinked = TestBed.createComponent(ChunkGeneralTab);
-    unlinked.componentRef.setInput('detail', DETAIL);
+    unlinked.componentRef.setInput('detail', graphDetail);
+    unlinked.componentRef.setInput('showNodeHistory', true);
     await unlinked.whenStable();
-    const unlinkedValue = (unlinked.nativeElement as HTMLElement).querySelector('[data-testid="graph-value"]');
+    const unlinkedValue = (unlinked.nativeElement as HTMLElement).querySelector('[data-testid="section-node-history"] [data-testid="node-history-graph"]');
     expect(unlinkedValue?.tagName).toBe('SPAN');
+    expect(unlinkedValue?.textContent?.trim()).toBe('G-G857#glacier-20260719');
+    expect(unlinkedValue?.getAttribute('title')).toBe('gr_01KXV4DP7T7NKBE8GJJ1GXG857');
 
     const linked = TestBed.createComponent(ChunkGeneralTab);
-    linked.componentRef.setInput('detail', DETAIL);
+    linked.componentRef.setInput('detail', graphDetail);
+    linked.componentRef.setInput('showNodeHistory', true);
     linked.componentRef.setInput('graphLinkBase', ['/graphs']);
     await linked.whenStable();
-    const linkedValue = (linked.nativeElement as HTMLElement).querySelector('[data-testid="graph-value"]');
+    const linkedValue = (linked.nativeElement as HTMLElement).querySelector('[data-testid="node-history-graph"]');
     expect(linkedValue?.tagName).toBe('A');
+    expect(linkedValue?.getAttribute('href')).toBe('/graphs/gr_01KXV4DP7T7NKBE8GJJ1GXG857');
+  });
+
+  it('forwards chunkLinkBase to the work item box’s dependency neighbors', async () => {
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', {
+      ...DETAIL,
+      neighborhood: { prerequisites: [{ chunk_id: 'ch_01prereq00000000000000000', satisfied: true, status: 'done' }], dependents: [] },
+    });
+    fixture.componentRef.setInput('chunkLinkBase', ['/runner', 'chunk']);
+    await fixture.whenStable();
+    const link = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="section-work-item"] [data-testid="depends-on-neighbor"]');
+    expect(link?.getAttribute('href')).toBe('/runner/chunk/ch_01prereq00000000000000000');
   });
 
   it('re-emits answerQuestion from the asks section when canAnswer opts in', async () => {

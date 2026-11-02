@@ -1,4 +1,17 @@
-<fleet-mobile-titlebar [live]="live()" [caption]="tenants.current()?.name ?? ''" [detail]="lensed()?.name ?? ''" [menu]="shellMenu" />
+<fleet-mobile-titlebar [live]="live()" [menu]="shellMenu">
+  <a fleetMobileTitle class="lens" data-testid="mobile-titlebar-lens" [routerLink]="pickerLink | lensLink" [queryParams]="{ from: fromView() }" [attr.title]="lensName()">
+    <span class="sep" aria-hidden="true">·</span>
+    @if (lensed()?.color; as color) {
+      <fleet-kit-swatch class="swatch" [color]="color" />
+    }
+    <span class="name">{{ lensName() }}</span>
+  </a>
+  @if (spendToday(); as spend) {
+    <span fleetMobileStatus class="spend" title="Spend today" data-testid="mobile-titlebar-spend">{{
+      formatCost(spend.cost_usd, spend.estimated_cost_usd, spend.cost_partial)
+    }}</span>
+  }
+</fleet-mobile-titlebar>
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
     @if (tenants.switchable()) {
@@ -6,9 +19,6 @@
         Switch tenant
       </fleet-kit-menu-item>
     }
-    <fleet-kit-menu-item testid="mobile-titlebar-project" submenu [cdkMenuTriggerFor]="projectMenu">
-      Project lens
-    </fleet-kit-menu-item>
     <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
     </fleet-kit-menu-item>
@@ -21,9 +31,6 @@
     [current]="tenants.current()?.tenant_id ?? null"
     (choose)="tenants.switchTo($event)"
   />
-</ng-template>
-<ng-template #projectMenu>
-  <app-project-menu [choices]="lensChoices()" [current]="lensCurrent()" (choose)="lensChoose.emit($event)" />
 </ng-template>
 <ng-template #appearanceMenu>
   <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />

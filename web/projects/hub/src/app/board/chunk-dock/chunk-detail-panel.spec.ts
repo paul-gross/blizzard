@@ -96,7 +96,7 @@ describe('ChunkDetailPanel', () => {
     // Each column's sibling components rendered — the composition wired `detail`
     // (and, below, `workItems`) down to every one of them.
     expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
-    expect(el.querySelector('[data-testid="chunk-facts"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-efficiency"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="history-active"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="artifacts-empty"]')).not.toBeNull();
@@ -122,9 +122,9 @@ describe('ChunkDetailPanel', () => {
 
     const workItemSection = el.querySelector('[aria-label="Work item"]')!;
     const order = [
-      ...workItemSection.querySelectorAll('[data-testid="chunk-facts"], [data-testid="awaiting-human"], [data-testid="issue-pane"]'),
+      ...workItemSection.querySelectorAll('[data-testid="chunk-efficiency"], [data-testid="awaiting-human"], [data-testid="issue-pane"]'),
     ].map((node) => node.getAttribute('data-testid'));
-    expect(order).toEqual(['chunk-facts', 'awaiting-human', 'issue-pane']);
+    expect(order).toEqual(['chunk-efficiency', 'awaiting-human', 'issue-pane']);
   });
 
   it('links the chunk longname to its dedicated page (issue #205)', async () => {

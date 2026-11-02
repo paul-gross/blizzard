@@ -120,9 +120,6 @@ export class BoardColumn {
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
 
-  /** Emitted with a chunk id when a backlog card's Promote is clicked. */
-  readonly promote = output<string>();
-
   /** Emitted when a card is dropped somewhere new — the anchor it landed after,
    * tagged with which list ({@link BoardReorderList}) the move belongs to. */
   readonly reposition = output<BoardReposition>();

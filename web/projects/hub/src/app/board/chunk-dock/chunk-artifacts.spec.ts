@@ -135,18 +135,30 @@ describe('ChunkArtifacts', () => {
     expect(keys).toEqual(['older', 'newer']);
   });
 
-  it('shows the artifact branch name and links it to the forge, degrading when no url (issue #23)', async () => {
+  it('names the artifact branch as plain text inside its row link, never a nested forge link (issue #23)', async () => {
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', NAMED_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const [linked, orphan] = [...el.querySelectorAll('[data-kind="git_commit"] [data-testid="artifact-ref"]')];
-    const link = linked.querySelector<HTMLAnchorElement>('a[data-testid="artifact-branch"]');
-    expect(link?.textContent?.trim()).toBe('feature/widget');
-    expect(link?.getAttribute('href')).toBe('https://forge.example/acme/widget/tree/feature/widget');
-    expect(orphan.querySelector('a')).toBeNull();
+    expect(linked.querySelector('[data-testid="artifact-branch"]')?.textContent?.trim()).toBe('feature/widget');
+    expect(linked.querySelector('a[data-testid="artifact-branch"]')).toBeNull();
     expect(orphan.querySelector('[data-testid="artifact-branch"]')?.textContent?.trim()).toBe('feature/orphan');
+  });
+
+  it('marks the row the host has open, and none by default', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', NAMED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('[data-testid="artifact"].selected')).toHaveLength(0);
+
+    const firstKey = NAMED_DETAIL.artifacts[0].key;
+    fixture.componentRef.setInput('selectedKey', firstKey);
+    await fixture.whenStable();
+    const selected = [...el.querySelectorAll('[data-testid="artifact"].selected')];
+    expect(selected).toHaveLength(1);
   });
 
   it('renders its own "Artifacts" heading by default (issue #205)', async () => {

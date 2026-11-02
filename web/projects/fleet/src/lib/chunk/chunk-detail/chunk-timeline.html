@@ -1,5 +1,13 @@
 @if (heading()) {
-  <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
+  <div class="s-head">
+    <span class="tag" id="chunk-timeline-heading">Node history</span>
+    <span class="graph-sep" aria-hidden="true">·</span>
+    @if (graphLinkBase(); as base) {
+      <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | lensLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
+    } @else {
+      <span class="graph-link" data-testid="node-history-graph" [title]="detail().graph_id">{{ graphLabel() }}</span>
+    }
+  </div>
 }
 @if (historyRows().length === 0 && !activeRow()) {
   <fleet-kit-async-state
@@ -12,28 +20,82 @@
   <ol class="timeline" data-testid="history">
     @for (row of historyRows(); track $index) {
       <li class="step-item">
-        <div
-          class="step"
-          [class.selected]="row.key !== null && row.key === selectedKey()"
-          [class.keyed]="row.key !== null"
-          [attr.data-testid]="row.kind === 'transition' ? 'history-step' : 'history-' + row.kind + '-step'"
-          [attr.data-choice]="rowChoice(row)"
-          [attr.title]="row.title"
-          [attr.role]="activatable() && row.key !== null ? 'button' : null"
-          [attr.tabindex]="activatable() && row.key !== null ? 0 : null"
-          (click)="onActivate(row.key); forwardToLink($event)"
-          (keydown.enter)="onActivate(row.key, $event)"
-          (keydown.space)="onActivate(row.key, $event)"
-        >
-          @if (!activatable() && row.key !== null) {
-            <a
-              class="step-link"
-              data-testid="history-link"
-              [routerLink]="[...linkBase(), chunkId()] | lensLink"
-              [queryParams]="{ tab: 'node-history', step: row.key }"
-              [attr.aria-label]="'Open ' + row.nodeName + ', epoch ' + row.epoch"
-            ></a>
-          }
+        <!-- One interactive element per row: a link to the chunk page's step, a button that picks it, or plain for a
+             keyless row. The content inside is plain text throughout, so no anchor nests another. -->
+        @if (row.key === null) {
+          <div class="step" [attr.data-testid]="rowTestid(row)" [attr.data-choice]="rowChoice(row)" [attr.title]="row.title">
+            <ng-container [ngTemplateOutlet]="rowContent" [ngTemplateOutletContext]="{ $implicit: row }" />
+          </div>
+        } @else if (activatable()) {
+          <!-- eslint-disable-next-line no-restricted-syntax -- A whole timeline row is the pick target: its grid of plain-text cells must stay a subgrid of the list, which the kit button's own layout would break. -->
+          <button
+            type="button"
+            class="step keyed"
+            [class.selected]="row.key === selectedKey()"
+            [attr.data-step-key]="row.key"
+            [attr.data-testid]="rowTestid(row)"
+            [attr.data-choice]="rowChoice(row)"
+            [attr.title]="row.title"
+            (click)="onActivate(row.key)"
+          >
+            <ng-container [ngTemplateOutlet]="rowContent" [ngTemplateOutletContext]="{ $implicit: row }" />
+          </button>
+        } @else {
+          <a
+            class="step keyed"
+            [class.selected]="row.key === selectedKey()"
+            [attr.data-step-key]="row.key"
+            [attr.data-testid]="rowTestid(row)"
+            [attr.data-choice]="rowChoice(row)"
+            [attr.title]="row.title"
+            [routerLink]="[...linkBase(), chunkId()] | lensLink"
+            [queryParams]="{ tab: 'node-history', step: row.key }"
+          >
+            <ng-container [ngTemplateOutlet]="rowContent" [ngTemplateOutletContext]="{ $implicit: row }" />
+          </a>
+        }
+      </li>
+    }
+    <!-- The node currently in flight — synthetic, not a recorded transition:
+         RUN while a worker drives it, or the parked state's own verb. -->
+    @if (activeRow(); as a) {
+      <li class="step-item">
+        @if (a.key === null) {
+          <div class="step" data-testid="history-active" [attr.data-choice]="a.choice">
+            <ng-container [ngTemplateOutlet]="activeContent" [ngTemplateOutletContext]="{ $implicit: a }" />
+          </div>
+        } @else if (activatable()) {
+          <!-- eslint-disable-next-line no-restricted-syntax -- A whole timeline row is the pick target: its grid of plain-text cells must stay a subgrid of the list, which the kit button's own layout would break. -->
+          <button
+            type="button"
+            class="step keyed"
+            data-testid="history-active"
+            [class.selected]="a.key === selectedKey()"
+            [attr.data-step-key]="a.key"
+            [attr.data-choice]="a.choice"
+            (click)="onActivate(a.key)"
+          >
+            <ng-container [ngTemplateOutlet]="activeContent" [ngTemplateOutletContext]="{ $implicit: a }" />
+          </button>
+        } @else {
+          <a
+            class="step keyed"
+            data-testid="history-active"
+            [class.selected]="a.key === selectedKey()"
+            [attr.data-step-key]="a.key"
+            [attr.data-choice]="a.choice"
+            [routerLink]="[...linkBase(), chunkId()] | lensLink"
+            [queryParams]="{ tab: 'node-history', step: a.key }"
+          >
+            <ng-container [ngTemplateOutlet]="activeContent" [ngTemplateOutletContext]="{ $implicit: a }" />
+          </a>
+        }
+      </li>
+    }
+  </ol>
+}
+
+<ng-template #rowContent let-row>
           <span class="att">@if (row.kind === 'bounce') {
               <svg class="bounce-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                 <path d="M6 3 2.5 6.5 6 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7" />
@@ -42,30 +104,7 @@
               {{ rowMark(row) }}
             }</span>
           <span class="nd" [attr.title]="row.nodeId">
-            @if (multiGraph() && row.graphName) {
-              @if (graphLinkBase(); as linkBase) {
-                @if (row.graphId; as graphId) {
-                  <a
-                    class="gr"
-                    data-testid="history-graph"
-                    [routerLink]="[...linkBase, graphId] | lensLink"
-                    (click)="$event.stopPropagation()"
-                    >{{ row.graphName }}/</a
-                  >
-                } @else {
-                  <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
-                }
-              } @else {
-                <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
-              }
-            }@if (row.flowId !== null && flowLinkBase(); as flowBase) {<a
-                class="fl"
-                data-testid="history-flow-link"
-                [routerLink]="flowBase | lensLink"
-                [queryParams]="{ flow: row.flowId }"
-                (click)="$event.stopPropagation()"
-                >{{ row.nodeName }}</a
-              >} @else {{{ row.nodeName }}}</span
+            @if (multiGraph() && row.graphName) {<span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>}{{ row.nodeName }}</span
           >
           <!-- The judgement that closed the node, in a column of its own so the
                verdicts read down the timeline aligned, then where it routed the
@@ -77,71 +116,38 @@
             @if (row.toName !== null) {
               <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
             }
-@if (row.kind === 'bounce' && row.title) {
-              <span class="bounce-reason" data-testid="history-bounce-reason">{{ row.title }}</span>
-            }
             @if (row.actor !== null) {
               <span class="jg-by" data-testid="history-actor">by {{ row.actor }}</span>
             }
           </span>
-          <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
           <!-- That node-step's own usage — every invocation recorded at
                this step's (node, epoch) summed inline, so a review-fail cycle visibly
                shows what each lap cost. Absent when no usage fact landed for it yet. -->
           @if (usageForStep(row); as u) {
             <span class="step-usage" data-testid="history-step-usage">
-              <span class="tok" data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
-              <span class="cost" data-testid="history-step-cost" [attr.title]="u.costPartial ? stepCostPartialTitle : null">{{
-                formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial)
-              }}</span>
-              @if (u.harnessId; as harnessId) {
-                <fleet-kit-badge
-                  variant="pill"
-                  tone="idle"
-                  data-testid="history-step-harness"
-                  [attr.data-harness-id]="harnessId"
-                  [attr.aria-label]="harnessName(harnessId)"
-                >
-                  {{ harnessName(harnessId) }}
-                </fleet-kit-badge>
+              <fleet-session-efficiency class="eff" data-testid="history-step-efficiency" [usage]="u" />
+              @if (ranBy(u); as by) {
+                <span class="harness" data-testid="history-step-harness" [attr.data-harness-id]="u.harnessId" [attr.title]="by">{{ by }}</span>
               }
             </span>
           }
-        </div>
-      </li>
-    }
-    <!-- The node currently in flight — synthetic, not a recorded transition:
-         RUN while a worker drives it, or the parked state's own verb. -->
-    @if (activeRow(); as a) {
-      <li class="step-item">
-        <div
-          class="step"
-          data-testid="history-active"
-          [class.selected]="a.key !== null && a.key === selectedKey()"
-          [class.keyed]="a.key !== null"
-          [attr.data-choice]="a.choice"
-          [attr.role]="activatable() && a.key !== null ? 'button' : null"
-          [attr.tabindex]="activatable() && a.key !== null ? 0 : null"
-          (click)="onActivate(a.key)"
-          (keydown.enter)="onActivate(a.key, $event)"
-          (keydown.space)="onActivate(a.key, $event)"
-        >
-          @if (!activatable() && a.key !== null) {
-            <a
-              class="step-link"
-              data-testid="history-link"
-              [routerLink]="[...linkBase(), chunkId()] | lensLink"
-              [queryParams]="{ tab: 'node-history', step: a.key }"
-              [attr.aria-label]="'Open ' + a.nodeName + ', epoch ' + (a.epoch ?? '·')"
-            ></a>
+          <!-- A bounce's reason, in the verdict column on a row of its own under the verdict. -->
+          @if (row.kind === 'bounce' && row.title) {
+            <span class="bounce-reason" data-testid="history-bounce-reason" [attr.title]="row.title">{{ row.title }}</span>
           }
+          <!-- The stamp: one cell spanning every row of the entry, its day stacked over its time. -->
+          <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null" [style.grid-row]="'1 / span ' + rowSpan(row)">
+            @if (row.whenParts.day) {
+              <span class="ts-day">{{ row.whenParts.day }}</span>
+            }
+            <span class="ts-time">{{ row.whenParts.time }}</span>
+          </span>
+</ng-template>
+
+<ng-template #activeContent let-a>
           <span class="att">{{ a.epoch ?? '·' }}</span>
           <span class="nd" [attr.title]="a.nodeId">{{ a.nodeName }}</span>
           <span class="jg">
             <span class="verdict" data-testid="history-active-verb" [style.color]="toneColor(verdictTone(a.choice))">{{ a.label }}</span>
           </span>
-        </div>
-      </li>
-    }
-  </ol>
-}
+</ng-template>

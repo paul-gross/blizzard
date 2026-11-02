@@ -400,43 +400,23 @@ describe('ChunkCard open control', () => {
     expect(selected.mock.calls).toEqual([[DELIVERING.chunkId], [DELIVERING.chunkId], [DELIVERING.chunkId]]);
   });
 
-  it('leaves the PR link and Promote to act for themselves', async () => {
+  it('leaves the PR link to act for itself', async () => {
     const fixture = await renderFixture(DELIVERING, false, true);
     const el = fixture.nativeElement as HTMLElement;
     const selected = vi.fn();
-    const promoted = vi.fn();
     fixture.componentInstance.selectChunk.subscribe(selected);
-    fixture.componentInstance.promote.subscribe(promoted);
 
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="card-pr-link"]')!;
     link.addEventListener('click', (event) => event.preventDefault());
     link.click();
-    el.querySelector<HTMLElement>('[data-testid="promote-chunk"]')!.click();
 
     expect(selected).not.toHaveBeenCalled();
-    expect(promoted).toHaveBeenCalledWith(DELIVERING.chunkId);
   });
 });
 
-describe('ChunkCard Promote gate', () => {
-  it('offers Promote on a paused, never-promoted card the hub flags promotable', async () => {
-    const el = await render({ ...BASE, status: 'paused', terminal: false, promotable: true, completedAt: null }, false, true);
-
-    expect(el.querySelector('[data-testid="promote-chunk"]')).not.toBeNull();
-  });
-
-  it('withholds Promote on a not_ready card the hub does not flag promotable', async () => {
-    const el = await render(
-      { ...BASE, status: 'not_ready', terminal: false, promotable: false, completedAt: null },
-      false,
-      true,
-    );
-
-    expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
-  });
-
-  it('withholds Promote from an identity without chunk control even when promotable', async () => {
-    const el = await render({ ...BASE, status: 'not_ready', terminal: false, promotable: true, completedAt: null });
+describe('ChunkCard backlog controls', () => {
+  it('carries no Promote control, even on a promotable card under chunk control', async () => {
+    const el = await render({ ...BASE, status: 'not_ready', terminal: false, promotable: true, completedAt: null }, false, true);
 
     expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
   });
@@ -485,10 +465,10 @@ describe('ChunkCard project tint', () => {
 });
 
 describe('boardCardView step label', () => {
-  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', nodeId: 'nd_build', completedAt: null, graphId: 'gr_1' };
+  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', nodeId: 'nd_build', completedAt: null };
   const HELD: BoardCard = { ...RUNNING, graphName: 'adv-dwf', runnerId: 'rn_1', runnerName: 'r-claude', hostName: 'xps' };
 
-  it('names the step by graph/node once the graph is read, then the holding runner by host/runner', () => {
+  it('names the step by graph/node when the hub names the graph, then the holding runner by host/runner', () => {
     expect(boardCardView({ ...RUNNING, graphName: 'adv-dwf' }).step).toBe('adv-dwf/build');
     expect(boardCardView(HELD).step).toBe('adv-dwf/build · xps/r-claude');
     expect(boardCardView(HELD).stepTitle).toBe('adv-dwf/build · xps/r-claude (nd_build)');
@@ -499,7 +479,7 @@ describe('boardCardView step label', () => {
     expect(boardCardView(HELD, 'row').holder?.name).toBe('r-claude');
   });
 
-  it('keeps the bare node until the graph is read, and a status word standing in for it bare', () => {
+  it('keeps the bare node when the hub names no graph, and a status word standing in for it bare', () => {
     expect(boardCardView(RUNNING).step).toBe('build');
     expect(boardCardView({ ...RUNNING, status: 'stopped', terminal: true, graphName: 'adv-dwf' }).step).toBe('stopped');
   });

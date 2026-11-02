@@ -12,6 +12,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.delivery_outcomes import DeliveryOutcome
+from blizzard.foundation.graph_progress_state import GraphProgressState
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemPriority
@@ -141,6 +142,8 @@ class ChunkUsageView(WireModel):
     harness_id: str | None = None
     harness_version: str | None = None
     estimated_cost_usd: float | None = None
+    #: The runner that ran the invocation — ``None`` when none was recorded.
+    runner_id: str | None = None
 
 
 class PrView(BaseModel):
@@ -157,6 +160,14 @@ class LandedRepoView(WireModel):
     repo: str
     commit_hash: str
     url: str | None = None
+
+
+class GraphProgressNodeView(WireModel):
+    """One node of a chunk's graph, read against the chunk's visits there."""
+
+    node_id: str
+    name: str
+    state: Annotated[GraphProgressState | Unrecognized, OPEN]
 
 
 class ChunkSummary(WireModel):
@@ -209,6 +220,15 @@ class ChunkSummary(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+    #: The pinned graph's name; ``None`` when the graph is unresolvable.
+    graph_name: str | None = None
+    #: Every node of the pinned graph start to finish, each read against the chunk's visits: the node it stands on,
+    #: its last visit passed or sent back, or unvisited. Empty for a terminal chunk and for an unresolvable graph.
+    graph_progress: list[GraphProgressNodeView] = []
+    #: The chunk's newest recorded bounce; ``None`` before its first.
+    latest_bounce: BounceView | None = None
+    #: How many bounces the chunk has recorded.
+    bounce_count: int = 0
 
 
 class ChunksPageView(WireModel):

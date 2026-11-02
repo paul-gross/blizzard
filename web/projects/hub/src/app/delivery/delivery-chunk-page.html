@@ -1,0 +1,6 @@
+<div class="dp" data-testid="delivery-chunk-page">
+  <a class="back-row" [routerLink]="['/delivery'] | lensLink" data-testid="delivery-chunk-back">
+    <fleet-kit-back-bar label="Delivery" />
+  </a>
+  <app-delivery-drawer class="mobile" [chunkId]="chunkId()" [flows]="flows()" [repositories]="repositories()" [closable]="false" />
+</div>

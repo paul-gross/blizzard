@@ -4,7 +4,7 @@
   flex: 1;
   min-height: 0;
 }
-/* The glance takes the height the unserved-project banner, shown only under a lens, leaves it. */
+/* The glance takes the board's full height. */
 app-glance-view {
   flex: 1;
   min-height: 0;

@@ -103,6 +103,24 @@ describe('ChunkTranscriptsTab', () => {
     expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent).toContain('SELECT A SEGMENT');
   });
 
+  it('heads a matched step with its node name and its epoch as `E<n>`', async () => {
+    const { el } = await render({ history: HISTORY, segments: [segment()] });
+
+    const head = el.querySelector('[data-testid="transcript-step"] .step-head')!;
+    expect(head.textContent?.replace(/\s+/g, ' ').trim()).toBe('Build·E1');
+    expect(head.querySelector('[title="epoch 1"]')?.textContent).toBe('E1');
+    expect(head.querySelector('.unmatched')).toBeNull();
+  });
+
+  it('heads a segment matching no node-history entry with its node compact ref and `Unmatched`', async () => {
+    const { el } = await render({ history: HISTORY, segments: [segment({ node_id: 'nd_01orphan00000000000000ZZZZ', epoch: 7 })] });
+
+    const heads = [...el.querySelectorAll('[data-testid="transcript-step"] .step-head')];
+    const orphan = heads.find((h) => h.querySelector('.unmatched'))!;
+    expect(orphan.textContent?.replace(/\s+/g, ' ').trim()).toBe('N-ZZZZ·Unmatched·E7');
+    expect(orphan.querySelector('fleet-kit-badge')).toBeNull();
+  });
+
   it('opts into phone drill-down as a list without a segment and a detail with one', async () => {
     const { el, fixture } = await render({ history: HISTORY, segments: [segment()], drilldown: true });
 
@@ -172,7 +190,7 @@ describe('ChunkTranscriptsTab', () => {
     expect(el.querySelector('[data-testid="transcript-continues-in"]')?.textContent).toContain('segment 2');
   });
 
-  it('renders the recorded harness on the segment-list badge, and passes the open segment’s own stamp through to the segment view', async () => {
+  it('names the recorded harness as plain text on the segment list, and only there', async () => {
     const { el } = await render({
       history: HISTORY,
       segments: [segment({ harness_id: 'claude_code', harness_version: '1.2.3' })],
@@ -180,14 +198,12 @@ describe('ChunkTranscriptsTab', () => {
       segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [] },
     });
 
-    const listBadge = el.querySelector('[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]');
-    expect(listBadge?.textContent?.trim()).toBe('claude code');
-    expect(listBadge?.getAttribute('aria-label')).toBe('claude code');
-
-    // Both the nav-list badge and the open segment body's own badge render — two
-    // distinct affordances, one per surface.
-    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')).toHaveLength(2);
-    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')[1].textContent?.trim()).toBe('claude code');
+    const listHarness = el.querySelector('[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]');
+    expect(listHarness?.textContent?.trim()).toBe('claude code');
+    expect(listHarness?.classList.contains('harness')).toBe(true);
+    expect(listHarness?.closest('fleet-kit-badge')).toBeNull();
+    // The open segment body no longer repeats the stamp.
+    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')).toHaveLength(1);
   });
 
   it('renders no harness affordance at all for a segment that recorded none', async () => {

@@ -101,11 +101,6 @@
  *     page's chunk dock: closed, it takes no box and the board runs the centre
  *     column's height; opened, it sits beneath the board, which keeps its left,
  *     top and width and shortens; dismissed, the board's at-rest box returns.
- *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts —
- *     the work item panel's two fact tables (`ChunkFacts` + `ChunkTokenBreakdown`,
- *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
- *     at the same horizontal position under a long runner identity that wraps
- *     — a real CSS grid layout claim jsdom cannot make.
  *   - projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts — the
  *     graphs container/presentational split's `GraphDetailLifecycle`: its
  *     error line and entry line genuinely stack with the real gap `:host`'s
@@ -258,7 +253,7 @@
  *   - projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts — a
  *     120-character current-node name truncates inside its card: every lane stays
  *     inside a 1440px viewport.
- *   - projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts — the
+ *   - projects/hub/src/app/core/chunk-detail-header/chunk-detail-header.shell-sweep.spec.ts — the
  *     dock header's action row with every in-flow control live at once (Pause, the
  *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
  *     800px and at 390/320px. A second case per width opens the trigger's menu and
@@ -329,10 +324,6 @@
  *     garden page: a bare gardening path lands on Proposals, the gardening strip wears
  *     the kit's sub-strip, the Proposals count is amber while any wait, and the strip
  *     scrolls inside itself at a phone width.
- *   - projects/hub/src/app/board/flows/delivery-band.shell-sweep.spec.ts — the board's
- *     Delivery band: a lane's landing chunk, its line, and its verdict stay inside the band,
- *     a collapsed lane folds to one line, and an unknown state reads raw inside its chunk,
- *     at 1440px and at the narrowest centre column.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -358,7 +349,6 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-dock.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },
@@ -392,7 +382,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-list/board-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/core/chunk-detail-header/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
@@ -410,7 +400,6 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/board/flows/delivery-band.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

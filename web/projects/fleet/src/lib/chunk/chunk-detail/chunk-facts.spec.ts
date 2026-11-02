@@ -3,37 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail } from 'fleet/testing';
+import { chunkDetail, chunkNeighborhoodView, chunkNeighborView, chunkUsageTotalView } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
-
-const ROUTED_DETAIL: ChunkDetail = chunkDetail({
-  chunk_id: 'ch_01routed000000000000000000',
-  graph_id: 'gr_1',
-  status: 'running',
-  current_node_id: 'nd_build',
-  latest_epoch: 1,
-  work_refs: [],
-  history: [],
-  artifacts: [],
-  route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
-  graph_name: null,
-  current_node_name: null,
-});
-
-// A not_ready chunk the wire calls graph-editable.
-const NOT_READY_DETAIL: ChunkDetail = chunkDetail({
-  chunk_id: 'ch_01ready000000000000000000000',
-  graph_id: 'gr_default',
-  status: 'not_ready',
-  current_node_id: null,
-  graph_editable: true,
-  latest_epoch: null,
-  work_refs: [],
-  history: [],
-  artifacts: [],
-  graph_name: null,
-  current_node_name: null,
-});
 
 describe('ChunkFacts', () => {
   beforeEach(async () => {
@@ -43,178 +14,81 @@ describe('ChunkFacts', () => {
     }).compileComponents();
   });
 
-  it('states the chunk facts, naming the runner holding its route', async () => {
+  async function render(detail: ChunkDetail, chunkLinkBase?: readonly string[]): Promise<HTMLElement> {
     const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, current_node_name: 'build' });
+    fixture.componentRef.setInput('detail', detail);
+    if (chunkLinkBase) fixture.componentRef.setInput('chunkLinkBase', chunkLinkBase);
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    return fixture.nativeElement as HTMLElement;
+  }
 
-    const fact = (key: string) => el.querySelector(`[data-testid="fact-${key}"]`)?.textContent?.trim();
-    expect(fact('status')).toBe('running');
-    expect(fact('node')).toBe('build');
-    expect(fact('runner')).toBe('R-01.r-claude');
-    expect(fact('attempts')).toBe('1');
+  const parts = (el: HTMLElement): string[] =>
+    [...el.querySelectorAll('[data-testid="chunk-efficiency"] .part')].map((p) => p.textContent ?? '');
+
+  it("states the chunk's total session efficiency cost", async () => {
+    const el = await render(
+      chunkDetail({
+        cost: chunkUsageTotalView({
+          input_tokens: 20_000,
+          cache_create_tokens: 200_000,
+          output_tokens: 32_700,
+          cache_read_tokens: 8_340_000,
+          cost_usd: 0.3,
+          cost_partial: false,
+          estimated_cost_usd: null,
+        }),
+      }),
+    );
+    expect(parts(el)).toEqual(['$0.30', '· 220kI', '/ 32.7kO', '× 2.57%']);
   });
 
-  it('reads attempts as em-dash, not 0, for a chunk no runner has ever worked', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, latest_epoch: null, route: null });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="fact-attempts"]')?.textContent?.trim()).toBe('—');
-    expect(el.querySelector('[data-testid="fact-runner"]')?.textContent?.trim()).toBe('—');
+  it('reads `$0.00` alone for a chunk with no recorded usage', async () => {
+    const el = await render({ ...chunkDetail(), cost: null } as unknown as ChunkDetail);
+    expect(parts(el)).toEqual(['$0.00']);
   });
 
-  it('shows the chunk’s current graph as a compact ref for a running chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.textContent?.trim()).toBe('G-1');
-    expect(graphValue?.getAttribute('title')).toBe('gr_1');
+  it('renders no Depends on / Blocks box for a chunk with no edges', async () => {
+    const el = await render(chunkDetail({ neighborhood: chunkNeighborhoodView() }));
+    expect(el.querySelector('[data-testid="chunk-deps"]')).toBeNull();
   });
 
-  it('links the graph value to the graphs view for that graph id when a consumer opts in with graphLinkBase', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('names each neighbor by compact ref, linked to its chunk, with its lane icon', async () => {
+    const el = await render(
+      chunkDetail({
+        neighborhood: chunkNeighborhoodView({
+          prerequisites: [chunkNeighborView({ chunk_id: 'ch_01prereq00000000000000000', status: 'done', satisfied: true })],
+          dependents: [
+            chunkNeighborView({ chunk_id: 'ch_01dependent000000000000aa', status: 'not_ready', satisfied: false }),
+            chunkNeighborView({ chunk_id: 'ch_01dependent000000000000bb', status: null, satisfied: false }),
+          ],
+        }),
+      }),
+      ['/board', 'chunk'],
+    );
 
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.tagName).toBe('A');
-    expect(graphValue?.getAttribute('href')).toBe('/graphs/gr_1');
+    const dependsOn = el.querySelector('[data-testid="fact-depends-on"]')!;
+    expect(dependsOn.querySelector('.tag')?.textContent).toBe('Depends on');
+    const prereq = dependsOn.querySelector<HTMLAnchorElement>('[data-testid="depends-on-neighbor"]')!;
+    expect(prereq.textContent?.trim()).toBe('C-0000');
+    expect(prereq.getAttribute('href')).toBe('/board/chunk/ch_01prereq00000000000000000');
+    expect(prereq.getAttribute('title')).toBe('ch_01prereq00000000000000000');
+    expect(prereq.querySelector('fleet-lane-icon')).not.toBeNull();
+
+    const blocks = el.querySelector('[data-testid="fact-blocks"]')!;
+    expect(blocks.querySelector('.tag')?.textContent).toBe('Blocks');
+    const deps = [...blocks.querySelectorAll('[data-testid="blocks-neighbor"]')];
+    expect(deps.map((d) => d.textContent?.trim())).toEqual(['C-00aa', 'C-00bb']);
+    // A neighbor with no known status draws no icon.
+    expect(deps[1].querySelector('fleet-lane-icon')).toBeNull();
   });
 
-  it('defaults to a plain, unlinked value — graphLinkBase is null until a consumer opts in (this component is shared with the runner app, which has no /graphs route)', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.tagName).toBe('SPAN');
-    expect(graphValue?.textContent?.trim()).toBe('G-1');
+  it('reads `—` for the side that has no edge while the other has one', async () => {
+    const el = await render(
+      chunkDetail({
+        neighborhood: chunkNeighborhoodView({ prerequisites: [chunkNeighborView({ chunk_id: 'ch_01prereq00000000000000000' })] }),
+      }),
+    );
+    expect(el.querySelector('[data-testid="fact-blocks"] .empty')?.textContent).toBe('—');
+    expect(el.querySelector('[data-testid="fact-depends-on"] .empty')).toBeNull();
   });
-
-  it('renders the graph as compactRef#name-YYYYMMDD when the graph name and creation date are present (issue #102)', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...ROUTED_DETAIL,
-      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
-      graph_name: 'glacier',
-      graph_created_at: '2026-07-19T10:00:00Z',
-    });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.textContent?.trim()).toBe('G-G857#glacier-20260719');
-    expect(graphValue?.getAttribute('title')).toBe('gr_01KXV4DP7T7NKBE8GJJ1GXG857');
-  });
-
-  it('degrades the graph label to the bare compact ref when the creation date is absent', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...ROUTED_DETAIL,
-      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
-      graph_name: 'glacier',
-    });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.textContent?.trim()).toBe('G-G857');
-    expect(graphValue?.textContent).not.toContain('#');
-  });
-
-  it('degrades the graph label to the bare compact ref when the name is absent', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...ROUTED_DETAIL,
-      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
-      graph_created_at: '2026-07-19T10:00:00Z',
-    });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.textContent?.trim()).toBe('G-G857');
-    expect(graphValue?.textContent).not.toContain('#');
-  });
-
-  it('degrades the graph label to the bare compact ref when the creation date is present but unparseable', async () => {
-    // consider-5 from the #118 pre-push review: `graphLabel` guarded on field presence,
-    // not parse success — a malformed `graph_created_at` used to fall through to the
-    // dangling `G-G857#glacier-` the docstring rules out, since `formatUtcYmd` degrades
-    // to `''` for an unparseable instant rather than throwing.
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...ROUTED_DETAIL,
-      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
-      graph_name: 'glacier',
-      graph_created_at: 'not-a-date',
-    });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    const graphValue = el.querySelector('[data-testid="graph-value"]');
-    expect(graphValue?.textContent?.trim()).toBe('G-G857');
-    expect(graphValue?.textContent).not.toContain('#');
-  });
-
-  it('renders the graph read-only even while the wire calls it editable', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
-    expect(el.querySelector('[data-testid="graph-value"]')).not.toBeNull();
-  });
-
-  it('renders the standing edges in the shared fact list, with no row at all for a direction that has none', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...ROUTED_DETAIL,
-      neighborhood: {
-        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000AAAA', satisfied: false, status: 'running' }],
-        dependents: [],
-      },
-    });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const dependsOn = el.querySelector('[data-testid="fact-depends-on"]');
-    expect(dependsOn).not.toBeNull();
-    expect(dependsOn?.querySelector('[data-testid="depends-on-neighbor"]')?.textContent?.trim()).toBe('C-AAAA');
-    expect(dependsOn?.querySelector('.edge-status')?.textContent?.trim()).toBe('running');
-    expect(el.querySelector('[data-testid="fact-blocks"]')).toBeNull();
-  });
-
-  it('renders no model row at all (issue #144)', async () => {
-    // `Chunk.model` is retired and its replacements have no web editing surface, so the
-    // row is gone rather than turned read-only — a read-only row for a field the board
-    // cannot write and the fleet no longer runs on would be worse than absent.
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="fact-model"]')).toBeNull();
-    expect(el.querySelector('[data-testid="model-input"]')).toBeNull();
-  });
-
-  it('withholds the graph edit input once the chunk is claimed', async () => {
-    for (const status of ['running', 'delivering', 'waiting_on_human', 'needs_human', 'paused', 'stopped', 'done'] as const) {
-      const fixture = TestBed.createComponent(ChunkFacts);
-      fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status });
-      await fixture.whenStable();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="graph-input"]'), status).toBeNull();
-      expect(el.querySelector('[data-testid="graph-value"]'), status).not.toBeNull();
-    }
-  });
-
 });

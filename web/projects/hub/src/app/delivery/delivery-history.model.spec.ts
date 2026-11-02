@@ -19,6 +19,10 @@ const FORGES: ReadonlyMap<string, string> = new Map([
   ['fl_b', 'paul-gross/blizzard-context'],
 ]);
 
+/** The verdict the hub sends a `turn-ended` fact for these fixtures' outcomes: `landed`, none for a wait, else `bounced`. */
+const verdictOf = (kind: FlowFactView['kind'], outcome: string | null | undefined): FlowFactView['verdict'] =>
+  kind !== 'turn-ended' || !outcome || outcome === 'pending' ? null : outcome === 'landed' ? 'landed' : 'bounced';
+
 let factId = 0;
 /** A flow fact `minutesAgo` before the fixture's now, under submission `sub`. */
 const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fields: Partial<FlowFactView> = {}): FlowFactView => ({
@@ -30,6 +34,7 @@ const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fi
   outcome: null,
   revision: null,
   submission_id: 'sub_1',
+  verdict: verdictOf(kind, fields.outcome),
   ...fields,
 });
 
@@ -57,7 +62,7 @@ describe('deliveryHistory', () => {
       expect.stringMatching(/^waiting on checks · 2 polls · \d\d:\d\d–\d\d:\d\d$/),
       'queued',
     ]);
-    expect(history.map((entry) => entry.tone)).toEqual(['done', 'idle', 'spawning']);
+    expect(history.map((entry) => entry.tone)).toEqual(['done', 'idle', null]);
     expect(history[1].at).toBe(fixtureInstant(-19 * MIN));
     expect(history.every((entry) => entry.repos === 'blizzard')).toBe(true);
   });
@@ -72,7 +77,7 @@ describe('deliveryHistory', () => {
     const withdrawn = [fact('fl_a', 'turn-started', 5), fact('fl_a', 'turn-ended', 4, { outcome: 'failure' }), fact('fl_a', 'withdrawn', 3, { outcome: 'failure' })];
     const history = deliveryHistory(detail({ flow_record: withdrawn }), FORGES, FIXTURE_NOW);
     expect(history.map((entry) => entry.text)).toEqual(['landing attempt failure · withdrawn']);
-    expect(history[0].tone).toBe('stale');
+    expect(history[0].tone).toBe('needs');
     expect(texts(detail({ flow_record: [fact('fl_a', 'turn-ended', 4, { outcome: 'conflict' })] }))).toEqual(['landing attempt conflict']);
   });
 
@@ -85,28 +90,32 @@ describe('deliveryHistory', () => {
   it('merges the same entry said on several flows at once, naming every repository', () => {
     const history = deliveryHistory(detail({ flow_record: [fact('fl_a', 'submitted', 5), fact('fl_b', 'submitted', 5)] }), FORGES, FIXTURE_NOW);
     expect(history).toHaveLength(1);
-    expect(history[0].repos).toBe('blizzard, blizzard-context');
+    expect(history[0].repos).toBe('blizzard · blizzard-context');
   });
 
-  it('reads only the visits to delivery nodes, a send to resolve as sent back', () => {
+  it('stitches in the graph transitions just before and just after each delivery event, whatever the nodes are named', () => {
     const history = [
       transitionView({ epoch: 1, from_node_name: 'build', to_node_name: 'review', recorded_at: fixtureInstant(-40 * MIN) }),
-      transitionView({ epoch: 2, from_node_name: 'review', to_node_name: 'pre-push', recorded_at: fixtureInstant(-30 * MIN) }),
-      transitionView({ epoch: 3, from_node_name: 'deliver', to_node_name: 'resolve', choice_name: 'conflict', recorded_at: fixtureInstant(-20 * MIN) }),
+      transitionView({ epoch: 2, from_node_name: 'review', to_node_name: 'ship', recorded_at: fixtureInstant(-30 * MIN) }),
+      transitionView({ epoch: 3, from_node_name: 'ship', to_node_name: 'resolve-scope', choice_name: 'conflict', recorded_at: fixtureInstant(-20 * MIN) }),
+      transitionView({ epoch: 4, from_node_name: 'resolve-scope', to_node_name: 'build', recorded_at: fixtureInstant(-10 * MIN) }),
     ];
-    const entries = deliveryHistory(detail({ history }), FORGES, FIXTURE_NOW);
-    expect(entries.map((entry) => [entry.text, entry.tone])).toEqual([
-      ['sent back to resolve (conflict)', 'waiting'],
-      ['review → pre-push', 'running'],
+    const entries = deliveryHistory(detail({ history, flow_record: [fact('fl_a', 'submitted', 25)] }), FORGES, FIXTURE_NOW);
+    expect(entries.map((entry) => [entry.text, entry.transition, entry.tone])).toEqual([
+      ['ship · conflict → resolve-scope', true, 'idle'],
+      ['queued', false, null],
+      ['review → ship', true, 'idle'],
     ]);
+    expect(entries[0].move).toMatchObject({ from: 'ship', choice: 'conflict', to: 'resolve-scope' });
   });
 
   it('reads a bounce with its repositories, detail, failed step and log', () => {
     const envelope = JSON.stringify({
-      detail: 'checks failed',
-      step: { name: 'test', exit_code: 1, output_tail: Array.from({ length: OUTPUT_TAIL_LINES + 3 }, (_, i) => `line ${i}`).join('\n') },
-      unlanded: [{ repo: 'paul-gross/blizzard', branch: 'feat/x' }],
-      action: { log_artifact: 'deliver-log' },
+      cause: 'failure',
+      detail: 'checks failed in `test`',
+      step: { name: 'test', exit_code: 1, output_tail: Array.from({ length: OUTPUT_TAIL_LINES + 3 }, (_, i) => `line ${i}`).join('\n'), log_artifact: 'test-log' },
+      unlanded: [{ repo: 'paul-gross/blizzard', branch: 'feat/x', commit: 'a'.repeat(40) }],
+      action: { name: 'land', choice: 'failure', log_artifact: 'deliver-log' },
     });
     const artifacts = [
       assetArtifactView({ name: 'deliver-log', key: 'log-old', recorded_at: fixtureInstant(-50 * MIN) }),
@@ -114,13 +123,13 @@ describe('deliveryHistory', () => {
       assetArtifactView({ name: 'deliver-log', key: 'log-later', recorded_at: fixtureInstant(-MIN) }),
     ];
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'failure', envelope, recorded_at: fixtureInstant(-10 * MIN) })], artifacts }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · failure', tone: 'stale', repos: 'blizzard', detail: 'checks failed', logKey: 'log-at', age: '[10m 0s]' });
+    expect(entry).toMatchObject({ text: 'bounced · failure', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
     expect(entry.step).toMatchObject({ name: 'test', exitCode: 1, long: true });
   });
 
   it('reads a bounce whose envelope is not JSON as carrying nothing but its cause', () => {
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', envelope: '<html>' })] }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · conflict', tone: 'waiting', repos: null, detail: null, step: null, logKey: null });
+    expect(entry).toMatchObject({ text: 'bounced · conflict', tone: 'needs', repos: null, detail: null, step: null, logKey: null });
   });
 });
 

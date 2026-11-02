@@ -1,0 +1,137 @@
+<header class="d-head">
+  <!-- The chunk's identity, in the board's own vocabulary: the short name in gold,
+       the work item it serves in cyan, and its state — with the node it currently
+       sits at pushed to the far right. -->
+  <div class="d-title">
+    <a
+      class="id"
+      data-testid="detail-id"
+      [attr.title]="detail().chunk_id"
+      [routerLink]="[...linkBase(), detail().chunk_id] | lensLink"
+      >{{ detail().chunk_id }}</a
+    >
+    <span class="d-sub">
+      <!-- The project the chunk belongs to leads the line, its swatch beside its name. -->
+      @if (detail().project_name; as projectName) {
+        <span class="project" data-testid="detail-project" [title]="projectName">
+          @if (projectColor(); as color) {
+            <fleet-kit-swatch class="project-swatch" [color]="color" />
+          }
+          {{ projectName }}
+        </span>
+        <span class="sep" aria-hidden="true">·</span>
+      }
+      <!-- Each pointer links out to its work source.
+           No web_url (unconfigured source) degrades to plain text, no broken link. -->
+      @for (p of pointers(); track p.source + ':' + p.ref) {
+        @if (!$first) {
+          <span class="sep" aria-hidden="true">·</span>
+        }
+        <fleet-work-ref-link [workRef]="p" testid="detail-pointer" />
+      }
+      @if (pointers().length) {
+        <span class="sep" aria-hidden="true">·</span>
+      }
+      <!-- The runner holding the chunk as `host/runner` — a plain fact; Detach, in the ⋯ menu,
+           names it again in its own copy. Then where the chunk is: its status and the node it
+           sits at. -->
+      @if (claimant(); as runner) {
+        <span class="runner" data-testid="route-info" [attr.title]="claimantTitle()">{{ runner }}</span>
+        <span class="sep" aria-hidden="true">·</span>
+      }
+      <span class="st" data-testid="detail-status">{{ renderedStatus() }}</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="st" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
+    </span>
+  </div>
+  <div class="d-meta">
+    <!-- Who paused the chunk, read off the pause fact — the header states it because
+         a paused chunk that is also parked on a question derives waiting_on_human, so
+         the status cell above would never say so. -->
+    @if (pause(); as p) {
+      <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
+    }
+    <!-- Every chunk action lives in the overflow menu (`#actionsMenu` below). -->
+    @if (canControl()) {
+      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu">
+        <svg trigger class="glyph glyph--dots" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="8" cy="3.5" r="1.4" /><circle cx="8" cy="8" r="1.4" /><circle cx="8" cy="12.5" r="1.4" />
+        </svg>
+      </fleet-kit-menu>
+    }
+    @if (closable()) {
+      <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
+        <svg class="glyph glyph--x" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
+      </fleet-kit-button>
+    }
+  </div>
+</header>
+
+<!-- The ⋯ overflow menu's own panel: the claim actions — Pause/Resume, the halves of one choice
+     with Detach (pause keeps the claim, detach gives it away) — then a divider, then
+     Complete/Delete. Pause/Resume does not hang off the route, so it shows whether or not a
+     route is live; Detach only while one is. `KitMenu` needs the panel as a `TemplateRef` in this view (`kit-menu.ts` owns why). -->
+<ng-template #actionsMenu>
+  <fleet-kit-menu-panel testid="chunk-actions-panel">
+    @if (pause()) {
+      @let resume = resumeCopy(claimant());
+      <fleet-kit-menu-item testid="resume-chunk" [disabled]="pausePending()" (triggered)="onResume()">
+        <span fleetKitMenuItemSubtitle>{{ resume.subtitle }}</span>
+        {{ resume.label }}
+      </fleet-kit-menu-item>
+    } @else if (pausable()) {
+      @let pauseAction = pauseCopy(claimant());
+      <fleet-kit-menu-item testid="pause-chunk" [disabled]="pausePending()" (triggered)="onPause()">
+        <span fleetKitMenuItemSubtitle>{{ pauseAction.subtitle }}</span>
+        {{ pauseAction.label }}
+      </fleet-kit-menu-item>
+    }
+    @if (claimant(); as runner) {
+      @let detach = detachCopy(runner, currentNodeName());
+      <fleet-kit-menu-item
+        testid="detach-chunk"
+        [disabled]="detachPending()"
+        (triggered)="onDetach()"
+      >
+        <span fleetKitMenuItemSubtitle>{{ detach.subtitle }}</span>
+        {{ detach.label }}
+      </fleet-kit-menu-item>
+    }
+    @if (pause() || pausable() || claimant()) {
+      <hr class="menu-divider" />
+    }
+    @let complete = completeCopy();
+    <fleet-kit-menu-item
+      class="danger"
+      testid="complete-chunk"
+      [disabled]="!completable() || completePending()"
+      (triggered)="onComplete()"
+    >
+      <span fleetKitMenuItemSubtitle>{{ complete.subtitle }}</span>
+      {{ complete.label }}
+    </fleet-kit-menu-item>
+    @let del = deleteCopy();
+    <fleet-kit-menu-item
+      class="danger"
+      testid="delete-chunk"
+      [disabled]="deleteDisabled() || deletePending()"
+      (triggered)="onDelete()"
+    >
+      <span fleetKitMenuItemSubtitle>{{ deleteSubtitle() }}</span>
+      {{ del.label }}
+    </fleet-kit-menu-item>
+  </fleet-kit-menu-panel>
+</ng-template>
+
+@if (pendingConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="confirm-dialog"
+    (confirmed)="onConfirmed()"
+    (cancelled)="onCancelled()"
+  />
+}

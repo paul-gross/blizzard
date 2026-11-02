@@ -52,7 +52,6 @@ const groups = (
     hosts?: ReadonlyMap<string, string>;
     colors?: ReadonlyMap<string, string>;
     workItems?: ReadonlyMap<string, WorkItemsView>;
-    graphNames?: ReadonlyMap<string, string>;
   } = {},
 ) =>
   glanceListGroups(
@@ -65,7 +64,6 @@ const groups = (
     fields.colors ?? new Map(),
     NOW,
     fields.workItems ?? NO_ITEMS,
-    fields.graphNames,
   );
 
 const ids = (rows: readonly { chunkId: string }[]): string[] => rows.map((row) => row.chunkId);
@@ -98,17 +96,17 @@ describe('glanceListGroups', () => {
     expect(ids(list.backlog)).toEqual(['ch_b2', 'ch_b1', 'ch_b3']);
   });
 
-  it('keeps only the chunks finished in the last 24 hours', () => {
+  it('keeps only the chunks finished in the last 48 hours, the board\'s own done window', () => {
     const list = groups([
       chunk('ch_recent', 'done', { terminal: true, completed_at: ago(HOUR) }),
-      chunk('ch_stopped', 'stopped', { terminal: true, completed_at: ago(3 * HOUR) }),
-      chunk('ch_stale', 'done', { terminal: true, completed_at: ago(25 * HOUR) }),
+      chunk('ch_stopped', 'stopped', { terminal: true, completed_at: ago(30 * HOUR) }),
+      chunk('ch_stale', 'done', { terminal: true, completed_at: ago(49 * HOUR) }),
       chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
     ]);
     expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped']);
   });
 
-  it('lists done today newest-first, whatever order the read returns them in', () => {
+  it('lists the recent done newest-first, whatever order the read returns them in', () => {
     const list = groups([
       chunk('ch_old', 'done', { terminal: true, completed_at: ago(5 * HOUR) }),
       chunk('ch_new', 'done', { terminal: true, completed_at: ago(HOUR) }),
@@ -126,9 +124,10 @@ describe('glanceListGroups', () => {
     expect(list.live[0].completedAt).toBeNull();
   });
 
-  it("names a card's graph once its name is read, and carries its node id and terminal flag", () => {
-    const [named] = groups([chunk('ch_1', 'running')], { graphNames: new Map([['gr_1', 'adv-dwf']]) }).live;
-    expect(named).toMatchObject({ graphId: 'gr_1', graphName: 'adv-dwf', nodeId: 'nd_build', terminal: false });
+  it("names a card's graph and carries its progress, node id and terminal flag", () => {
+    const graphProgress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
+    const [named] = groups([chunk('ch_1', 'running', { graph_name: 'adv-dwf', graph_progress: graphProgress })]).live;
+    expect(named).toMatchObject({ graphName: 'adv-dwf', graphProgress, nodeId: 'nd_build', terminal: false });
 
     const [unread] = groups([chunk('ch_1', 'running')]).live;
     expect(unread.graphName).toBeNull();
@@ -229,7 +228,7 @@ describe('glanceVitals', () => {
       // running, and delivering, which shows under RUNNING
       running: 2,
       ready: 1,
-      doneToday: 1,
+      doneRecent: 1,
       runnersUpLabel: '1/2',
     });
   });
@@ -273,7 +272,7 @@ describe('filterGlanceRows', () => {
 
   it('lists exactly as many cards as the vital it is narrowed to counts', () => {
     const vitals = glanceVitals([], LIST);
-    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.doneToday };
+    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.doneRecent };
     for (const [filter, count] of Object.entries(counts)) expect(filterGlanceRows(LIST, filter as GlanceFilter)).toHaveLength(count);
   });
 

@@ -87,7 +87,8 @@ test('test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero', as
   await expect(page.getByTestId('glance-board')).toBeVisible();
 
   // The spend panel and the running chunk's card both read the estimate alone, marked `~`, never a billed $0.00.
-  await expect(page.getByTestId('glance-spend-value')).toHaveText('~$0.07');
+  // The spend value is the fleet's session efficiency cost; its cost part reads the estimate, never a billed $0.00.
+  await expect(page.getByTestId('glance-spend-value').locator('.part').first()).toHaveText('~$0.07');
   const card = page.locator(`[data-testid="glance-card"][data-chunk="${chunkId}"]`);
   await expect(card).toHaveCount(1);
   await expect(card.getByTestId('glance-cost')).toHaveText('~$0.07');

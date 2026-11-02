@@ -132,10 +132,10 @@ describe('board card row order shell sweep (web:shell-sweep)', () => {
   });
 
   for (const width of WIDTHS) {
-    it(`lets a real pointer reach the PR link, the fold, and Promote over the open control at width ${width}`, async () => {
+    it(`lets a real pointer reach the PR link and the fold over the open control at width ${width}`, async () => {
       const root = await renderCard(width, { ...CARD, workLines: ['One', 'Two', 'Three', 'Four'].map((title) => ({ label: null, title })), promotable: true }, true);
       try {
-        for (const testid of ['card-pr-link', 'chunk-title-fold', 'promote-chunk']) {
+        for (const testid of ['card-pr-link', 'chunk-title-fold']) {
           const control = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
           expect(control, `width ${width}: fixture defect — ${testid} did not render`).not.toBeNull();
           const rect = control!.getBoundingClientRect();

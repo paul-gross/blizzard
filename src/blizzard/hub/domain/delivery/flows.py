@@ -16,6 +16,7 @@ from typing import Literal, get_args
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.flow_place_state import FlowPlaceState
+from blizzard.foundation.flow_verdict import FlowVerdict
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
@@ -29,6 +30,8 @@ from blizzard.hub.domain.graph.model import Node
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
+#: The outcome of a turn whose pass landed its submission — the landing action's one success answer.
+TURN_LANDED = "landed"
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
@@ -144,6 +147,14 @@ class FlowFact:
     at: datetime
     outcome: str | None = None
     revision: str | None = None
+
+    def verdict(self) -> FlowVerdict | None:
+        """A ``turn-ended`` fact's verdict on its submission: ``landed`` for the landing's success, ``bounced`` for any
+        other answer that judged it; ``None`` for a turn that judged nothing — one of :data:`NOT_VERDICTS`, a wait
+        among them — and for every other kind."""
+        if self.kind != "turn-ended" or self.outcome is None or self.outcome in NOT_VERDICTS:
+            return None
+        return FlowVerdict.LANDED if self.outcome == TURN_LANDED else FlowVerdict.BOUNCED
 
 
 @domain_model

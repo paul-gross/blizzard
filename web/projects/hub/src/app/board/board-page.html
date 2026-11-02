@@ -1,7 +1,5 @@
 <main class="main">
   <div class="col col-center">
-    <app-unserved-banner />
-    <app-delivery-band [workItems]="workItems()" [openPrs]="openPrs()" (selectChunk)="select($event)" (selectFlow)="selectFlow($event)" />
     <app-board-shell
       class="board"
       [chunks]="boardChunks()"
@@ -14,7 +12,6 @@
       [canControl]="canControl()"
       [canReorder]="canReorder()"
       [workItems]="workItems()"
-      [graphNames]="graphNames()"
       [projectColors]="projectColors()"
       [runnerHosts]="runnerHosts()"
       [layout]="layout()"
@@ -22,7 +19,6 @@
       [listSkeletons]="listSkeletons"
       (layoutChange)="setLayout($event)"
       (selectChunk)="select($event)"
-      (promote)="onPromote($event)"
       (reposition)="reposition($event)"
       (laneMove)="moveAcrossLanes($event)"
     />
@@ -32,14 +28,11 @@
       [class.closed]="!selected()"
       [chunkId]="selected()"
       [graphLinkBase]="['/graphs']"
-      [flowLinkBase]="['/board']"
       (dismiss)="select(null)"
     />
-    @if (selectedFlow(); as flowId) {
-      <app-flow-record class="dock" [flowId]="flowId" [workItems]="workItems()" (dismiss)="selectFlow(null)" (selectChunk)="select($event)" />
-    }
   </div>
   <div class="col rail-right">
+    <app-fleet-spend-panel />
     <app-runner-panel class="rail-runners" />
     <app-questions-panel (selectChunk)="select($event)" />
     <app-gates-panel (selectChunk)="select($event)" />

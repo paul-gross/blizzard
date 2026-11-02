@@ -4,7 +4,6 @@ import { TestBed } from '@angular/core/testing';
 import type { ChunkSummary, WorkItemsView } from 'fleet';
 import { workItemEntry, workRefView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
-import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 describe('BoardShell layouts', () => {
   const RUNNING = (suffix: string): ChunkSummary => (chunkSummary({
@@ -20,7 +19,6 @@ describe('BoardShell layouts', () => {
     workItems: ReadonlyMap<string, WorkItemsView> = new Map(),
     chunks: readonly ChunkSummary[] = [RUNNING('a')],
   ) => {
-    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],

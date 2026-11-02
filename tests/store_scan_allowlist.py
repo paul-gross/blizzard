@@ -127,7 +127,7 @@ _DERIVATION_SWEEP_REASON = (
 
 # The tenant's flows: one per branch any of its chunks has landed on.
 _TENANT_FLOWS_REASON = (
-    "the tenant's every flow, by design — the board's Delivery band and `blizzard hub flow list` show each branch the "
+    "the tenant's every flow, by design — the board's Delivery page and `blizzard hub flow list` show each branch the "
     "tenant lands on; a flow is one per repository branch, so the walk is bounded by the tenant's repositories and "
     "their base branches, never by its chunks or its facts."
 )

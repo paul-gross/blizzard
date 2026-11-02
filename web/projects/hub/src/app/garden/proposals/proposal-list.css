@@ -23,9 +23,8 @@
 }
 /* No wrap — the class ellipsizes instead of breaking onto a second line, so the
    trailing ref (`.pl-ref`'s `margin-left: auto`) always lands at the row's right
-   edge rather than wrapping under it (`chunk-timeline-selection.css`'s own
-   `.line2 .jg-to`/`.line2 .ts` shape: the middle fact ellipsizes, the trailing one
-   is pinned right, neither wraps). */
+   edge rather than wrapping under it: the middle fact ellipsizes, the trailing one
+   is pinned right, neither wraps. */
 .pl-meta {
   display: flex;
   align-items: baseline;

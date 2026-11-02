@@ -11,7 +11,7 @@
     [style.--project-tint]="projectTint(row.projectColor)"
   >
     <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
-    <app-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
+    <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
     <span class="grow">
       <span class="head">
         @if (row.lines[0]?.label; as label) {
@@ -33,10 +33,13 @@
         <span class="ask" data-testid="glance-ask">{{ ask }}</span>
       }
       @if (showsNodeStrip(row)) {
-        <app-node-strip class="node-strip" [chunkId]="row.chunkId" [graphId]="row.graphId" [currentNodeId]="row.nodeId || null" />
+        <app-node-strip class="node-strip" [progress]="row.graphProgress" />
       }
       @if (row.completedAt; as completedAt) {
-        <fleet-when class="done-at" data-testid="glance-done-at" [iso]="completedAt" />
+        <span class="done-line">
+          <fleet-when class="done-at" data-testid="glance-done-at" [iso]="completedAt" />
+          <span class="done-age" data-testid="glance-done-age">{{ doneAge(completedAt) }}</span>
+        </span>
       }
       <span class="meta">
         <span class="where">
@@ -84,8 +87,8 @@
     </button>
     <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
     <button type="button" class="vital" data-testid="vital-done-today" [class.on]="filter() === 'done'" [attr.aria-pressed]="filter() === 'done'" (click)="toggleFilter('done')">
-      <span class="v-n" [style.color]="laneColor(DONE_LANE)">{{ vitals().doneToday }}</span>
-      <span class="v-cap">done today</span>
+      <span class="v-n" [style.color]="laneColor(DONE_LANE)">{{ vitals().doneRecent }}</span>
+      <span class="v-cap">done (48h)</span>
     </button>
     <div class="vital" data-testid="vital-runners-up">
       <span class="v-n">{{ vitals().runnersUpLabel }}</span>
@@ -93,7 +96,7 @@
     </div>
   </div>
 
-  <fleet-kit-panel aria-label="Fleet spend today" data-testid="glance-spend-panel" label="Fleet spend · today">
+  <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state
       [state]="spendState()"
       loadingText="—"
@@ -102,15 +105,7 @@
       errorTestid="glance-spend-error"
     >
       @if (spend(); as s) {
-        <div class="spend" data-testid="glance-spend-row">
-          <!-- The combined figure (formatCost) always renders here, whatever mix of
-               billed/estimated/partial the window carries — an estimate-only window
-               reads as its own `~$X.XX` rather than a withheld $0.00. -->
-          <span class="cid" data-testid="glance-spend-value">{{
-            formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial)
-          }}</span>
-          <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
-        </div>
+        <app-fleet-spend data-testid="glance-spend-row" [today]="s" [yesterday]="spendYesterday()" />
       } @else {
         <p class="empty" data-testid="glance-spend-empty">—</p>
       }
@@ -145,7 +140,7 @@
       <li class="divider" data-testid="glance-done-divider" role="separator" aria-label="Backlog above, done below">
         <span class="divider-label">▲ Backlog</span>
         <span class="divider-rule"></span>
-        <span class="divider-label">Done ▼</span>
+        <span class="divider-label">Done (48h) ▼</span>
       </li>
       @for (row of list().done; track row.chunkId) {
         <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />

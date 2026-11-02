@@ -49,9 +49,12 @@ test('test_browser_login_dance_and_mid_stream_session_expiry', async ({ page, ap
   await expect(page.getByTestId('board-shell')).toBeVisible();
   await expect(page.getByTestId('no-access')).toHaveCount(0);
   expect((await page.context().cookies()).filter((cookie) => cookie.name === 'bz_session')).toHaveLength(1);
-  // The chunk's card is visible, since a guest reads everything, but its Promote control is not.
+  // The chunk's card is visible, since a guest reads everything, but its dock carries no actions menu.
   await expect(page.locator(`[data-chunk="${chunkId}"]`)).toBeVisible();
-  await expect(page.getByTestId('promote-chunk')).toHaveCount(0);
+  await page.locator(`[data-chunk="${chunkId}"]`).click();
+  await expect(page.getByTestId('chunk-detail')).toBeVisible();
+  await expect(page.getByTestId('chunk-detail-loading')).toHaveCount(0);
+  await expect(page.getByTestId('chunk-actions-menu')).toHaveCount(0);
 
   // 3. Promoted to contributor, the write control appears.
   const members = await api.get('/api/members');
@@ -60,7 +63,7 @@ test('test_browser_login_dance_and_mid_stream_session_expiry', async ({ page, ap
   expect((await api.put(`/api/members/${member?.user_id}`, { data: { role: 'contributor' } })).ok).toBe(true);
   await page.reload();
   await expect(page.getByTestId('board-shell')).toBeVisible();
-  await expect(page.getByTestId('promote-chunk')).toBeVisible();
+  await expect(page.getByTestId('chunk-actions-menu')).toBeVisible();
 
   // 4. The session ends while this page's stream is open: a second page of the same browser logs out through the board's
   // own control, the hub closes the person's streams, and the open page's reconnect is refused and sent to login, with
