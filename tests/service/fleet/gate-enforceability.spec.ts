@@ -35,7 +35,7 @@ test.describe('gate enforceability', () => {
     expect(status.body.unenforceable_gates).toEqual(read.body.unenforceable_gates);
   });
 
-  test('test_runner_lists_its_own_open_gate_decision_and_the_fleet_route_is_owner_guarded', async ({ api, bearer, forge, issue, repository, runnerHosts }) => {
+  test('test_runner_lists_its_own_open_gate_decision_and_the_fleet_route_is_owner_guarded', async ({ api, bearer, issue, repository, runnerHosts }) => {
     test.setTimeout(120000);
     const repo = await repository();
     const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
