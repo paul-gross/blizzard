@@ -1,8 +1,8 @@
 """Analytics operator-plane routes: a forced re-derive, the read-only
 events/counts surfaces over the derived projection, and the operational
 datasets over facts the hub already holds. Reads gate on
-:attr:`~blizzard.auth_core.Permission.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
-:attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`, per-route. Operator-plane,
+:attr:`~blizzard.hub.auth.permissions.Permission.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
+:attr:`~blizzard.hub.auth.permissions.Permission.ANALYTICS_ADMIN`, per-route. Operator-plane,
 never ``/api/fleet/...``."""
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -24,6 +23,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.work_source_params import QuerySource
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
 from blizzard.hub.domain.observability.analytics.extraction import read_version

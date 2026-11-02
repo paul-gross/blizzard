@@ -8,7 +8,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth import reject_runner_principal
@@ -16,6 +15,7 @@ from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
 from blizzard.hub.domain.tenancy.teardown import LastTenant, TenantAlreadyDeleted
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus, reconcile_open_tenants

@@ -13,7 +13,7 @@ import json
 import threading
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from blizzard.foundation.roles import domain_model
 
@@ -32,6 +32,8 @@ class Event:
         return f"id: {self.id}\nevent: {self.type}\ndata: {self.data}\n\n"
 
 
+@domain_model
+@dataclass(eq=False, slots=True)
 class Subscriber:
     """One live SSE connection: its event queue, the loop that drains it, the principal it was opened
     for (``None`` when its daemon names none), the session key it was opened under (``None`` when it names
@@ -39,22 +41,12 @@ class Subscriber:
     its owner was ended — set after every event published before the end is queued. ``joined_at`` is the
     broker's latest event id when it registered: an event above it reaches the queue, one at or below never does."""
 
-    __slots__ = ("ended", "joined_at", "loop", "owner", "queue", "session")
-
-    def __init__(
-        self,
-        queue: asyncio.Queue[Event],
-        loop: asyncio.AbstractEventLoop,
-        owner: str | None = None,
-        joined_at: int = 0,
-        session: str | None = None,
-    ) -> None:
-        self.queue = queue
-        self.loop = loop
-        self.owner = owner
-        self.session = session
-        self.joined_at = joined_at
-        self.ended = asyncio.Event()
+    queue: asyncio.Queue[Event]
+    loop: asyncio.AbstractEventLoop
+    owner: str | None = None
+    joined_at: int = 0
+    session: str | None = None
+    ended: asyncio.Event = field(default_factory=asyncio.Event, init=False)
 
 
 class EventBroker:

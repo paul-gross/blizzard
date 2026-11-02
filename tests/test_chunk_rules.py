@@ -7,12 +7,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
+    PRE_CLAIM_STATUSES,
     ChunkFacts,
     ChunkVerb,
     EpochOwnerFact,

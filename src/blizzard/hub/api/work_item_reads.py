@@ -11,11 +11,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.work_sources.reads import ReadWorkItem, read_work_items
 from blizzard.hub.work_sources.source import AuthorView

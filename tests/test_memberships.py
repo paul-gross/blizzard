@@ -13,7 +13,7 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -40,7 +40,7 @@ from blizzard.hub.auth.memberships import (
     membership_change_refusal,
 )
 from blizzard.hub.auth.models import ResolvedIdentity, User
-from blizzard.hub.auth.permissions import permissions_for
+from blizzard.hub.auth.permissions import Permission, permissions_for
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.tenancy import TenantId

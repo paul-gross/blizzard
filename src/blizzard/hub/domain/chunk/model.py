@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.completion_gates import ChecksGate
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
@@ -1025,6 +1025,10 @@ class ChunkVerb(StrEnum):
 
 _EVERY_STATUS: frozenset[ChunkStatus] = frozenset(ChunkStatus)
 _NON_TERMINAL: frozenset[ChunkStatus] = _EVERY_STATUS - TERMINAL_STATUSES
+
+#: The unclaimed admit set — a status test, not "never claimed": a chunk back at one of
+#: these would admit again. Every consumer names this constant (``bzh:one-prose-home``).
+PRE_CLAIM_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
 #: The statuses each :class:`ChunkVerb` is legal from; any other refuses with the verb's own refusal.
 CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyType(

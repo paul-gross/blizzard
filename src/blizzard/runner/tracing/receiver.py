@@ -10,8 +10,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from blizzard.foundation.cli_spans import ATTR_LEASE_ID, SCOPE_NAME
-from blizzard.foundation.platform_tracing.attributes import CALLER, CLI_ATTRIBUTES
+from blizzard.foundation.cli_spans import ATTR_COMMAND, ATTR_EXIT_CODE, ATTR_LEASE_ID, SCOPE_NAME
+from blizzard.foundation.platform_tracing.attributes import CALLER
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord, ReceivedSpan, Scalar
 from blizzard.foundation.roles import adapter_model, domain_model
 from blizzard.foundation.trace_attributes import CHUNK_ID
@@ -211,6 +211,18 @@ def _truncated(value: Scalar) -> Scalar:
 CLI_SERVICE_NAME = "blizzard-cli"
 #: ``service.name`` on every other worker program's spans, kept only under ``[tracing] worker_programs``.
 PROGRAM_SERVICE_NAME = "blizzard-worker-program"
+
+#: The attributes a CLI span may carry, each with its declared value type (``string``, ``int`` or ``double``).
+CLI_ATTRIBUTES: Mapping[str, str] = {
+    ATTR_COMMAND: "string",
+    ATTR_EXIT_CODE: "int",
+    "http.request.method": "string",
+    "http.response.status_code": "int",
+    "url.full": "string",
+    "server.address": "string",
+    "server.port": "int",
+    "error.type": "string",
+}
 
 _CLI_ALLOWLIST = Allowlist(scope=SCOPE_NAME, attributes=CLI_ATTRIBUTES)
 _PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)

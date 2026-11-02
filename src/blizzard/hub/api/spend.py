@@ -11,13 +11,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.fleet import FleetSpendView
 
 router = APIRouter(

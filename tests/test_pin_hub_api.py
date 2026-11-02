@@ -12,9 +12,9 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.auth_core import Permission
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.config import HubConfig
 
 pytestmark = [pytest.mark.unit]

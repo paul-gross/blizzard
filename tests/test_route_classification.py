@@ -18,8 +18,8 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.routing import APIRoute
 
-from blizzard.auth_core import Permission
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
+from blizzard.hub.auth.permissions import Permission
 from tests.support import build_hub
 
 pytestmark = pytest.mark.unit

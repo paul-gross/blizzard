@@ -14,12 +14,13 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from blizzard.auth_core import Permission, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.tenants import TenantState
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository

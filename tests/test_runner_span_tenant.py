@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
-from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES
 from blizzard.foundation.platform_tracing.received import ReceivedLogRecord, ReceivedSpan, Scalar
 from blizzard.foundation.trace_ids import chunk_trace_id
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
@@ -18,7 +17,7 @@ from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.attributes import DECLARED_ATTRIBUTES, RUNNER_ID, RUNNER_NAME, TENANT, TENANT_NAME
 from blizzard.runner.tracing.facts import RunnerFact
 from blizzard.runner.tracing.platform import identity_stamp
-from blizzard.runner.tracing.receiver import Allowlist, admit, admit_log_records
+from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES, Allowlist, admit, admit_log_records
 from tests import runner_trace_fixtures as rfx
 from tests.runner_fakes import REGISTERED_AT
 

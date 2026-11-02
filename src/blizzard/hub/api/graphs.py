@@ -12,12 +12,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph.validation import GraphValidationError

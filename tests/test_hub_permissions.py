@@ -1,12 +1,12 @@
-"""``blizzard/auth_core/`` — the dependency-free shared authz vocabulary (unit tier)."""
+"""``blizzard/hub/auth/permissions.py`` — the permissions, their role bundles, and the hub-level grants (unit tier)."""
 
 from __future__ import annotations
 
 import pytest
 
-from blizzard.auth_core import ROLE_PERMISSIONS, Permission, Role, expand
+from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, ROLE_PERMISSIONS, Permission, expand, permissions_for
 
 pytestmark = pytest.mark.unit
 

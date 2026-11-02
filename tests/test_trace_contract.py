@@ -70,6 +70,7 @@ from blizzard.runner.tracing import attributes as runner_attr
 from blizzard.runner.tracing import platform as runner_platform
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.facts import LeaseTraceFacts
+from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES
 from tests import runner_trace_fixtures as rfx
 from tests import trace_fixtures as fx
 from tests.repo_files import repo_root
@@ -631,14 +632,14 @@ def test_the_platform_section_is_the_code_constants() -> None:
         platform_attr.TENANT,
         platform_attr.TENANT_NAME,
         runner_platform.TICK_STEP,
-        *platform_attr.CLI_ATTRIBUTES,
+        *CLI_ATTRIBUTES,
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
     assert attr.RUNNER_NAME == runner_attr.RUNNER_NAME
     declared = {a["name"]: a["type"] for a in platform["attributes"]}
     assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
-    assert all(declared[name] == type_ for name, type_ in platform_attr.CLI_ATTRIBUTES.items())
-    assert all(t == "string" for n, t in declared.items() if n not in platform_attr.CLI_ATTRIBUTES)
+    assert all(declared[name] == type_ for name, type_ in CLI_ATTRIBUTES.items())
+    assert all(t == "string" for n, t in declared.items() if n not in CLI_ATTRIBUTES)
 
 
 def test_a_deprecated_platform_attribute_names_the_live_attribute_that_replaces_it() -> None:

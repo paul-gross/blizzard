@@ -7,11 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.tenant import HubEventView
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(reject_runner_principal)])

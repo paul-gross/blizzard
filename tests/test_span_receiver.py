@@ -12,7 +12,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.platform_tracing.attributes import CLI_ATTRIBUTES
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, build_platform_tracing
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
@@ -26,7 +25,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, chunk_span_id, chunk_trace_id, step_root
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import Lease
-from blizzard.runner.tracing.receiver import MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
+from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES, MAX_ATTRIBUTES, MAX_STRING_CHARS, Allowlist, admit
 from blizzard.runner.tracing.receiver_limits import (
     BUCKET_CAPACITY,
     ReceiverCounter,

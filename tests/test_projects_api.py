@@ -12,8 +12,9 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.auth_core import ROLE_PERMISSIONS, Permission, Role
+from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
+from blizzard.hub.auth.permissions import ROLE_PERMISSIONS, Permission
 from tests.support import HubHarness, build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component

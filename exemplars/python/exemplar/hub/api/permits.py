@@ -10,7 +10,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -18,6 +17,7 @@ from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from exemplar.hub.api.deps import Services
 from exemplar.hub.api.permit_params import PathPermit

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 
 import httpx2
 from fastapi.telemetry import TelemetryConfig
@@ -36,6 +37,7 @@ from blizzard.foundation.platform_tracing.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION
 from blizzard.foundation.platform_tracing.span_context import span_context
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.trace_ids import DerivedContext
 from blizzard.foundation.trace_spans import Attributes
 
@@ -45,11 +47,12 @@ _SQLALCHEMY_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
 _STAMP_KEY = otel_context.create_key("blizzard.platform.stamp")
 
 
+@adapter_model
+@dataclass(frozen=True)
 class _Carried:
     """The stamp a context carries, boxed so the key's value is recognisably one."""
 
-    def __init__(self, stamp: SpanStamp) -> None:
-        self.stamp = stamp
+    stamp: SpanStamp
 
 
 def _carried_stamp(context: Context | None) -> SpanStamp | None:

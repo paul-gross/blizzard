@@ -10,10 +10,11 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
+    PRE_CLAIM_STATUSES,
     Chunk,
     ChunkFacts,
     ChunkVerb,

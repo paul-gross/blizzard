@@ -2,7 +2,7 @@
 plus the wire<->domain rendering the fleet router's ingest and lease-read routes share.
 The discovery route returns segment metadata and byte counts only —
 never turn content — so a caller must hold a ``segment_id`` from it before the content
-route answers anything. Gated on :attr:`~blizzard.auth_core.Permission.TRANSCRIPT_READ`."""
+route answers anything. Gated on :attr:`~blizzard.hub.auth.permissions.Permission.TRANSCRIPT_READ`."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import TypeAdapter
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     SegmentSummary,

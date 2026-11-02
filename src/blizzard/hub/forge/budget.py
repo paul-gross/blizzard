@@ -13,7 +13,7 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -88,14 +88,15 @@ def _admits(priority: ForgePriority, reading: BudgetReading) -> bool:
             return reading.remaining * 5 > 2 * reading.limit
 
 
+@domain_model
+@dataclass
 class _Budget:
     """One key's readings by bucket, its spent-until, and the window each notice kind was last queued for."""
 
-    def __init__(self) -> None:
-        self.lock = threading.Lock()
-        self.readings: dict[str, BudgetReading] = {}
-        self.spent_until: datetime | None = None
-        self.noticed: dict[BudgetNoticeKind, datetime] = {}
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    readings: dict[str, BudgetReading] = field(default_factory=dict[str, BudgetReading])
+    spent_until: datetime | None = None
+    noticed: dict[BudgetNoticeKind, datetime] = field(default_factory=dict[BudgetNoticeKind, datetime])
 
 
 class ForgeBudgets:

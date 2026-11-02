@@ -19,7 +19,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.hub.api.auth import (
     HostSigningIn,
@@ -30,6 +29,7 @@ from blizzard.hub.api.auth import (
 )
 from blizzard.hub.api.auth_session import require_hub, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices

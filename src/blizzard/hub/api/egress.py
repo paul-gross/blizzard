@@ -1,16 +1,16 @@
 """Fact-egress operator-plane routes. The export is hub-wide, shared by every tenant, so status and the writes alike
-gate on the hub-level :attr:`~blizzard.auth_core.Permission.EXPORT_ADMIN`."""
+gate on the hub-level :attr:`~blizzard.hub.auth.permissions.Permission.EXPORT_ADMIN`."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused
 from blizzard.hub.domain.observability.egress.reset import ResetRefused, ResetUnavailable
 from blizzard.wire.egress import (

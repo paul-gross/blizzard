@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from blizzard.auth_core import Role, expand
+from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, expand
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
