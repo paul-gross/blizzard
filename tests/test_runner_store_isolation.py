@@ -44,7 +44,7 @@ from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IWriteEscalationRepository
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import NewLease, NewMint
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository, IWriteRequeueRepository
 from blizzard.runner.leases.overload import IWriteOverloadRepository
 from blizzard.runner.leases.record import ClosureFact, IWriteLeaseRecordRepository
@@ -203,6 +203,28 @@ def _new_lease(w: RunnerWorld) -> None:
     )
 
 
+def _new_mint(w: RunnerWorld) -> None:
+    w.stores.lease_record.record_mint(
+        NewMint(
+            lease=NewLease(
+                lease_id="lease_m",
+                chunk_id=w.chunk_1,
+                graph_id=GRAPH_ID,
+                node_id=w.node_a,
+                node_name="build",
+                epoch=10,
+                retries_max=3,
+                created_at=_at(0),
+                session_name="pool-a",
+            ),
+            harness_id=CLAUDE_CODE_HARNESS_ID,
+            token_hash="hash-mint",
+            fact_kind="lease.minted",
+            fact_payload="{}",
+        )
+    )
+
+
 def _segment(w: RunnerWorld) -> str:
     return w.stores.transcript_ledger.open_transcript_segment(
         chunk_id=w.chunk_1,
@@ -247,6 +269,7 @@ def _engage_under_lock(w: RunnerWorld) -> None:
 
 WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWriteLeaseRecordRepository, "record_lease"): _new_lease,
+    (IWriteLeaseRecordRepository, "record_mint"): _new_mint,
     (IWriteLeaseRecordRepository, "record_closure"): lambda w: w.stores.lease_record.record_closure(
         lease_id=w.lease_2,
         chunk_id=w.chunk_1,
@@ -405,6 +428,9 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         fence_epoch=None,
         opened_at=_at(34),
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
+    ),
+    (IWriteTakeoverRepository, "record_takeover_entry"): lambda w: w.stores.takeover.record_takeover_entry(
+        takeover_id="tko_1", entered_at=_at(34.5)
     ),
     (IWriteTakeoverRepository, "record_takeover_end"): lambda w: w.stores.takeover.record_takeover_end(
         takeover_id="tko_1", ended_at=_at(35)

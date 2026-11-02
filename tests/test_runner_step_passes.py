@@ -346,6 +346,9 @@ class _Resume:
         self.shutdowns += 1
         return 0
 
+    def recover_takeovers(self) -> int:
+        return 0
+
 
 class _ServingNothing:
     def __init__(self, body: Callable[[], None]) -> None:
