@@ -440,6 +440,9 @@ class _Flows:
     def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
         raise NotImplementedError
 
+    def submissions_of_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
+        raise NotImplementedError
+
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         raise NotImplementedError
 

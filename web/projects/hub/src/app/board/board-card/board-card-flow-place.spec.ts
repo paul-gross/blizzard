@@ -14,6 +14,8 @@ const DELIVERING: BoardCard = {
   promotable: false,
   node: 'deliver',
   nodeId: 'nd_deliver',
+  graphName: null,
+  graphProgress: [],
   workLines: [],
   itemsRead: true,
   costUsd: 0,

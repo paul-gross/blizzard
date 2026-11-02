@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { type ChunkDetail, runnerDisplayName } from 'fleet';
-import { chunkDetail } from 'fleet/testing';
+import { chunkControlStub, chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -68,7 +68,7 @@ async function renderHeader(
   const fixture = TestBed.createComponent(ChunkDetailHeader);
   fixture.componentRef.setInput('detail', detail);
   fixture.componentRef.setInput('renderedStatus', detail.status);
-  fixture.componentRef.setInput('canControl', true);
+  fixture.componentRef.setInput('control', chunkControlStub());
   fixture.componentRef.setInput('runnerHosts', runnerHosts);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

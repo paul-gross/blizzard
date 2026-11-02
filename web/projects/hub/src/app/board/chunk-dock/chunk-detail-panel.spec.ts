@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail, WorkItemsState } from 'fleet';
-import { chunkDetail, questionView, workItemEntry } from 'fleet/testing';
+import { chunkControlStub, chunkDetail, questionView, workItemEntry } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -178,13 +178,12 @@ describe('ChunkDetailPanel', () => {
     expect(closed).toBe(true);
   });
 
-  it('emits detach with the chunk id once the operator confirms, through the header', async () => {
+  it('fires detach through the control port once the operator confirms in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
+    const control = chunkControlStub();
+    fixture.componentRef.setInput('control', control);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -194,16 +193,15 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    expect(control.calls).toEqual([['detach', ROUTED_DETAIL.chunk_id]]);
   });
 
-  it('emits complete with the chunk id once the operator confirms, through the header', async () => {
+  it('fires complete through the control port once the operator confirms in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.complete.subscribe((chunkId) => (emitted = chunkId));
+    const control = chunkControlStub();
+    fixture.componentRef.setInput('control', control);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -213,16 +211,15 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    expect(control.calls).toEqual([['complete', ROUTED_DETAIL.chunk_id]]);
   });
 
-  it('emits delete with the chunk id once the operator confirms, through the header', async () => {
+  it('fires delete through the control port once the operator confirms in the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', deletable: true, route: null });
     fixture.componentRef.setInput('renderedStatus', 'not_ready');
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.delete.subscribe((chunkId) => (emitted = chunkId));
+    const control = chunkControlStub();
+    fixture.componentRef.setInput('control', control);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -232,7 +229,7 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    expect(control.calls).toEqual([['delete', ROUTED_DETAIL.chunk_id]]);
   });
 
   it('forwards renderedStatus down to the header, over the real status', async () => {

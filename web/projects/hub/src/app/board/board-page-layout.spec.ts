@@ -17,6 +17,8 @@ const CHUNK = {
   status: 'running',
   current_node_id: 'nd_build',
   work_refs: [{ source: 'hub', ref: '1', label: 'hub#1' }],
+  graph_name: 'default',
+  graph_progress: [],
 };
 
 /** The board's reads, each answered empty but for one running chunk and its one titled work item;

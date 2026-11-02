@@ -13,6 +13,7 @@ import {
   type FlowFactView,
   type KitAsyncStateValue,
   type FlowView,
+  parseBounceEnvelope,
   type PrView,
   type RepositorySummary,
   projectTint,
@@ -28,7 +29,6 @@ import {
 import { withinDoneWindow } from '../core/done-window';
 import { ordinal } from '../core/flow-place.model';
 import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../core/step-label';
-import { withdrawnAfter } from './delivery-history.model';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;
@@ -111,9 +111,9 @@ function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
 export interface DeliveryBounce {
   /** `failure`, `conflict`, `poll-timeout` — the answer that bounced it. */
   readonly cause: string;
-  /** Whether the chunk's latest bounced turn had its submission withdrawn right after it. */
+  /** Whether the bounce's turn withdrew its submission from its flows, as the hub records it. */
   readonly withdrawn: boolean;
-  /** The envelope's own account, or `null` for none. */
+  /** The envelope's own account, or `null` when it gives none. */
   readonly reason: string | null;
   /** How many bounces the chunk has had. */
   readonly count: number;
@@ -200,15 +200,14 @@ function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounc
   const footprint = chunk.open_prs.length > 0 || chunk.awaiting_external_merge;
   const age = ageMs(latest.recorded_at, inputs.now);
   if (!footprint && (age === null || age >= BOUNCE_WINDOW_MS)) return null;
-  const reason = bounceReason(latest.envelope);
-  const turn = chunkFacts(chunk.chunk_id, inputs.facts).find((fact) => fact.verdict === 'bounced');
+  const reason = parseBounceEnvelope(latest.envelope)?.detail ? bounceReason(latest.envelope) : null;
   return {
     cause: latest.cause,
-    withdrawn: turn !== undefined && withdrawnAfter(inputs.facts.get(turn.flow_id) ?? [], turn),
+    withdrawn: latest.withdrawn,
     reason,
     count: chunk.bounce_count,
     at: latest.recorded_at,
-    title: [reason, formatAbsolute(latest.recorded_at)].join('\n'),
+    title: [reason, formatAbsolute(latest.recorded_at)].filter((part) => part !== null).join('\n'),
   };
 }
 

@@ -323,6 +323,10 @@ def list_chunks(
     # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
     # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
     flow_places = chunk_flow_places(services, page_ids)
+    # A bounce's withdrawal reads its visit's submission: one batched read over the page's bounced chunks.
+    submissions = services.flows.submissions_of_chunks(
+        [chunk.chunk_id for chunk in page_chunks if (f := facts.get(chunk.chunk_id)) is not None and f.bounces]
+    )
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -343,6 +347,7 @@ def list_chunks(
                 projects=projects,
                 sources=sources,
                 flow_places=flow_places,
+                submissions=submissions,
             ).summary()
             for chunk in page_chunks
         ],

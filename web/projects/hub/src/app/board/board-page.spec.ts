@@ -49,6 +49,8 @@ const CHUNK = (chunkId: string, status: string) => ({
   work_refs: [],
   runner_id: 'runner-local',
   environment_count: 1,
+  graph_name: 'default',
+  graph_progress: [],
 });
 
 /** All-time counts — `done` far above the board list's card count, since the list is windowed. */

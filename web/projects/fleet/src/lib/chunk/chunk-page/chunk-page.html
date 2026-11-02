@@ -22,16 +22,8 @@
       [projectColor]="projectColor()"
       [route]="d.route ?? null"
       [detail]="d"
-      [canControl]="canControl()"
-      [pausePending]="pausePending()"
-      [detachPending]="detachPending()"
-      [completePending]="completePending()"
-      [deletePending]="deletePending()"
-      (pauseChunk)="onPause($event)"
-      (resumeChunk)="onResume($event)"
-      (detach)="onDetach($event)"
-      (complete)="onComplete($event)"
-      (delete)="onDelete($event)"
+      [control]="control"
+      [afterDelete]="backToBoard"
     />
   }
   @if (detail()) {

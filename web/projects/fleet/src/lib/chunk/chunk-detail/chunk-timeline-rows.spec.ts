@@ -32,7 +32,7 @@ const BASE: ChunkDetail = chunkDetail({
       to_graph_name: null,
     },
   ],
-  bounces: [{ cause: 'schema-mismatch', envelope: '{"cause":"schema-mismatch","detail":"verdict `???` is not a choice"}', recorded_at: '2026-07-13T00:00:02Z' }],
+  bounces: [{ cause: 'schema-mismatch', envelope: '{"cause":"schema-mismatch","detail":"verdict `???` is not a choice"}', recorded_at: '2026-07-13T00:00:02Z', withdrawn: false }],
   restarts: [
     {
       epoch: 3,

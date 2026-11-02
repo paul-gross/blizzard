@@ -254,6 +254,7 @@ export function bounceView(overrides: Partial<BounceView> = {}): BounceView {
     cause: 'missing_artifact',
     envelope: JSON.stringify({ cause: 'missing_artifact', detail: 'The step ended without declaring `commit`.' }),
     recorded_at: fixtureInstant(-45),
+    withdrawn: false,
     ...overrides,
   };
 }

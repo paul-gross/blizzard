@@ -123,10 +123,6 @@ export class ChunkTimeline {
    * (`done`/`stopped`): those states have no node mid-flight to report. */
   protected readonly activeRow = computed(() => deriveActiveRow(this.detail()));
 
-  /** One history row's summed usage, or `null` when no usage fact has landed for its
-   * `(nodeId, epoch)` yet — matches the row's origin node against every usage entry
-   * recorded there. Multiple invocations at one step (spawn/resume/judge) fold into
-   * one figure so the timeline reads one lap's cost per line. */
   /** How many grid rows an entry takes — its main row, plus its usage line, plus a bounce's reason — which the stamp
    * cell spans. */
   protected rowSpan(row: HistoryRow): number {
@@ -148,6 +144,10 @@ export class ChunkTimeline {
     return [runner, harness].filter((part) => part !== null).join(' · ') || null;
   }
 
+  /** One history row's summed usage, or `null` when no usage fact has landed for its
+   * `(nodeId, epoch)` yet — matches the row's origin node against every usage entry
+   * recorded there. Multiple invocations at one step (spawn/resume/judge) fold into
+   * one figure so the timeline reads one lap's cost per line. */
   protected usageForStep(row: HistoryRow) {
     return sumStepUsage(this.detail(), row);
   }

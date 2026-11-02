@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, FLEET_CLOCK, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
-import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
-import { type DeleteVars, injectDeleteChunkMutation } from '../chunks/delete.mutations';
-import { type DetachVars, injectDetachChunkMutation } from '../chunks/detach.mutations';
+import { type CompleteVars } from '../chunks/complete.mutations';
+import { injectHubChunkControl } from '../chunks/hub-chunk-control';
 import {
   type AnswerFailure,
   type AnswerVars,
@@ -15,12 +14,10 @@ import {
   readAnswerFailure,
   readDecisionFailure,
 } from '../chunks/human.mutations';
-import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
+import { type ChunkPauseVars } from '../chunks/pause.mutations';
 import {
   answerQuestionMutationKey,
   chunkCompleteMutationKey,
-  chunkDeleteMutationKey,
-  chunkDetachMutationKey,
   chunkPauseMutationKey,
   resolveDecisionMutationKey,
 } from '../../core/mutation-keys';
@@ -62,20 +59,19 @@ export class ChunkDetail {
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
   private readonly resolveMutation = injectResolveDecisionMutation();
-  private readonly detachMutation = injectDetachChunkMutation();
-  private readonly pauseMutation = injectChunkPauseMutation();
-  private readonly completeMutation = injectCompleteChunkMutation();
-  private readonly deleteMutation = injectDeleteChunkMutation((chunkId) => {
-    if (this.chunkId() === chunkId) this.dismiss.emit();
+  /** The ⋮ menu's chunk-control port — failures land on {@link actionError}, and a
+   * confirmed delete of the open chunk dismisses the dock. */
+  protected readonly control = injectHubChunkControl({
+    beginAction: () => this.beginAction(),
+    fail: (message) => this.actionError.set(message),
+    onDeleted: (chunkId) => {
+      if (this.chunkId() === chunkId) this.dismiss.emit();
+    },
   });
   private readonly meQuery = injectMeQuery();
   private readonly projectsQuery = injectProjectsQuery();
   private readonly clock = inject(FLEET_CLOCK);
   protected readonly runnerHosts = injectRunnerHostNames();
-
-  /** Whether the current identity may pause/resume/detach the chunk
-   * (`chunk:control`); `null`/pending resolves to `false`. */
-  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
   /** Whether the current identity may answer an open question (`question:answer`). */
   protected readonly canAnswer = computed(() => hasPermission(this.meQuery.data(), 'question:answer'));
@@ -83,37 +79,8 @@ export class ChunkDetail {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
-  /** Every chunk id a Detach mutation is currently pending for, with its variables
-   * (`bzh:frontend-pending-override`). */
-  private readonly pendingChunkDetaches = injectPendingMutationVariables<DetachVars>(chunkDetachMutationKey);
-
-  /** The same, for Delete. */
-  private readonly pendingChunkDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
-
   /** The same, for Resolve decision. */
   private readonly pendingResolves = injectPendingMutationVariables<ResolveVars>(resolveDecisionMutationKey);
-
-  /** Whether a Pause/Resume is in flight for the open chunk. Scoped to `chunkId` because
-   * this container stays mounted across a selection change: a pause fired on one chunk must not disable another's controls,
-   * and must still disable its own when that chunk is re-selected. */
-  protected readonly pausePending = computed(() =>
-    isPendingFor(this.pendingChunkPauses(), (v) => v.chunkId === this.chunkId()),
-  );
-
-  /** Whether a Detach is in flight for the open chunk. */
-  protected readonly detachPending = computed(() =>
-    isPendingFor(this.pendingChunkDetaches(), (v) => v.chunkId === this.chunkId()),
-  );
-
-  /** Whether a Complete is in flight for the open chunk. */
-  protected readonly completePending = computed(() =>
-    isPendingFor(this.pendingChunkCompletes(), (v) => v.chunkId === this.chunkId()),
-  );
-
-  /** Whether a Delete is in flight for the open chunk. */
-  protected readonly deletePending = computed(() =>
-    isPendingFor(this.pendingChunkDeletes(), (v) => v.chunkId === this.chunkId()),
-  );
 
   /** Every chunk id a Pause/Resume mutation is currently pending for, with its variables
    * (`bzh:frontend-pending-override`). */
@@ -215,50 +182,6 @@ export class ChunkDetail {
         note: event.note,
       },
       { onError: (error) => this.reportFailure(readDecisionFailure(error, new Date(this.clock()))) },
-    );
-  }
-
-  protected onDetach(chunkId: string): void {
-    this.beginAction();
-    this.detachMutation.mutate(
-      { chunkId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Detach failed.')) },
-    );
-  }
-
-  protected onPause(chunkId: string): void {
-    this.beginAction();
-    this.pauseMutation.mutate(
-      { chunkId, paused: true },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Pause failed.')) },
-    );
-  }
-
-  protected onResume(chunkId: string): void {
-    this.beginAction();
-    this.pauseMutation.mutate(
-      { chunkId, paused: false },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
-    );
-  }
-
-  protected onComplete(chunkId: string): void {
-    this.beginAction();
-    this.completeMutation.mutate(
-      { chunkId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Complete failed.')) },
-    );
-  }
-
-  /** Delete an unacquired chunk; there is no undo. Success dismisses the dock — the order
-   * is pinned by `chunk-detail.spec.ts`'s "dismisses the dock on a successful delete" case. */
-  protected onDelete(chunkId: string): void {
-    this.beginAction();
-    this.deleteMutation.mutate(
-      { chunkId },
-      {
-        onError: (error) => this.actionError.set(errorMessage(error, 'Delete failed.')),
-      },
     );
   }
 }

@@ -22,6 +22,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'build',
   nodeId: 'nd_build',
+  graphName: null,
+  graphProgress: [],
   workLines: [{ label: 'hub#7', title: 'Migrate the event log onto the new store, partitioned by tenant', url: 'https://example.test/7' }],
   itemsRead: true,
   costUsd: 1.23,

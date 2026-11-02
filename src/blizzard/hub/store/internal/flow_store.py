@@ -119,19 +119,25 @@ class FlowStore:
             return self._submissions(conn, [row], closed={row.submission_id: outcome})[0]
 
     def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
-        with self._store.read("submissions_of") as conn:
+        return self.submissions_of_chunks([chunk_id]).get(chunk_id, [])
+
+    def submissions_of_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
+        if not chunk_ids:
+            return {}
+        with self._store.read("submissions_of_chunks") as conn:
             joined = self._store.scope_join(
                 _sub, _closures, _closures.c.submission_id == _sub.c.submission_id, isouter=True
             )
             rows = conn.execute(
                 self._store.select(joined, *_sub.c, _closures.c.outcome, _closures.c.closed_at).where(
-                    _sub.c.chunk_id == chunk_id
+                    _sub.c.chunk_id.in_(sorted(set(chunk_ids)))
                 )
             ).all()
-            # Sorted here, not in SQL: an ORDER BY arrival steers the planner onto the tenant-wide arrival index,
-            # where the chunk's own visit index bounds the read to this chunk's rows.
-            rows = sorted(rows, key=lambda r: r.arrival)
-            return [
+        # Sorted here, not in SQL: an ORDER BY arrival steers the planner onto the tenant-wide arrival index,
+        # where the chunks' own visit index bounds the read to their rows.
+        out: dict[str, list[SubmissionRecord]] = {}
+        for r in sorted(rows, key=lambda r: r.arrival):
+            out.setdefault(r.chunk_id, []).append(
                 SubmissionRecord(
                     submission_id=r.submission_id,
                     node_id=r.node_id,
@@ -143,8 +149,8 @@ class FlowStore:
                     if r.closed_at is None
                     else SubmissionClosure(outcome=r.outcome, closed_at=r.closed_at),
                 )
-                for r in rows
-            ]
+            )
+        return out
 
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         with self._store.read("facts_of") as conn:

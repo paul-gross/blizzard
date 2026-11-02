@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
 import { chunkDetail, routeView, workRefView } from '../../testing/builders/chunk';
+import { chunkControlStub } from '../../testing/chunk-control-stub';
 import { ChunkPageHeader } from './chunk-page-header';
 
 const meta: Meta<ChunkPageHeader> = {
@@ -15,7 +16,7 @@ const meta: Meta<ChunkPageHeader> = {
     projectColor: null,
     route: null,
     detail: null,
-    canControl: false,
+    control: null,
   },
 };
 export default meta;
@@ -35,5 +36,5 @@ export const ManyPointers: Story = {
 };
 /** The full identity line — project swatch, work item, the runner holding the route, status — and the ⋮ menu. */
 export const ProjectRunnerAndMenu: Story = {
-  args: { projectName: 'Blizzard', projectColor: '#4aa3ff', route: routeView(), detail: chunkDetail({ route: routeView() }), canControl: true },
+  args: { projectName: 'Blizzard', projectColor: '#4aa3ff', route: routeView(), detail: chunkDetail({ route: routeView() }), control: chunkControlStub() },
 };

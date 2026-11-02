@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, type WorkItemsState, KitErrorLine } from 'fleet';
+import { type ChunkControl, type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, type WorkItemsState, KitErrorLine } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-header';
 
@@ -54,9 +54,9 @@ export class ChunkDetailPanel {
    * still needs saying. Rendered as news, not as a failure. */
   readonly actionOutcome = input<string | null>(null);
 
-  /** Whether the current identity may pause/resume/detach the chunk
-   * (`chunk:control`), forwarded to {@link ChunkDetailHeader}. `null`/pending resolves to `false`. */
-  readonly canControl = input(false);
+  /** The chunk-control port behind the header's ⋮ menu, forwarded to
+   * {@link ChunkDetailHeader}; `null` hides the menu. */
+  readonly control = input<ChunkControl | null>(null);
 
   /** The graphs view's own path segments, forwarded to {@link ChunkTimeline}'s heading; `null` withholds the graph label's link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
@@ -68,18 +68,6 @@ export class ChunkDetailPanel {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`),
    * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
-
-  /** Whether the pause/resume mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
-  readonly pausePending = input(false);
-
-  /** Whether the detach mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
-  readonly detachPending = input(false);
-
-  /** Whether the complete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
-  readonly completePending = input(false);
-
-  /** Whether the delete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
-  readonly deletePending = input(false);
 
   /** Whether the resolve-decision mutation is in flight, forwarded to
    * {@link ChunkAwaitingHuman}. */
@@ -102,25 +90,6 @@ export class ChunkDetailPanel {
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
 
-  /** Emitted with the chunk id when the operator confirms Detach. */
-  readonly detach = output<string>();
-
-  /** Emitted with the chunk id when the operator confirms Pause. Named
-   * `pauseChunk`, not `pause` — `@angular-eslint/no-output-native` forbids an output
-   * shadowing the native DOM `pause` event. */
-  readonly pauseChunk = output<string>();
-
-  /** Emitted with the chunk id when the operator confirms Resume. */
-  readonly resumeChunk = output<string>();
-
-  /** Emitted with the chunk id when the operator confirms Complete. */
-  readonly complete = output<string>();
-
-  /** Emitted with the chunk id when the operator confirms Delete. */
-  readonly delete = output<string>();
-
-  /** The chunk's work ref count — legible before the forge read lands, for the
-   * work-item column's own heading. */
   /** Whether the delivery section shows — `hasDelivery`. */
   protected readonly showDelivery = computed(() => hasDelivery(this.detail()));
 

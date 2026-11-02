@@ -33,9 +33,9 @@ export interface BoardCard {
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
   /** The chunk's graph's name, from `ChunkSummary.graph_name` — null when unresolvable. */
-  readonly graphName?: string | null;
+  readonly graphName: string | null;
   /** The chunk's progress through its graph, from `ChunkSummary.graph_progress` — the strip it carries. */
-  readonly graphProgress?: readonly hubApi.GraphProgressNodeView[];
+  readonly graphProgress: readonly hubApi.GraphProgressNodeView[];
   /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
   readonly workLines: readonly WorkLine[];
   /** Whether the chunk's work items have been read — until then each title holds a skeleton. */

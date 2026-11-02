@@ -53,6 +53,11 @@ class IReadFlows(Protocol):
         by the chunk's visits."""
         ...
 
+    def submissions_of_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
+        """:meth:`submissions_of` for each named chunk in one read, by chunk id; a chunk with no submission has no
+        entry."""
+        ...
+
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         """Every fact the submission wrote, on every flow it holds, in write order."""
         ...

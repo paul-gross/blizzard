@@ -9,6 +9,10 @@ shows "Nothing delivering or delivered." in place of a bare divider, and a newly
 to its loading skeleton.
 
 `GET /api/chunks` rows carry `graph_name`, `graph_progress` (each node of the chunk's graph with its state: `current`,
-`passed`, `failed` or `unvisited`), `latest_bounce` and `bounce_count`. Flow record entries carry `verdict`, which is
-`landed` or `bounced` for a `turn-ended` entry that judged its submission and `null` otherwise. The board draws each
-chunk's graph progress and graph name from these fields, so it no longer fetches each chunk's detail or each graph.
+`passed`, `failed` or `unvisited`; empty for a terminal chunk or a graph the hub cannot resolve), `latest_bounce` and
+`bounce_count`. Each `usage` entry of a chunk's detail carries `runner_id`, the runner that ran the invocation, or
+`null` when none was recorded. Flow record entries carry `verdict`, which is `landed` or `bounced` for a `turn-ended`
+entry that judged its submission and `null` otherwise. They also carry `wait`, which is true only on a `turn-ended`
+entry whose turn waited (`pending` or `awaiting-merge`). A bounce, on `latest_bounce` and in a chunk's `bounces`,
+carries `withdrawn`, which says whether its turn withdrew the submission from its flows. The board draws each chunk's
+graph progress and graph name from these fields, so it no longer fetches each chunk's detail or each graph.

@@ -605,12 +605,18 @@
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
+          },
+          "withdrawn": {
+            "default": false,
+            "title": "Withdrawn",
+            "type": "boolean"
           }
         },
         "required": [
           "cause",
           "envelope",
-          "recorded_at"
+          "recorded_at",
+          "withdrawn"
         ],
         "title": "BounceView",
         "type": "object"
@@ -3153,6 +3159,11 @@
             ],
             "title": "Revision"
           },
+          "rework": {
+            "default": false,
+            "title": "Rework",
+            "type": "boolean"
+          },
           "submission_id": {
             "title": "Submission Id",
             "type": "string"
@@ -3167,6 +3178,11 @@
                 "type": "null"
               }
             ]
+          },
+          "wait": {
+            "default": false,
+            "title": "Wait",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3178,7 +3194,9 @@
           "at",
           "outcome",
           "revision",
-          "verdict"
+          "verdict",
+          "wait",
+          "rework"
         ],
         "title": "FlowFactView",
         "type": "object"

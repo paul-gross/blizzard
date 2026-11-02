@@ -32,20 +32,6 @@
   margin-left: auto;
   flex: none;
 }
-/* The ⋮ trigger: a fixed square target, matching the dock header. */
-.actions ::ng-deep .trigger {
-  box-sizing: border-box;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  font-size: var(--fs-lg);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-}
 /* The dot-joined run under the id — the same shape as the dock's own `.d-sub`
    (chunk-detail-header.css), wrapping rather than overflowing a phone-width page. */
 .cp-sub {
@@ -93,28 +79,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The glyph is drawn, not typeset, so it centres on its own ink rather than a fallback font's line box. */
-.glyph {
-  display: block;
-}
-.glyph--dots {
-  fill: currentColor;
-}
-.menu-divider {
-  border: none;
-  border-top: 1px solid var(--line);
-  margin: 4px 0;
-}
-/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant, so
-   this caller applies the `--red` token, scoped to this header's own template.
-   The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
-   `:host(:hover)` cyan (equal specificity, one more class) so the danger tint holds
-   under a pointer too. */
-.danger {
-  color: var(--red);
-}
-.danger:hover,
-.danger:focus {
-  color: var(--red);
-}
-

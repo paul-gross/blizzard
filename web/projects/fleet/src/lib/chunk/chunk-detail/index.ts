@@ -1,4 +1,6 @@
-export { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
+export { pauseCopy, resumeCopy } from './chunk-action-copy';
+export { ChunkActionsMenu } from './chunk-actions-menu';
+export type { ChunkControl } from './chunk-control';
 export { ChunkDelivery } from './chunk-delivery';
 export { hasDelivery } from './has-delivery';
 export { bounceReason, parseBounceEnvelope } from './parse-bounce-envelope';

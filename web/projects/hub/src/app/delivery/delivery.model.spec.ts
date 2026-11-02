@@ -1,4 +1,4 @@
-import { type ChunkFlowPlaceView, type ChunkSummary, type FlowFactView, type FlowView, type RepositorySummary, STATUS_TONE, toneColor, type WorkItemsView } from 'fleet';
+import { type ChunkFlowPlaceView, type ChunkSummary, type FlowFactView, type FlowView, type hubApi, type RepositorySummary, STATUS_TONE, toneColor, type WorkItemsView } from 'fleet';
 import { bounceView, chunkSummary, FIXTURE_NOW, fixtureInstant, landedRepoView, prView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -26,9 +26,26 @@ const flow = (id: string, repositoryId: string): FlowView =>
 
 const repository = (id: string, name: string): RepositorySummary => ({ repository_id: id, name, owner: 'paul-gross', repo: name }) as RepositorySummary;
 
-/** The verdict the hub sends a `turn-ended` fact for these fixtures' outcomes: `landed`, none for a wait, else `bounced`. */
-const verdictOf = (kind: FlowFactView['kind'], outcome: string | null): FlowFactView['verdict'] =>
-  kind !== 'turn-ended' || outcome === null || outcome === 'pending' ? null : outcome === 'landed' ? 'landed' : 'bounced';
+/** What the hub sends a `turn-ended` fact for each outcome these fixtures use, as its `NOT_VERDICTS` and reserved waits
+ * judge it: `landed` lands, the reserved waits wait, an interruption, a cut-off, an escalation, or a supersession
+ * judges nothing, any other answer bounces, and a conflict bounces as rework. */
+const JUDGED: Readonly<Record<string, Pick<FlowFactView, 'verdict' | 'wait' | 'rework'>>> = {
+  landed: { verdict: 'landed', wait: false, rework: false },
+  pending: { verdict: null, wait: true, rework: false },
+  'awaiting-merge': { verdict: null, wait: true, rework: false },
+  interrupted: { verdict: null, wait: false, rework: false },
+  'cut-off': { verdict: null, wait: false, rework: false },
+  escalated: { verdict: null, wait: false, rework: false },
+  superseded: { verdict: null, wait: false, rework: false },
+  failure: { verdict: 'bounced', wait: false, rework: false },
+  conflict: { verdict: 'bounced', wait: false, rework: true },
+};
+const judged = (kind: FlowFactView['kind'], outcome: string | null | undefined): Pick<FlowFactView, 'verdict' | 'wait' | 'rework'> => {
+  if (kind !== 'turn-ended') return { verdict: null, wait: false, rework: false };
+  const judgement = outcome ? JUDGED[outcome] : undefined;
+  if (judgement === undefined) throw new Error(`no hub judgement for the turn outcome ${String(outcome)}`);
+  return judgement;
+};
 
 let factId = 0;
 /** A flow fact `secondsAgo` before the fixture's now. */
@@ -41,7 +58,7 @@ const fact = (flowId: string, chunkId: string, kind: FlowFactView['kind'], secon
   outcome,
   revision: null,
   submission_id: `sub-${chunkId}`,
-  verdict: verdictOf(kind, outcome),
+  ...judged(kind, outcome),
 });
 
 const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state'] = 'waiting', fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView => ({
@@ -166,15 +183,22 @@ describe('a row\'s bounce', () => {
     expect(only(inputs([bounced(25 * 60, { open_prs: [prView()] })])).bounce?.cause).toBe('failure');
   });
 
-  it('names the bounce withdrawn when the record\'s next fact on that flow withdraws its turn\'s submission, by record order not instant', () => {
-    const turn = fact('fl_a', 'ch_1', 'turn-ended', 50 * MIN, 'failure');
-    const withdrawal = { ...fact('fl_a', 'ch_1', 'withdrawn', 50 * MIN, 'failure'), verdict: null, at: turn.at };
-    const row = only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn, withdrawal] }));
+  it('names the bounce withdrawn as the hub records it, whatever the flow record holds', () => {
+    const withdrawn = (bounce: Partial<hubApi.BounceView>, facts: readonly FlowFactView[] = []) =>
+      only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN), ...bounce }), bounce_count: 1 })], { facts }));
+    const row = withdrawn({ withdrawn: true });
     expect(row.bounce?.withdrawn).toBe(true);
     expect(cardStageLabel(row)).toBe('failure · withdrawn');
-    const other = { ...withdrawal, submission_id: 'sub-other' };
-    expect(only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn, other] })).bounce?.withdrawn).toBe(false);
-    expect(only(inputs([bounced(50, { open_prs: [prView()] })], { facts: [turn] })).bounce?.withdrawn).toBe(false);
+    const turn = fact('fl_a', 'ch_1', 'turn-ended', 50 * MIN, 'failure');
+    const withdrawal = { ...fact('fl_a', 'ch_1', 'withdrawn', 50 * MIN, 'failure'), at: turn.at };
+    expect(withdrawn({ withdrawn: false }, [turn, withdrawal]).bounce?.withdrawn).toBe(false);
+    expect(withdrawn({}).bounce?.withdrawn).toBe(false);
+  });
+
+  it('reads no reason from an envelope with no account of its own, and titles the bounce with its instant alone', () => {
+    const row = only(inputs([bounced(5, { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: JSON.stringify({ cause: 'failure' }), recorded_at: fixtureInstant(-5 * MIN) }) })]));
+    expect(row.bounce?.reason).toBeNull();
+    expect(row.bounce?.title.split('\n')).toHaveLength(1);
   });
 
   it('reads no bounce from a turn the hub judged bounced with no bounce recorded', () => {
