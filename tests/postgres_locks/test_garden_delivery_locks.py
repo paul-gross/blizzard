@@ -152,37 +152,39 @@ def test_substituted_citation_locks_before_guard_and_fk(
             )
 
         with ThreadPoolExecutor(max_workers=1) as actors:
-            # A scoped read takes no tenant admission lock; only fin_a is held.
+            # An ordinary non-key update holds NO KEY UPDATE, compatible with FK KEY SHARE.
             with scope.read("hold_finding") as conn:
-                conn.execute(sa.text("SELECT finding_id FROM findings WHERE finding_id = 'fin_a' FOR UPDATE"))
+                conn.execute(sa.text("UPDATE findings SET summary = summary WHERE finding_id = 'fin_a'"))
                 future = actors.submit(store.deliver, plan, admission=EpochAdmission.AT_OR_ABOVE)
-                deadline = monotonic() + 5
-                with observer.connect() as monitor:
-                    while monotonic() < deadline:
-                        blocked = monitor.execute(
-                            sa.text("""
+                if omit_citation_lock:
+                    assert future.result(timeout=5) is DeliveryOutcome.RECORDED
+                    assert link_insert.is_set()
+                else:
+                    deadline = monotonic() + 5
+                    with observer.connect() as monitor:
+                        while monotonic() < deadline:
+                            blocked = monitor.execute(
+                                sa.text("""
                             SELECT EXISTS (SELECT 1 FROM pg_stat_activity w
                               JOIN pg_stat_activity h ON h.pid = ANY(pg_blocking_pids(w.pid))
                               WHERE w.application_name = 'garden_waiter' AND h.application_name = 'garden_holder')
                         """)
-                        ).scalar_one()
-                        if blocked:
-                            break
-                        assert not future.done(), "delivery escaped the held finding"
-                        Event().wait(0.02)
-                    else:
-                        pytest.fail("delivery did not block on the finding")
+                            ).scalar_one()
+                            if blocked:
+                                break
+                            assert not future.done(), "delivery escaped the held finding"
+                            Event().wait(0.02)
+                        else:
+                            pytest.fail("delivery did not block on the finding")
                 assert link_insert.is_set() is omit_citation_lock
-                # A reverse-order writer could now wait on fin_z only in the omission case.
+                # The blocked delivery must not already hold the higher finding.
                 savepoint = conn.begin_nested()
                 try:
                     conn.execute(
                         sa.text("SELECT finding_id FROM findings WHERE finding_id = 'fin_z' FOR UPDATE NOWAIT")
                     )
-                    assert not omit_citation_lock
                 except OperationalError as exc:
-                    assert omit_citation_lock
-                    assert getattr(exc.orig, "sqlstate", None) == "55P03"
+                    pytest.fail(f"delivery held the higher finding while waiting: {exc}")
                 finally:
                     savepoint.rollback()
             assert future.result(timeout=10) is DeliveryOutcome.RECORDED

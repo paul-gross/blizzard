@@ -1420,6 +1420,7 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
 def build_hub(
     tmp_path: Path,
     *,
+    engine: Engine | None = None,
     work_sources: dict[str, FakeWorkSource] | None = None,
     link: bool = True,
     repositories: Sequence[RepositorySeed] | None = None,
@@ -1450,12 +1451,16 @@ def build_hub(
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
+    An explicitly supplied engine must already point at a migrated, seeded store.
+
     ``hub.client`` is a :class:`RunnerFleetClient`.
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
     file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged."""
-    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    db_url = (
+        engine.url.render_as_string(hide_password=False) if engine is not None else f"sqlite:///{tmp_path / 'hub.db'}"
+    )
     config = HubConfig(
         root=tmp_path,
         db_url=db_url,
@@ -1469,12 +1474,13 @@ def build_hub(
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
-    db_path = tmp_path / "hub.db"
-    if db_path.exists():
-        Migrations(config, MIGRATION_CLOCK).runner.upgrade("head")
-    else:
-        shutil.copyfile(hub_migration_prototype(), db_path)
-    engine = create_engine_from_url(db_url)
+    if engine is None:
+        db_path = tmp_path / "hub.db"
+        if db_path.exists():
+            Migrations(config, MIGRATION_CLOCK).runner.upgrade("head")
+        else:
+            shutil.copyfile(hub_migration_prototype(), db_path)
+        engine = create_engine_from_url(db_url)
     seed_repositories(
         engine, DEFAULT_FIXTURE_REPOSITORIES if repositories is None else repositories, tmp_path=tmp_path, link=link
     )
