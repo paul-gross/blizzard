@@ -102,6 +102,11 @@ class ChunkWorkRefsStore:
         facts_by_id = self._facts.status_facts_for_conn(conn, sorted(maybe_live_ids))
         return self._resolve(pairs, maybe_live_ids, facts_by_id)
 
+    def holder_candidates_conn(self, conn: Connection, pointer: WorkRef) -> set[str]:
+        """All chunks ever naming a pointer, including terminal or ephemeral ones."""
+        pairs, _ = self._maybe_live_holders(conn, [pointer])
+        return {chunk_id for _, chunk_id in pairs}
+
     @staticmethod
     def _maybe_live_holders(conn: Connection, pointers: list[WorkRef]) -> tuple[list[tuple[WorkRef, str]], set[str]]:
         """Every ``(pointer, chunk_id)`` pair naming one of ``pointers``, and the subset of

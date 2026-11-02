@@ -48,6 +48,7 @@ from blizzard.hub.domain.chunk.ingest import (
     IngestItemProjectMismatch,
     IngestProjectAmbiguous,
     IngestSourceNotLinked,
+    IngestWithdrawnItem,
     ingest_work_refs,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
@@ -205,6 +206,8 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
             ),
         )
     except EmptyIngest as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except IngestWithdrawnItem as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
         return ingest_project_refusal(services, exc)

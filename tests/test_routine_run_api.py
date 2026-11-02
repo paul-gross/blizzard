@@ -77,6 +77,16 @@ def test_run_defaults_to_the_routines_own_scope(tmp_path: Path) -> None:
     assert body["scope_slug"] == "blizzard"
 
 
+def test_successive_runs_allocate_distinct_refs(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    first = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={})
+    second = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={})
+    assert first.status_code == second.status_code == 201
+    assert first.json()["ref"] != second.json()["ref"]
+
+
 def test_run_scope_override_unknown_slug_is_422_and_never_mints(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)

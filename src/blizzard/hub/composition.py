@@ -257,6 +257,7 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.routine_authoring_participants import RoutineAuthoringParticipants
+from blizzard.hub.store.routine_run_participants import RoutineRunParticipants
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -641,6 +642,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
             facts=chunk_stores.facts,
             clock=clock,
             delete=delete,
+            exclusive=chunk_stores.exclusive,
         ),
         garden_proposal_resolution=GardenProposalDeliveryResolution(
             closures=garden_proposal_closure_store,
@@ -1340,6 +1342,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             items=work_item_store,
             work_refs=chunk_work_refs,
             clock=clock,
+            admission=RoutineRunParticipants(tenant_connections, clock),
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,
@@ -1353,8 +1356,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store,
             items=stores.work_item_edits,
-            default_graph=lambda: graph_mint.ensure_default(
-                PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
+            default_graph=lambda handle: graph_mint.ensure_default_locked(
+                handle, PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
             ),
             clock=clock,
         ),

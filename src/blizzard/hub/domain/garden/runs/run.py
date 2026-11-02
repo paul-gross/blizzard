@@ -11,7 +11,9 @@ than defaults."""
 from __future__ import annotations
 
 from collections.abc import Collection
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
@@ -189,6 +191,10 @@ class RunResult:
     baseline: FindingSet | None
 
 
+class IRunAdmission(Protocol):
+    def open(self) -> AbstractContextManager[RunService]: ...
+
+
 class RunService:
     """Mint and ingest a hub work item from a routine, in one act."""
 
@@ -203,6 +209,7 @@ class RunService:
         items: IWriteWorkItemRepository,
         work_refs: IReadChunkWorkRefsRepository,
         clock: IClock,
+        admission: IRunAdmission | None = None,
     ) -> None:
         self._routines = routines
         self._scopes = scopes
@@ -212,6 +219,17 @@ class RunService:
         self._items = items
         self._work_refs = work_refs
         self._clock = clock
+        self._admission = admission
+
+    def admitted(self) -> AbstractContextManager[RunService]:
+        assert self._admission is not None
+        return self._admission.open()
+
+    def get_routine(self, routine_id: str) -> Routine | None:
+        return self._routines.get(routine_id)
+
+    def get_scope(self, project_id: str, slug: str) -> Scope | None:
+        return self._scopes.get(project_id, slug)
 
     def refuse_if_retired(self, routine: Routine) -> None:
         """The retired-routine refusal on its own, so an edge can apply it before it

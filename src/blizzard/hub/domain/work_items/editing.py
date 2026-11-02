@@ -7,6 +7,7 @@ model, writes, and turns a lost write race into the model's refusal."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -17,19 +18,25 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import require_no_live_holder
 from blizzard.hub.domain.chunk.model import (
     Chunk,
-    ChunkFacts,
     HubWorkItem,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
+    holds_work_refs,
     mint_chunk,
 )
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.operations.delete import (
+    ChunkHasDependents,
+    ChunkNotDeletable,
+    DeleteService,
+    require_deletable,
+)
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.model import (
     Transition,
@@ -149,6 +156,7 @@ class WorkItemEditService:
         facts: IReadChunkFactsRepository,
         clock: IClock,
         delete: DeleteService,
+        exclusive: IChunkExclusiveWrites,
     ) -> None:
         self._items = items
         self._work_refs = work_refs
@@ -156,6 +164,7 @@ class WorkItemEditService:
         self._facts = facts
         self._clock = clock
         self._delete = delete
+        self._exclusive = exclusive
 
     def create(
         self,
@@ -195,30 +204,32 @@ class WorkItemEditService:
         title: str,
         body: str,
         author: WorkItemAuthor,
-        graph: Graph,
+        graph: Callable[[ILockedWorkRefRead], Graph],
         project_id: ProjectId,
         reason: str | None,
         closed_by: str,
     ) -> CreatedWorkItem | None:
-        """A garden-proposal acceptance's mint path: :meth:`create`'s guard sequence into the reserved hub
-        source and the proposal's ``project_id``, writing the item, its chunk, and the closure row on one
-        connection. Raises as
-        :meth:`create` does; returns ``None`` when already closed."""
+        """Accept into the reserved hub source, resolving the graph on the admission transaction.
+        The item, chunk and closure commit together. Raises as :meth:`create` does; returns
+        ``None`` when already closed."""
         text = WorkItemText.of(title=title, body=body)
-        pointer, chunk, at = prepare_mint(
-            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
-        )
-        item = self._items.accept_create(
-            proposal_id=proposal_id,
-            pointer=pointer,
-            title=text.title,
-            body=text.body,
-            author=author,
-            at=at,
-            chunk=chunk,
-            reason=reason,
-            closed_by=closed_by,
-        )
+        pointer = WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref=self._items.allocate_ref(RESERVED_HUB_SOURCE_NAME))
+        with self._exclusive.locked_work_refs([pointer]) as handle:
+            chosen = graph(handle)
+            at = self._clock.now()
+            chunk = mint_chunk([pointer], graph_id=chosen.graph_id, at=at, project_id=project_id)
+            item = self._items.accept_create_locked(
+                handle,
+                proposal_id=proposal_id,
+                pointer=pointer,
+                title=text.title,
+                body=text.body,
+                author=author,
+                at=at,
+                chunk=chunk,
+                reason=reason,
+                closed_by=closed_by,
+            )
         if item is None:
             return None
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
@@ -253,27 +264,35 @@ class WorkItemEditService:
         delivery that closed the item first refuses with :class:`WithdrawalLostToClosure`
         after the holder's deletion has committed, carrying the same deletion facts."""
         require_open_for(item, WorkItemVerb.WITHDRAW)
-        holder = self._work_refs.find_live_holder(item.pointer)
-        if holder is None:
-            closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
-            require_withdrawn(closed)
-            return WithdrawnWorkItem(item=closed)
-        chunk = self._record.get(holder)
-        if chunk is None:
-            raise ChunkNotFound(holder)
-        facts = self._facts.load_facts(holder)
-        prev_status = ChunkFacts.or_default(facts).status().value
-        try:
-            deleted_id = self._delete.delete(chunk, by=by)
-        except ChunkNotDeletable as exc:
-            raise WorkItemHeldByLiveChunk(item.pointer, holder) from exc
-        except ChunkHasDependents as exc:
-            raise WorkItemHeldByDependents(item.pointer, holder, exc.dependent_chunk_ids) from exc
-        updated = self._items.get(item.source, item.ref)
-        assert updated is not None
-        withdrawn = WithdrawnWorkItem(
-            item=updated, deleted_chunk_id=holder, deleted_chunk_status=prev_status, deleted_chunk_fact_id=deleted_id
-        )
+        with self._delete.withdrawal(item.pointer) as handle:
+            holder = handle.holder()
+            facts = handle.facts(holder) if holder is not None else None
+            if holder is None or (facts is not None and not holds_work_refs(facts.status())):
+                closed = self._items.close_locked(
+                    handle, item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now()
+                )
+                require_withdrawn(closed)
+                return WithdrawnWorkItem(item=closed)
+            if facts is None:
+                raise ChunkNotFound(holder)
+            try:
+                require_deletable(holder, facts, handle.standing_edges_touching(holder))
+            except ChunkNotDeletable as exc:
+                raise WorkItemHeldByLiveChunk(item.pointer, holder) from exc
+            except ChunkHasDependents as exc:
+                raise WorkItemHeldByDependents(item.pointer, holder, exc.dependent_chunk_ids) from exc
+            chunk = handle.record(holder)
+            assert chunk is not None
+            deleted_id = self._items.delete_chunk_and_withdraw_hub_items_locked(
+                handle, chunk, by=by, at=self._clock.now()
+            )
+            updated = self._items.get_locked(handle, item.pointer)
+            withdrawn = WithdrawnWorkItem(
+                item=updated,
+                deleted_chunk_id=holder,
+                deleted_chunk_status=facts.status().value,
+                deleted_chunk_fact_id=deleted_id,
+            )
         if updated.closure is not WorkItemClosure.WITHDRAWN:
             raise WithdrawalLostToClosure(updated, withdrawn)
         return withdrawn

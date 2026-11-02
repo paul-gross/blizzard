@@ -46,7 +46,13 @@ from blizzard.hub.domain.garden.routines import (
     RoutineScopeOtherProject,
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
-from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.garden.runs.run import (
+    RoutineRetiredError,
+    RunResult,
+    RunService,
+    ScopeNotRelatedError,
+    ScopeRetiredError,
+)
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweeps, SweepWindow
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
@@ -611,11 +617,29 @@ def run_routine(
     enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
     retired-default-graph shape); 409 on an out-of-band ingest already holding the
     allocated ref's pointer."""
-    routine = services.routines.get(routine_id)
+    with services.routine_run.admitted() as admitted:
+        result = _admit_routine_run(routine_id, request, services, identity, admitted)
+    if not isinstance(result, RunResult):
+        return result
+    chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
+        cause="minted", key=f"chunks:{result.chunk_id}"
+    )
+    services.events.publish_queue_changed()
+    return _run_response(result)
+
+
+def _admit_routine_run(
+    routine_id: str,
+    request: RoutineRunRequest,
+    services: TenantServices,
+    identity: ResolvedIdentity,
+    admitted: RunService,
+) -> object:
+    routine = admitted.get_routine(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
     try:
-        services.routine_run.refuse_if_retired(routine)
+        admitted.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
@@ -624,11 +648,11 @@ def run_routine(
         )
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    scope = services.scopes.get(routine.project_id, slug.value)
+    scope = admitted.get_scope(routine.project_id, slug.value)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown scope {slug.value!r}")
     try:
-        result = services.routine_run.run(
+        result = admitted.run(
             routine,
             scope=scope,
             mode=request.mode,
@@ -647,9 +671,4 @@ def run_routine(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
         return ingest_conflict_response(services, exc)
-    # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
-    chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
-        cause="minted", key=f"chunks:{result.chunk_id}"
-    )
-    services.events.publish_queue_changed()  # the mint adds the chunk to the backlog list
-    return _run_response(result)
+    return result

@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedWorkRefRead
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
@@ -256,7 +257,7 @@ class GardenProposalClosureService:
         *,
         closures: IWriteGardenProposalClosureRepository,
         items: WorkItemEditService,
-        default_graph: Callable[[], Graph],
+        default_graph: Callable[[ILockedWorkRefRead], Graph],
         clock: IClock,
     ) -> None:
         self._closures = closures
@@ -307,7 +308,7 @@ class GardenProposalClosureService:
             title=accept.title,
             body=accept.body,
             author=WorkItemAuthor.user(by),
-            graph=self._default_graph(),
+            graph=self._default_graph,
             project_id=ProjectId(proposal.project_id),
             reason=accept.reason,
             closed_by=by,

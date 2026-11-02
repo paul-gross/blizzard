@@ -62,6 +62,14 @@ class EmptyIngest(Exception):
         super().__init__("at least one token required")
 
 
+class IngestWithdrawnItem(Exception):
+    """A withdrawn hub item cannot be read through its source."""
+
+    def __init__(self, pointer: WorkRef) -> None:
+        super().__init__(f"no open {pointer.source}:{pointer.ref} work item exists")
+        self.pointer = pointer
+
+
 class IngestProjectAmbiguous(Exception):
     """No project was named and the ingest's pointers do not agree on one — a configured source is linked
     to several projects, the sources' single projects differ, or hub items recorded in different
@@ -280,6 +288,10 @@ class IngestService:
         work_refs = ingest_work_refs(pointers)
         try:
             with self._exclusive.locked_work_refs(work_refs, project=project) as handle:
+                withdrawn = handle.withdrawn_items(work_refs)
+                for pointer in work_refs:
+                    if pointer in withdrawn:
+                        raise IngestWithdrawnItem(pointer)
                 links = handle.source_links(configured_sources(work_refs))
                 items = handle.item_projects(work_refs)
                 try:

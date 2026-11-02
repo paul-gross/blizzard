@@ -117,7 +117,7 @@ def _service(
     )
 
 
-def _untouched_default_graph() -> Graph:
+def _untouched_default_graph(_handle: object) -> Graph:
     raise NotImplementedError("should not resolve the default graph")
 
 

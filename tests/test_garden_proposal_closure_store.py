@@ -6,9 +6,11 @@ together, checked first so an already-closed proposal mints nothing a second tim
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from threading import Event
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import select
@@ -20,6 +22,7 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
@@ -30,6 +33,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
     build_hub,
+    chunk_stores,
     count_queries,
     default_project,
     hub_scoped,
@@ -289,3 +293,103 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
 
     assert result is None
     assert items.get("hub", pointer.ref) is None
+
+
+@pytest.mark.parametrize("change", ["retire", "newer"])
+def test_accept_resolves_default_after_concurrent_lifecycle_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposal(hub)
+    services = hub.services
+    graph = services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    proposal = services.garden_proposals.get("gprop_1")
+    assert proposal is not None
+    original = WorkItemStore.allocate_ref
+    newer_id: list[str] = []
+
+    def allocate_then_change(store: WorkItemStore, source: str) -> str:
+        ref = original(store, source)
+        if change == "retire":
+            services.graph_lifecycle.retire(graph, by="operator")
+        else:
+            hub.clock.advance(timedelta(seconds=1))
+            newer, _ = services.graph_mint.mint(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+            newer_id.append(newer.graph_id)
+        return ref
+
+    monkeypatch.setattr(WorkItemStore, "allocate_ref", allocate_then_change)
+    if change == "retire":
+        with pytest.raises(DefaultGraphRetired):
+            services.garden_proposal_closure.accept(proposal, reason=None, by="u1", body=None, mint=True, findings=[])
+        assert services.garden_proposal_closures.get("gprop_1") is None
+        assert WorkItemStore(hub_store_connections(hub.engine)).list("hub") == []
+    else:
+        result = services.garden_proposal_closure.accept(
+            proposal, reason=None, by="u1", body=None, mint=True, findings=[]
+        )
+        assert result.chunk_id is not None
+        chunk = chunk_stores(hub.engine, hub.clock).record.get(result.chunk_id)
+        assert chunk is not None and chunk.graph_id == newer_id[0]
+
+
+def test_accept_holds_graph_decision_until_mint_commits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposal(hub)
+    services = hub.services
+    graph = services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    proposal = services.garden_proposals.get("gprop_1")
+    assert proposal is not None
+    entered, release = Event(), Event()
+    original = WorkItemStore.accept_create_locked
+
+    def paused_write(store: WorkItemStore, *args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        assert release.wait(10)
+        return original(store, *args, **kwargs)
+
+    monkeypatch.setattr(WorkItemStore, "accept_create_locked", paused_write)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        accept = pool.submit(
+            services.garden_proposal_closure.accept,
+            proposal,
+            reason=None,
+            by="u1",
+            body=None,
+            mint=True,
+            findings=[],
+        )
+        try:
+            assert entered.wait(10)
+            retire = pool.submit(services.graph_lifecycle.retire, graph, by="operator")
+            with pytest.raises(TimeoutError):
+                retire.result(timeout=0.2)
+        finally:
+            release.set()
+        result = accept.result(timeout=10)
+        retire.result(timeout=10)
+    assert result.chunk_id is not None
+    chunk = chunk_stores(hub.engine, hub.clock).record.get(result.chunk_id)
+    assert chunk is not None and chunk.graph_id == graph.graph_id
+    assert services.garden_proposal_closures.get("gprop_1") is not None
+
+
+def test_failed_accept_rolls_back_first_default_mint_and_closure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposal(hub)
+    services = hub.services
+    proposal = services.garden_proposals.get("gprop_1")
+    assert proposal is not None
+    assert services.graphs.get_enabled_by_name(PACKAGED.default.doc.name) is None
+
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("item write failed")
+
+    monkeypatch.setattr(WorkItemStore, "_insert_item", fail)
+    with pytest.raises(RuntimeError, match="item write failed"):
+        services.garden_proposal_closure.accept(proposal, reason=None, by="u1", body=None, mint=True, findings=[])
+    assert services.graphs.get_enabled_by_name(PACKAGED.default.doc.name) is None
+    assert services.garden_proposal_closures.get("gprop_1") is None
+    assert WorkItemStore(hub_store_connections(hub.engine)).list("hub") == []

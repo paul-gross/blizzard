@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from threading import Event
 from time import monotonic
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import sqlalchemy as sa
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.postgres_lock
 _AT = datetime(2026, 10, 27, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("operation", ["graph-transaction", "release", "work-ref", "authored"])
+@pytest.mark.parametrize("operation", ["graph-transaction", "release", "work-ref", "authored", "withdrawal"])
 @pytest.mark.parametrize("omit", [False, True], ids=["lock", "negative-control"])
 def test_graph_decision_key(database_url: str, operation: str, omit: bool) -> None:
     options = "-c statement_timeout=8000"
@@ -37,7 +37,9 @@ def test_graph_decision_key(database_url: str, operation: str, omit: bool) -> No
         record=cast(Any, None),
         dependencies=dependencies,
         registry=cast(Any, None),
-        work_refs=cast(Any, None),
+        work_refs=cast(
+            Any, Mock(live_holders_conn=Mock(return_value={}), holder_candidates_conn=Mock(return_value=set()))
+        ),
     )
     namespace = chunk_dependencies_store.DEPENDENCY_GRAPH_LOCK_NAMESPACE
     key = chunk_dependencies_store.DEPENDENCY_GRAPH_LOCK_KEY
@@ -57,6 +59,9 @@ def test_graph_decision_key(database_url: str, operation: str, omit: bool) -> No
                 chunk = mint_chunk([WorkRef("hub", "1")], graph_id="graph", at=_AT, project_id=ProjectId("project"))
                 with scoped.write("authored") as conn:
                     work_item_store.WorkItemStore(scoped)._admit_chunk(conn, chunk, _AT)
+            elif operation == "withdrawal":
+                with exclusive.locked_withdrawal(WorkRef("hub", "1")):
+                    pass
             else:
                 with exclusive.locked_dependency_graph([]):
                     pass

@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import (
     IChunkExclusiveWrites,
     ILockedChunkRead,
     ILockedFlowAdmissionRead,
+    ILockedWithdrawal,
     ILockedWorkRefRead,
 )
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -104,6 +105,14 @@ class LockedFlowAdmissionTransaction(LockedChunkTransaction):
 
 
 @dataclass(frozen=True)
+class LockedWithdrawalTransaction(LockedChunkTransaction):
+    _holder: str | None
+
+    def holder(self) -> str | None:
+        return self._holder
+
+
+@dataclass(frozen=True)
 class LockedWorkRefTransaction:
     """The concrete pointer-lock handle — :class:`ILockedWorkRefRead`'s adapter, every read
     resolving on :attr:`conn`, the connection every named pointer's lock row was taken on."""
@@ -135,6 +144,20 @@ class LockedWorkRefTransaction:
 
     def config_authoring_locked(self) -> None:
         pass
+
+    def withdrawn_items(self, pointers: Sequence[WorkRef]) -> set[WorkRef]:
+        refs = [p.ref for p in pointers if p.source == RESERVED_HUB_SOURCE_NAME]
+        result: set[WorkRef] = set()
+        for batch in id_batches(refs):
+            rows = self.conn.execute(
+                self._store.select(s.work_items, s.work_items.c.ref).where(
+                    s.work_items.c.source == RESERVED_HUB_SOURCE_NAME,
+                    s.work_items.c.ref.in_(batch),
+                    s.work_items.c.closure == "withdrawn",
+                )
+            )
+            result.update(WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref=row.ref) for row in rows)
+        return result
 
 
 _POINTER_LOCK_NAMESPACE = "work_ref"
@@ -208,6 +231,19 @@ class ChunkExclusiveWrites:
             for chunk_id in sorted(ids):
                 lock_chunk_row(conn, chunk_id)
             yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
+
+    @contextmanager
+    def locked_withdrawal(self, pointer: WorkRef) -> Generator[ILockedWithdrawal, None, None]:
+        with self._store.write("locked_withdrawal") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
+            ids = frozenset(self._work_refs.holder_candidates_conn(conn, pointer))
+            for chunk_id in sorted(ids):
+                lock_chunk_row(conn, chunk_id)
+            holder = self._work_refs.live_holders_conn(conn, [pointer]).get(pointer)
+            transaction = LockedWithdrawalTransaction(
+                conn, self._facts, self._record, self._dependencies, self._registry, ids, holder
+            )
+            yield transaction
 
     @contextmanager
     def locked_claim(self, chunk_id: str) -> Generator[ILockedChunkRead, None, None]:

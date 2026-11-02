@@ -80,6 +80,12 @@ class ILockedWorkRefRead(ILockedConfigTransaction, Protocol):
         """Recorded hub-item projects read on the locked connection."""
         ...
 
+    def withdrawn_items(self, pointers: Sequence[WorkRef]) -> set[WorkRef]: ...
+
+
+class ILockedWithdrawal(ILockedChunkRead, Protocol):
+    def holder(self) -> str | None: ...
+
 
 class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
@@ -103,6 +109,10 @@ class IChunkExclusiveWrites(Protocol):
 
     def locked_dependency_graph(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:
         """Lock the dependency graph key, then named chunks in sorted order."""
+        ...
+
+    def locked_withdrawal(self, pointer: WorkRef) -> AbstractContextManager[ILockedWithdrawal]:
+        """Lock the graph, then all historical holder rows in order, before resolving the live holder."""
         ...
 
     def locked_claim(self, chunk_id: str) -> AbstractContextManager[ILockedChunkRead]:

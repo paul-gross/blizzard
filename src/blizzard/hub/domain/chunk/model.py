@@ -32,7 +32,7 @@ from blizzard.hub.domain.runners.registration import RecordedPause
 if TYPE_CHECKING:
     # Deferred: ``ports.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
     # ``DependencyEdge`` — a runtime import here would cycle back.
-    from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+    from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 
 # --- Domain objects ---------------------------------------------------------
 
@@ -1980,6 +1980,12 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         """Record ``closed_at``/``closure`` on an open item, once."""
         ...
 
+    def close_locked(
+        self, handle: ILockedChunkRead, source: str, ref: str, *, closure: WorkItemClosure, at: datetime
+    ) -> HubWorkItem: ...
+
+    def get_locked(self, handle: ILockedChunkRead, pointer: WorkRef) -> HubWorkItem: ...
+
     def delete_chunk_and_withdraw_hub_items_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
     ) -> int:
@@ -2007,6 +2013,23 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         transaction — mirrors :meth:`create_with_chunk`, plus the closure row,
         written first as its idempotence guard. Returns ``None`` and writes nothing when
         ``proposal_id`` already carries a closure."""
+        ...
+
+    def accept_create_locked(
+        self,
+        handle: ILockedWorkRefRead,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        at: datetime,
+        chunk: Chunk,
+        reason: str | None,
+        closed_by: str,
+    ) -> HubWorkItem | None:
+        """Accept and mint on the pointer admission transaction."""
         ...
 
 

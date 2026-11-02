@@ -68,7 +68,13 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
     chunks = chunk_stores(engine, clock)
     delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
     edits = WorkItemEditService(
-        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+        items=items,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        facts=chunks.facts,
+        clock=clock,
+        delete=delete,
+        exclusive=chunks.exclusive,
     )
     users = UserRepository(store, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     resolution = GardenProposalDeliveryResolution(
@@ -836,7 +842,13 @@ def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock) -> Work
     """The write half on its own, to hand it a record read before a racing write."""
     delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
     return WorkItemEditService(
-        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+        items=items,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        facts=chunks.facts,
+        clock=clock,
+        delete=delete,
+        exclusive=chunks.exclusive,
     )
 
 
@@ -936,7 +948,7 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
             title=title,
             body=body,
             author=author,
-            graph=graph,
+            graph=lambda _: graph,
             project_id=ProjectId(default_project(engine)),
             reason=None,
             closed_by="operator",

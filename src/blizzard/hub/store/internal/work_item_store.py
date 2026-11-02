@@ -28,7 +28,7 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthorKind,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as s
@@ -43,6 +43,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
     lock_keys,
     record_deleted_row,
+    work_ref_conn_of,
 )
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
@@ -284,6 +285,28 @@ class WorkItemStore:
             ).one()
         return self._record(row)
 
+    def close_locked(
+        self, handle: ILockedChunkRead, source: str, ref: str, *, closure: WorkItemClosure, at: datetime
+    ) -> HubWorkItem:
+        conn = conn_of(handle)
+        self._close_conn(conn, source, ref, closure=closure, at=at)
+        row = conn.execute(
+            self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+        ).one()
+        return self._record(row)
+
+    def get_locked(self, handle: ILockedChunkRead, pointer: WorkRef) -> HubWorkItem:
+        row = (
+            conn_of(handle)
+            .execute(
+                self._store.select(s.work_items).where(
+                    s.work_items.c.source == pointer.source, s.work_items.c.ref == pointer.ref
+                )
+            )
+            .one()
+        )
+        return self._record(row)
+
     def delete_chunk_and_withdraw_hub_items_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
     ) -> int:
@@ -322,30 +345,84 @@ class WorkItemStore:
         with self._store.write("accept_create") as conn:
             lock_queue_positions(conn)
             lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
-            if not insert_garden_proposal_closure_row(
+            return self._accept_create_conn(
                 conn,
                 proposal_id=proposal_id,
-                closure=GardenProposalClosureKind.ACCEPTED,
-                reason=reason,
-                closed_by=closed_by,
-                at=at,
-                item_outcome=GardenProposalItemOutcome.MINTED,
                 pointer=pointer,
-            ):
-                return None
-            self._admit_chunk(conn, chunk, at)
-            work_item_id = self._insert_item(
-                conn,
-                source=pointer.source,
-                ref=pointer.ref,
                 title=title,
                 body=body,
                 author=author,
-                stated_priority=None,
                 at=at,
-                project_id=chunk.project_id,
+                chunk=chunk,
+                reason=reason,
+                closed_by=closed_by,
             )
-            insert_chunk_rows(conn, chunk)
+
+    def accept_create_locked(
+        self,
+        handle: ILockedWorkRefRead,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        at: datetime,
+        chunk: Chunk,
+        reason: str | None,
+        closed_by: str,
+    ) -> HubWorkItem | None:
+        return self._accept_create_conn(
+            work_ref_conn_of(handle),
+            proposal_id=proposal_id,
+            pointer=pointer,
+            title=title,
+            body=body,
+            author=author,
+            at=at,
+            chunk=chunk,
+            reason=reason,
+            closed_by=closed_by,
+        )
+
+    def _accept_create_conn(
+        self,
+        conn: Connection,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        at: datetime,
+        chunk: Chunk,
+        reason: str | None,
+        closed_by: str,
+    ) -> HubWorkItem | None:
+        if not insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=reason,
+            closed_by=closed_by,
+            at=at,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            pointer=pointer,
+        ):
+            return None
+        self._admit_chunk(conn, chunk, at)
+        work_item_id = self._insert_item(
+            conn,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            at=at,
+            project_id=chunk.project_id,
+        )
+        insert_chunk_rows(conn, chunk)
         return HubWorkItem(
             work_item_id=work_item_id,
             project_id=chunk.project_id,

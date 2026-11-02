@@ -10,13 +10,21 @@ from __future__ import annotations
 # The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
+from contextlib import contextmanager
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DependencyEdge,
+    IWriteWorkItemRepository,
+    WorkRef,
+)
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedWithdrawal
 
 
 class ChunkNotDeletable(ValueError):
@@ -108,3 +116,8 @@ class DeleteService:
             # withdrawal because the write below still carries the caller's stale list.
             current = handle.record(chunk.chunk_id) or chunk
             return self._items.delete_chunk_and_withdraw_hub_items_locked(handle, current, by=by, at=self._clock.now())
+
+    @contextmanager
+    def withdrawal(self, pointer: WorkRef) -> Generator[ILockedWithdrawal, None, None]:
+        with self._cycle_lock, self._exclusive.locked_withdrawal(pointer) as handle:
+            yield handle
