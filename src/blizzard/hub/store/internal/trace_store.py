@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, insert, select
+from sqlalchemy import ColumnElement, insert
 
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph
@@ -33,6 +33,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 _FAILED: HubEventKind = "trace-export-failed"
@@ -104,7 +105,7 @@ class TraceStore:
         c = s.trace_cursor.c
         with self._store.read(operation) as conn:
             row = conn.execute(
-                select(s.trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+                OPEN_TENANTS.select(s.trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
             ).first()
         if row is None:
             return None

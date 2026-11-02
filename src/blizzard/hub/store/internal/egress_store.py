@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Row, insert, select
+from sqlalchemy import Row, insert
 
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.hub_events import HubEventKind, IReadHubE
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
 from blizzard.hub.tenancy import TenantId
 
 _FAILED: HubEventKind = "egress-write-failed"
@@ -44,7 +45,12 @@ class EgressStore:
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
         c = s.egress_cursor.c
-        stmt = select(s.egress_cursor).where(c.dataset == dataset).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+        stmt = (
+            OPEN_TENANTS.select(s.egress_cursor)
+            .where(c.dataset == dataset)
+            .order_by(c.recorded_at.desc(), c.id.desc())
+            .limit(1)
+        )
         with self._store.read("egress_newest_cursor") as conn:
             row = conn.execute(stmt).first()
         return _cursor(row) if row is not None else None
@@ -55,7 +61,7 @@ class EgressStore:
         newest: list[EgressCheckpoint] = []
         for dataset in EGRESS_DATASETS:
             stmt = (
-                select(s.egress_cursor)
+                OPEN_TENANTS.select(s.egress_cursor)
                 .where(c.dataset == dataset, c.files != _NO_FILES)
                 .order_by(c.recorded_at.desc(), c.id.desc())
                 .limit(1)

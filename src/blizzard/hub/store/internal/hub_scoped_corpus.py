@@ -3,8 +3,8 @@ across every tenant.
 
 Each corpus read answers, beside every row, the tenant the row belongs to, and leaves out every
 closed tenant — one with a ``tenant_deletions`` row, whether its drain is still running or done —
-through the one predicate ``corpus_rows.open_tenant``, applied to every tenant-owned table a read
-returns rows of; the same predicate leaves out a row naming no tenant. A probe that gates a pass
+by being built through ``OPEN_TENANTS``, which confines every tenant-owned table a read returns rows of; it
+leaves out a row naming no tenant too. A probe that gates a pass
 (``bzh:probe-gated-pass``) is read hub-wide in one statement and answers per tenant
 (``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. The group reads and never
 writes. The statements live in ``corpus_rows`` (which owns the id-minting rule for tenant
@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null, select, union_all
+from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
@@ -48,7 +48,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
-from blizzard.hub.store.internal.corpus_rows import open_tenant
+from blizzard.hub.store.internal.fact_families import ephemeral_tables
+from blizzard.hub.store.internal.open_tenants import ALL_TENANTS, OPEN_TENANTS
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
 from blizzard.hub.tenancy import TenantId
 
@@ -56,13 +57,12 @@ from blizzard.hub.tenancy import TenantId
 #: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
-_EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
+_EPHEMERAL_TABLES = ephemeral_tables()
 
 
 def _ephemeral_chunk_ids() -> CompoundSelect[Any]:
     """Every tenant's grouped-away and deleted chunk ids — gone from every corpus read."""
-    first, *rest = (select(t.c.chunk_id) for t in _EPHEMERAL_TABLES)
-    return first.union(*rest)
+    return OPEN_TENANTS.union(*(OPEN_TENANTS.select(t, t.c.chunk_id) for t in _EPHEMERAL_TABLES))
 
 
 def _visible_segments() -> Select[Any]:
@@ -70,18 +70,15 @@ def _visible_segments() -> Select[Any]:
     and superseded by no segment of the same tenant."""
     segment = s.transcript_segments
     successor = segment.alias("successor")
-    superseded = (
-        select(successor.c.id)
-        .where(successor.c.supersedes == segment.c.segment_id, successor.c.tenant_id == segment.c.tenant_id)
-        .exists()
+    superseded = OPEN_TENANTS.exists(
+        successor, successor.c.supersedes == segment.c.segment_id, successor.c.tenant_id == segment.c.tenant_id
     )
     return (
-        select(segment.c.tenant_id, segment.c.segment_id)
+        OPEN_TENANTS.select(segment, segment.c.tenant_id, segment.c.segment_id)
         .where(
-            open_tenant(segment),
             segment.c.final.is_(True),
             ~superseded,
-            segment.c.chunk_id.in_(select(s.chunks.c.chunk_id)),
+            OPEN_TENANTS.exists(s.chunks, s.chunks.c.chunk_id == segment.c.chunk_id),
         )
         .distinct()
     )
@@ -101,8 +98,8 @@ class SweepCorpusReads:
         refs = s.chunk_work_refs
         with self._read("corpus live work refs") as conn:
             rows = conn.execute(
-                select(refs.c.tenant_id, refs.c.chunk_id, refs.c.source, refs.c.ref)
-                .where(open_tenant(refs), refs.c.chunk_id.not_in(_ephemeral_chunk_ids()))
+                OPEN_TENANTS.select(refs, refs.c.tenant_id, refs.c.chunk_id, refs.c.source, refs.c.ref)
+                .where(refs.c.chunk_id.not_in(_ephemeral_chunk_ids()))
                 .order_by(refs.c.id)
             ).all()
         return [
@@ -123,7 +120,7 @@ class SweepCorpusReads:
         changes = s.config_changes
         with self._read("corpus work source changes signature") as conn:
             rows = conn.execute(
-                select(changes.c.tenant_id, func.max(changes.c.id))
+                ALL_TENANTS.select(changes, changes.c.tenant_id, func.max(changes.c.id))
                 .where(changes.c.record_kind == RecordKind.WORK_SOURCE.value)
                 .group_by(changes.c.tenant_id)
             ).all()
@@ -142,7 +139,8 @@ class SweepCorpusReads:
     ) -> dict[TenantId, tuple[tuple[str, int, int | None], ...]]:
         """Each tenant's ``(table, count, max(id))`` per table of ``tables``, read hub-wide in one statement."""
         per_table = [
-            select(
+            ALL_TENANTS.select(
+                table,
                 table.c.tenant_id.label("tenant_id"),
                 literal(table.name).label("table_name"),
                 func.count().label("row_count"),
@@ -151,7 +149,7 @@ class SweepCorpusReads:
             for table in tables
         ]
         with self._read(operation) as conn:
-            rows = conn.execute(union_all(*per_table)).all()
+            rows = conn.execute(ALL_TENANTS.union_all(*per_table)).all()
         seen: dict[str, dict[str, tuple[int, int | None]]] = {}
         for row in rows:
             seen.setdefault(row.tenant_id, {})[row.table_name] = (row.row_count, row.max_id)
@@ -168,10 +166,12 @@ class SweepCorpusReads:
         attempt, intent = s.close_intent_attempts, s.close_intents
         of_intent = and_(attempt.c.tenant_id == intent.c.tenant_id, attempt.c.intent_id == intent.c.id)
         spent = attempt.c.outcome != DEFERRED_ATTEMPT
-        attempt_count = select(func.count(attempt.c.id)).where(of_intent, spent).scalar_subquery()
-        last_attempt_at = select(func.max(attempt.c.attempted_at)).where(of_intent, spent).scalar_subquery()
+        attempt_count = OPEN_TENANTS.select(attempt, func.count(attempt.c.id)).where(of_intent, spent).scalar_subquery()
+        last_attempt_at = (
+            OPEN_TENANTS.select(attempt, func.max(attempt.c.attempted_at)).where(of_intent, spent).scalar_subquery()
+        )
         resume_at = (
-            select(attempt.c.resume_at)
+            OPEN_TENANTS.select(attempt, attempt.c.resume_at)
             .where(of_intent, attempt.c.outcome == DEFERRED_ATTEMPT)
             .order_by(attempt.c.attempted_at.desc(), attempt.c.id.desc())
             .limit(1)
@@ -179,7 +179,8 @@ class SweepCorpusReads:
         )
         with self._read("corpus pending close intents") as conn:
             rows = conn.execute(
-                select(
+                OPEN_TENANTS.select(
+                    intent,
                     intent.c.tenant_id,
                     intent.c.id,
                     intent.c.chunk_id,
@@ -189,7 +190,7 @@ class SweepCorpusReads:
                     last_attempt_at.label("last_attempt_at"),
                     resume_at.label("resume_at"),
                 )
-                .where(open_tenant(intent), intent.c.retired_at.is_(None))
+                .where(intent.c.retired_at.is_(None))
                 .where(intent.c.chunk_id.not_in(_ephemeral_chunk_ids()))
                 .order_by(intent.c.id)
             ).all()
@@ -213,14 +214,16 @@ class SweepCorpusReads:
     def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
         """One grouped statement of segment and chunk aggregates per tenant."""
         segment, chunk = s.transcript_segments, s.chunks
-        segments = select(
+        segments = ALL_TENANTS.select(
+            segment,
             segment.c.tenant_id.label("tenant_id"),
             func.count(segment.c.id).label("segment_count"),
             func.max(segment.c.id).label("max_segment_id"),
             func.max(segment.c.received_at).label("max_received_at"),
             literal(0).label("chunk_count"),
         ).group_by(segment.c.tenant_id)
-        chunks = select(
+        chunks = ALL_TENANTS.select(
+            chunk,
             chunk.c.tenant_id.label("tenant_id"),
             literal(0).label("segment_count"),
             null().label("max_segment_id"),
@@ -228,7 +231,7 @@ class SweepCorpusReads:
             func.count().label("chunk_count"),
         ).group_by(chunk.c.tenant_id)
         with self._read("corpus derivation signature") as conn:
-            rows = conn.execute(union_all(segments, chunks)).all()
+            rows = conn.execute(ALL_TENANTS.union_all(segments, chunks)).all()
         merged: dict[str, dict[str, Any]] = {}
         for row in rows:
             into = merged.setdefault(
@@ -250,7 +253,8 @@ class SweepCorpusReads:
         marker = s.transcript_event_derivations
         with self._read("corpus candidacy") as conn:
             digest_rows = conn.execute(
-                select(
+                OPEN_TENANTS.select(
+                    segment,
                     segment.c.tenant_id,
                     segment.c.segment_id,
                     segment.c.content_digest,
@@ -265,9 +269,9 @@ class SweepCorpusReads:
             markers = {
                 (row.tenant_id, row.segment_id): row.content_fingerprint
                 for row in conn.execute(
-                    select(marker.c.tenant_id, marker.c.segment_id, marker.c.content_fingerprint).where(
-                        open_tenant(marker), marker.c.extractor_version == extractor_version
-                    )
+                    OPEN_TENANTS.select(
+                        marker, marker.c.tenant_id, marker.c.segment_id, marker.c.content_fingerprint
+                    ).where(marker.c.extractor_version == extractor_version)
                 )
             }
         visible_ids: dict[TenantId, set[str]] = {}
@@ -288,8 +292,7 @@ class SweepCorpusReads:
         marker = s.transcript_event_derivations
         with self._read("corpus derived segment ids") as conn:
             rows = conn.execute(
-                select(marker.c.tenant_id, marker.c.segment_id)
-                .where(open_tenant(marker))
+                OPEN_TENANTS.select(marker, marker.c.tenant_id, marker.c.segment_id)
                 .distinct()
                 .order_by(marker.c.tenant_id, marker.c.segment_id)
             ).all()

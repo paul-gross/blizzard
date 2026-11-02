@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.egress.repository import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.fact_families import Projection, tables
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
@@ -263,6 +264,105 @@ def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_
         _live(world.carried): (f"{world.carried}:{_live(world.carried)}",),
         _live(_OPEN): (f"{_OPEN}:{_live(_OPEN)}",),
     }
+
+
+def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(world: _World) -> None:
+    """The closed tenant holds a row beside its chunk in each table the trace reads (``_seed_tenant`` seeds the
+    rest): none comes back."""
+    chunk = _live(_CLOSED)
+    project = default_project(world.engine, _CLOSED)
+    tenant = {"tenant_id": _CLOSED, "chunk_id": chunk}
+    seeded = {
+        s.chunk_pause_facts: {"paused": True, "set_at": _AT, "set_by": "test"},
+        s.requeues: {"requeued_at": _AT},
+        s.chunk_promoted: {"promoted_at": _AT},
+        s.chunk_demoted: {"demoted_at": _AT},
+        s.chunk_stopped: {"stopped_at": _AT},
+        s.chunk_completed: {"completed_at": _AT, "completed_by": "test"},
+        s.route_released: {"released_at": _AT, "seq": 1},
+        s.epoch_owners: {"epoch": 1, "runner_id": "r1", "recorded_at": _AT},
+        s.chunk_bounces: {"epoch": 1, "cause": "c", "envelope": "{}", "recorded_at": _AT},
+        s.hub_node_poll: {"node_id": "nd_1", "epoch": 1, "polled_at": _AT, "kind": "k"},
+        s.decisions: {
+            "decision_id": "dc_closed",
+            "node_id": "nd_1",
+            "node_name": "n",
+            "epoch": 1,
+            "choices": "[]",
+            "submitted_at": _AT,
+            "project_id": project,
+        },
+        s.questions: {
+            "question_id": "qn_closed",
+            "runner_id": "r1",
+            "epoch": 1,
+            "question": "q",
+            "options": "[]",
+            "asked_at": _AT,
+            "project_id": project,
+        },
+        s.chunk_migrations: {
+            "migration_id": "mg_closed",
+            "from_graph_id": f"gr_{_CLOSED}",
+            "to_graph_id": f"gr_{_CLOSED}",
+            "epoch": 1,
+            "recorded_at": _AT,
+        },
+        s.escalations: {"epoch": 1, "recorded_at": _AT, "takeover_command": "", "wrapped_takeover_command": ""},
+        s.chunk_restarts: {
+            "graph_id": f"gr_{_CLOSED}",
+            "to_node_id": "nd_1",
+            "epoch": 1,
+            "restarted_by": "test",
+            "recorded_at": _AT,
+        },
+        s.route_created: {
+            "route_id": "rt_closed",
+            "runner_id": "r1",
+            "workspace_id": "ws",
+            "created_at": _AT,
+            "seq": 1,
+        },
+        s.flow_submissions: {
+            "submission_id": "sb_closed",
+            "node_id": "nd_1",
+            "epoch": 1,
+            "generation": 0,
+            "arrival": 0,
+            "submitted_at": _AT,
+        },
+    }
+    for table, values in seeded.items():
+        world.insert(table, **tenant, **values)
+    world.insert(
+        s.decision_resolutions,
+        tenant_id=_CLOSED,
+        decision_id="dc_closed",
+        choice="c",
+        resolved_by="test",
+        resolved_at=_AT,
+    )
+    world.insert(
+        s.hub_exec_slot,
+        tenant_id=_CLOSED,
+        slot_id="sl_closed",
+        holder_chunk_id=chunk,
+        node_id="nd_1",
+        acquired_at=_AT,
+    )
+    world.insert(
+        s.chunk_dependencies,
+        tenant_id=_CLOSED,
+        dependency_id="dp_closed",
+        dependent_chunk_id=chunk,
+        prerequisite_chunk_id=_gone(_CLOSED),
+        declared_at=_AT,
+        declared_by="test",
+    )
+    held = {*seeded, s.decision_resolutions, s.hub_exec_slot, s.chunk_dependencies}
+    from_seed = {s.transitions, s.lease_facts, s.usage_facts, s.chunk_work_refs}
+    assert set(tables(Projection.TRACE)) <= held | from_seed
+    assert world.corpus.step_facts_for([chunk], _tenant_label) == {}
 
 
 def test_usage_pages_are_the_open_tenants_rows_each_with_its_tenant(world: _World) -> None:

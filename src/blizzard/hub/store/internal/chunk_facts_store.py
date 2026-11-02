@@ -51,10 +51,18 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import (
     settled_done,
     settled_stopped,
 )
+from blizzard.hub.store.internal.fact_families import Projection, families, tables
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
-ALL_FAMILIES: frozenset[str] = frozenset(
+ALL_FAMILIES: frozenset[str] = families(Projection.FACTS)
+
+#: Exactly the families `ChunkFacts.status()` reaches — pinned by a mechanical equivalence test.
+STATUS_FAMILIES: frozenset[str] = families(Projection.STATUS)
+
+#: The families `_load_batch` has a mapper for — equal to :data:`ALL_FAMILIES`, which
+#: `tests/test_fact_families.py` checks.
+LOADED_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
         "stopped",
@@ -80,61 +88,21 @@ ALL_FAMILIES: frozenset[str] = frozenset(
     }
 )
 
-#: Exactly the families `ChunkFacts.status()` reaches — pinned by a mechanical equivalence test.
-STATUS_FAMILIES: frozenset[str] = frozenset(
-    {
-        "promoted",
-        "stopped",
-        "operator_completed",
-        "escalations",
-        "leases",
-        "transitions",
-        "routes_created",
-        "routes_released",
-        "questions",
-        "decisions",
-        "requeues",
-        "migrations",
-        "restarts",
-        "pauses",
-    }
-)
-
-_MOVEMENT_FAMILIES: frozenset[str] = frozenset({"transitions", "migrations", "restarts"})
-
-
-#: Each status family's tables — the change probe's list, so a new family joins it here.
-_STATUS_FAMILY_TABLES: dict[str, tuple[Table, ...]] = {
-    "promoted": (s.chunk_promoted, s.chunk_demoted),
-    "stopped": (s.chunk_stopped,),
-    "operator_completed": (s.chunk_completed,),
-    "escalations": (s.escalations,),
-    "leases": (s.lease_facts,),
-    "transitions": (s.transitions,),
-    "routes_created": (s.route_created,),
-    "routes_released": (s.route_released,),
-    "questions": (s.questions, s.question_answers),
-    "decisions": (s.decisions, s.decision_resolutions),
-    "requeues": (s.requeues,),
-    "migrations": (s.chunk_migrations,),
-    "restarts": (s.chunk_restarts,),
-    "pauses": (s.chunk_pause_facts,),
-}
-assert _STATUS_FAMILY_TABLES.keys() == STATUS_FAMILIES, "every status family names its tables"
+MOVEMENT_FAMILIES: frozenset[str] = frozenset({"transitions", "migrations", "restarts"})
 
 
 def status_family_tables() -> tuple[Table, ...]:
     """Every table the status families read, plus ``chunks`` (the roster the facts load keys on)."""
-    tables = {t.name: t for tables in _STATUS_FAMILY_TABLES.values() for t in tables}
-    tables["chunks"] = s.chunks
-    return tuple(tables[name] for name in sorted(tables))
+    by_name = {t.name: t for t in tables(Projection.STATUS)}
+    by_name["chunks"] = s.chunks
+    return tuple(by_name[name] for name in sorted(by_name))
 
 
 #: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`STATUS_FAMILIES`
 #: plus ``usage`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.usage_total`) and
 #: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_epoch`), the
 #: reaches ``status()`` itself doesn't make. :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
-_TICK_STATUS_FAMILIES: frozenset[str] = STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
+TICK_STATUS_FAMILIES: frozenset[str] = STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
 
 def _rows(
@@ -190,23 +158,23 @@ class ChunkFactsStore:
         if not chunk_ids:
             return {}
         with self._store.read("movement_facts_for") as conn:
-            return self._load(conn, chunk_ids, families=_MOVEMENT_FAMILIES)
+            return self._load(conn, chunk_ids, families=MOVEMENT_FAMILIES)
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
-        by chunk id, reading only the families ``_TICK_STATUS_FAMILIES`` names rather than
+        by chunk id, reading only the families ``TICK_STATUS_FAMILIES`` names rather than
         every family :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as :meth:`load_facts_for`."""
         if not chunk_ids:
             return {}
         with self._store.read("status_facts_for") as conn:
-            return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
+            return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
     def status_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`status_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
         if not chunk_ids:
             return {}
-        return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
+        return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by

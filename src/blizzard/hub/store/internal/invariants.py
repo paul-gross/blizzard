@@ -25,6 +25,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
 from blizzard.hub.store.scoped import TENANT_COLUMN, ScopedConnections, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 
@@ -41,11 +42,7 @@ class HubQueryCheck(QueryCheck):
     def rows(self, statement: Select[Any]) -> CursorResult[Any]:
         """``statement``'s rows of the open tenants only — each tenant-owned table it reads from is confined to the
         tenants no ``tenant_deletions`` row names."""
-        closed = select(hub.tenant_deletions.c.tenant_id)
-        open_only = [
-            from_.c[TENANT_COLUMN].not_in(closed) for from_ in statement.get_final_froms() if is_tenant_owned(from_)
-        ]
-        return self.conn.execute(statement.where(*open_only) if open_only else statement)
+        return self.conn.execute(OPEN_TENANTS.confine(statement))
 
 
 @dataclass(frozen=True)

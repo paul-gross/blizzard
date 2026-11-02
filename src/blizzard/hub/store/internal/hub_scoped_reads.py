@@ -17,12 +17,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 
-from sqlalchemy import Connection, exists, select
+from sqlalchemy import Connection
 
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.open_tenants import ALL_TENANTS
 from blizzard.hub.store.schema import tenant_deletions, tenants
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
 
@@ -44,9 +45,13 @@ class TenantStateReads:
         """Raises :class:`UnknownTenant` when no tenant has this id, and :class:`TenantClosed`
         when it has a ``tenant_deletions`` row — whether its drain is still running or done."""
         with hub_scoped_read(self._connections, "read a tenant's state") as conn:
-            known = conn.execute(select(tenants.c.tenant_id).where(tenants.c.tenant_id == tenant)).first()
+            known = conn.execute(
+                ALL_TENANTS.select(tenants, tenants.c.tenant_id).where(tenants.c.tenant_id == tenant)
+            ).first()
             closed = conn.execute(
-                select(tenant_deletions.c.id).where(tenant_deletions.c.tenant_id == tenant).limit(1)
+                ALL_TENANTS.select(tenant_deletions, tenant_deletions.c.id)
+                .where(tenant_deletions.c.tenant_id == tenant)
+                .limit(1)
             ).first()
         if closed is not None:
             raise TenantClosed(tenant)
@@ -55,9 +60,9 @@ class TenantStateReads:
 
     def open_tenants(self) -> dict[TenantId, str]:
         """Every tenant with no ``tenant_deletions`` row, by id, with its name."""
-        closed = exists().where(tenant_deletions.c.tenant_id == tenants.c.tenant_id)
+        closed = ALL_TENANTS.exists(tenant_deletions, tenant_deletions.c.tenant_id == tenants.c.tenant_id)
         with hub_scoped_read(self._connections, "read the open tenants") as conn:
-            rows = conn.execute(select(tenants.c.tenant_id, tenants.c.name).where(~closed)).all()
+            rows = conn.execute(ALL_TENANTS.select(tenants, tenants.c.tenant_id, tenants.c.name).where(~closed)).all()
         return {TenantId(row.tenant_id): row.name for row in rows}
 
 

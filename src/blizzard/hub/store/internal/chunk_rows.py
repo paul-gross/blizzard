@@ -45,6 +45,7 @@ from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
 
@@ -272,7 +273,7 @@ def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: st
     return inserted_id(result)
 
 
-_EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
+_EPHEMERAL_TABLES = ephemeral_tables()
 """The tables whose chunk ids are gone from every read — the one place the ephemeral set is
 declared; the subquery helper and the id-set helpers below all derive from it."""
 
