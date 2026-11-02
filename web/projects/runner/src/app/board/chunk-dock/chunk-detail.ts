@@ -10,6 +10,7 @@ import {
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
+import { injectChunkRequeueMutation } from './chunk-requeue.mutations';
 import { heartbeatLabel, liveWorker, runnerTarget } from './chunk-detail.model';
 import { injectPanelProjects } from '../../core/panel-reads';
 import { MachineDetailView } from './chunk-detail-view';
@@ -119,11 +120,45 @@ export class MachineDetail {
    * so a stale failure never lingers into the next chunk's dock. */
   protected readonly actionError = signal<string | null>(null);
 
+  /** The escalation's Requeue mutation — this dock's runner, the escalation's owner, since the
+   * shell matches the escalation on the newest lease's runner. */
+  protected readonly requeueMutation = injectChunkRequeueMutation(() => this.runnerId());
+
+  /** Whether the shown chunk's requeue is in flight — scoped to it by the mutation's variables. */
+  protected readonly requeuePending = computed<boolean>(() =>
+    this.requeueMutation.isPending() && this.requeueMutation.variables()?.chunkId === this.chunkId());
+
+  /** The shown chunk's last requeue failure, or `null`. */
+  protected readonly requeueError = signal<string | null>(null);
+
+  /** The chunk whose requeue last landed, so the notice renders for that chunk only. */
+  private readonly requeuedChunkId = signal<string | null>(null);
+  protected readonly requeued = computed<boolean>(() =>
+    this.requeuedChunkId() !== null && this.requeuedChunkId() === this.chunkId());
+
   constructor() {
     effect(() => {
       this.chunkId();
       this.actionError.set(null);
+      this.requeueError.set(null);
     });
+  }
+
+  /** Requeue the escalated chunk on its owning runner, once the operator has confirmed. */
+  protected onRequeue(chunkId: string): void {
+    const runnerId = this.runnerId();
+    if (runnerId === null || this.requeuePending()) return;
+    this.requeueError.set(null);
+    this.requeuedChunkId.set(null);
+    this.requeueMutation.mutate(
+      { runnerId, chunkId },
+      {
+        onSuccess: () => this.requeuedChunkId.set(chunkId),
+        onError: (error) => {
+          if (this.chunkId() === chunkId) this.requeueError.set(errorMessage(error, 'Requeue failed.'));
+        },
+      },
+    );
   }
 
   /** The chunk's runner's bare name, for the header's

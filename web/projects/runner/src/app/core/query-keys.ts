@@ -55,3 +55,8 @@ export function runnerChunkWorkItemsKey(runnerId: string | null, chunkId: string
 export function runnerChunkDetailKey(runnerId: string, chunkId: string): readonly unknown[] {
   return chunkDetailKey(runnerId, chunkId);
 }
+
+/** One selftest run on one runner — `GET /runners/{runner_id}/api/selftests/{selftest_id}`. */
+export function runnerSelftestKey(runnerId: string, selftestId: string): readonly unknown[] {
+  return [runnerId, 'selftest', selftestId];
+}

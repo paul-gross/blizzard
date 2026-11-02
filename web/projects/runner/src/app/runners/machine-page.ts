@@ -4,12 +4,13 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { KitPanel } from 'fleet';
 
 import { LocalPauseControl } from './app-pause-control';
+import { LocalSelftest } from './selftest';
 import { LocalThrottle } from './throttle';
 
 @Component({
   selector: 'app-machine-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, RouterLink, LocalPauseControl, LocalThrottle],
+  imports: [KitPanel, RouterLink, LocalPauseControl, LocalThrottle, LocalSelftest],
   templateUrl: './machine-page.html',
 })
 export class MachinePage {

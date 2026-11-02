@@ -27,5 +27,9 @@
     [lease]="newestLease()"
     [escalation]="escalation()"
     [heartbeatLabel]="heartbeatLabel()"
+    [requeuePending]="requeuePending()"
+    [requeueError]="requeueError()"
+    [requeued]="requeued()"
+    (requeue)="onRequeue($event)"
   />
 </fleet-kit-panel>

@@ -91,7 +91,9 @@ poll only as a backstop, and the session read has no poll — a stream 401 route
 read's 401.
 
 The panel's top-bar Pause/Resume control issues the identical `PATCH /runners/{runner_id}/api/runner` the CLI's local
-verbs use — the same write path, not a second one.
+verbs use — the same write path, not a second one. The panel's Requeue on an escalation and its Run selftest issue the
+same `POST /runners/{runner_id}/api/chunks/{chunk_id}/requeues` and `POST /runners/{runner_id}/api/selftests` routes the
+CLI's `runner requeue` and `runner selftest` use.
 
 ## The two brakes
 

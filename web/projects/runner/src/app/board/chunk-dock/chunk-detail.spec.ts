@@ -554,3 +554,80 @@ describe('MachineDetail heartbeat label ticking', () => {
     }
   });
 });
+
+describe('MachineDetail Requeue', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub.restore());
+
+  const ESCALATION: runnerApi.EscalationView = {
+    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+    lease_id: NEW_LEASE,
+    node_id: 'nd_build',
+    epoch: 2,
+    closed_at: '2026-07-16T11:00:00.000Z',
+    resume_command: 'blizzard runner resume sess-new',
+    wrapped_takeover_command: null,
+    closure: null,
+    cause: null,
+    effort: null,
+    harness_id: null,
+    harness_version: null,
+    model: null,
+    project_id: null,
+    session_name: null,
+  };
+  const REQUEUE_ROUTE = '/runners/rn_2/api/chunks/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9/requeues';
+
+  /** The dock over an escalated chunk owned by `rn_2`, the requeue POST answered by `result`. */
+  async function mountEscalated(result: unknown) {
+    stub = stubRequestClient(runnerClient, (method, path) => (method === 'POST' && path === REQUEUE_ROUTE ? result : {}));
+    await TestBed.configureTestingModule({
+      imports: [MachineDetail],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(MachineDetail);
+    fixture.componentRef.setInput('leases', [NEWEST({ owner: { runnerId: 'rn_2', name: 'r2', label: 'r2' } })]);
+    fixture.componentRef.setInput('escalation', ESCALATION);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!.click();
+    await settle(fixture);
+    return { fixture, el };
+  }
+
+  it('POSTs to the owning runner’s requeue route once confirmed, then shows the requeued notice', async () => {
+    const { fixture, el } = await mountEscalated({ chunk_id: ESCALATION.chunk_id, requeued: true });
+    expect(stub.forRoute(REQUEUE_ROUTE, 'POST')).toHaveLength(0);
+
+    el.querySelector<HTMLElement>('[data-testid="confirm-requeue-confirm"]')!.click();
+    await settle(fixture);
+
+    expect(stub.forRoute(REQUEUE_ROUTE, 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="requeued-notice"]')?.textContent).toContain('a fresh attempt spawns at its current node');
+  });
+
+  it('sends nothing when the operator cancels', async () => {
+    const { fixture, el } = await mountEscalated({});
+
+    el.querySelector<HTMLElement>('[data-testid="confirm-requeue-cancel"]')!.click();
+    await settle(fixture);
+
+    expect(stub.forRoute(REQUEUE_ROUTE, 'POST')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="confirm-requeue"]')).toBeNull();
+  });
+
+  it('renders a refused requeue on the error line', async () => {
+    const { fixture, el } = await mountEscalated(stubError(409, { detail: 'end the interactive session first' }));
+
+    el.querySelector<HTMLElement>('[data-testid="confirm-requeue-confirm"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="requeue-error"]')?.textContent).toContain('end the interactive session first');
+    expect(el.querySelector('[data-testid="requeued-notice"]')).toBeNull();
+    expect(el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!.disabled).toBe(false);
+  });
+});
