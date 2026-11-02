@@ -69,6 +69,9 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_lease": Published(
         RunnerEventType.LEASE_CHANGED, "Spawner._mint (runner/lifecycle/spawn.py) — cause='created'"
     ),
+    "record_mint": Published(
+        RunnerEventType.LEASE_CHANGED, "Spawner._mint (runner/lifecycle/spawn.py) — cause='created', after the commit"
+    ),
     "record_spawn": Published(
         RunnerEventType.LEASE_CHANGED,
         "Spawner.spawn (runner/lifecycle/spawn.py) and DormantSession._wake (runner/lifecycle/dormant.py) "
@@ -218,6 +221,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_takeover": Published(
         RunnerEventType.TAKEOVER_CHANGED, "TakeoverService.open (runner/lifecycle/takeover.py) — cause='opened'"
     ),
+    "record_takeover_entry": Silent(_INTERNAL_BOOKKEEPING + " (the entry fact; the open already published)"),
     "record_takeover_end": Published(
         RunnerEventType.TAKEOVER_CHANGED,
         "TakeoverService.close (runner/lifecycle/takeover.py) and Pull._reconcile_takeovers "

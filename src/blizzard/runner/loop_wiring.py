@@ -42,6 +42,7 @@ from blizzard.runner.lifecycle.judgement.internal.elicitation_files import Elici
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
+from blizzard.runner.lifecycle.takeover import TakeoverRecovery
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
@@ -331,6 +332,17 @@ class ResumeMarking:
         return ResumeIntents(self.stores).mark_crashed(
             process=self.process, liveness=self.host_stores.daemon_liveness, now=self.clock.now()
         )
+
+    def recover_takeovers(self) -> int:
+        """Finish and end every takeover a crash interrupted mid-entry — run after :meth:`on_startup` (whose
+        marking skips the held lease) and before any thread or request can begin an entry."""
+        return TakeoverRecovery(
+            takeover=self.stores.takeover,
+            leases=self.stores.lease_record,
+            elicitations=self.stores.elicitations,
+            process=self.process,
+            clock=self.clock,
+        ).run()
 
 
 class RunnerStepper:

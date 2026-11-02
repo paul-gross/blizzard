@@ -78,11 +78,17 @@ class OutboundFacts:
 
     ctx: OutboundContext
 
-    def lease_minted(self, chunk_id: str, lease_id: str, *, epoch: int, at: datetime) -> None:
-        """Buffered ahead of any completion minted under it: the drain is strict FIFO, and this
-        is the fence input the hub's completion check consumes."""
+    def lease_minted_fact(self, chunk_id: str, lease_id: str, *, epoch: int) -> tuple[str, str]:
+        """The ``lease.minted`` kind and rendered payload, buffered ahead of any completion minted under it
+        (the drain is strict FIFO; this is the fence input the hub's completion check consumes). The mint
+        commits it in its own transaction; the caller publishes after the commit via :meth:`published`."""
         payload = lease_minted_payload(chunk_id, lease_id, epoch=epoch, route_token=self._route_token(chunk_id))
-        self._enqueue(LEASE_MINTED, chunk_id, lease_id, payload, at)
+        return LEASE_MINTED, json.dumps(payload)
+
+    def published(self, seq: int, kind: str, chunk_id: str | None, lease_id: str | None) -> None:
+        """Announce a fact a transaction already committed to the buffer."""
+        if self.ctx.events is not None:
+            self.ctx.events.publish_fact_changed(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id)
 
     def question_asked(self, lease: Lease, ask: OpenAsk, *, at: datetime) -> None:
         payload = question_asked_payload(lease, ask, route_token=self._route_token(lease.chunk_id))
@@ -169,8 +175,7 @@ class OutboundFacts:
         seq = self.ctx.stores.outbound.enqueue_outbound(
             kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=json.dumps(payload), created_at=at
         )
-        if self.ctx.events is not None:
-            self.ctx.events.publish_fact_changed(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id)
+        self.published(seq, kind, chunk_id, lease_id)
 
 
 def buffered_completion(fact: BufferedFact) -> Completion:

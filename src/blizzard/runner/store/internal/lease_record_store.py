@@ -9,13 +9,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, func
+from sqlalchemy import Connection, and_, func
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
-from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
+from blizzard.runner.leases.model import ClosedLease, Lease, NewLease, NewMint
 from blizzard.runner.leases.record import ClosureFact, IWriteLeaseRecordRepository
 from blizzard.runner.store.internal.base import (
     Unclosed,
@@ -30,6 +30,7 @@ from blizzard.runner.store.schema import (
     binding_releases,
     lease_closures,
     lease_context,
+    lease_tokens,
     leases,
     outbound_buffer,
     takeovers,
@@ -211,34 +212,70 @@ class LeaseRecordStore:
 
     def record_lease(self, lease: NewLease) -> None:
         with self._store.begin() as conn:
-            insert_fact_row(
+            self._insert_lease(conn, lease)
+        _log.info(
+            "lease minted", lease_id=lease.lease_id, chunk_id=lease.chunk_id, node=lease.node_name, epoch=lease.epoch
+        )
+
+    def record_mint(self, mint: NewMint) -> int:
+        # The lease, its mint owner, its token hash and its `lease.minted` fact commit together or
+        # not at all: no `kill -9` can leave a lease missing the owner or token a retry relies on.
+        lease = mint.lease
+        with self._store.begin() as conn:
+            self._insert_lease(conn, lease)
+            if mint.harness_id is not None:
+                conn.execute(
+                    self._store.update(leases)
+                    .where(leases.c.lease_id == lease.lease_id)
+                    .values(harness_id=mint.harness_id)
+                )
+            conn.execute(self._store.delete(lease_tokens).where(lease_tokens.c.lease_id == lease.lease_id))
+            conn.execute(
+                self._store.insert(lease_tokens).values(
+                    lease_id=lease.lease_id, token_hash=mint.token_hash, minted_at=lease.created_at
+                )
+            )
+            seq = insert_outbox_row(
                 self._store,
                 conn,
-                leases,
-                lease_id=lease.lease_id,
+                outbound_buffer,
+                kind=mint.fact_kind,
                 chunk_id=lease.chunk_id,
-                epoch=lease.epoch,
+                lease_id=lease.lease_id,
+                payload=mint.fact_payload,
                 created_at=lease.created_at,
-            )
-            conn.execute(
-                self._store.insert(lease_context).values(
-                    lease_id=lease.lease_id,
-                    chunk_id=lease.chunk_id,
-                    graph_id=lease.graph_id,
-                    node_id=lease.node_id,
-                    node_name=lease.node_name,
-                    retries_max=lease.retries_max,
-                    session_name=lease.session_name,
-                    resolved_model=lease.resolved_model,
-                    resolved_effort=lease.resolved_effort,
-                    resolved_compaction_window=lease.resolved_compaction_window,
-                    graph_name=lease.graph_name,
-                    work_refs=encode_work_refs(lease.work_refs),
-                    recorded_at=lease.created_at,
-                )
             )
         _log.info(
             "lease minted", lease_id=lease.lease_id, chunk_id=lease.chunk_id, node=lease.node_name, epoch=lease.epoch
+        )
+        return seq
+
+    def _insert_lease(self, conn: Connection, lease: NewLease) -> None:
+        insert_fact_row(
+            self._store,
+            conn,
+            leases,
+            lease_id=lease.lease_id,
+            chunk_id=lease.chunk_id,
+            epoch=lease.epoch,
+            created_at=lease.created_at,
+        )
+        conn.execute(
+            self._store.insert(lease_context).values(
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                graph_id=lease.graph_id,
+                node_id=lease.node_id,
+                node_name=lease.node_name,
+                retries_max=lease.retries_max,
+                session_name=lease.session_name,
+                resolved_model=lease.resolved_model,
+                resolved_effort=lease.resolved_effort,
+                resolved_compaction_window=lease.resolved_compaction_window,
+                graph_name=lease.graph_name,
+                work_refs=encode_work_refs(lease.work_refs),
+                recorded_at=lease.created_at,
+            )
         )
 
     def record_closure(

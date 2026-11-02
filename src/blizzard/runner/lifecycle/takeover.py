@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
@@ -34,6 +35,7 @@ from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.owned_process import IOwnedProcessControl, kill_owned_process
 
@@ -44,6 +46,17 @@ if TYPE_CHECKING:
 # daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
 _IDENTITY_PREFIX = "BLIZZARD_"
 _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
+
+# The armed crash windows (``bzh:crash-point-registry``) of a forced entry over a live worker. The decision is
+# durable at the first, the displacement done at the second; startup recovery finishes and ends either.
+_CP_TAKEOVER_AFTER_OPEN = crashpoint(
+    "takeover.after-open.before-kill",
+    "runner committed the takeover decision but has killed nothing — restart must finish the kill and end the entry",
+)
+_CP_TAKEOVER_AFTER_KILL = crashpoint(
+    "takeover.after-kill.before-entry",
+    "runner killed the worker but has not recorded the entry — restart must end the entry",
+)
 
 __all__ = [
     "TAKEOVER_TRANSITIONS",
@@ -58,9 +71,11 @@ __all__ = [
     "TakeoverAdmission",
     "TakeoverCloseScope",
     "TakeoverCommand",
+    "TakeoverDisplacement",
     "TakeoverError",
     "TakeoverOpenScope",
     "TakeoverOwnerUnresolvable",
+    "TakeoverRecovery",
     "TakeoverService",
     "TakeoverState",
     "TakeoverVerb",
@@ -133,6 +148,12 @@ class OpenTakeover:
     harness_id: str | None = None
     reference_epoch: int | None = None
     hold_epoch: int | None = None
+    #: Whether the entry completed — its commands ran and the person was handed the session.
+    entered: bool = True
+
+    def interrupted(self) -> bool:
+        """Open with no entry fact: a runner crash cut the entry short, and no person holds the session."""
+        return not self.entered
 
     def holds(self, chunk_id: str, epoch: int | None) -> bool:
         """Whether this takeover keeps the loop off a lease (or a held chunk) at ``epoch``: the
@@ -242,9 +263,20 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         opened_at: datetime,
         session: SessionReference,
         hold_epoch: int | None = None,
-    ) -> None:
+        fence_payload: str | None = None,
+        lease_token_hash: str | None = None,
+        entered_at: datetime | None = None,
+    ) -> int | None:
         """Open a takeover — recorded before any kill and before the interactive command
-        is returned, so no later tick can race the human for the chunk."""
+        is returned, so no later tick can race the human for the chunk.
+
+        The takeover row, the ``lease.minted`` fence fact (``fence_payload``), the reference lease's re-minted
+        token hash and — when nothing is left to kill — the entry fact (``entered_at``) commit in ONE transaction.
+        Returns the fence fact's ``seq``, ``None`` when no fence was written."""
+        ...
+
+    def record_takeover_entry(self, *, takeover_id: str, entered_at: datetime) -> None:
+        """Record that the takeover's entry completed. Idempotent."""
         ...
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
@@ -381,7 +413,9 @@ def admit_takeover(scope: TakeoverOpenScope, *, force: bool) -> TakeoverAdmissio
     and a forced entry over an already-buffered submission is refused, as the fence could never apply."""
     chunk_id = scope.chunk_id
     if TAKEOVER_TRANSITIONS[_state(scope.open_takeover)][TakeoverVerb.OPEN] is TakeoverVerdict.REFUSE:
-        raise ChunkNotTakeable(f"chunk {chunk_id} already has an open takeover")
+        raise ChunkNotTakeable(
+            f"chunk {chunk_id} already has an open takeover — end it with `blizzard runner takeover {chunk_id} --end`"
+        )
     if not scope.bindings:
         raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
     if scope.requeue_pending:
@@ -466,6 +500,61 @@ class TakeoverCloser:
             self.events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")
 
 
+@dataclass(frozen=True)
+class TakeoverDisplacement:
+    """The commands that displace a live worker: the best-effort kill, then the kill and clear of any in-flight
+    elicitation. Every step is liveness- and identity-checked, so a repeat is safe."""
+
+    process: IOwnedProcessControl
+    elicitations: IWriteElicitationRepository
+
+    def run(self, lease: Lease) -> None:
+        # The reap machinery's own best-effort kill: the shared, liveness-checked,
+        # pgid-preferring kill every owned-process teardown reaches through.
+        kill_owned_process(self.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid)
+        # A taken-over chunk's lease is never driven again, so an in-flight elicitation
+        # is killed here or never.
+        elicitation = self.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if elicitation is not None:
+            kill_owned_process(
+                self.process,
+                pid=elicitation.pid,
+                process_start_time=elicitation.process_start_time,
+                pgid=elicitation.pgid,
+            )
+            self.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
+
+
+@dataclass(frozen=True)
+class TakeoverRecovery:
+    """Finishes then ends every takeover whose entry a runner crash interrupted, once at startup.
+
+    Run before the daemon serves a request, when no entry can be mid-flight. The token plaintext died with the
+    crashed request, so no person holds the session: the displacement is re-driven (the fence stands at the
+    hub, the lease stays open), then the takeover ends — the state of "entered, then left" — and the
+    operator's retry is admitted as a fresh entry. A crash during recovery re-runs at the next startup: the
+    kill is idempotent and the end is a lone insert."""
+
+    takeover: IWriteTakeoverRepository
+    leases: IReadLeaseRecordRepository
+    elicitations: IWriteElicitationRepository
+    process: IOwnedProcessControl
+    clock: IClock
+    events: IRunnerEventPublisher | None = None
+
+    def run(self) -> int:
+        """End each interrupted takeover; answer how many."""
+        interrupted = [t for t in self.takeover.open_takeovers() if t.interrupted()]
+        for record in interrupted:
+            lease = self.leases.lease(record.lease_id) if record.lease_id is not None else None
+            if lease is not None:
+                TakeoverDisplacement(self.process, self.elicitations).run(lease)
+            self.takeover.record_takeover_end(takeover_id=record.takeover_id, ended_at=self.clock.now())
+            if self.events is not None:
+                self.events.publish_takeover_changed(record.chunk_id, record.takeover_id, cause="closed")
+        return len(interrupted)
+
+
 class TakeoverService:
     """Composition-root-wired: the clock, harness registry, and process probe.
 
@@ -515,10 +604,16 @@ class TakeoverService:
         now = self._clock.now()
         takeover_id = Id.mint(IdPrefix.TAKEOVER, self._clock).value
         fence_epoch = admission.fence_epoch
+        # A resume inherits no spawn env, so identity must be handed over. The token plaintext is never
+        # persisted, so it is re-minted, invalidating the prior — in the decision transaction, so the displaced
+        # worker loses runner-verb authority in the same instant the takeover holds its lease.
+        lease_token, token_hash = LeaseToken.mint()
+        kills = live and active is not None
 
-        # Fact-before-command (bzh:crash-point-registry): the open takeover is recorded
-        # before anything is killed or returned.
-        self._takeover.record_takeover(
+        # Fact-before-command (bzh:crash-point-registry): the whole decision — the takeover, the fence fact for
+        # a live entry, the re-minted token, and the entry itself when nothing is left to kill — commits
+        # in one transaction before anything is killed or returned.
+        seq = self._takeover.record_takeover(
             takeover_id=takeover_id,
             chunk_id=chunk_id,
             lease_id=reference.lease_id,
@@ -527,38 +622,24 @@ class TakeoverService:
             fence_epoch=fence_epoch,
             hold_epoch=admission.hold_epoch,
             opened_at=now,
+            # The fence bump: reported like a fresh lease mint, so the killed worker's
+            # buffered completion lands on a stale epoch.
+            fence_payload=json.dumps({"chunk_id": chunk_id, "epoch": fence_epoch}) if kills else None,
+            lease_token_hash=token_hash,
+            entered_at=None if kills else now,
         )
         if self._events is not None:
             self._events.publish_takeover_changed(chunk_id, takeover_id, cause="opened")
-
-        if live and active is not None:
-            # The fence bump: reported like a fresh lease mint, so the killed worker's
-            # buffered completion lands on a stale epoch.
-            seq = self._outbound.enqueue_outbound(
-                kind=LEASE_MINTED,
-                chunk_id=chunk_id,
-                lease_id=None,
-                payload=json.dumps({"chunk_id": chunk_id, "epoch": fence_epoch}),
-                created_at=now,
-            )
-            if self._events is not None:
+            if seq is not None:
                 self._events.publish_fact_changed(seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None)
-            # The reap machinery's own best-effort kill: the shared, liveness-checked,
-            # pgid-preferring kill every owned-process teardown reaches through.
-            kill_owned_process(
-                self._process, pid=active.pid, process_start_time=active.process_start_time, pgid=active.pgid
-            )
-            # A taken-over chunk's lease is never driven again, so an in-flight elicitation
-            # is killed here or never.
-            elicitation = self._elicitations.in_flight_elicitation(active.lease_id, active.epoch)
-            if elicitation is not None:
-                kill_owned_process(
-                    self._process,
-                    pid=elicitation.pid,
-                    process_start_time=elicitation.process_start_time,
-                    pgid=elicitation.pgid,
-                )
-                self._elicitations.clear_elicitation(active.lease_id, active.epoch)
+
+        if kills and active is not None:
+            _CP_TAKEOVER_AFTER_OPEN.reached()
+            TakeoverDisplacement(self._process, self._elicitations).run(active)
+            _CP_TAKEOVER_AFTER_KILL.reached()
+            # The entry fact: the commands ran, the person is handed the session. Without it a restart
+            # finishes the displacement and ends the entry.
+            self._takeover.record_takeover_entry(takeover_id=takeover_id, entered_at=self._clock.now())
 
         # Read the reference lease's stamps rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
@@ -569,10 +650,6 @@ class TakeoverService:
             effort=reference.resolved_effort,
             attended=True,
         )
-        # A resume inherits no spawn env, so identity must be handed over.
-        # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
-        lease_token, token_hash = LeaseToken.mint()
-        self._tokens.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
             environments=[
                 AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in scope.bindings

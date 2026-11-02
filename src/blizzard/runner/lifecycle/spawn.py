@@ -41,7 +41,7 @@ from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
-from blizzard.runner.leases.model import Lease, NewLease, WorkRefStamp
+from blizzard.runner.leases.model import Lease, NewLease, NewMint, WorkRefStamp
 from blizzard.runner.leases.record import IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
@@ -630,7 +630,7 @@ class Spawner:
             if harness_id is not None
             else (None, None, None)
         )
-        # Before `record_lease`: a crash here leaves only an orphan row a retry
+        # Before the mint transaction: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.host_stores.graph_artifacts.record_graph_artifacts(
             graph_id=envelope.graph_id,
@@ -640,37 +640,42 @@ class Spawner:
             ],
             recorded_at=at,
         )
-        self.ctx.stores.lease_record.record_lease(
-            NewLease(
-                lease_id=lease_id,
-                chunk_id=chunk_id,
-                graph_id=envelope.graph_id,
-                node_id=node.node_id,
-                node_name=node.node_name,
-                epoch=epoch,
-                retries_max=budget,
-                session_name=node.session_name,
-                resolved_model=model,
-                resolved_effort=effort,
-                resolved_compaction_window=compaction_window,
-                graph_name=envelope.graph_name,
-                work_refs=tuple(
-                    WorkRefStamp(source=w["source"], ref=w["ref"], label=w.get("label")) for w in envelope.work_refs
-                ),
-                created_at=at,
-            )
-        )
-        # Stamped before spawn ever runs: a crash or launch failure between here and spawn-return
-        # still leaves the mint's owner durable for a retry — skipped for an escalation-only mint.
-        if harness_id is not None:
-            self.ctx.stores.session.record_mint_owner(lease_id, harness_id)
-        if self.ctx.events is not None:
-            self.ctx.events.publish_lease_changed(lease_id, chunk_id, cause="created")
         # A per-lease capability token: only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
         token, token_hash = LeaseToken.mint()
-        self.ctx.stores.tokens.record_lease_token(lease_id, token_hash, at)
-        OutboundFacts(self.ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=at)
+        facts = OutboundFacts(self.ctx)
+        fact_kind, fact_payload = facts.lease_minted_fact(chunk_id, lease_id, epoch=epoch)
+        # One transaction: the lease, its mint owner (none for an escalation-only mint), its token hash and
+        # its `lease.minted` fact. A crash before the commit leaves no lease; after it, every part of it.
+        seq = self.ctx.stores.lease_record.record_mint(
+            NewMint(
+                lease=NewLease(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    graph_id=envelope.graph_id,
+                    node_id=node.node_id,
+                    node_name=node.node_name,
+                    epoch=epoch,
+                    retries_max=budget,
+                    session_name=node.session_name,
+                    resolved_model=model,
+                    resolved_effort=effort,
+                    resolved_compaction_window=compaction_window,
+                    graph_name=envelope.graph_name,
+                    work_refs=tuple(
+                        WorkRefStamp(source=w["source"], ref=w["ref"], label=w.get("label")) for w in envelope.work_refs
+                    ),
+                    created_at=at,
+                ),
+                harness_id=harness_id,
+                token_hash=token_hash,
+                fact_kind=fact_kind,
+                fact_payload=fact_payload,
+            )
+        )
+        facts.published(seq, fact_kind, chunk_id, lease_id)
+        if self.ctx.events is not None:
+            self.ctx.events.publish_lease_changed(lease_id, chunk_id, cause="created")
         return MintedLease(
             lease_id=lease_id, epoch=epoch, token=token, model=model, effort=effort, compaction_window=compaction_window
         )

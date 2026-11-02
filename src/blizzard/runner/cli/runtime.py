@@ -1142,6 +1142,10 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
             resumable = resume.on_startup()
             if resumable:
                 click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
+            # After the marking, which skips a held lease; before any thread or request can begin an entry.
+            interrupted = resume.recover_takeovers()
+            if interrupted:
+                click.echo(f"ended {interrupted} takeover(s) a crash interrupted mid-entry")
 
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.
