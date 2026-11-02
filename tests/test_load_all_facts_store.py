@@ -37,6 +37,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
@@ -456,9 +457,9 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
             self.load_live_statuses_calls += 1
             return super().load_live_statuses()
 
-        def load_facts(self, chunk_id: str):
+        def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None):
             self.load_facts_calls += 1
-            return super().load_facts(chunk_id)
+            return super().load_facts(chunk_id, transaction=transaction)
 
     class _CountingRecordStore(ChunkRecordStore):
         def __init__(self, store: ScopedConnections, clock: FixedClock) -> None:

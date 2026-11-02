@@ -297,8 +297,8 @@ def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchang
 
 
 def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    chunks, items, delete, _ = _stores(tmp_path)
-    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    chunks, items, delete, engine = _stores(tmp_path)
+    item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
     chunk = chunks.record.get(f"ch_{item.ref}")
     assert chunk is not None
     _mint(chunks, "ch_prereq")
