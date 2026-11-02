@@ -7,16 +7,22 @@ apply-path lands falls through to a clean failure, never a crash."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.graph_targets import ChoiceTargetKind
+from blizzard.hub.api.chunks import ingest_chunk
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import ChoiceTarget, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
+from blizzard.wire.chunk import ChunkIngestRequest, ChunkIngestResponse
+from tests import support
 from tests.support import TEST_CATALOGUE, build_hub
 
 unit = pytest.mark.unit
@@ -24,6 +30,45 @@ component = pytest.mark.component
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _POINTER = {"source": "default", "ref": "9"}
+
+
+@component
+def test_first_ingest_with_cross_graph_default_uses_one_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def constrained_engine(url: str) -> sa.Engine:
+        return sa.create_engine(
+            url, connect_args={"check_same_thread": False}, pool_size=1, max_overflow=0, pool_timeout=0.5
+        )
+
+    monkeypatch.setattr(support, "create_engine_from_url", constrained_engine)
+    hub = build_hub(tmp_path)
+    doc = _doc(to="graph:delivery")
+    definition = """\
+name: src
+entry: build
+nodes:
+  build:
+    executor: runner
+    judgement:
+      prompt: p
+      choices:
+        pass: {description: done, to: 'graph:delivery'}
+        fail: {description: retry, to: build}
+"""
+    services = replace(hub.services, default_graph_doc=doc, default_graph_yaml=definition)
+    try:
+        with hub.engine.connect(), pytest.raises(PoolTimeout):
+            hub.engine.connect()
+        result = ingest_chunk(ChunkIngestRequest(tokens=["default:9"]), services)
+        assert isinstance(result, ChunkIngestResponse)
+        chunk = services.chunks.record.get(result.chunk_id)
+        assert chunk is not None
+        graph = services.graphs.get(chunk.graph_id)
+        assert graph is not None and graph.cross_graph_targets() == ["delivery"]
+        assert services.graphs.get_enabled_by_name(doc.name) == graph
+    finally:
+        hub.engine.dispose()
 
 
 def _doc(*, to: str, model: str | None = None) -> GraphDoc:
