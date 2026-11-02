@@ -9,6 +9,8 @@ import type { ChunkStepSession } from './chunk-step-sessions';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, rowChoice, rowMark, usageForStep as sumStepUsage } from './chunk-timeline-rows';
 import { LensLink } from '../../core/lens-link';
+import { toneColor } from '../../kit/kit-badge';
+import { verdictTone } from './verdict-tone';
 
 /**
  * The node history tab's own Selection list — the interactive,
@@ -70,6 +72,8 @@ export class ChunkTimelineSelection {
 
   protected readonly rowMark = rowMark;
   protected readonly rowChoice = rowChoice;
+  protected readonly verdictTone = verdictTone;
+  protected readonly toneColor = toneColor;
   protected readonly stepCostPartialTitle = STEP_COST_PARTIAL_TITLE;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;

@@ -73,7 +73,7 @@ async function render(
 }
 
 const chunkIds = (root: Element | null, testid: string): (string | null)[] =>
-  Array.from(root?.querySelectorAll(`[data-testid="${testid}"]`) ?? []).map((row) => row.getAttribute('data-chunk-id'));
+  Array.from(root?.querySelectorAll(`[data-testid="${testid}"]`) ?? []).map((row) => row.getAttribute('data-chunk'));
 
 describe('ChunkBoard', () => {
   describe('Board layout', () => {
@@ -90,15 +90,15 @@ describe('ChunkBoard', () => {
     it('puts each chunk in its own lane, keeping the merged order within one', async () => {
       const { el } = await render();
 
-      expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'), 'chunk-row')).toEqual(['ch_ask']);
-      expect(chunkIds(el.querySelector('[data-testid="lane-progress"]'), 'chunk-row')).toEqual(['ch_run', 'ch_run2']);
-      expect(chunkIds(el.querySelector('[data-testid="lane-done"]'), 'chunk-row')).toEqual(['ch_done']);
+      expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'), 'chunk-card')).toEqual(['ch_ask']);
+      expect(chunkIds(el.querySelector('[data-testid="lane-progress"]'), 'chunk-card')).toEqual(['ch_run', 'ch_run2']);
+      expect(chunkIds(el.querySelector('[data-testid="lane-done"]'), 'chunk-card')).toEqual(['ch_done']);
     });
 
     it('names each card by the runner it was read off', async () => {
       const { el } = await render();
 
-      const runners = Array.from(el.querySelectorAll('[data-testid="lane-progress"] [data-testid="chunk-row-runner"]'));
+      const runners = Array.from(el.querySelectorAll('[data-testid="lane-progress"] [data-testid="card-runner"]'));
       expect(runners.map((runner) => runner.textContent?.trim())).toEqual(['r1', 'r2']);
     });
 
@@ -106,7 +106,7 @@ describe('ChunkBoard', () => {
       const { el } = await render({ rows: ROWS.filter((row) => row.lane !== 'needs') });
 
       expect(el.querySelector('[data-testid="lane-needs"] .n')?.textContent?.trim()).toBe('0');
-      expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'), 'chunk-row')).toEqual([]);
+      expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'), 'chunk-card')).toEqual([]);
     });
   });
 
@@ -116,7 +116,7 @@ describe('ChunkBoard', () => {
 
       expect(el.querySelector('[data-testid="board"]')).toBeNull();
       expect(chunkIds(el.querySelector('[data-testid="board-list"]'), 'list-row')).toEqual(['ch_ask', 'ch_run', 'ch_run2', 'ch_done']);
-      expect(el.querySelector('[data-testid="chunk-row"]')).toBeNull();
+      expect(el.querySelector('[data-testid="chunk-card"]')).toBeNull();
     });
 
     it('heads its columns in operator words', async () => {
@@ -146,10 +146,11 @@ describe('ChunkBoard', () => {
       const { fixture, el } = await render({ layout, selectedChunkId: 'ch_run' });
       const picked: string[] = [];
       fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
-      const testid = layout === 'board' ? 'chunk-row' : 'list-row';
+      const testid = layout === 'board' ? 'chunk-card' : 'list-row';
 
-      expect(el.querySelector(`[data-testid="${testid}"].selected`)?.getAttribute('data-chunk-id')).toBe('ch_run');
-      el.querySelector<HTMLElement>(`[data-testid="${testid}"][data-chunk-id="ch_done"]`)?.click();
+      expect(el.querySelector(`[data-testid="${testid}"].selected`)?.getAttribute('data-chunk')).toBe('ch_run');
+      const open = layout === 'board' ? '.card-open button' : '[data-testid="list-row-open"]';
+      el.querySelector<HTMLElement>(`[data-testid="${testid}"][data-chunk="ch_done"] ${open}`)?.click();
       expect(picked).toEqual(['ch_done']);
     }
   });

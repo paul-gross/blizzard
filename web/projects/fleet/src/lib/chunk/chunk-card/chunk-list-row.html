@@ -6,7 +6,7 @@
   data-testid="list-row"
   [attr.data-status]="card().status"
   [attr.data-chunk]="card().chunkId"
-  [style.--status-color]="statusColor()"
+  [style.--edge]="edge()"
   [class.selected]="selected()"
   [class.tinted]="projectTint() !== null"
   [style.--project-tint]="projectTint()"
@@ -21,18 +21,16 @@
     [selected]="selected()"
     (picked)="selectChunk.emit(card().chunkId)"
   />
-  <!-- The icon takes the pointer for its tooltip, so a click on it opens the chunk itself, as the
-       select row beneath would. -->
-  <app-lane-icon class="lane" data-testid="list-row-lane" [lane]="lane()" [status]="card().status" (click)="selectChunk.emit(card().chunkId)" />
+  <ng-content select="[chunkRowLead]" />
   <div class="work">
     <span class="id" data-testid="list-row-id">{{ card().shortId }}</span>
     @for (line of fold().shown; track $index) {
       <span class="item">
-        <!-- Plain text, as on a board card: the detail panel owns the link out to the work source. -->
+        <!-- Plain text, as on a card: the detail panel owns the link out to the work source. -->
         @if (line.label; as label) {
           <span class="ref" data-testid="list-row-ref" [title]="label">{{ label }}</span>
         }
-        @if (titlesPending()) {
+        @if (!card().itemsRead) {
           <fleet-kit-skeleton class="title-skeleton" data-testid="list-row-title-skeleton" [rows]="1" />
         } @else if (line.title; as title) {
           <span class="title" data-testid="list-row-title" [title]="title">{{ title }}</span>
@@ -41,28 +39,22 @@
     }
     @if (fold().hidden > 0 || expanded()) {
       <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
-      <button
-        type="button"
-        class="fold"
-        data-testid="list-row-fold"
-        [attr.aria-expanded]="expanded()"
-        (click)="toggleFold()"
-      >
+      <button type="button" class="fold" data-testid="list-row-fold" [attr.aria-expanded]="expanded()" (click)="toggleFold()">
         {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
       </button>
     }
-    @if (finishedAt(); as finished) {
-      <span class="finished" data-testid="list-row-finished" [style.color]="statusColor()">
-        <app-lane-icon class="finished-icon" lane="done" [status]="card().status" />
-        {{ finishedWord(card().status) }}
+    @if (card().completedAt; as finished) {
+      <span class="finished" data-testid="list-row-finished">
+        <ng-content select="[chunkRowFinishedIcon]" />
+        {{ card().finishedWord }}
         <fleet-when class="done-at" [iso]="finished" />
       </span>
     }
   </div>
   <!-- Where the chunk is: the runner holding it, the step it is on beneath, then what it has
-       delivered — its open PRs and landed commits. -->
+       delivered — its open PRs and landed commits — or its live worker. -->
   <span class="cell holder">
-    @if (holder(); as holder) {
+    @if (card().holder; as holder) {
       <span class="runner" data-testid="list-row-runner" [title]="holder.title">
         @if (holder.host; as host) {
           <span class="r-host">{{ host }}</span><span class="r-sep">/</span>
@@ -71,18 +63,19 @@
       </span>
     }
     <span class="step">
-      <span class="step-name" [title]="step()">{{ step() }}</span>
+      <span class="step-name" [title]="card().stepTitle ?? card().step">{{ card().step }}</span>
       @if (gated()) {
         <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
       }
-      @if (blocked(); as blocker) {
-        <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
+      @if (card().blocked; as blocked) {
+        <span class="blocked" [title]="blocked.title">blocked · {{ blocked.label }}</span>
       }
     </span>
-    @if (card().flowPlaces?.length) {
+    <ng-content select="[chunkRowWorker]" />
+    @if (card().places?.length) {
       <span class="places">
-        @for (place of card().flowPlaces ?? []; track place.flowId) {
-          <span class="flow-place" data-testid="list-row-flow-place" [style.color]="toneColor(place.tone)" [title]="place.flowId">{{ place.text }}</span>
+        @for (place of card().places ?? []; track place.key) {
+          <span class="flow-place" data-testid="list-row-flow-place" [style.color]="toneColor(place.tone)" [title]="place.title">{{ place.text }}</span>
         }
       </span>
     }
@@ -104,9 +97,11 @@
       </span>
     }
   </span>
-  <span class="cell cost">
-    @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
-      {{ formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial) }}
+  <span class="cell end">
+    @if (card().cost; as cost) {
+      <span class="cost" data-testid="list-row-cost">{{ cost }}</span>
+    } @else if (card().rowStatus; as status) {
+      <span class="state-word" data-testid="list-row-status" [title]="card().status">{{ status }}</span>
     }
   </span>
 </div>

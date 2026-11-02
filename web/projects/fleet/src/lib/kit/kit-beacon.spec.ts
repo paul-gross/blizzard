@@ -1,6 +1,7 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import type { Tone } from './tone';
 import { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
 
 @Component({
@@ -10,7 +11,7 @@ import { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
 })
 class TestHost {
   readonly active = signal(false);
-  readonly tone = signal<BeaconTone>('amber');
+  readonly tone = signal<BeaconTone | Tone>('amber');
   readonly blink = signal<BeaconBlink>('pulse');
 }
 
@@ -86,5 +87,15 @@ describe('KitBeacon', () => {
     const beacon = el.querySelector('.beacon') as HTMLElement;
     expect(beacon.classList.contains('hold')).toBe(true);
     expect(beacon.getAttribute('style')).toContain('var(--green)');
+  });
+
+  it('colors a derived-status Tone as toneColor does', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.active.set(true);
+    fixture.componentInstance.tone.set('waiting');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--amber-hi)');
   });
 });

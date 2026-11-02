@@ -25,7 +25,7 @@
           <section class="b-col" [attr.data-col]="lane.key" [attr.data-testid]="'lane-' + lane.key">
             <div class="b-col-head">
               <span class="col-lbl">{{ lane.label }}</span>
-              <span class="n">{{ rowsFor(lane.key).length }}</span>
+              <span class="n" [style.color]="toneColor(lane.tone)">{{ rowsFor(lane.key).length }}</span>
             </div>
             <div class="b-col-body">
               @for (chunk of rowsFor(lane.key); track chunk.lease.chunk_id) {

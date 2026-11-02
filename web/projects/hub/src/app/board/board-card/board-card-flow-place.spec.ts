@@ -1,9 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { BoardCard } from './board-card';
-import { BoardCardComponent } from './board-card';
-import { BoardListRow } from '../board-list/board-list-row';
+import { ChunkCard, ChunkListRow } from 'fleet';
+
+import { type BoardCard, boardCardView } from './board-card-view.model';
 import { placeLines } from '../flows/flow-place.model';
 
 const DELIVERING: BoardCard = {
@@ -37,18 +37,17 @@ const PLACES = placeLines([
 ]);
 
 async function renderCard(card: BoardCard): Promise<HTMLElement> {
-  await TestBed.configureTestingModule({ imports: [BoardCardComponent], providers: [provideZonelessChangeDetection()] }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
+  await TestBed.configureTestingModule({ imports: [ChunkCard], providers: [provideZonelessChangeDetection()] }).compileComponents();
+  const fixture = TestBed.createComponent(ChunkCard);
+  fixture.componentRef.setInput('card', boardCardView(card));
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }
 
 async function renderRow(card: BoardCard): Promise<HTMLElement> {
-  await TestBed.configureTestingModule({ imports: [BoardListRow], providers: [provideZonelessChangeDetection()] }).compileComponents();
-  const fixture = TestBed.createComponent(BoardListRow);
-  fixture.componentRef.setInput('card', card);
-  fixture.componentRef.setInput('lane', 'running');
+  await TestBed.configureTestingModule({ imports: [ChunkListRow], providers: [provideZonelessChangeDetection()] }).compileComponents();
+  const fixture = TestBed.createComponent(ChunkListRow);
+  fixture.componentRef.setInput('card', boardCardView(card));
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }

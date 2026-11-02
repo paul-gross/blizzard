@@ -91,21 +91,21 @@ const WORK_ITEMS = {
 
 /**
  * `ChunkRow`'s own concerns are the per-row {@link injectChunkTitleQuery} enrichment read —
- * addressed to the runner the row was read off — the project tint it resolves, and which
- * presentation it mounts. The markup belongs to `ChunkRowView` / `ChunkListRowView`.
+ * addressed to the runner the row was read off — the view it maps, and which presentation it
+ * mounts. The markup belongs to the fleet `ChunkCard` / `ChunkListRow`.
  */
 describe('ChunkRow', () => {
   it('renders on chunk_id alone when the work-items read 502s — never depends on the hub', async () => {
     const { el } = await render(() => stubError(502, { detail: 'stubbed route error (502)' }));
 
-    expect(el.querySelector('[data-testid="chunk-row"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="chunk-row-title"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-card"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-title"]')).toBeNull();
   });
 
   it("hands the title query's resolved work items to the view", async () => {
     const { el } = await render(() => WORK_ITEMS);
 
-    expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent).toContain('blizzard#61');
+    expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent).toContain('blizzard#61');
   });
 
   it("reads the work items off the row's own runner", async () => {
@@ -117,7 +117,7 @@ describe('ChunkRow', () => {
 
   it("resolves the row's project colour into the card's tint", async () => {
     const { el } = await render();
-    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]')!;
+    const card = el.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
 
     expect(card.classList).toContain('tinted');
     expect(card.style.getPropertyValue('--project-tint')).toBe('var(--project-cyan, var(--label-dim))');
@@ -126,14 +126,14 @@ describe('ChunkRow', () => {
   it('leaves a row whose project has no colour untinted', async () => {
     const { el } = await render(undefined, { row: rowOf({ projectSlug: 'ops' }) });
 
-    expect(el.querySelector('[data-testid="chunk-row"]')?.classList).not.toContain('tinted');
+    expect(el.querySelector('[data-testid="chunk-card"]')?.classList).not.toContain('tinted');
   });
 
   it('mounts the list row, tinted the same, for the list layout', async () => {
     const { el } = await render(() => WORK_ITEMS, { layout: 'list' });
     const row = el.querySelector<HTMLElement>('[data-testid="list-row"]');
 
-    expect(el.querySelector('[data-testid="chunk-row"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-card"]')).toBeNull();
     expect(row?.classList).toContain('tinted');
     expect(el.querySelector('[data-testid="list-row-title"]')?.textContent).toContain('runner machine panel');
   });

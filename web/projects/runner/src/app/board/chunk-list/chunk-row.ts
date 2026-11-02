@@ -1,26 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { projectTint } from 'fleet';
+import { ChunkCard, ChunkListRow } from 'fleet';
 
 import type { MachineChunkRow } from '../../core/chunk-rows.model';
+import { WorkerLine } from '../../runners/worker-line';
+import { machineChunkCardView } from './chunk-card-view.model';
 import { injectChunkTitleQuery } from './chunk-title.query';
-import { ChunkListRowView } from './chunk-list-row-view';
-import { ChunkRowView } from './chunk-row-view';
 
 /**
- * One chunk on the runners read — the board card's and list row's **container**: owns the
- * per-row {@link injectChunkTitleQuery} work-item enrichment read and resolves the project
- * tint, handing both to the presentational {@link ChunkRowView} (the lane card) or
- * {@link ChunkListRowView} (the list row), which own the markup
+ * One chunk on the runners read — the fleet card's and list row's **container**: owns the per-row
+ * {@link injectChunkTitleQuery} work-item enrichment read and maps the folded row into the fleet view
+ * ({@link machineChunkCardView}), handing it to the presentational {@link ChunkCard} (the lane card) or
+ * {@link ChunkListRow} (the list row), with the chunk's live {@link WorkerLine} in the worker slot
  * (`bzh:frontend-container-presentational`).
  *
- * The work-item enrichment is severable, volatile layering: one
- * {@link injectChunkTitleQuery} per row, read optimistically — every degraded case (hub down, no source, per-pointer
- * forge failure) collapses to "render nothing extra".
+ * The work-item enrichment is severable, volatile layering: one {@link injectChunkTitleQuery} per row, read
+ * optimistically — every degraded case (hub down, no source, per-pointer forge failure) collapses to "render nothing
+ * extra".
  */
 @Component({
   selector: 'app-chunk-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkListRowView, ChunkRowView],
+  imports: [ChunkCard, ChunkListRow, WorkerLine],
   templateUrl: './chunk-row.html',
   styleUrl: './chunk-row.css',
 })
@@ -34,19 +34,14 @@ export class ChunkRow {
   /** Whether the container considers this row the current selection. */
   readonly selected = input(false);
 
-  /** Emits this row's `chunk_id` on click/Enter/Space. */
+  /** Emits this row's `chunk_id` on activation. */
   readonly selectChunk = output<string>();
-
-  protected readonly chunkId = computed(() => this.row().lease.chunk_id);
-
-  /** The project colour the background is tinted with, or `null` for an untinted row. */
-  protected readonly projectTint = computed(() => projectTint(this.row().projectColor));
 
   /** The severable work-item read — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(
     () => this.row().lease.owner.runnerId,
-    () => this.chunkId(),
+    () => this.row().lease.chunk_id,
   );
 
-  protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
+  protected readonly view = computed(() => machineChunkCardView(this.row(), this.titleQuery.data()?.items ?? []));
 }

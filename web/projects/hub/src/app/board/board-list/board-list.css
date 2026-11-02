@@ -81,3 +81,13 @@
   height: 0;
   border-top: 1px dashed var(--cyan-dim);
 }
+/* The lane icon leads each row, centred in its fixed track on the row's first line, over the
+   row's open control so it keeps the pointer for its tooltip. */
+.lane {
+  position: relative;
+  justify-self: center;
+  margin-top: 1px;
+}
+.finished-icon {
+  --lane-icon-size: 12px;
+}

@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
-import { BoardCardComponent, type BoardCard } from '../board-card/board-card';
+import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { type Lane, KitBeacon } from 'fleet';
+import { ChunkCard, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { resolveDrop } from './board-drop.model';
 
@@ -62,7 +62,7 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardComponent, BoardCardSkeleton, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
+  imports: [BoardCardSkeleton, ChunkCard, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
@@ -77,6 +77,9 @@ export class BoardColumn {
   /** How many card skeletons stand in for the lane's cards while the chunk read is loading —
    * 0 once it has answered. */
   readonly skeletons = input(0);
+
+  /** Each card as the fleet card draws it. */
+  protected readonly views = computed(() => this.cards().map(boardCardView));
 
   /** One index per skeleton, for the template's loop. */
   protected readonly skeletonIndexes = computed(() => Array.from({ length: this.skeletons() }, (_, i) => i));
@@ -101,7 +104,7 @@ export class BoardColumn {
   readonly reorderControls = input(false);
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`),
-   * forwarded to each {@link BoardCardComponent}. */
+   * forwarded to each card. */
   readonly canControl = input(false);
 
   /** Whether the current identity may reorder the ready queue and backlog
@@ -134,13 +137,14 @@ export class BoardColumn {
    * (`chunk:control`) from lists that exist at all (`queue:reorder`). */
   protected readonly crossLane = computed(() => this.reorderControls() && this.canReorder() && this.canControl());
 
-  /** The beacon color for an occupied lane's header, or null for the quiet lanes:
-   * amber for work in flight or parked on a human, red for an escalation. */
-  protected readonly blink = computed<'amber' | 'red' | null>(() => {
+  /** The count's color — its lane's tone. */
+  protected readonly countColor = computed(() => toneColor(laneTone(this.column().key)));
+
+  /** The beacon tone for an occupied lane's header, or null for the quiet lanes: the
+   * lanes with work in flight, parked on a human, or escalated beacon, in their lane's tone. */
+  protected readonly blink = computed<Tone | null>(() => {
     const key = this.column().key;
-    if (key === 'running' || key === 'waiting') return 'amber';
-    if (key === 'needs') return 'red';
-    return null;
+    return key === 'running' || key === 'waiting' || key === 'needs' ? laneTone(key) : null;
   });
 
   /** This lane's own reorder list tag, derived from {@link Lane.key}. Only meaningful

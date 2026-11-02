@@ -80,3 +80,10 @@
 .resume-fallback {
   margin-top: 4px;
 }
+.resume-requeue {
+  margin-top: 6px;
+}
+.requeued-notice {
+  color: var(--green);
+  font-size: var(--fs-sm);
+}

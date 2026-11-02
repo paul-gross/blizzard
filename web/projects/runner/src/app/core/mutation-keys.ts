@@ -19,3 +19,11 @@ export function floorClearMutationKey(runnerId: string | null): readonly unknown
 }
 
 export const runnerLogoutMutationKey = ['auth', 'mutation', 'runner-logout'] as const;
+
+export function chunkRequeueMutationKey(runnerId: string | null): readonly unknown[] {
+  return [runnerId, 'mutation', 'chunk-requeue'];
+}
+
+export function selftestStartMutationKey(runnerId: string | null): readonly unknown[] {
+  return [runnerId, 'mutation', 'selftest-start'];
+}

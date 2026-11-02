@@ -92,7 +92,7 @@
  *     page feed: 80 events in a bounded shell genuinely scroll inside `.rows` alone
  *     (the panel body does not), to the last event, at 1280/390px.
  *   - projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts — the
- *     shared `--tint-hover`/`--tint-selected` wash on board-card,
+ *     shared `--tint-hover`/`--tint-selected` wash on the fleet chunk card,
  *     chunk-timeline, and chunk-artifacts rows: a computed-style claim, not a
  *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
  *     so only a real pointer (Playwright's `userEvent.hover`) proves a
@@ -234,17 +234,20 @@
  *     from a bucket mixing routines and scopes genuinely renders both its own
  *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
  *   - projects/hub/src/app/board/board-card/board-card-rows.shell-sweep.spec.ts —
- *     a card's rows stack in order — title, blocked marking, PR links, the step row with
+ *     the fleet chunk card as the hub fills it: its rows stack in order — title, blocked marking, PR links, the step row with
  *     its id flush right, then the cost row — each inside the card, at 800px and at
  *     390/320px.
  *   - projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts — a
- *     selected card draws only the outer card's cyan edge (the bare kit select row
+ *     selected fleet chunk card draws only the outer card's cyan edge (the bare kit select row
  *     inside has no padding, border or background), its PR links sit inside the card,
  *     and the content inset is the card's own padding, at 800px, 390px and 320px.
  *   - projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts — a
- *     done-lane card's completion stamp, billed cost, and estimate stay side by side on
+ *     done-lane fleet chunk card's completion stamp, billed cost, and estimate stay side by side on
  *     one line below the step row, flush right, without overflowing the card, at 800px
  *     and at 390/320px.
+ *   - projects/fleet/src/lib/chunk/chunk-card/chunk-card-tone.shell-sweep.spec.ts — the
+ *     fleet chunk card's and list row's left edge and id resolve to `toneColor` of the
+ *     view's tone, in every tone, and a selected one's edge to the selection cyan.
  *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
@@ -393,6 +396,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-card/chunk-card-tone.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail-header.shell-sweep.spec.ts' },

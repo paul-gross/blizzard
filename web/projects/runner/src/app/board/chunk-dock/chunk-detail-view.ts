@@ -1,5 +1,16 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
-import { createCopyFlash, harnessName, KitAsyncState, KitBadge, KitButton, type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, TemplateRef, input, output, signal } from '@angular/core';
+import {
+  createCopyFlash,
+  harnessName,
+  KitAsyncState,
+  KitBadge,
+  KitButton,
+  KitConfirmDialog,
+  KitErrorLine,
+  type KitFact,
+  KitFactList,
+  type runnerApi,
+} from 'fleet';
 
 import { HeartbeatFreshness } from '../../runners/heartbeat-freshness';
 
@@ -13,7 +24,7 @@ import { HeartbeatFreshness } from '../../runners/heartbeat-freshness';
 @Component({
   selector: 'app-machine-detail-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitAsyncState, KitBadge, KitButton, KitFactList],
+  imports: [HeartbeatFreshness, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitErrorLine, KitFactList],
   templateUrl: './chunk-detail-view.html',
   styleUrl: './chunk-detail-view.css',
 })
@@ -33,6 +44,21 @@ export class MachineDetailView {
 
   /** `-34s` shorthand, or `—` before the first beat / past the skew bound. */
   readonly heartbeatLabel = input('—');
+
+  /** Whether this chunk's requeue is in flight — disables its Requeue control. */
+  readonly requeuePending = input(false);
+
+  /** This chunk's last requeue failure, or `null`. */
+  readonly requeueError = input<string | null>(null);
+
+  /** Whether this chunk's requeue has landed — its escalation stays listed until the next
+   * fill mints a fresh lease, so the notice says what happens next. */
+  readonly requeued = input(false);
+
+  /** Emitted with the escalated chunk's id once the operator confirms its requeue. */
+  readonly requeue = output<string>();
+
+  protected readonly confirmingRequeue = signal(false);
 
   /** The execution-facts table's rows — a method, not a stored computed, since the
    * workdir/heartbeat rows need the `<ng-template>`s this template declares for them

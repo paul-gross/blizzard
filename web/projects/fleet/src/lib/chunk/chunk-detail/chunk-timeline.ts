@@ -17,6 +17,8 @@ import {
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
 import { LensLink } from '../../core/lens-link';
+import { toneColor } from '../../kit/kit-badge';
+import { verdictTone } from './verdict-tone';
 
 /** The chunk's node-history timeline — one row per judged node,
  * oldest-first: the node, the verdict that closed it in an aligned column
@@ -100,6 +102,8 @@ export class ChunkTimeline {
 
   protected readonly rowMark = rowMark;
   protected readonly rowChoice = rowChoice;
+  protected readonly verdictTone = verdictTone;
+  protected readonly toneColor = toneColor;
   protected readonly stepCostPartialTitle = STEP_COST_PARTIAL_TITLE;
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;

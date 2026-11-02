@@ -1,0 +1,33 @@
+.selftests,
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.selftest + .selftest {
+  margin-top: 8px;
+}
+.selftest-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.checks {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+}
+.check {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.check .mark {
+  color: var(--green);
+}
+.check.failed .mark {
+  color: var(--red);
+}
+.check .detail {
+  color: var(--label-dim);
+}
