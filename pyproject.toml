@@ -99,9 +99,9 @@ exclude = ["src/blizzard/*/store/migrations/tests"]
 # One binary, verbs namespaced by target. The hyphenated aliases are the
 # systemd / `ps` entry points for the daemon `host` personalities.
 [project.scripts]
-blizzard = "blizzard.cli.main:blizzard"
-blizzard-hub = "blizzard.hub.cli:hub"
-blizzard-runner = "blizzard.runner.cli:runner"
+blizzard = "blizzard.cli.entry:blizzard"
+blizzard-hub = "blizzard.cli.entry:hub"
+blizzard-runner = "blizzard.cli.entry:runner"
 # OpenAPI export: dumps the hub and runner specs to a stable path. The frontend's
 # openapi-ts client generation and CI's client-drift check both consume it
 # (bzh:generated-client).
