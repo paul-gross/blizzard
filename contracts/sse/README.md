@@ -18,14 +18,15 @@ spec (`web/projects/fleet/src/lib/sse/sse-contract.spec.ts`) read these same fil
 no per-side copy. Moving a golden reddens whichever side has not caught up to the change; changing a side's shape
 without moving the golden reddens that side.
 
-## Forward-compatibility policy
+## Compatibility
 
-These are decisions, not accidents:
+A frame kind or payload field a supported release carries cannot be removed except as `bzh:released-surface-additive`
+and [`docs/versioning.md`](../../docs/versioning.md) allow; `blizzard-compat` holds both scopes to it. A consumer
+ignores unknown `event:` kinds and unknown payload fields, which is what makes an added kind or field additive.
+`manifest.json` may list a `deprecated` array of `<kind>` and `<kind>.<field>` entries.
 
-- **A consumer ignores unknown fields.** A payload field neither side's golden declares is not itself a break.
-- **A consumer ignores unknown `event:` kinds**, proven at the transport level (`SseService`) for both scopes. The hub
-  scope's own registered consumer, the board's `FleetLiveUpdates` frame dispatch, additionally returns `[]` for an
-  unregistered event type rather than erroring; the runner scope's own consumer lives in the `runner` app.
+## Frame semantics
+
 - **Absent is not the same as null, and both are load-bearing.** An optional field is omitted from the payload when it
   does not apply; the hub's `event-logged` and the runner's `fact-changed` each carry a `chunk_id` that is deliberately
   emitted as a present `null` (a runner-scoped hub event, or a runner-wide fact with no chunk) rather than omitted. A

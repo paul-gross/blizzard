@@ -81,3 +81,23 @@ def test_login_and_logout_keep_session_service_off_the_recorded_surface() -> Non
     for name in ("login", "logout"):
         param_names = {p["name"] for p in hub_tree["commands"][name]["params"]}
         assert "session_service" not in param_names, f"{name} declared session_service as a recorded parameter"
+
+
+def test_a_deprecated_command_and_option_are_recorded_and_others_carry_no_key() -> None:
+    @click.group()
+    def root() -> None: ...
+
+    @root.command(deprecated=True)
+    @click.option("--old", deprecated=True)
+    @click.option("--new")
+    def gone(old: str, new: str) -> None: ...
+
+    @root.command()
+    def kept() -> None: ...
+
+    shape = build("root", root)
+    assert shape["commands"]["gone"]["deprecated"] is True
+    assert "deprecated" not in shape["commands"]["kept"]
+    params = {p["name"]: p for p in shape["commands"]["gone"]["params"]}
+    assert params["old"]["deprecated"] is True
+    assert "deprecated" not in params["new"]

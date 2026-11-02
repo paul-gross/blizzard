@@ -30,6 +30,10 @@ def _empty_spec() -> Document:
 _EMPTY: dict[str, object] = {
     "openapi/hub.openapi.json": _empty_spec(),
     "openapi/runner.openapi.json": _empty_spec(),
+    "contracts/sse/manifest.json": {"kinds": []},
+    "contracts/sse/runner/manifest.json": {"kinds": []},
+    "contracts/cli/hub.json": {"path": "hub", "params": [], "commands": {}},
+    "contracts/cli/runner.json": {"path": "runner", "params": [], "commands": {}},
     "contracts/config/hub.json": {"daemon": "hub", "keys": [], "paths": []},
     "contracts/config/host.json": {"daemon": "host", "keys": [], "paths": []},
     "contracts/traces/dictionary.json": {},
@@ -73,12 +77,14 @@ class _Repo:
         drop: tuple[str, ...] = (),
         notes: dict[str, str] | None = None,
         store: Mapping[str, object] | None = None,
+        files: Mapping[str, object] | None = None,
         **extra: object,
     ) -> str:
         documents: dict[str, object] = {
             **_EMPTY,
             "openapi/hub.openapi.json": hub or _EMPTY["openapi/hub.openapi.json"],
             **extra,
+            **(files or {}),
         }
         if store is not None:
             documents["contracts/store/hub.json"] = store
@@ -836,3 +842,56 @@ def test_an_allowance_admits_only_for_a_candidate_above_its_line_against_that_li
     assert allowances.admitting([entry], (0, 3), judged) == admitted
     assert allowances.admitting([entry], (0, 2), judged) == {}
     assert allowances.admitting([entry], (0, 1), judged) == {}
+
+
+_SSE_MANIFEST = "contracts/sse/manifest.json"
+_SSE_KIND = "contracts/sse/chunk-changed.json"
+
+
+def _stream(*fields: str) -> dict[str, object]:
+    """The files of a hub scope listing one kind whose one case carries ``fields``."""
+    return {_SSE_MANIFEST: {"kinds": ["chunk-changed"]}, _SSE_KIND: {"case": dict.fromkeys(fields, 1)}}
+
+
+def test_a_composed_document_is_read_at_head_and_at_a_release_tag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut", files=_stream("chunk_id", "status"))
+    repo.git("tag", "v0.2.0")
+    repo.commit("feat: drop a field", files=_stream("chunk_id"))
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 1
+    assert "[BREAK] event-stream hub chunk-changed.status: frame field removed" in result.output
+
+
+def test_an_added_field_in_a_composed_document_is_additive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut", files=_stream("chunk_id"))
+    repo.git("tag", "v0.2.0")
+    repo.commit("feat: add a field", files=_stream("chunk_id", "status"))
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 0
+    assert f"{_SSE_MANIFEST} (event-stream): additive" in result.output
+
+
+def test_a_release_without_a_composed_documents_manifest_has_no_baseline_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut", drop=(_SSE_MANIFEST,))
+    repo.git("tag", "v0.2.0")
+    repo.commit("feat: add the stream", files=_stream("chunk_id"))
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 0
+    assert f"{_SSE_MANIFEST} (event-stream): no baseline" in result.output
+
+
+def test_head_missing_a_composed_documents_manifest_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut", drop=(_SSE_MANIFEST,))
+    result = _run(repo, monkeypatch)
+    assert result.exit_code != 0
+    assert f"HEAD has no {_SSE_MANIFEST}" in result.output

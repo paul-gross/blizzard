@@ -9,8 +9,10 @@ from typing import Any
 
 import pytest
 
+from blizzard.tools.compat.surfaces.cli import classify_cli
 from blizzard.tools.compat.surfaces.config import classify_config
 from blizzard.tools.compat.surfaces.egress import classify_egress
+from blizzard.tools.compat.surfaces.sse import classify_sse
 from blizzard.tools.compat.surfaces.store import classify_store
 from blizzard.tools.compat.surfaces.traces import classify_traces
 from blizzard.tools.compat.violation import Violation
@@ -291,3 +293,163 @@ def test_expansions_are_additive() -> None:
 
 def test_a_new_deprecation_mark_is_additive() -> None:
     assert classify_store(_BASE, _head(deprecated="0.3")) == []
+
+
+# --- event stream -------------------------------------------------------------------------
+
+
+def _stream(
+    kinds: dict[str, dict[str, Any]], *, deprecated: tuple[str, ...] = (), scope: str = "hub"
+) -> dict[str, Any]:
+    """A composed scope: each kind's cases as ``{case: {field: value}}``."""
+    manifest: dict[str, Any] = {"kinds": list(kinds)}
+    if deprecated:
+        manifest["deprecated"] = list(deprecated)
+    return {"scope": scope, "manifest": manifest, "cases": kinds}
+
+
+def test_a_removed_kind_is_a_break() -> None:
+    base = _stream({"a-changed": {"c": {"x": 1}}, "b-changed": {"c": {"x": 1}}})
+    head = _stream({"a-changed": {"c": {"x": 1}}})
+    assert _reasons(classify_sse(base, head)) == [("hub b-changed", "frame kind removed", False)]
+
+
+def test_a_field_kept_by_any_case_is_not_removed() -> None:
+    base = _stream({"a-changed": {"minimal": {"x": 1}, "full": {"x": 1, "y": 2}}})
+    head = _stream({"a-changed": {"full": {"x": 1, "y": 2}}})
+    assert classify_sse(base, head) == []
+
+
+def test_a_field_missing_from_every_case_is_a_break_in_its_scope() -> None:
+    base = _stream({"a-changed": {"minimal": {"x": 1}, "full": {"x": 1, "y": 2}}}, scope="runner")
+    head = _stream({"a-changed": {"minimal": {"x": 1}, "full": {"x": 1}}}, scope="runner")
+    assert _reasons(classify_sse(base, head)) == [("runner a-changed.y", "frame field removed", False)]
+
+
+def test_an_added_kind_or_field_is_additive() -> None:
+    base = _stream({"a-changed": {"c": {"x": 1}}})
+    head = _stream({"a-changed": {"c": {"x": 1, "y": 2}}, "b-changed": {"c": {"z": 1}}})
+    assert classify_sse(base, head) == []
+
+
+def test_a_kind_or_field_the_base_manifest_marks_is_deprecated() -> None:
+    base = _stream(
+        {"a-changed": {"c": {"x": 1, "y": 2}}, "b-changed": {"c": {"z": 1}}}, deprecated=("a-changed.y", "b-changed")
+    )
+    head = _stream({"a-changed": {"c": {"x": 1}}})
+    assert _reasons(classify_sse(base, head)) == [
+        ("hub a-changed.y", "frame field removed", True),
+        ("hub b-changed", "frame kind removed", True),
+    ]
+
+
+# --- CLI ----------------------------------------------------------------------------------
+
+
+def _param(
+    name: str, kind: str = "option", *, type: str = "text", required: bool = False, **extra: Any
+) -> dict[str, Any]:
+    opts = [f"--{name}"] if kind == "option" else [name]
+    return {"name": name, "kind": kind, "opts": opts, "secondary_opts": [], "type": type, "required": required, **extra}
+
+
+def _node(
+    path: str, *params: dict[str, Any], commands: dict[str, dict[str, Any]] | None = None, **extra: Any
+) -> dict[str, Any]:
+    node: dict[str, Any] = {"path": path, "params": list(params), **extra}
+    if commands is not None:
+        node["commands"] = commands
+    return node
+
+
+def _tree(*commands: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return _node("hub", commands={c["path"].split()[-1]: c for c in commands}, **extra)
+
+
+def test_a_removed_command_is_a_break() -> None:
+    base = _tree(_node("hub a"), _node("hub b"))
+    assert _reasons(classify_cli(base, _tree(_node("hub a")))) == [("hub b", "command removed", False)]
+
+
+def test_a_new_command_and_a_new_optional_parameter_are_additive() -> None:
+    base = _tree(_node("hub a", _param("x", "argument", required=True)))
+    head = _tree(
+        _node("hub a", _param("x", "argument", required=True), _param("y", "argument"), _param("verbose")),
+        _node("hub b"),
+    )
+    assert classify_cli(base, head) == []
+
+
+def test_a_removed_option_spelling_is_a_break_and_a_kept_one_is_not() -> None:
+    base = _tree(_node("hub a", {**_param("json"), "opts": ["--json", "-j"]}))
+    head = _tree(_node("hub a", {**_param("json"), "opts": ["--json"]}))
+    assert _reasons(classify_cli(base, head)) == [("hub a -j", "option removed", False)]
+
+
+def test_a_removed_argument_position_is_a_break_but_a_renamed_argument_is_not() -> None:
+    base = _tree(_node("hub a", _param("one", "argument"), _param("two", "argument")))
+    assert classify_cli(base, _tree(_node("hub a", _param("uno", "argument"), _param("dos", "argument")))) == []
+    assert _reasons(classify_cli(base, _tree(_node("hub a", _param("one", "argument"))))) == [
+        ("hub a <argument 2>", "argument removed", False)
+    ]
+
+
+def test_an_option_or_argument_that_became_required_is_a_break() -> None:
+    base = _tree(_node("hub a", _param("x"), _param("y", "argument")))
+    head = _tree(_node("hub a", _param("x", required=True), _param("y", "argument", required=True)))
+    assert _reasons(classify_cli(base, head)) == [
+        ("hub a --x", "option became required", False),
+        ("hub a <argument 1>", "argument became required", False),
+    ]
+
+
+def test_a_new_required_option_or_argument_is_a_break() -> None:
+    base = _tree(_node("hub a"))
+    head = _tree(_node("hub a", _param("x", required=True), _param("y", "argument", required=True)))
+    assert _reasons(classify_cli(base, head)) == [
+        ("hub a --x", "required option added", False),
+        ("hub a <argument 1>", "required argument added", False),
+    ]
+
+
+def test_a_changed_type_is_a_break() -> None:
+    base = _tree(_node("hub a", _param("x", type="text")))
+    head = _tree(_node("hub a", _param("x", type="integer")))
+    assert _reasons(classify_cli(base, head)) == [("hub a --x", "option type changed from text to integer", False)]
+
+
+def test_a_renamed_to_get_verb_resolves_through_the_groups_alias() -> None:
+    base = _node(
+        "hub", commands={"w": _node("hub w", commands={"show": _node("hub w show", _param("id", "argument"))})}
+    )
+    head = _node(
+        "hub",
+        commands={
+            "w": _node(
+                "hub w", aliases=["show", "read"], commands={"get": _node("hub w get", _param("id", "argument"))}
+            )
+        },
+    )
+    assert classify_cli(base, head) == []
+    without = _node("hub", commands={"w": _node("hub w", aliases=[], commands={"get": _node("hub w get")})})
+    assert _reasons(classify_cli(base, without)) == [("hub w show", "command removed", False)]
+
+
+def test_a_removed_alias_is_a_break() -> None:
+    base = _node("hub", commands={"w": _node("hub w", aliases=["show", "read"], commands={"get": _node("hub w get")})})
+    head = _node("hub", commands={"w": _node("hub w", aliases=["show"], commands={"get": _node("hub w get")})})
+    assert _reasons(classify_cli(base, head)) == [("hub w read", "command alias removed", False)]
+
+
+def test_deprecation_is_read_from_the_command_an_ancestor_group_or_the_option() -> None:
+    base = _tree(
+        _node("hub a", _param("x", deprecated=True), deprecated=True),
+        _node("hub g", commands={"c": _node("hub g c")}, deprecated=True),
+        _node("hub b", _param("y", deprecated=True), _param("z")),
+    )
+    head = _tree(_node("hub a"), _node("hub g", commands={}), _node("hub b", _param("z")))
+    assert _reasons(classify_cli(base, head)) == [
+        ("hub a --x", "option removed", True),
+        ("hub g c", "command removed", True),
+        ("hub b --y", "option removed", True),
+    ]

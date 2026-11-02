@@ -58,14 +58,25 @@ def _window(version_window: VersionWindow) -> Window:
     return Window(floor=version_window.floor, opening=version_window.opening)
 
 
+def _read_text(path: Path) -> str | None:
+    """A working-tree file's text; an absent file is ``None``, any other failure surfaces."""
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        return None
+
+
 def _head_documents(root: Path) -> dict[str, dict[str, Any]]:
     documents: dict[str, dict[str, Any]] = {}
     for document in DOCUMENTS:
         path = document.path
         try:
-            documents[path] = json.loads((root / path).read_text())
+            loaded = document.load(lambda p: _read_text(root / p))
         except OSError as error:
             raise click.ClickException(f"HEAD has no {path}: {error}") from error
+        if loaded is None:
+            raise click.ClickException(f"HEAD has no {path}")
+        documents[path] = loaded
     return documents
 
 
@@ -73,8 +84,8 @@ def _check_release(repo: Repository, rev: str, head: dict[str, dict[str, Any]]) 
     outcomes: list[Outcome] = []
     for document in DOCUMENTS:
         path = document.path
-        text = repo.show(rev, path)
-        findings = None if text is None or path not in head else tuple(document.classify(json.loads(text), head[path]))
+        base = document.load(lambda p: repo.show(rev, p))
+        findings = None if base is None or path not in head else tuple(document.classify(base, head[path]))
         outcomes.append(Outcome(path, document.surface, findings))
     return outcomes
 
@@ -226,9 +237,9 @@ def _base_documents(repo: Repository, rev: str) -> dict[str, dict[str, Any]]:
     documents: dict[str, dict[str, Any]] = {}
     for document in DOCUMENTS:
         path = document.path
-        text = repo.show(rev, path)
-        if text is not None:
-            documents[path] = json.loads(text)
+        loaded = document.load(lambda p: repo.show(rev, p))
+        if loaded is not None:
+            documents[path] = loaded
     return documents
 
 
