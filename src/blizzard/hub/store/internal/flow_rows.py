@@ -15,9 +15,10 @@ from typing import Any
 from sqlalchemy import Connection, Row
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowFactKind, FlowLanding, TurnEvent, Withdrawal
+from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowLanding, TurnEvent, Withdrawal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import statements_of
 
@@ -37,7 +38,7 @@ def fact_of(row: Row[Any]) -> FlowFact:
         flow_id=row.flow_id,
         submission_id=row.submission_id,
         chunk_id=row.chunk_id,
-        kind=row.kind,
+        kind=FlowChangeKind(row.kind),
         at=row.at,
         outcome=row.outcome,
         revision=row.revision,
@@ -74,7 +75,7 @@ def write_facts(
     submission_id: str,
     chunk_id: str,
     *,
-    kind: FlowFactKind,
+    kind: FlowChangeKind,
     outcome: str | None,
     at: datetime,
     revision: str | None = None,
@@ -134,7 +135,7 @@ def close_submission(
         return None
     conn.execute(stmts.insert(_closures).values(submission_id=submission_id, outcome=outcome, closed_at=at))
     chunk_id, flows = held_by(conn, submission_id)
-    return write_facts(conn, flows, submission_id, chunk_id, kind="withdrawn", outcome=outcome, at=at)
+    return write_facts(conn, flows, submission_id, chunk_id, kind=FlowChangeKind.WITHDRAWN, outcome=outcome, at=at)
 
 
 def has_open_turn(conn: Connection, submission_id: str) -> bool:
@@ -162,7 +163,9 @@ def end_turn(
         return None
     conn.execute(stmts.update(_turns).where(_turns.c.turn_id == turn_id).values(ended_at=at, outcome=outcome))
     chunk_id, flows = held_by(conn, turn.submission_id)
-    written = write_facts(conn, flows, turn.submission_id, chunk_id, kind="turn-ended", outcome=outcome, at=at)
+    written = write_facts(
+        conn, flows, turn.submission_id, chunk_id, kind=FlowChangeKind.TURN_ENDED, outcome=outcome, at=at
+    )
     return str(turn.submission_id), written
 
 
@@ -199,7 +202,7 @@ def write_landing(
         [landing.flow],
         landing.submission_id,
         landing.chunk_id,
-        kind="landed",
+        kind=FlowChangeKind.LANDED,
         outcome=None,
         revision=revision,
         at=at,

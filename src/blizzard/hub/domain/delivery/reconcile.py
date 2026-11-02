@@ -14,6 +14,7 @@ from datetime import datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
@@ -166,7 +167,7 @@ class FlowLineReconciler:
             closed=len(withdrawn),
             floor=min(arrivals) if arrivals else max((sub.arrival + 1 for sub in open_subs), default=floor),
             written=(
-                *(fact for sub in submitted for fact in written_on(sub, kind="submitted")),
+                *(fact for sub in submitted for fact in written_on(sub, kind=FlowChangeKind.SUBMITTED)),
                 *(fact for closure in withdrawn for fact in closure),
             ),
         )

@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
-
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
-
-
-class LandingPolicyName(StrEnum):
-    """A landing policy a write may name — how a repository's changes land."""
-
-    MERGE_ON_CHECKS = "merge-on-checks"
-    FAST_FORWARD = "fast-forward"
-    PARK = "park"
 
 
 class RepositorySummary(WireModel):
@@ -62,7 +53,7 @@ class RepositoryDocument(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
-    landing_policy: LandingPolicyName | None = None
+    landing_policy: LandingPolicy | None = None
     park_timeout_hours: int | None = None
 
 
@@ -82,7 +73,7 @@ class RepositoryCreateRequest(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
-    landing_policy: LandingPolicyName = LandingPolicyName.MERGE_ON_CHECKS
+    landing_policy: LandingPolicy = LandingPolicy.MERGE_ON_CHECKS
     park_timeout_hours: int | None = None
 
 
@@ -102,7 +93,7 @@ class RepositoryPatchRequest(BaseModel):
     repo: str | None = None
     base_branch: str | None = None
     secret_name: str | None = None
-    landing_policy: LandingPolicyName | None = None
+    landing_policy: LandingPolicy | None = None
     park_timeout_hours: int | None = None
 
 

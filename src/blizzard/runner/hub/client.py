@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
@@ -583,7 +584,7 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         self,
         capabilities: Sequence[HarnessCapability],
         *,
-        policy: str,
+        policy: QueueMatchPolicy,
         project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:

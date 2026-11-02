@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
@@ -24,7 +25,6 @@ from blizzard.hub.domain.chunk.model import (
     TransitionFact,
 )
 from blizzard.hub.domain.config.forges import ForgeId
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryFields,

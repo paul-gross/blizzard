@@ -7,11 +7,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.fast_forward import FastForward
 from blizzard.hub.delivery.actions.landing.merge_on_checks import MergeOnChecks
 from blizzard.hub.delivery.actions.landing.park import Park
 from blizzard.hub.delivery.actions.landing.repo import Admitted, RepoLanding, RepoState
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 
 
 class ILandingPolicy(Protocol):

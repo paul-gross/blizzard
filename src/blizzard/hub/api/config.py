@@ -30,12 +30,7 @@ from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId
-from blizzard.hub.domain.config.landing_policies import (
-    DEFAULT_LANDING_POLICY,
-    POLICY_CAPABILITIES,
-    LandingPolicy,
-    landing_sort_key,
-)
+from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, POLICY_CAPABILITIES, landing_sort_key
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit, WorkSourceId
 from blizzard.hub.domain.config_apply.entries import (
@@ -67,7 +62,7 @@ from blizzard.wire.config import (
     ScopeEntry,
     WorkSourceEntry,
 )
-from blizzard.wire.repository import LandingPolicyName, RepositoryDocument
+from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
@@ -284,7 +279,7 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
         address = stated.pop(_REPOSITORY_ADDRESS, UNSET)
         reference = stated.pop("forge", UNSET)
-        policy = None if repo.landing_policy is None else LandingPolicy(repo.landing_policy.value)
+        policy = repo.landing_policy
         if "landing_policy" in stated:
             stated["landing_policy"] = policy
         repositories.append(
@@ -563,7 +558,7 @@ def export_config(
                 repo=r.fields.repo,
                 base_branch=r.fields.base_branch,
                 secret_name=r.fields.secret_name,
-                landing_policy=LandingPolicyName(r.fields.landing_policy),
+                landing_policy=r.fields.landing_policy,
                 park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories
@@ -620,7 +615,7 @@ def export_config(
                 repo=r.fields.repo,
                 base_branch=r.fields.base_branch,
                 secret_name=r.fields.secret_name,
-                landing_policy=LandingPolicyName(r.fields.landing_policy),
+                landing_policy=r.fields.landing_policy,
                 park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories

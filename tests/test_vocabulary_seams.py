@@ -6,6 +6,7 @@ from enum import StrEnum
 from typing import Annotated
 
 import pytest
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 from blizzard.foundation.component_name import ComponentNamed
@@ -33,8 +34,11 @@ class _Inline(BaseModel):
     hue: Annotated[_Hue, InlineVocabulary("Hue")]
 
 
+type _TolerantHue = _Hue | Unrecognized
+
+
 class _Tolerant(BaseModel):
-    hue: Annotated[_Hue | Unrecognized, ToleratedRequestVocabulary("Hue")] = _Hue.BLUE
+    hue: Annotated[_TolerantHue, ToleratedRequestVocabulary("Hue")] = _Hue.BLUE
 
 
 def test_a_component_named_enum_takes_its_name_and_title_and_keeps_its_members() -> None:
@@ -70,3 +74,12 @@ def test_a_tolerated_field_serializes_both_raw() -> None:
     assert _Tolerant.model_validate({"hue": "red"}).model_dump(mode="json") == {"hue": "red"}
     assert _Tolerant.model_validate({"hue": "green"}).model_dump(mode="json") == {"hue": "green"}
     assert _Tolerant.model_validate({"hue": "green"}).model_dump() == {"hue": "green"}
+
+
+def test_a_tolerated_request_field_adds_no_component_to_a_served_document() -> None:
+    app = FastAPI()
+
+    @app.post("/tolerant")
+    def tolerant(body: _Tolerant) -> None: ...
+
+    assert sorted(app.openapi()["components"]["schemas"]) == ["HTTPValidationError", "ValidationError", "_Tolerant"]

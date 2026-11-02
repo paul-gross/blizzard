@@ -3,10 +3,11 @@ timeline, and ``ChunkHistoryView``, the history slice of a chunk's detail."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel
 
+from blizzard.foundation.history_kinds import HistoryRowKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BounceView, MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
@@ -19,9 +20,7 @@ class HistoryRowView(WireModel):
     source; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.
     ``kind`` is ``transition``, ``migration``, ``bounce``, ``resolution``, ``requeue`` or ``restart``."""
 
-    kind: Annotated[
-        Literal["transition", "migration", "bounce", "resolution", "requeue", "restart"] | Unrecognized, OPEN
-    ]
+    kind: Annotated[HistoryRowKind | Unrecognized, OPEN]
     from_node: str | None = None
     to_node: str | None = None
     choice: str | None = None

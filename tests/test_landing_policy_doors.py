@@ -14,9 +14,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES, LandingPolicy
+from blizzard.foundation.landing_policy import LandingPolicy
+from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES
 from blizzard.hub.store.schema import project_repository_positions
-from blizzard.wire.repository import LandingPolicyName
 from tests.support import HubHarness, build_hub, default_tenant
 
 pytestmark = pytest.mark.component
@@ -135,10 +135,6 @@ def test_the_forge_detail_carries_what_it_offers(hub: HubHarness) -> None:
 
     assert offered == sorted(offered)
     assert POLICY_CAPABILITIES[LandingPolicy.MERGE_ON_CHECKS].requires <= set(offered)
-
-
-def test_the_wire_names_every_policy_the_domain_knows() -> None:
-    assert {policy.value for policy in LandingPolicyName} == {policy.value for policy in LandingPolicy}
 
 
 # --- The project's landing order ---------------------------------------------------------------------------------

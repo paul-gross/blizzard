@@ -15,23 +15,20 @@ from typing import Literal, get_args
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.flow_place_state import FlowPlaceState
 from blizzard.foundation.hub_event_types import FlowChangeKind
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
-from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, LandingPolicy
+from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryResolution
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
 from blizzard.hub.domain.graph.model import Node
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
-#: What a flow's record says happened — the kinds a ``flow-changed`` frame names, one frame per fact.
-type FlowFactKind = FlowChangeKind
-#: Where an open submission stands on a flow it holds: taking its turn, next to take one, eligible behind another,
-#: waiting on its next poll, or passed over while its chunk is not ``delivering`` or its visit not current.
-type FlowPlaceState = Literal["landing", "next", "waiting", "polling", "awaiting-merge", "passed-over"]
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
@@ -143,7 +140,7 @@ class FlowFact:
     flow_id: str
     submission_id: str
     chunk_id: str
-    kind: FlowFactKind
+    kind: FlowChangeKind
     at: datetime
     outcome: str | None = None
     revision: str | None = None
@@ -266,11 +263,11 @@ class AdmittedTurn:
     @property
     def written(self) -> tuple[FlowFactWritten, ...]:
         """The ``turn-started`` fact the turn's start wrote on each flow its submission holds."""
-        return written_on(self.submission, kind="turn-started")
+        return written_on(self.submission, kind=FlowChangeKind.TURN_STARTED)
 
 
 def written_on(
-    submission: Submission, *, kind: FlowFactKind, outcome: str | None = None
+    submission: Submission, *, kind: FlowChangeKind, outcome: str | None = None
 ) -> tuple[FlowFactWritten, ...]:
     """The fact of ``kind`` a write appends on each flow ``submission`` holds."""
     return FlowFactWritten.each(
@@ -536,7 +533,9 @@ class FlowLine:
                 submission=submission,
                 flow=flow,
                 state=state,
-                position=1 if state in ("landing", "next") else 1 + self._eligible_ahead(submission, flow, now=now),
+                position=1
+                if state in (FlowPlaceState.LANDING, FlowPlaceState.NEXT)
+                else 1 + self._eligible_ahead(submission, flow, now=now),
                 due_at=due,
             )
             for flow in submission.flows
@@ -544,16 +543,16 @@ class FlowLine:
 
     def _state(self, submission: Submission, *, now: datetime) -> tuple[FlowPlaceState, datetime | None]:
         if submission.submission_id in self.turning:
-            return "landing", None
+            return FlowPlaceState.LANDING, None
         if not may_pass(self.facts[submission.chunk_id], submission):
-            return "passed-over", None
+            return FlowPlaceState.PASSED_OVER, None
         due = self._due_at(submission)
         if due is not None and due > now:
             poll = self._latest_poll(submission)
             if poll is not None and poll.kind == "awaiting-merge":
-                return "awaiting-merge", due
-            return "polling", due
-        return ("next" if self.is_next(submission, now=now) else "waiting"), None
+                return FlowPlaceState.AWAITING_MERGE, due
+            return FlowPlaceState.POLLING, due
+        return (FlowPlaceState.NEXT if self.is_next(submission, now=now) else FlowPlaceState.WAITING), None
 
     def _eligible_ahead(self, submission: Submission, flow: Flow, *, now: datetime) -> int:
         return sum(

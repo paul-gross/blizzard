@@ -14,6 +14,7 @@ from typing import ClassVar, NewType, Protocol
 from urllib.parse import urlparse
 
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.repo_ref import RepoRef
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -29,12 +30,7 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, NewForge
-from blizzard.hub.domain.config.landing_policies import (
-    DEFAULT_LANDING_POLICY,
-    PARKING_POLICIES,
-    LandingPolicy,
-    parse_policy,
-)
+from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, PARKING_POLICIES, parse_policy
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug

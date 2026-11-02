@@ -9,6 +9,7 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -141,7 +142,7 @@ class ReadyQueue:
                 ctx.capability_snapshot(),
                 # The same knob `_next` reach-ahead already honors locally, sent per call
                 # rather than read hub-side, so both dimensions get the identical policy.
-                policy="hold" if ctx.config.queue_strict else "pass-over",
+                policy=QueueMatchPolicy.HOLD if ctx.config.queue_strict else QueueMatchPolicy.PASS_OVER,
                 projects=[binding.project_id for binding in bindings],
             )
         except HubClientError:

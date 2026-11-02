@@ -3,7 +3,7 @@ corpus at ``contracts/sse/``."""
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -15,6 +15,7 @@ from blizzard.foundation.hub_event_types import (
     HubEventType,
     RunnerChangeKind,
 )
+from blizzard.wire.vocabulary import InlineVocabulary
 
 
 class SseFramePayload(BaseModel):
@@ -116,7 +117,7 @@ class FlowChangedPayload(SseFramePayload):
     """One fact written to a flow's record. A flow is tenant-wide, so the frame names no project."""
 
     flow_id: str
-    kind: FlowChangeKind
+    kind: Annotated[FlowChangeKind, InlineVocabulary("Kind")]
     submission_id: str
     chunk_id: str
     #: A ``turn-ended`` fact's outcome, or why a ``withdrawn`` one left; omitted on every other kind.

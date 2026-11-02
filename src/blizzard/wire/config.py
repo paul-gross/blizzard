@@ -7,9 +7,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.forge import OldFieldWarning
-from blizzard.wire.repository import LandingPolicyName, RepositoryDocument
+from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
@@ -135,7 +136,7 @@ class RepositoryEntry(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
-    landing_policy: LandingPolicyName | None = None
+    landing_policy: LandingPolicy | None = None
     park_timeout_hours: int | None = None
 
 

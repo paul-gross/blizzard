@@ -22,6 +22,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from blizzard import __version__
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
@@ -224,7 +225,7 @@ class HttpHubClient:
         self,
         capabilities: Sequence[HarnessCapability],
         *,
-        policy: str,
+        policy: QueueMatchPolicy,
         project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:

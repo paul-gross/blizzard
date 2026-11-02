@@ -8,8 +8,8 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.land import Land
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ChangeState
 from tests.github_double import change

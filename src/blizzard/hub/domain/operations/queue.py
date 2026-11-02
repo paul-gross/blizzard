@@ -18,7 +18,9 @@ from enum import Enum
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.domain.chunk.dependencies import FoldEdgePlan, plan_fold, would_close_a_cycle
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import (
@@ -54,18 +56,10 @@ class QueueList(Enum):
     NOT_READY = "not_ready"
 
 
-class QueueMatchPolicy(Enum):
-    """The matched fleet peek's hold-or-pass-over policy — applied to the
-    capability-eligibility and blocked-dependency dimensions together, never one alone.
-    :meth:`of` never raises: an unrecognized wire value reads as :attr:`PASS_OVER`
+def queue_match_policy(value: QueueMatchPolicy | Unrecognized) -> QueueMatchPolicy:
+    """The policy a peek is read under. A value this build does not know reads as :attr:`QueueMatchPolicy.PASS_OVER`
     (``docs/versioning.md``'s round-trip-the-unrecognized rule)."""
-
-    HOLD = "hold"
-    PASS_OVER = "pass-over"
-
-    @classmethod
-    def of(cls, value: str) -> QueueMatchPolicy:
-        return cls.HOLD if value == cls.HOLD.value else cls.PASS_OVER
+    return value if isinstance(value, QueueMatchPolicy) else QueueMatchPolicy.PASS_OVER
 
 
 @domain_model

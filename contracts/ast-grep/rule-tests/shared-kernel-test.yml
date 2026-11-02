@@ -1,0 +1,41 @@
+id: bzh:shared-kernel
+valid:
+  # A vocabulary imported from its one home in foundation.
+  - |
+    from blizzard.foundation.flow_place_state import FlowPlaceState
+
+    class FlowPlaceView(WireModel):
+        state: Annotated[FlowPlaceState | Unrecognized, OPEN]
+  # A single-member `Literal` is a discriminator, not a vocabulary.
+  - |
+    class PlantedView(BaseModel):
+        kind: Literal["planted"] = "planted"
+  - |
+    KIND = Literal["only"]
+  # A class that is not an enum.
+  - |
+    class OutcomeView(BaseModel):
+        detail: str = ""
+invalid:
+  - |
+    class FlowPlaceState(StrEnum):
+        LANDING = "landing"
+        NEXT = "next"
+  - |
+    class Shade(enum.Enum):
+        LIGHT = "light"
+        DARK = "dark"
+  - |
+    class Level(ComponentNamed, IntEnum):
+        LOW = 1
+        HIGH = 2
+  - |
+    class DeliveryView(WireModel):
+        outcome: Annotated[Literal["recorded", "invalid"] | Unrecognized, OPEN]
+  - |
+    class DeliveryView(WireModel):
+        outcome: Literal["recorded", "invalid"]
+  - |
+    DeliveryOutcome = Literal["recorded", "invalid"]
+  - |
+    type DeliveryOutcome = Literal["recorded", "invalid"]

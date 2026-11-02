@@ -27,6 +27,17 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site
     with `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
+- **`bzh:shared-kernel`** (`rules/shared-kernel.yml`) — a vocabulary a wire model carries is defined once, in
+  `src/blizzard/foundation/`, never under `wire/`. The rule's prose home is `bzh:shared-kernel` in
+  `blizzard-context:/architecture/clean-architecture.md`; this file states none of that prose, only what the rule
+  mechanically checks.
+  - Scoped to `src/blizzard/wire/**`.
+  - Matches a class whose bases include `Enum`, `StrEnum` or `IntEnum`, bare or as an attribute (`enum.StrEnum`), and a
+    `Literal` of two or more values, whether an annotation, an `X = Literal[...]` alias or a `type X = Literal[...]`
+    alias. A single-member `Literal` is a discriminator and passes. A closed vocabulary typed as plain `str` is not
+    seen.
+  - No exemption stands.
+
 - **`bzh:sweep-acts-in-row-tenant`** (`rules/sweep-acts-in-row-tenant.yml`) — a cross-tenant read builds its statements
   through `OPEN_TENANTS` (or the named opt-out `ALL_TENANTS`) in `src/blizzard/hub/store/internal/open_tenants.py`,
   never a raw SQLAlchemy constructor. The rule's prose home is `blizzard-context:/architecture/system-shape/tenancy.md`;

@@ -21,6 +21,7 @@ from typing import Any, cast
 import httpx2
 import pytest
 
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.runner.hub.client import (
     ClaimRequest,
     HostReport,
@@ -159,7 +160,7 @@ _TRANSCRIPT: dict[str, Any] = {
 _FACT = PushedFact(seq=1, kind="chunk.advanced", payload_text="{}")
 
 _HUB_CLIENT: dict[str, Callable[[HttpHubClient], object]] = {
-    "peek_queue": lambda c: c.peek_queue([], policy="fifo", project="p"),
+    "peek_queue": lambda c: c.peek_queue([], policy=QueueMatchPolicy.PASS_OVER, project="p"),
     "claim_route": lambda c: c.claim_route(ClaimRequest("ch_1", "ws", ["env"])),
     "submit_completion": lambda c: c.submit_completion("ch_1", Completion(choice="done", epoch=1, from_node_id="n")),
     "submit_decision": lambda c: c.submit_decision("ch_1", GateSubmission(from_node_id="n", epoch=1)),

@@ -14,9 +14,7 @@ from blizzard.hub.domain.config.repositories import ConfiguredRepository, Reposi
 from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowLine, FlowOverview, FlowPlace, Submission, Turn
 from blizzard.wire.flow import (
     ChunkFlowPlaceView,
-    FlowFactKind,
     FlowFactView,
-    FlowPlaceState,
     FlowPlaceView,
     FlowTurnView,
     FlowView,
@@ -29,7 +27,7 @@ def fact_view(fact: FlowFact) -> FlowFactView:
         flow_id=fact.flow_id,
         submission_id=fact.submission_id,
         chunk_id=fact.chunk_id,
-        kind=FlowFactKind(fact.kind),
+        kind=fact.kind,
         at=iso_utc(fact.at),
         outcome=fact.outcome,
         revision=fact.revision,
@@ -87,7 +85,7 @@ class FlowLineRead:
             repository_slug=record.slug if record is not None else None,
             repository_name=record.name if record is not None else None,
             branch=place.flow.branch,
-            state=FlowPlaceState(place.state),
+            state=place.state,
             position=place.position,
             next_poll_at=iso_utc(place.due_at) if place.due_at is not None else None,
         )
@@ -113,7 +111,7 @@ class FlowLineRead:
                 chunk_id=place.submission.chunk_id,
                 submission_id=place.submission.submission_id,
                 arrival=place.submission.arrival,
-                state=FlowPlaceState(place.state),
+                state=place.state,
                 position=place.position,
                 next_poll_at=iso_utc(place.due_at) if place.due_at is not None else None,
             )

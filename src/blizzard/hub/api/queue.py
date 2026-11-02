@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -38,10 +39,10 @@ from blizzard.hub.domain.operations.queue import (
     NotInList,
     QueueEntry,
     QueueList,
-    QueueMatchPolicy,
     QueuePage,
     SelfAnchoredMove,
     entries_of,
+    queue_match_policy,
     select_matched_entry,
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
@@ -230,7 +231,7 @@ class MatchedPeek:
         served: Collection[str],
     ) -> MatchedPeek:
         chunks = services.queue.ordered_ready(statuses=statuses)
-        policy = QueueMatchPolicy.of(request.policy)
+        policy = queue_match_policy(request.policy)
         served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
         per_project = request.projects is not None
         if policy is not QueueMatchPolicy.HOLD:

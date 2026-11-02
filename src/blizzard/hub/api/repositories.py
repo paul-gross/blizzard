@@ -24,7 +24,6 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD, ForgeChoice
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
-from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -35,7 +34,6 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.repository import (
-    LandingPolicyName,
     RepositoriesListView,
     RepositoryCreateRequest,
     RepositoryPatchRequest,
@@ -101,11 +99,6 @@ def _forge_choice(request: RepositoryCreateRequest | RepositoryPatchRequest, ser
     )
 
 
-def landing_policy(value: LandingPolicyName | None) -> LandingPolicy | None:
-    """The domain's policy a request names; ``None`` passes through for the record to refuse."""
-    return None if value is None else LandingPolicy(value.value)
-
-
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -148,7 +141,7 @@ def create_repository(
         repo=request.repo,
         base_branch=request.base_branch,
         secret_name=request.secret_name,
-        landing_policy=LandingPolicy(request.landing_policy.value),
+        landing_policy=request.landing_policy,
         park_timeout_hours=request.park_timeout_hours,
     )
     try:
@@ -190,8 +183,6 @@ def patch_repository(
     repository at a forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry."""
     present = request.model_fields_set
     stated = {field: getattr(request, field) for field in present if field not in (_ADDRESS, FORGE_FIELD)}
-    if "landing_policy" in stated:
-        stated["landing_policy"] = landing_policy(stated["landing_policy"])
     edit = RepositoryEdit(**stated)
     try:
         authored = services.config_authoring.edit_repository_naming(
