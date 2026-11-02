@@ -29,8 +29,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
 
 - **`bzh:sweep-acts-in-row-tenant`** (`rules/sweep-acts-in-row-tenant.yml`) — a cross-tenant read builds its statements
   through `OPEN_TENANTS` (or the named opt-out `ALL_TENANTS`) in `src/blizzard/hub/store/internal/open_tenants.py`,
-  never a raw SQLAlchemy constructor. The rule's prose home is
-  `blizzard-context:/architecture/system-shape/tenancy.md`; this file states only what the rule mechanically checks.
+  never a raw SQLAlchemy constructor. The rule's prose home is `blizzard-context:/architecture/system-shape/tenancy.md`;
+  this file states only what the rule mechanically checks.
   - Scoped to `corpus_rows.py`, the `hub_scoped_*.py` modules, `trace_store.py` and `egress_store.py` under
     `src/blizzard/hub/store/internal/`; `open_tenants.py` is the rule's only ignore.
   - Matches a call of `select`, `exists`, `join`, `outerjoin`, `union` or `union_all`, bare or as an attribute of `sa`
