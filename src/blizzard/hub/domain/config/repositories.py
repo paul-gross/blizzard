@@ -35,6 +35,7 @@ from blizzard.hub.domain.config.landing_policies import (
     LandingPolicy,
     parse_policy,
 )
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
@@ -577,6 +578,8 @@ def _field(record: ConfiguredRepository, name: str) -> object:
 
 class IReadRepositoryRecordRepository(Protocol):
     """Read-only repository-record operations."""
+
+    def list_all_locked(self, handle: ILockedConfigRead) -> list[ConfiguredRepository]: ...
 
     def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None: ...
 

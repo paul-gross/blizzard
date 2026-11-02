@@ -21,6 +21,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.delivery.flows import (
     NOT_VERDICTS,
     TURN_INTERRUPTED,
+    TURN_SUPERSEDED,
     Flow,
     FlowFact,
     FlowLanding,
@@ -311,11 +312,29 @@ class FlowStore:
         resources: Sequence[FlowResource],
         at: datetime,
     ) -> Submission | None:
-        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
-            raise ValueError("submission's chunk is not locked by this handle")
+        if generation != self.generation_locked(handle, chunk_id, node_id=node_id, epoch=epoch):
+            return None
         return self._submit_on(
             conn_of(handle), chunk_id, node_id=node_id, epoch=epoch, generation=generation, resources=resources, at=at
         )
+
+    def generation_locked(self, handle: ILockedChunkRead, chunk_id: str, *, node_id: str, epoch: int) -> int | None:
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        conn = conn_of(handle)
+        lock_flow_chunk(conn, chunk_id)
+        latest = conn.execute(
+            self._store.select(_sub, _sub.c.submission_id, _sub.c.generation)
+            .where(_sub.c.chunk_id == chunk_id, _sub.c.node_id == node_id, _sub.c.epoch == epoch)
+            .order_by(_sub.c.generation.desc())
+            .limit(1)
+        ).first()
+        if latest is None:
+            return 0
+        outcome = conn.execute(
+            self._store.select(_closures, _closures.c.outcome).where(_closures.c.submission_id == latest.submission_id)
+        ).scalar()
+        return latest.generation + 1 if outcome == TURN_SUPERSEDED else None
 
     def _submit_on(
         self,

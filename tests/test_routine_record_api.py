@@ -5,6 +5,7 @@ writing nothing — a real hub app driven through ``TestClient``."""
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.store import routine_authoring_participants
+from blizzard.hub.store.routine_authoring_participants import RoutineAuthoringParticipants
 from blizzard.hub.store.schema import config_changes
 from tests.support import (
     HubHarness,
@@ -101,6 +104,103 @@ def test_a_patch_restating_a_since_retired_graph_applies_the_other_fields(hub: H
 
     assert resp.status_code == 200, resp.text
     assert (resp.json()["default_effort"], resp.json()["revision"]) == ("high", 2)
+
+
+@pytest.mark.parametrize("initially_retired", [False, True])
+def test_create_resolves_graph_after_admission(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch, initially_retired: bool
+) -> None:
+    graph_id = hub.client.get("/api/graphs").json()[0]["graph_id"]
+    if initially_retired:
+        assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={}).status_code in (200, 202)
+    original = RoutineAuthoringParticipants.open
+
+    @contextmanager
+    def transition_before_admission(self, *, clock):
+        verb = "enable" if initially_retired else "retire"
+        assert hub.client.post(f"/api/graphs/{graph_id}/{verb}", json={}).status_code in (200, 202)
+        with original(self, clock=clock) as session:
+            yield session
+
+    monkeypatch.setattr(RoutineAuthoringParticipants, "open", transition_before_admission)
+    response = hub.client.post(
+        "/api/routines", json={"name": "nightly", "graph_name": "alpha", "default_scope_slug": "fresh"}
+    )
+    assert response.status_code == (201 if initially_retired else 422), response.text
+    assert len(_changes(hub)) == int(initially_retired)
+    assert len(_changes(hub, "scope")) == int(initially_retired)
+
+
+def test_edit_resolves_changed_graph_after_admission(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+    rid = _create(hub)["routine_id"]
+    _mint_graph(hub, "beta")
+    graph_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "beta")
+    original = RoutineAuthoringParticipants.open
+
+    @contextmanager
+    def retire_before_admission(self, *, clock):
+        assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={}).status_code in (200, 202)
+        with original(self, clock=clock) as session:
+            yield session
+
+    monkeypatch.setattr(RoutineAuthoringParticipants, "open", retire_before_admission)
+    response = hub.client.patch(f"/api/routines/{rid}", json={"graph_name": "beta", "default_scope_slug": "fresh"})
+    assert response.status_code == 422, response.text
+    assert len(_changes(hub)) == 1
+    assert [row["record_key"] for row in _changes(hub, "scope")] == ["blizzard"]
+
+
+@pytest.mark.parametrize("change_effort", [False, True])
+def test_restatement_survives_graph_retirement_at_admission(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch, change_effort: bool
+) -> None:
+    rid = _create(hub)["routine_id"]
+    graph_id = hub.client.get("/api/graphs").json()[0]["graph_id"]
+    original = RoutineAuthoringParticipants.open
+
+    @contextmanager
+    def retire_before_admission(self, *, clock):
+        assert hub.client.post(f"/api/graphs/{graph_id}/retire", json={}).status_code in (200, 202)
+        with original(self, clock=clock) as session:
+            yield session
+
+    monkeypatch.setattr(RoutineAuthoringParticipants, "open", retire_before_admission)
+    body = {"graph_name": "alpha"}
+    if change_effort:
+        body["default_effort"] = "high"
+    response = hub.client.patch(f"/api/routines/{rid}", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["revision"] == 1 + int(change_effort)
+    assert len(_changes(hub)) == 1 + int(change_effort)
+
+
+def test_stale_edit_is_refused_after_admission(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+    rid = _create(hub)["routine_id"]
+    original = RoutineAuthoringParticipants.open
+
+    @contextmanager
+    def edit_before_admission(self, *, clock):
+        monkeypatch.setattr(RoutineAuthoringParticipants, "open", original)
+        assert hub.client.patch(f"/api/routines/{rid}", json={"default_effort": "high"}).status_code == 200
+        with original(self, clock=clock) as session:
+            yield session
+
+    monkeypatch.setattr(RoutineAuthoringParticipants, "open", edit_before_admission)
+    response = hub.client.patch(f"/api/routines/{rid}", json={"default_effort": "low"})
+    assert response.status_code == 409, response.text
+    assert hub.client.get(f"/api/routines/{rid}").json()["default_effort"] == "high"
+    assert len(_changes(hub)) == 2
+
+
+def test_failed_routine_write_rolls_back_scope_mint(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_insert(*args, **kwargs):
+        raise RuntimeError("injected write failure")
+
+    monkeypatch.setattr(routine_authoring_participants, "insert_routine", fail_insert)
+    with pytest.raises(RuntimeError, match="injected write failure"):
+        hub.client.post("/api/routines", json={"name": "nightly", "graph_name": "alpha", "default_scope_slug": "fresh"})
+    assert _changes(hub) == []
+    assert _changes(hub, "scope") == []
 
 
 def test_an_older_clis_full_payload_still_succeeds(hub: HubHarness) -> None:

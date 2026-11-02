@@ -255,14 +255,16 @@ class IngestService:
         project refusals of :func:`choose_ingest_project`, and :class:`IngestConflict` for a pointer
         a live chunk holds. Of two overlapping ingests of one pointer, exactly one mints.
 
-        The links are read once to choose the project, then again under that project's source-link
-        lock — taken before the pointers' — so a source unlinked in between refuses the ingest
-        rather than minting a chunk its project no longer draws from."""
+        Project inference and pointer admission read their facts on the locked transaction."""
         work_refs = ingest_work_refs(pointers)
-        chosen = self.choose_project(work_refs, project)
         try:
-            with self._exclusive.locked_work_refs(work_refs, project=chosen) as handle:
-                choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
+            with self._exclusive.locked_work_refs(work_refs, project=project) as handle:
+                chosen = choose_ingest_project(
+                    project,
+                    work_refs,
+                    handle.source_links(configured_sources(work_refs)),
+                    handle.item_projects(work_refs),
+                )
                 chunk = decide_ingest(
                     work_refs,
                     live_holders=handle.live_holders(work_refs),

@@ -3,13 +3,14 @@ whole with a ``422`` body naming what to choose; and a source unlinked under an 
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
+from blizzard.hub.domain.chunk.ingest import IngestItemProjectMismatch, IngestProjectAmbiguous, IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -249,3 +250,54 @@ def test_a_hub_item_recorded_in_the_inferred_project_is_accepted_beside_a_config
 
     assert status == 201, body
     assert _project_of(hub, body["chunk_id"]) == first
+
+
+def test_source_link_added_before_lock_makes_inference_ambiguous(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, first, second = _two_projects(tmp_path)
+    ingest = hub.services.ingest
+    pointer = WorkRef(source="a", ref="race")
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    assert ingest.choose_project([pointer], None) == first
+    exclusive = ingest._exclusive
+    original = exclusive.locked_work_refs
+
+    @contextmanager
+    def interleaved(pointers: Any, *, project: Any = None) -> Any:
+        link_project(hub.engine, project=second, source="a")
+        with original(pointers, project=project) as handle:
+            yield handle
+
+    monkeypatch.setattr(exclusive, "locked_work_refs", interleaved)
+    with pytest.raises(IngestProjectAmbiguous) as refused:
+        ingest.ingest([pointer], graph=graph, project=None)
+    assert set(refused.value.candidates) == {first, second}
+    assert hub.client.get("/api/chunks").json()["chunks"] == []
+
+
+def test_locked_hub_item_project_is_checked_against_named_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub, first, second = _two_projects(tmp_path)
+    token = _hub_item_in(hub, first)
+    pointer = WorkRef(source="hub", ref=token.split(":", 1)[1])
+    ingest = hub.services.ingest
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    assert ingest.choose_project([pointer], first) == first
+    exclusive = ingest._exclusive
+    original = exclusive.locked_work_refs
+
+    @contextmanager
+    def interleaved(pointers: Any, *, project: Any = None) -> Any:
+        with original(pointers, project=project) as handle:
+            monkeypatch.setattr(type(handle), "item_projects", lambda self, refs: {pointer: second})
+            yield handle
+
+    monkeypatch.setattr(exclusive, "locked_work_refs", interleaved)
+    with pytest.raises(IngestItemProjectMismatch):
+        ingest.ingest([pointer], graph=graph, project=first)

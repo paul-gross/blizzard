@@ -6,15 +6,17 @@ row, and the change row. ``uq_projects_tenant_slug`` refuses a slug another proj
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.projects.model import (
     IWriteProjectRepository,
     Project,
@@ -23,6 +25,7 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlugTaken,
 )
 from blizzard.hub.domain.projects.resolve import resolve
+from blizzard.hub.store.internal.chunk_rows import conn_of
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
@@ -115,6 +118,14 @@ class ProjectStore:
 
     def get(self, project_id: ProjectId) -> Project | None:
         return self.get_many([project_id]).get(project_id)
+
+    def get_locked(self, handle: ILockedConfigRead, project_id: ProjectId) -> Project | None:
+        row = (
+            conn_of(cast(ILockedChunkRead, handle))
+            .execute(self._store.select(projects).where(projects.c.project_id == project_id))
+            .first()
+        )
+        return None if row is None else _of(row)
 
     def get_many(self, project_ids: list[ProjectId]) -> dict[ProjectId, Project]:
         if not project_ids:

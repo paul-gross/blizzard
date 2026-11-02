@@ -15,6 +15,7 @@ from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import parse_color
@@ -179,6 +180,8 @@ def sole_project(projects: Sequence[Project]) -> Project:
 
 class IReadProjectRepository(Protocol):
     """Read-only project operations, within one tenant."""
+
+    def get_locked(self, handle: ILockedConfigRead, project_id: ProjectId) -> Project | None: ...
 
     def get(self, project_id: ProjectId) -> Project | None: ...
 

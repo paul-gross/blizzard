@@ -126,6 +126,10 @@ class IFlowChangePublisher(Protocol):
 class IWriteFlows(IReadFlows, Protocol):
     """Read-write flows access. Decisions serialize by chunk and resource; arrivals also serialize per tenant."""
 
+    def generation_locked(self, handle: ILockedChunkRead, chunk_id: str, *, node_id: str, epoch: int) -> int | None:
+        """Lock the chunk's flow key and derive the next eligible generation on this connection."""
+        ...
+
     def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
         """Open submissions on the named flows, for tentative contender discovery."""
         ...

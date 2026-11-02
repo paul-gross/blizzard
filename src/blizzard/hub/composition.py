@@ -256,6 +256,7 @@ from blizzard.hub.store.internal.transcript_event_store import TranscriptEventSt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.routine_authoring_participants import RoutineAuthoringParticipants
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -1327,6 +1328,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             graphs=graph_store,
             scope_registry=scope_registry,
             clock=clock,
+            participants=RoutineAuthoringParticipants(tenant_connections),
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
         routine_run=RunService(

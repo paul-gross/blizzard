@@ -8,6 +8,7 @@ and requires the named graph resolve to an enabled mint."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -402,6 +403,12 @@ class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
         ...
 
 
+class IRoutineAuthoringParticipants(Protocol):
+    def open(self, *, clock: IClock) -> AbstractContextManager[RoutineAuthoring]:
+        """Open the admitted routine authoring unit."""
+        ...
+
+
 class RoutineAuthoring:
     """Create and edit a routine, minting its default scope on demand and linking it into
     the routine's own `routine_scopes` set, so the default is always a member of that set."""
@@ -413,11 +420,13 @@ class RoutineAuthoring:
         graphs: IReadGraphRepository,
         scope_registry: ScopeRegistry,
         clock: IClock,
+        participants: IRoutineAuthoringParticipants | None = None,
     ) -> None:
         self._routines = routines
         self._graphs = graphs
         self._scope_registry = scope_registry
         self._clock = clock
+        self._participants = participants
 
     def _resolves(self, graph_name: str) -> bool:
         return self._graphs.get_enabled_by_name(graph_name) is not None
@@ -436,6 +445,18 @@ class RoutineAuthoring:
     ) -> Routine:
         """Create a routine in ``project``; its name is free and its default scope resolves (or mints) within
         that project."""
+        if self._participants is not None:
+            with self._participants.open(clock=self._clock) as admitted:
+                return admitted.create(
+                    project=project,
+                    name=name,
+                    graph_name=graph_name,
+                    default_scope_slug=default_scope_slug,
+                    ctx=ctx,
+                    default_model=default_model,
+                    default_effort=default_effort,
+                    default_harnesses=default_harnesses,
+                )
         project_id = project.project_id
         harnesses = validated_harnesses(default_harnesses or [])
         require_name_free(self._routines.get_by_name(project_id, name), name)
@@ -460,6 +481,12 @@ class RoutineAuthoring:
         field is present and, for the graph, changes it; an edit that changes nothing writes nothing. A new default is
         linked; a previous default is deliberately left linked — the routine still sweeps
         it, and a set larger than its default is legal."""
+        if self._participants is not None:
+            with self._participants.open(clock=self._clock) as admitted:
+                current = admitted._routines.get(routine.routine_id)
+                if current is not None and current.revision != routine.revision:
+                    raise ConfigRevisionConflict("routine", routine.name, current=current.revision)
+                return admitted.edit(routine, edit, ctx, if_match=if_match)
         decided = routine.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if isinstance(edit.graph_name, str):
             require_graph_change_resolves(routine.graph_name, edit.graph_name, self._resolves)

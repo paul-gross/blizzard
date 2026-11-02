@@ -75,6 +75,10 @@ class ILockedWorkRefRead(Protocol):
         the lock — a source no project links maps to no projects."""
         ...
 
+    def item_projects(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, ProjectId]:
+        """Recorded hub-item projects read on the locked connection."""
+        ...
+
 
 class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
@@ -109,7 +113,7 @@ class IChunkExclusiveWrites(Protocol):
     ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each
-        pointer locks only its own key. The queue key is taken first, before the graph key,
+        pointer locks only its own key. The config-authoring key precedes the queue and graph keys,
         so ingestion cannot add a backlog member during a queue decision. With
         ``project``, its source links' key is taken before any pointer's, the one order every
         locker of both keeps; a source link or unlink of that project waits for the commit. A

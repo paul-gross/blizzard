@@ -16,7 +16,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.delivery.flows import FlowLanding, FlowResource, TurnEvent
+from blizzard.hub.domain.delivery.flows import FlowLanding, FlowResource, Submission, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import flow_rows, flow_store
 from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, lock_keys
@@ -59,6 +59,45 @@ def _seed(scoped: ScopedConnections) -> None:
 @pytest.fixture
 def clean_flow_database(database_url: str) -> str:
     return database_url
+
+
+def test_locked_submit_rechecks_latest_generation(database_url: str) -> None:
+    engine = sa.create_engine(database_url)
+    scoped = scoped_connections(engine, _TENANT)
+    flows = flow_store.FlowStore(scoped, SystemClock())
+    try:
+        _seed(scoped)
+
+        def submit(generation: int) -> Submission | None:
+            with scoped.write("locked_submit") as conn:
+                lock_chunk_row(conn, "ch_1")
+                handle = cast(ILockedChunkRead, SimpleNamespace(conn=conn, locked_ids=frozenset({"ch_1"})))
+                return flows.submit_locked(
+                    handle, "ch_1", node_id="nd_1", epoch=1, generation=generation, resources=[], at=_AT
+                )
+
+        def next_generation() -> int | None:
+            with scoped.write("generation") as conn:
+                lock_chunk_row(conn, "ch_1")
+                handle = cast(ILockedChunkRead, SimpleNamespace(conn=conn, locked_ids=frozenset({"ch_1"})))
+                return flows.generation_locked(handle, "ch_1", node_id="nd_1", epoch=1)
+
+        assert next_generation() == 0
+        assert submit(1) is None
+        first = submit(0)
+        assert first is not None
+        assert next_generation() is None
+        assert submit(1) is None
+        assert flows.close(first.submission_id, outcome="superseded", at=_AT) is not None
+        assert next_generation() == 1
+        assert submit(0) is None
+        second = submit(1)
+        assert second is not None
+        assert flows.close(second.submission_id, outcome="stopped", at=_AT) is not None
+        assert next_generation() is None
+        assert submit(2) is None
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize(

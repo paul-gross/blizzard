@@ -10,12 +10,13 @@ forge's API origin in the deprecated ``forge_api_url`` column, which the coordin
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeId, ForgeOriginTaken, ForgeSlugTaken, NewForge
@@ -31,6 +32,8 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
     resolve_repository_reference,
 )
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
+from blizzard.hub.store.internal.chunk_rows import conn_of
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_record_store import (
@@ -316,6 +319,12 @@ class RepositoryRecordStore:
             for row in rows
             if include_retired or row.repository_id not in retired
         ]
+
+    def list_all_locked(self, handle: ILockedConfigRead) -> list[ConfiguredRepository]:
+        conn = conn_of(cast(ILockedChunkRead, handle))
+        rows = conn.execute(self._store.select(repositories).order_by(repositories.c.slug)).all()
+        retired = _retirements(conn)
+        return [_of(row, retired_at=retired.get(row.repository_id)) for row in rows]
 
     def get_by_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
         with self._store.read("get_by_slug") as conn:

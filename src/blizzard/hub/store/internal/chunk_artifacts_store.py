@@ -10,9 +10,9 @@ import json
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
-from sqlalchemy import or_
+from sqlalchemy import Connection, or_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -22,9 +22,11 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
+    conn_of,
     enqueue_close_intents,
     fence,
     is_landing_marker,
@@ -34,6 +36,10 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
+
+
+class _ChunkLocks(Protocol):
+    locked_ids: frozenset[str]
 
 
 def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
@@ -151,26 +157,32 @@ class ChunkArtifactsStore:
 
     def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         with self._store.read("load_artifacts") as conn:
-            return [
-                StoredArtifact(
-                    kind=ArtifactKind(a.kind),
-                    name=a.name,
-                    data=a.data,
-                    repo=a.repo,
-                    forge=a.forge,
-                    artifact_id=a.artifact_id,
-                    chunk_id=a.chunk_id,
-                    node_id=a.node_id,
-                    node_name=a.node_name,
-                    epoch=a.epoch,
-                    produced_at=a.produced_at,
-                )
-                for a in conn.execute(
-                    self._store.select(s.artifacts)
-                    .where(s.artifacts.c.chunk_id == chunk_id)
-                    .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
-                ).all()
-            ]
+            return self._load_artifacts_conn(conn, chunk_id)
+
+    def load_artifacts_locked(self, handle: ILockedChunkRead, chunk_id: str) -> list[StoredArtifact]:
+        return self._load_artifacts_conn(conn_of(handle), chunk_id)
+
+    def _load_artifacts_conn(self, conn: Connection, chunk_id: str) -> list[StoredArtifact]:
+        return [
+            StoredArtifact(
+                kind=ArtifactKind(a.kind),
+                name=a.name,
+                data=a.data,
+                repo=a.repo,
+                forge=a.forge,
+                artifact_id=a.artifact_id,
+                chunk_id=a.chunk_id,
+                node_id=a.node_id,
+                node_name=a.node_name,
+                epoch=a.epoch,
+                produced_at=a.produced_at,
+            )
+            for a in conn.execute(
+                self._store.select(s.artifacts)
+                .where(s.artifacts.c.chunk_id == chunk_id)
+                .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
+            ).all()
+        ]
 
     def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
         with self._store.read("latest_artifact") as conn:
@@ -268,37 +280,93 @@ class ChunkArtifactsStore:
         ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
         with self._store.write("record_hub_artifact") as conn:
             lock_chunk_row(conn, chunk_id)
-            already = conn.execute(
-                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
-                    (s.artifacts.c.chunk_id == chunk_id)
-                    & (s.artifacts.c.node_id == node_id)
-                    & (s.artifacts.c.epoch == epoch)
-                    & (s.artifacts.c.name == name)
-                )
-            ).first()
-            if already is not None:
-                return False
-            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-                return False
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    node_name=node_name,
-                    epoch=epoch,
-                    name=name,
-                    kind=ArtifactKind.ASSET.value,
-                    data=content,
-                    repo=None,
-                    forge=None,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, chunk_id),
-                )
+            return self._record_hub_artifact_on(
+                conn,
+                chunk_id,
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                admission=admission,
+                name=name,
+                content=content,
+                at=at,
+                close_decision=close_decision,
             )
-            if is_landing_marker(name, content):
-                enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-            return True
+
+    def record_hub_artifact_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+    ) -> bool:
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("artifact's chunk is not locked by this handle")
+        return self._record_hub_artifact_on(
+            conn_of(handle),
+            chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=admission,
+            name=name,
+            content=content,
+            at=at,
+            close_decision=close_decision,
+        )
+
+    def _record_hub_artifact_on(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+    ) -> bool:
+        already = conn.execute(
+            self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
+                (s.artifacts.c.chunk_id == chunk_id)
+                & (s.artifacts.c.node_id == node_id)
+                & (s.artifacts.c.epoch == epoch)
+                & (s.artifacts.c.name == name)
+            )
+        ).first()
+        if already is not None:
+            return False
+        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+            return False
+        conn.execute(
+            self._store.insert(s.artifacts).values(
+                artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
+                chunk_id=chunk_id,
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                name=name,
+                kind=ArtifactKind.ASSET.value,
+                data=content,
+                repo=None,
+                forge=None,
+                produced_at=at,
+                seq=next_artifact_seq(conn, chunk_id),
+            )
+        )
+        if is_landing_marker(name, content):
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+        return True
 
     def record_landing(
         self,

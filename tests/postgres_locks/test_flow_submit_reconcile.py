@@ -72,9 +72,13 @@ def test_submit_rechecks_candidate_after_movement(database_url: str, movement: s
         )
         repositories, forges, projects, links = Mock(), Mock(), Mock(), Mock()
         repositories.list_all.return_value = []
+        repositories.list_all_locked.return_value = []
         forges.list_all.return_value = []
+        forges.list_all_locked.return_value = []
         projects.get.return_value = None
+        projects.get_locked.return_value = None
         links.repositories_of.return_value = []
+        links.repositories_of_locked.return_value = []
         reconciler = FlowLineReconciler(
             flows=flows,
             facts=stores.facts,

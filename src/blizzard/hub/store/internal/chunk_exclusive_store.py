@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from sqlalchemy import Connection
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import (
     IChunkExclusiveWrites,
@@ -25,9 +26,11 @@ from blizzard.hub.domain.chunk.ports.exclusive import (
     ILockedFlowAdmissionRead,
     ILockedWorkRefRead,
 )
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_dependencies_store import (
     DEPENDENCY_GRAPH_LOCK_KEY,
     DEPENDENCY_GRAPH_LOCK_NAMESPACE,
@@ -107,6 +110,7 @@ class LockedWorkRefTransaction:
 
     conn: Connection
     _work_refs: ChunkWorkRefsStore
+    _store: ScopedConnections
 
     def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
         return self._work_refs.live_holders_conn(self.conn, pointers)
@@ -114,6 +118,20 @@ class LockedWorkRefTransaction:
     def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
         found = projects_linking_sources_conn(self.conn, sources)
         return {source: found.get(source, []) for source in dict.fromkeys(sources)}
+
+    def item_projects(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, ProjectId]:
+        refs = [p.ref for p in pointers if p.source == RESERVED_HUB_SOURCE_NAME]
+        result: dict[WorkRef, ProjectId] = {}
+        for batch in id_batches(refs):
+            rows = self.conn.execute(
+                self._store.select(s.work_items, s.work_items.c.ref, s.work_items.c.project_id).where(
+                    s.work_items.c.source == RESERVED_HUB_SOURCE_NAME, s.work_items.c.ref.in_(batch)
+                )
+            )
+            for row in rows:
+                if row.project_id is not None:
+                    result[WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref=row.ref)] = ProjectId(row.project_id)
+        return result
 
 
 _POINTER_LOCK_NAMESPACE = "work_ref"
@@ -207,6 +225,8 @@ class ChunkExclusiveWrites:
         self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
     ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._store.write("locked_work_ref_transaction") as conn:
+            # All source-link authoring takes this key, including links to other projects.
+            lock_config_authoring(conn)
             # Ingest creates a backlog member. Take the queue key before the graph,
             # project and pointer keys so a queue roster cannot miss a concurrent mint.
             lock_queue_positions(conn)
@@ -216,7 +236,7 @@ class ChunkExclusiveWrites:
             if project is not None:
                 lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project])
             lock_keys(conn, _POINTER_LOCK_NAMESPACE, [pointer_lock_key(p) for p in pointers])
-            yield LockedWorkRefTransaction(conn, self._work_refs)
+            yield LockedWorkRefTransaction(conn, self._work_refs, self._store)
 
 
 _exclusive_conforms: type[IChunkExclusiveWrites] = ChunkExclusiveWrites

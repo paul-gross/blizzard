@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -29,7 +30,6 @@ from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
-    TURN_SUPERSEDED,
     AdmittedTurn,
     FlowLine,
     PollPolicy,
@@ -324,39 +324,7 @@ class FlowLineReconciler:
         """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
         moved — or refuse it, routing its failure choice, when it cannot name them."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
-        generation = self._generation(chunk.chunk_id, node.node_id, epoch)
-        if generation is None:
-            return None
-        artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        resolved = resolve_visit(
-            artifacts,
-            action=node.action,
-            spec=self._catalogue.get(node.action) if node.action is not None else None,
-            project=LandingProject.read(chunk.project_id, projects=self._projects, links=self._links),
-            minted_at=chunk.minted_at,
-            repositories=self._repositories.list_all(include_retired=True),
-            forges=self._forge_records.list_all(include_retired=True),
-        )
-        if isinstance(resolved, VisitRefusal):
-            self._refusals.refuse(
-                chunk,
-                graph,
-                node,
-                epoch=epoch,
-                step=resolved.step,
-                detail=resolved.detail,
-                resolution=resolved.resolution,
-            )
-            return None
-        resources = held_resources(
-            resolved.resolution,
-            LandedRepos.of(artifacts).names
-            | no_code_repos(
-                artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
-            ),
-            resolved.spec,
-        )
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
+        with self._exclusive.locked_flow_admission([chunk.chunk_id]) as handle:
             current = handle.facts(chunk.chunk_id)
             record = handle.record(chunk.chunk_id)
             if (
@@ -368,23 +336,51 @@ class FlowLineReconciler:
                 or (current.latest_epoch() or 0) != epoch
             ):
                 return None
-            return self._flows.submit_locked(
-                handle,
-                chunk.chunk_id,
-                node_id=node.node_id,
-                epoch=epoch,
-                generation=generation,
-                resources=resources,
-                at=self._clock.now(),
+            generation = self._flows.generation_locked(handle, chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+            if generation is None:
+                return None
+            artifacts = self._artifacts.load_artifacts_locked(handle, chunk.chunk_id)
+            project_id = record.project_id
+            project = self._projects.get_locked(handle, project_id) if project_id is not None else None
+            links = self._links.repositories_of_locked(handle, project_id) if project_id is not None else []
+            positions: dict[str, float | None] = {link.repository_id: link.position for link in links}
+            landing_project = LandingProject(
+                project_id=project_id or "",
+                slug=(project.slug if project is not None else project_id) or "",
+                linked=frozenset(positions),
+                positions=MappingProxyType(positions),
             )
-
-    def _generation(self, chunk_id: str, node_id: str, epoch: int) -> int | None:
-        """The generation the visit submits at: 0 when never submitted, the next when its own turn closed its newest
-        ``superseded`` — its resources moved — and ``None`` when that one is open or closed otherwise."""
-        latest = self._flows.submission_for_visit(chunk_id, node_id=node_id, epoch=epoch)
-        if latest is None:
-            return 0
-        return latest.generation + 1 if latest.closed == TURN_SUPERSEDED else None
+            resolved = resolve_visit(
+                artifacts,
+                action=node.action,
+                spec=self._catalogue.get(node.action) if node.action is not None else None,
+                project=landing_project,
+                minted_at=record.minted_at,
+                repositories=self._repositories.list_all_locked(handle),
+                forges=self._forge_records.list_all_locked(handle),
+            )
+            if not isinstance(resolved, VisitRefusal):
+                resources = held_resources(
+                    resolved.resolution,
+                    LandedRepos.of(artifacts).names
+                    | no_code_repos(
+                        artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
+                    ),
+                    resolved.spec,
+                )
+                return self._flows.submit_locked(
+                    handle,
+                    chunk.chunk_id,
+                    node_id=node.node_id,
+                    epoch=epoch,
+                    generation=generation,
+                    resources=resources,
+                    at=self._clock.now(),
+                )
+        self._refusals.refuse(
+            chunk, graph, node, epoch=epoch, step=resolved.step, detail=resolved.detail, resolution=resolved.resolution
+        )
+        return None
 
     def _close_departed(
         self, open_subs: Sequence[Submission]

@@ -26,6 +26,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.
@@ -132,6 +133,8 @@ class RepositoryLink(_Link):
 
 class IReadProjectLinks(Protocol):
     """Read-only link operations, within one tenant."""
+
+    def repositories_of_locked(self, handle: ILockedConfigRead, project_id: ProjectId) -> list[RepositoryLink]: ...
 
     def source_link(self, project_id: ProjectId, work_source_id: WorkSourceId) -> SourceLink | None:
         """The stored link, linked or not; ``None`` when the project never linked the source."""

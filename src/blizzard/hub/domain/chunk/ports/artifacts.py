@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
 
@@ -18,6 +19,10 @@ class IReadChunkArtifactsRepository(Protocol):
 
     def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
+        ...
+
+    def load_artifacts_locked(self, handle: ILockedChunkRead, chunk_id: str) -> list[StoredArtifact]:
+        """Read the artifacts on the chunk's locked connection."""
         ...
 
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
@@ -44,6 +49,23 @@ class IReadChunkArtifactsRepository(Protocol):
 
 class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
     """Read-write chunk-artifacts access."""
+
+    def record_hub_artifact_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+    ) -> bool:
+        """Record a hub artifact on the locked chunk transaction."""
+        ...
 
     def record_hub_artifact(
         self,

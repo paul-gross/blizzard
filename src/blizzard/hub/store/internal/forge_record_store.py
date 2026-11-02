@@ -15,13 +15,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import (
@@ -40,6 +41,8 @@ from blizzard.hub.domain.config.forges import (
     require_unused,
     resolve_forge_reference,
 )
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
+from blizzard.hub.store.internal.chunk_rows import conn_of
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_referrers import active_referrers
@@ -323,6 +326,12 @@ class ForgeRecordStore:
         return [
             _of(row, retired=row.forge_id in retired) for row in rows if include_retired or row.forge_id not in retired
         ]
+
+    def list_all_locked(self, handle: ILockedConfigRead) -> list[ConfiguredForge]:
+        conn = conn_of(cast(ILockedChunkRead, handle))
+        rows = conn.execute(self._store.select(forges).order_by(forges.c.slug)).all()
+        retired = _retired_ids(conn)
+        return [_of(row, retired=row.forge_id in retired) for row in rows]
 
     def get_by_slug(self, slug: ForgeSlug) -> ConfiguredForge | None:
         with self._store.read("get_by_slug") as conn:

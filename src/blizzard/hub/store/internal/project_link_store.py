@@ -10,20 +10,22 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import Column, Table, func
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.project_position_store import newest_positions
@@ -318,6 +320,21 @@ class ProjectLinkStore:
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
         return self.repositories_of_projects([project_id]).get(project_id, [])
+
+    def repositories_of_locked(self, handle: ILockedConfigRead, project_id: ProjectId) -> list[RepositoryLink]:
+        conn = conn_of(cast(ILockedChunkRead, handle))
+        pairs = set(_newest(self._store, conn, _REPOSITORIES, [project_id], standing_only=True))
+        revisions = _revisions(self._store, conn, _REPOSITORIES, pairs)
+        positions = newest_positions(conn, pairs)
+        return [
+            RepositoryLink(
+                project_id=project_id,
+                repository_id=RepositoryId(name),
+                revision=revisions[(project_id, name)],
+                position=positions.get((project_id, name)),
+            )
+            for _, name in sorted(pairs)
+        ]
 
     def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
         return self.projects_linking_sources([work_source_id]).get(work_source_id, [])

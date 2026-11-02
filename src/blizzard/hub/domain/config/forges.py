@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.changes import (
     Verdict,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.kernel.config_read import ILockedConfigRead
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug, derive_slug
@@ -553,6 +554,8 @@ def _field(record: ConfiguredForge, name: str) -> str | None:
 
 class IReadForgeRepository(Protocol):
     """Read-only forge operations."""
+
+    def list_all_locked(self, handle: ILockedConfigRead) -> list[ConfiguredForge]: ...
 
     def get(self, forge_id: ForgeId) -> ConfiguredForge | None: ...
 
