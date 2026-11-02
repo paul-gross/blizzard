@@ -6,6 +6,7 @@ runner from the default fleet views, and refuses its claims and registrations by
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -13,7 +14,7 @@ from typing import cast
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerNotRetired, RunnerRetirementChanged
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
 from tests.test_route_classification import _api_routes, _dependency_names
@@ -91,6 +92,42 @@ def _retire(hub: HubHarness, runner_id: str = "runner-a", **body):
 def _listed(hub: HubHarness, *, include_retired: bool = False) -> list[dict[str, object]]:
     params = {"include_retired": "true"} if include_retired else {}
     return hub.client.get("/api/runners", params=params).json()["runners"]
+
+
+def test_concurrent_reinstatements_only_write_one_fact(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    assert _retire(hub).status_code == 200
+    registry = hub.services.registry
+    registration = registry.get_runner("runner-a")
+    assert registration is not None
+
+    def reinstate() -> str:
+        try:
+            hub.services.fleet.reinstate(registration, by="op")
+            return "success"
+        except RunnerNotRetired:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(lambda _: reinstate(), range(2))) == ["conflict", "success"]
+    current = registry.get_runner("runner-a")
+    assert current is not None and not current.retired
+
+
+def test_stale_reinstatement_cannot_reverse_new_retirement(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    assert _retire(hub).status_code == 200
+    registry = hub.services.registry
+    stale = registry.get_runner("runner-a")
+    assert stale is not None
+    hub.services.fleet.reinstate(stale, by="op")
+    assert _retire(hub).status_code == 200
+    with pytest.raises(RunnerRetirementChanged, match="retry reinstatement"):
+        hub.services.fleet.reinstate(stale, by="op")
+    current = registry.get_runner("runner-a")
+    assert current is not None and current.retired
 
 
 def test_retiring_an_idle_runner_hides_it_and_records_who_and_when(tmp_path: Path) -> None:
@@ -373,11 +410,11 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     release_held = detach.release_held
     retired_at_release: list[bool] = []
 
-    def observed(chunk, *, runner_id: str) -> int | None:
+    def observed(chunk, *, runner_id: str, expected_route, retirement_id: int) -> int | None:
         registration = hub.services.registry.get_runner(runner_id)
         assert registration is not None
         retired_at_release.append(registration.retired)
-        return release_held(chunk, runner_id=runner_id)
+        return release_held(chunk, runner_id=runner_id, expected_route=expected_route, retirement_id=retirement_id)
 
     monkeypatch.setattr(detach, "release_held", observed)
 

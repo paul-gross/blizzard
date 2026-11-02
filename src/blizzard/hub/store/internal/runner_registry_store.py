@@ -26,14 +26,23 @@ from blizzard.hub.domain.runners.registration import (
     RunnerCapability,
     RunnerDeclining,
     RunnerRegistration,
+    RunnerRetired,
     ServedEntry,
     SubscriptionUsageMiss,
     SubscriptionUsageSample,
     TokenRotation,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.host_registry_store import (
+    HostRegistryStore,
+    lock_host_registry,
+    locked_host_token_hash,
+    refuse_retired_host,
+)
 from blizzard.hub.store.internal.host_usage import read_host_rosters, read_host_usage, stored_usage_windows
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.internal.retirement_holdings import retirement_holdings
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
@@ -54,6 +63,20 @@ def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
     ).scalar_one_or_none()
 
 
+def refuse_retired_runner_or_host(conn: Connection, runner_id: str, *, action: str) -> None:
+    """Recheck both lifecycle facts after taking the registry lock."""
+    if RunnerRegistryStore.lifecycle(conn, runner_id)[0]:
+        raise RunnerRetired(runner_id, action=action)
+    stmts = statements_of(conn)
+    host_id = conn.execute(
+        stmts.select(s.runner_registrations, s.runner_registrations.c.host_id).where(
+            s.runner_registrations.c.runner_id == runner_id
+        )
+    ).scalar_one_or_none()
+    if host_id is not None:
+        refuse_retired_host(conn, host_id, action=action)
+
+
 class RunnerRegistryStore:
     """Read-write fleet-registry adapter over the hub store engine."""
 
@@ -68,7 +91,7 @@ class RunnerRegistryStore:
 
     def is_retired(self, runner_id: str) -> bool:
         with self._store.read("is_retired") as conn:
-            return self._lifecycle(conn, runner_id)[0]
+            return self.lifecycle(conn, runner_id)[0]
 
     def get_runner_conn(self, conn: Connection, runner_id: str) -> RunnerRegistration | None:
         """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
@@ -86,7 +109,7 @@ class RunnerRegistryStore:
             self._local_pause_detail(conn, runner_id),
             [] if hosted else self._external_usage(conn, runner_id),
             [] if hosted else self._external_usage_misses(conn, runner_id),
-            self._lifecycle(conn, runner_id),
+            self.lifecycle(conn, runner_id),
         )
         return self._reading_hosts(conn, [registration])[0]
 
@@ -241,6 +264,10 @@ class RunnerRegistryStore:
 
     def add(self, addition: RunnerAddition) -> None:
         with self._store.write("add") as conn:
+            lock_host_registry(conn)
+            if addition.host_id is not None:
+                locked_host_token_hash(conn, addition.host_id)
+                refuse_retired_host(conn, addition.host_id, action="adding a runner")
             conn.execute(
                 self._store.insert(s.runner_registrations).values(
                     runner_id=addition.runner_id,
@@ -325,6 +352,8 @@ class RunnerRegistryStore:
             refreshed["projects"] = _served_json(projects)
         registration = s.runner_registrations.c.runner_id == runner_id
         with self._store.write("record_registration") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="registration")
             if not conn.execute(
                 self._store.update(s.runner_registrations).where(registration).values(refreshed)
             ).rowcount:
@@ -341,6 +370,8 @@ class RunnerRegistryStore:
         self, runner_id: str, *, version: str | None, reason: VersionRefusalReason, at: datetime
     ) -> None:
         with self._store.write("record_version_refusal") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="registration")
             if not conn.execute(
                 self._store.update(s.runner_registrations)
                 .where(s.runner_registrations.c.runner_id == runner_id)
@@ -350,6 +381,8 @@ class RunnerRegistryStore:
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
         with self._store.write("touch_last_seen") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="heartbeat")
             result = conn.execute(
                 self._store.update(s.runner_registrations)
                 .where(
@@ -362,6 +395,7 @@ class RunnerRegistryStore:
 
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
         with self._store.write("record_pause") as conn:
+            lock_host_registry(conn)
             result = conn.execute(
                 self._store.insert(s.runner_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by
@@ -374,6 +408,8 @@ class RunnerRegistryStore:
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
     ) -> int:
         with self._store.write("record_local_pause") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="fact ingest")
             result = conn.execute(
                 self._store.insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
@@ -390,6 +426,9 @@ class RunnerRegistryStore:
         # Upserts on (runner_id, slug) — one row per declared subscription,
         # so a sibling slug's row is untouched by this one's write.
         with self._store.write("record_external_usage") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="fact ingest")
+            lock_keys(conn, "runner-external-usage", [json.dumps([runner_id, slug])])
             existing = conn.execute(
                 self._store.select(s.runner_external_usage, s.runner_external_usage.c.runner_id).where(
                     s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
@@ -419,6 +458,9 @@ class RunnerRegistryStore:
         # Sibling to `record_external_usage`: same no-FK, no-known-runner-required upsert on
         # (runner_id, slug) — its own table, never overwriting the sample row it joins at read.
         with self._store.write("record_external_usage_miss") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="fact ingest")
+            lock_keys(conn, "runner-external-usage-miss", [json.dumps([runner_id, slug])])
             existing = conn.execute(
                 self._store.select(s.runner_external_usage_misses, s.runner_external_usage_misses.c.runner_id).where(
                     s.runner_external_usage_misses.c.runner_id == runner_id,
@@ -446,8 +488,35 @@ class RunnerRegistryStore:
                 .values(name=name, missed_at=missed_at, reason=reason, updated_at=at)
             )
 
-    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
+    def record_lifecycle(
+        self,
+        runner_id: str,
+        *,
+        retired: bool,
+        at: datetime,
+        by: str,
+        force: bool = True,
+        expected_generation: int | None = None,
+    ) -> int:
         with self._store.write("record_lifecycle") as conn:
+            lock_host_registry(conn)
+            if not retired:
+                registration = self.get_runner_conn(conn, runner_id)
+                if registration is not None:
+                    registration.reinstate(by=by, at=at)
+                    if registration.lifecycle_generation != expected_generation:
+                        from blizzard.hub.domain.runners.registration import RunnerRetirementChanged
+
+                        raise RunnerRetirementChanged(runner_id)
+                if registration is not None and registration.host_id is not None:
+                    locked_host_token_hash(conn, registration.host_id)
+                    refuse_retired_host(conn, registration.host_id, action="runner reinstatement")
+            if retired and not force:
+                registration = self.get_runner_conn(conn, runner_id)
+                if registration is not None:
+                    registration.retire(
+                        retirement_holdings(self._store, conn, [runner_id])[runner_id], force=False, by=by, at=at
+                    )
             result = conn.execute(
                 self._store.insert(s.runner_lifecycle_facts).values(
                     runner_id=runner_id, retired=retired, set_at=at, set_by=by
@@ -456,30 +525,91 @@ class RunnerRegistryStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
+    def record_retirement(
+        self,
+        runner_id: str,
+        *,
+        at: datetime,
+        by: str,
+        force: bool,
+        expected_registration: RunnerRegistration | None = None,
+        expected_host_id: str | None = None,
+        expected_host_retired: bool = True,
+    ) -> tuple[int | None, int | None, int] | None:
+        with self._store.write("record_runner_retirement") as conn:
+            lock_host_registry(conn)
+            registration = self.get_runner_conn(conn, runner_id)
+            if registration is None:
+                raise LookupError(f"runner {runner_id!r} was never added")
+            if expected_host_id is not None:
+                locked_host_token_hash(conn, expected_host_id)
+                if (
+                    registration.host_id != expected_host_id
+                    or HostRegistryStore.lifecycle_many(conn, [expected_host_id])[expected_host_id][0]
+                    != expected_host_retired
+                ):
+                    return None
+            if expected_registration is not None and (
+                registration.retired != expected_registration.retired
+                or registration.lifecycle_generation != expected_registration.lifecycle_generation
+            ):
+                if expected_host_id is not None and expected_host_retired:
+                    return None
+                from blizzard.hub.domain.runners.registration import RunnerLifecycleChanged
+
+                raise RunnerLifecycleChanged(runner_id)
+            holdings = (
+                [] if force or registration.retired else retirement_holdings(self._store, conn, [runner_id])[runner_id]
+            )
+            fact = registration.retire(holdings, force=force, at=at, by=by)
+            fact_id = None
+            if fact is not None:
+                result = conn.execute(
+                    self._store.insert(s.runner_lifecycle_facts).values(
+                        runner_id=runner_id, retired=True, set_at=at, set_by=by
+                    )
+                )
+                key = result.inserted_primary_key
+                fact_id = int(key[0]) if key is not None else 0
+            generation = fact_id
+            if generation is None:
+                generation = conn.execute(
+                    self._store.select(s.runner_lifecycle_facts, s.runner_lifecycle_facts.c.id)
+                    .where(s.runner_lifecycle_facts.c.runner_id == runner_id)
+                    .order_by(s.runner_lifecycle_facts.c.id.desc())
+                    .limit(1)
+                ).scalar_one()
+            return fact_id, self._revoke(conn, runner_id, at=at, by=by), generation
+
     def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
         # The revocation fact and the nulled hash land in one transaction, so a token always resolves or
         # reads as revoked; the row lock orders it against a concurrent rotation.
         with self._store.write("revoke_token") as conn:
-            token_hash = locked_token_hash(conn, runner_id)
-            if token_hash is None:
-                return None
-            result = conn.execute(
-                self._store.insert(s.runner_token_revocations).values(
-                    runner_id=runner_id, token_hash=token_hash, revoked_at=at, revoked_by=by
-                )
+            return self._revoke(conn, runner_id, at=at, by=by)
+
+    def _revoke(self, conn: Connection, runner_id: str, *, at: datetime, by: str) -> int | None:
+        token_hash = locked_token_hash(conn, runner_id)
+        if token_hash is None:
+            return None
+        result = conn.execute(
+            self._store.insert(s.runner_token_revocations).values(
+                runner_id=runner_id, token_hash=token_hash, revoked_at=at, revoked_by=by
             )
-            conn.execute(
-                self._store.update(s.runner_registrations)
-                .where(s.runner_registrations.c.runner_id == runner_id)
-                .values(token_hash=None)
-            )
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
+        )
+        conn.execute(
+            self._store.update(s.runner_registrations)
+            .where(s.runner_registrations.c.runner_id == runner_id)
+            .values(token_hash=None)
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def rotate_token(self, rotation: TokenRotation) -> int | None:
         # The replaced hash's revocation and the new hash land in one transaction, and the row lock makes a
         # concurrent rotation read the hash this one stored, so every replaced hash is revoked.
         with self._store.write("rotate_token") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, rotation.runner_id, action="enrollment")
             replaced = locked_token_hash(conn, rotation.runner_id)
             revocation_id: int | None = None
             if replaced is not None:
@@ -533,18 +663,20 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _lifecycle(conn: Connection, runner_id: str) -> tuple[bool, datetime | None, str | None]:
+    def lifecycle(conn: Connection, runner_id: str) -> tuple[bool, datetime | None, str | None, int | None]:
         """The runner's retirement, off its newest lifecycle fact."""
         return RunnerRegistryStore._lifecycle_many(conn, [runner_id])[runner_id]
 
     @staticmethod
     def _lifecycle_many(
         conn: Connection, runner_ids: Sequence[str]
-    ) -> dict[str, tuple[bool, datetime | None, str | None]]:
-        """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
+    ) -> dict[str, tuple[bool, datetime | None, str | None, int | None]]:
+        """``lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
         its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None)``,
         and a reinstated runner's newest fact nulls ``at``/``by``."""
-        result: dict[str, tuple[bool, datetime | None, str | None]] = dict.fromkeys(runner_ids, (False, None, None))
+        result: dict[str, tuple[bool, datetime | None, str | None, int | None]] = dict.fromkeys(
+            runner_ids, (False, None, None, None)
+        )
         if not runner_ids:
             return result
         for batch in id_batches(runner_ids):
@@ -558,10 +690,13 @@ class RunnerRegistryStore:
                     s.runner_lifecycle_facts.c.retired,
                     s.runner_lifecycle_facts.c.set_at,
                     s.runner_lifecycle_facts.c.set_by,
+                    s.runner_lifecycle_facts.c.id,
                 )
             ).all()
             for row in rows:
-                result[row.runner_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
+                result[row.runner_id] = (
+                    (True, row.set_at, row.set_by, row.id) if row.retired else (False, None, None, row.id)
+                )
         return result
 
     @staticmethod
@@ -679,9 +814,9 @@ class RunnerRegistryStore:
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],
         external_usage_misses: list[tuple[str, str, datetime, str]],
-        lifecycle: tuple[bool, datetime | None, str | None],
+        lifecycle: tuple[bool, datetime | None, str | None, int | None],
     ) -> RunnerRegistration:
-        retired, retired_at, retired_by = lifecycle
+        retired, retired_at, retired_by, generation = lifecycle
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         subscription_usage = tuple(
             SubscriptionUsageSample(
@@ -748,6 +883,7 @@ class RunnerRegistryStore:
             retired=retired,
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
+            lifecycle_generation=generation,
             gates=tuple(gates),
             host_id=row.host_id,
             bindings=(

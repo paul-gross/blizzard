@@ -14,6 +14,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.routine_store import link_scope, move_revision
 from blizzard.hub.store.internal.scope_store import scope_id_of
@@ -67,6 +68,7 @@ class RoutineScopeStore:
 
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             move_revision(conn, routine, from_revision)
             link_scope(conn, routine, scope_slug)
             append_change(conn, change)
@@ -74,6 +76,7 @@ class RoutineScopeStore:
 
     def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         with self._store.write("unlink", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             move_revision(conn, routine, from_revision)
             conn.execute(
                 self._store.delete(routine_scopes).where(

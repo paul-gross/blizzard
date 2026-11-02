@@ -19,12 +19,44 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowFactKind, FlowLanding, TurnEvent, Withdrawal
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, lock_keys
 from blizzard.hub.store.scoped import statements_of
 
 _sub = s.flow_submissions
 _held = s.flow_submission_flows
 _closures = s.flow_submission_closures
 _turns = s.hub_turns
+
+
+def lock_flow_chunk(conn: Connection, chunk_id: str) -> None:
+    """Serialize a chunk's flow decisions, after any chunk-row lock and before resource locks."""
+    lock_keys(conn, "flow-chunk", [chunk_id])
+
+
+def lock_flow_submission(conn: Connection, submission_id: str) -> bool:
+    """Lock the immutable submission's chunk and resources; return False if it was absent."""
+    chunk_id = conn.execute(
+        statements_of(conn).select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission_id)
+    ).scalar()
+    if chunk_id is None:
+        return False
+    lock_chunk_row(conn, chunk_id)
+    lock_flow_chunk(conn, chunk_id)
+    lock_flow_resources(conn, [submission_id])
+    return True
+
+
+def lock_flow_turn(conn: Connection, turn_id: str) -> None:
+    submission_id = conn.execute(
+        statements_of(conn).select(_turns, _turns.c.submission_id).where(_turns.c.turn_id == turn_id)
+    ).scalar()
+    if submission_id is not None:
+        lock_flow_submission(conn, submission_id)
+
+
+def lock_flow_resources(conn: Connection, submission_ids: Sequence[str]) -> None:
+    held = flows_held(conn, submission_ids)
+    lock_keys(conn, "flow", [flow.resource for flows in held.values() for flow in flows])
 
 
 def flow_of(row: Row[Any]) -> Flow:
@@ -172,7 +204,17 @@ def withdraw_waiting(
     """Close ``outcome`` every open submission of the chunk that has no open turn — a lever's withdrawal. One with an
     open turn is left to that turn's end, which asks ``withdrawal_for`` and closes it the same way. Answers the
     ``withdrawn`` facts it wrote."""
+    lock_flow_chunk(conn, chunk_id)
     stmts = statements_of(conn)
+    submission_ids = list(
+        conn.execute(
+            stmts.select(_sub, _sub.c.submission_id).where(
+                _sub.c.chunk_id == chunk_id,
+                ~stmts.exists(_closures, _closures.c.submission_id == _sub.c.submission_id),
+            )
+        ).scalars()
+    )
+    lock_flow_resources(conn, submission_ids)
     open_ids = conn.execute(
         stmts.select(_sub, _sub.c.submission_id)
         .where(

@@ -24,12 +24,15 @@ from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     latest_epoch,
     lock_chunk_row,
+    lock_keys,
     mint_admission,
     next_route_seq,
     record_epoch_owner,
     route_of_conn,
     routes_of_conn,
 )
+from blizzard.hub.store.internal.host_registry_store import lock_host_registry
+from blizzard.hub.store.internal.runner_registry_store import refuse_retired_runner_or_host
 from blizzard.hub.store.scoped import ScopedConnections
 
 _ROUTE_PREFIX = "route"
@@ -117,6 +120,10 @@ class ChunkRouteStore:
         return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
 
     def _record_route_conn(self, conn: Connection, route: Route, *, token_hash: str, at: datetime) -> str:
+        # The chunk row is already locked. Retirement takes the registry lock but never a chunk row
+        # in the same transaction, so this order fences claims without introducing a lock cycle.
+        lock_host_registry(conn)
+        refuse_retired_runner_or_host(conn, route.runner_id, action="claim")
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         conn.execute(
             self._store.insert(s.route_created).values(
@@ -153,6 +160,28 @@ class ChunkRouteStore:
     ) -> int:
         return self._record_route_released_conn(conn_of(handle), chunk_id, at=at, cause=cause, reason=reason)
 
+    def record_retirement_release_locked(
+        self, handle: ILockedChunkRead, route: Route, *, retirement_id: int, at: datetime
+    ) -> int | None:
+        conn = conn_of(handle)
+        # Chunk row precedes the registry lock, as on claim. Reinstate and retire both take the latter.
+        lock_host_registry(conn)
+        facts = s.runner_lifecycle_facts
+        latest = conn.execute(
+            self._store.select(facts, facts.c.id, facts.c.retired)
+            .where(facts.c.runner_id == route.runner_id)
+            .order_by(facts.c.id.desc())
+            .limit(1)
+        ).one_or_none()
+        if latest is None or not latest.retired or latest.id != retirement_id:
+            return None
+        current = route_of_conn(conn, route.chunk_id)
+        if current is None or current.route_id != route.route_id or current.runner_id != route.runner_id:
+            return None
+        return self._record_route_released_conn(
+            conn, route.chunk_id, at=at, cause=RouteReleaseCause.RETIREMENT, reason=None
+        )
+
     def _record_route_released_conn(
         self, conn: Connection, chunk_id: str, *, at: datetime, cause: RouteReleaseCause | None, reason: str | None
     ) -> int:
@@ -175,11 +204,16 @@ class ChunkRouteStore:
         connection (``bzh:store-exclusive-write``). Same allocator as :meth:`record_route_locked`'s own token
         fact, its own call rather than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""
-        conn_of(handle).execute(
+        conn = conn_of(handle)
+        lock_host_registry(conn)
+        route = route_of_conn(conn, chunk_id)
+        if route is not None:
+            refuse_retired_runner_or_host(conn, route.runner_id, action="route-token rekey")
+        conn.execute(
             self._store.insert(s.route_token_minted).values(
                 chunk_id=chunk_id,
                 token_hash=token_hash,
-                seq=next_route_seq(conn_of(handle), chunk_id),
+                seq=next_route_seq(conn, chunk_id),
                 minted_at=at,
             )
         )
@@ -208,8 +242,9 @@ class ChunkRouteStore:
 
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_runner_high_water") as conn:
+            lock_keys(conn, "runner-high-water", [runner_id])
             existing = conn.execute(
-                self._store.select(s.runner_high_water, s.runner_high_water.c.runner_id).where(
+                self._store.select(s.runner_high_water, s.runner_high_water.c.seq).where(
                     s.runner_high_water.c.runner_id == runner_id
                 )
             ).one_or_none()
@@ -217,7 +252,7 @@ class ChunkRouteStore:
                 conn.execute(
                     self._store.insert(s.runner_high_water).values(runner_id=runner_id, seq=seq, updated_at=at)
                 )
-            else:
+            elif seq > existing.seq:
                 conn.execute(
                     self._store.update(s.runner_high_water)
                     .where(s.runner_high_water.c.runner_id == runner_id)

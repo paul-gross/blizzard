@@ -77,6 +77,7 @@ from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, Malf
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
+from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerBinding,
@@ -704,6 +705,9 @@ def claim_route(
         )
     except RunnerRetired as exc:
         retired_denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=retired_denial.model_dump())
+    except HostRetired as exc:
+        retired_denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=runner_id, detail=str(exc))
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=retired_denial.model_dump())
     except ClaimDeniedPaused as exc:
         denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id)

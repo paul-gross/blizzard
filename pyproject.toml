@@ -133,6 +133,8 @@ dev = [
     "ast-grep-cli==0.45.3",
     # Resolves the egress extra for pyright and the Parquet tests.
     "pyarrow>=25.0.1",
+    # Resolves the opt-in lock suite's driver imports for the default typecheck.
+    "psycopg[binary]>=3.2.0",
     # Runs the published newest-copy views in tests/test_egress_contract.py; a hard dependency,
     # because a skipped run would pass the check without running it.
     "duckdb>=1.1.0",
@@ -178,6 +180,7 @@ markers = [
     "crash_sweep: the kill-9 crash sweep — real subprocesses SIGKILLed at each registry point; skipped without BLIZZARD_CRASH_SWEEP=1",
     "service: a running daemon's HTTP API exercised from outside with the counterpart mocked; skipped when the mock fleet is absent",
     "store_baseline: the store-baseline proof — a folded baseline revision against the history it replaced, built by the floor release's own published wheel; skipped without BLIZZARD_STORE_BASELINE=1",
+    "postgres_lock: bounded live PostgreSQL store-lock proofs, explicitly invoked",
     "rehearsal: the upgrade rehearsal — a supported release's own hub and runner upgraded to the candidate and its stores walked back; skipped without BLIZZARD_REHEARSAL=1",
     "winter_binding: the winter workspace binding against the real winter CLI — local-only, never run in CI; skipped without BLIZZARD_WINTER_BINDING=1",
 ]

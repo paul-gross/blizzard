@@ -20,8 +20,10 @@ from blizzard.hub.store.internal.chunk_rows import (
     currently_promoted_ats,
     insert_demote_rows,
     insert_promote_rows,
+    lock_chunk_row,
 )
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.internal.queue_lock import lock_queue_positions
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -61,6 +63,8 @@ class ChunkQueueStore:
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         with self._store.write("record_promote") as conn:
+            lock_queue_positions(conn)
+            lock_chunk_row(conn, chunk_id)
             if currently_promoted_ats(conn, [chunk_id]):
                 return None
             at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
@@ -89,6 +93,7 @@ class ChunkQueueStore:
         if not positions:
             return
         with self._store.write("record_queue_positions") as conn:
+            lock_queue_positions(conn)
             conn.execute(
                 self._store.insert(s.queue_positions),
                 [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
@@ -99,6 +104,7 @@ class ChunkQueueStore:
             return
         with self._store.write("record_backlog_positions") as conn:
             chunk_ids = [chunk_id for chunk_id, _ in positions]
+            lock_queue_positions(conn)
             # `.in_()` reads over id_batches, not one read per pair.
             promoted: set[str] = set()
             for batch in id_batches(chunk_ids):

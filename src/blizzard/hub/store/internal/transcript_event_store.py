@@ -30,6 +30,7 @@ from blizzard.hub.domain.observability.analytics.events import (
 )
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -39,6 +40,7 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 #: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
 #: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
 _DROP_SEGMENTS_BATCH_SIZE = 1000
+_SEGMENT_LOCK_NAMESPACE = "transcript-events-segment"
 
 
 def _minted_chunk_ids_subselect(stmts: ScopedStatements) -> Select[Any]:
@@ -476,6 +478,7 @@ class TranscriptEventStore:
         provenance: SegmentProvenance,
     ) -> None:
         with self._store.write("replace_segment_events") as conn:
+            lock_keys(conn, _SEGMENT_LOCK_NAMESPACE, [segment_id])
             conn.execute(_delete_events_stmt(self._store, segment_id, extractor_version))
             conn.execute(_delete_marker_stmt(self._store, segment_id, extractor_version))
             if events:
@@ -498,7 +501,9 @@ class TranscriptEventStore:
         if not segment_ids:
             return
         with self._store.write("drop_segments") as conn:
-            for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
+            ordered_ids = sorted(segment_ids)
+            lock_keys(conn, _SEGMENT_LOCK_NAMESPACE, ordered_ids)
+            for batch in itertools.batched(ordered_ids, _DROP_SEGMENTS_BATCH_SIZE):
                 # A segment with no stored record writes no drop fact: nothing to record it against.
                 first_by_segment: dict[str, Row[Any]] = {}
                 for row in conn.execute(_drop_identities_stmt(self._store, batch)).all():

@@ -151,9 +151,8 @@ def _rows(
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
-    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
+    def __init__(self, store: ScopedConnections, clock: IClock | None = None) -> None:
         self._store = store
-        self._clock = clock
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         with self._store.read("load_facts") as conn:

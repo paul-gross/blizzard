@@ -88,12 +88,14 @@ def lock_findings(conn: Connection, finding_ids: Sequence[str]) -> None:
     """Take the write lock of each named finding row — a no-op ``UPDATE``, which must be the
     transaction's first statement, or follow only the chunk-row lock where one is taken
     (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
-    conn.execute(
-        statements_of(conn)
-        .update(findings)
-        .where(findings.c.finding_id.in_(finding_ids))
-        .values(finding_id=findings.c.finding_id)
-    )
+    # An IN-list does not impose row lock acquisition order on PostgreSQL.
+    for finding_id in sorted(set(finding_ids)):
+        conn.execute(
+            statements_of(conn)
+            .update(findings)
+            .where(findings.c.finding_id == finding_id)
+            .values(finding_id=findings.c.finding_id)
+        )
 
 
 def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
@@ -264,6 +266,7 @@ class FindingStore:
         if not entries:
             return []
         with self._store.write("record_facts") as conn:
+            lock_findings(conn, sorted({entry.finding_id for entry in entries} | set(expect or {})))
             if expect:
                 moved = moved_findings(conn, expect)
                 if moved:

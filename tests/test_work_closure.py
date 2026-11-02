@@ -103,6 +103,28 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
 
 
 @pytest.mark.component
+@pytest.mark.parametrize(
+    "first", [WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE, WorkItemCloseOutcome.SKIPPED]
+)
+@pytest.mark.parametrize(
+    "second", [WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE, WorkItemCloseOutcome.SKIPPED]
+)
+def test_terminal_outcomes_are_idempotent_across_outcomes(
+    tmp_path: Path, first: WorkItemCloseOutcome, second: WorkItemCloseOutcome
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    pointer = WorkRef("default", "1")
+    assert delivery.record_work_item_closure(chunk_id, pointer=pointer, outcome=first, reason=None, at=hub.clock.now())
+    assert not delivery.record_work_item_closure(
+        chunk_id, pointer=pointer, outcome=second, reason=None, at=hub.clock.now()
+    )
+    assert delivery.pending_close_intents() == []
+
+
+@pytest.mark.component
 def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)

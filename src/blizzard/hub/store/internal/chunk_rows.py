@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
@@ -612,6 +612,7 @@ def enqueue_close_intents(
 
     Bound refs get an intent; refs without a bound closer get a durable terminal skip
     and chunk event. Existing terminal outcomes and replays produce no duplicate event."""
+    lock_chunk_row(conn, chunk_id)
     if is_ephemeral_id(conn, chunk_id):
         return
     stmts = statements_of(conn)
@@ -748,6 +749,7 @@ def write_landing_rows(
     artifact_id: str,
     at: datetime,
     close_decision: CloseEnqueueDecision,
+    before_write: Callable[[], None] | None = None,
 ) -> tuple[bool, bool]:
     """One merge's ``merged/<repo>`` marker, its ``delivery_repo_landed`` row and the chunk's close intents, admitted
     past the fence. Answers whether the fence would have refused, and whether this wrote — a replay finds the marker
@@ -766,6 +768,8 @@ def write_landing_rows(
     ).first()
     if already is not None:
         return refused, False
+    if before_write is not None:
+        before_write()
     conn.execute(
         stmts.insert(s.artifacts).values(
             artifact_id=artifact_id,

@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.domain.garden.scopes import ScopeMint
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_ids_of
 from blizzard.hub.store.schema import artifacts, chunks, finding_facts, findings
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
@@ -75,6 +76,8 @@ class ReviewFindingsStore:
 
     def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
         with self._store.write("deliver") as conn:
+            if plan.scope_slugs:
+                lock_config_authoring(conn)
             lock_chunk_row(conn, plan.chunk_id)
             if self._marker(conn, chunk_id=plan.chunk_id) is not None:
                 return ReviewFindingsOutcome.ALREADY_RECORDED

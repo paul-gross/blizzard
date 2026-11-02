@@ -78,6 +78,12 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 
+    def record_retirement_release_locked(
+        self, handle: ILockedChunkRead, route: Route, *, retirement_id: int, at: datetime
+    ) -> int | None:
+        """Release this route only while its runner's same retirement fact is still current."""
+        ...
+
     def record_lease_minted(
         self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
     ) -> FenceRefusal | None:

@@ -113,6 +113,15 @@ class ChunkQuestionsStore:
         # second insert in the same tenant raises IntegrityError and the loser reads back the winner.
         try:
             with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
+                # The question's chunk is immutable. Lock it before changing the answer fact,
+                # so status guards and restart's auto-answer share the same lock order.
+                chunk_id = conn.execute(
+                    self._store.select(s.questions, s.questions.c.chunk_id).where(
+                        s.questions.c.question_id == question_id
+                    )
+                ).scalar_one_or_none()
+                if chunk_id is not None:
+                    lock_chunk_row(conn, chunk_id)
                 conn.execute(
                     self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at

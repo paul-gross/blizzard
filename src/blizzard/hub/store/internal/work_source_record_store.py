@@ -31,6 +31,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlugTaken,
     resolve_work_source_reference,
 )
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_record_store import StandingForge, insert_new_forge, referred_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
@@ -107,6 +108,7 @@ def insert_record(conn: Connection, record: ConfiguredWorkSource, change: Config
     :func:`referred_forge`."""
     forge = _check_forge(conn, record, enabled=not record.retired)
     _check_secret(conn, record.fields.secret)
+    _SLUGS.lock(conn, record.slug)
     _SLUGS.claim(conn, record.work_source_id, record.slug)
     holder = _locator_holder(conn, record)
     if holder is not None:
@@ -132,6 +134,7 @@ def update_record(
     forge = _check_forge(conn, record, enabled=not record.retired)
     _check_secret(conn, record.fields.secret)
     if left_slug is not None:
+        _SLUGS.lock(conn, record.slug, left_slug)
         _SLUGS.claim(conn, record.work_source_id, record.slug)
     holder = _locator_holder(conn, record)
     if holder is not None:
@@ -212,6 +215,7 @@ class WorkSourceRecordStore:
                     *_FORGE_REFUSALS,
                 ),
             ) as conn:
+                lock_config_authoring(conn)
                 if forge is not None:
                     insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
@@ -240,6 +244,7 @@ class WorkSourceRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
+                lock_config_authoring(conn)
                 if forge is not None:
                     insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
@@ -266,6 +271,7 @@ class WorkSourceRecordStore:
         change: ConfigChange,
     ) -> ConfiguredWorkSource:
         with self._store.write("record_lifecycle", expect=(ConfigFieldError, ConfigRevisionConflict)) as conn:
+            lock_config_authoring(conn)
             record_lifecycle_fact(
                 conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )

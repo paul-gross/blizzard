@@ -282,3 +282,22 @@ def test_a_question_id_reused_in_another_tenant_is_a_different_question(tenants:
     answered = second.get_question("qn_shared")
     assert answered is not None
     assert (answered.answer, answered.delivered) == ("no", False)
+
+
+def test_answer_locks_the_question_chunk_in_its_own_tenant(tenants: _Tenants, monkeypatch: pytest.MonkeyPatch) -> None:
+    from blizzard.hub.store.internal import chunk_questions_store
+
+    first = _ask(tenants, tenants.first, "first?")
+    second = _ask(tenants, tenants.second, "second?")
+    original = chunk_questions_store.lock_chunk_row
+    locked = []
+
+    def record_lock(conn, chunk_id):
+        locked.append(chunk_id)
+        original(conn, chunk_id)
+
+    monkeypatch.setattr(chunk_questions_store, "lock_chunk_row", record_lock)
+    assert second.answer_question("qn_shared", answer="second", answered_by="bob", at=_AT).won
+    assert first.answer_question("qn_shared", answer="first", answered_by="alice", at=_AT).won
+    assert not second.answer_question("qn_shared", answer="late", answered_by="bob", at=_AT).won
+    assert locked == [f"ch_{tenants.second}", f"ch_{tenants.first}", f"ch_{tenants.second}"]

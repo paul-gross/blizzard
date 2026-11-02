@@ -39,6 +39,7 @@ from blizzard.hub.store.internal import repository_record_store as repository_wr
 from blizzard.hub.store.internal import routine_store as routine_writes
 from blizzard.hub.store.internal import scope_store as scope_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.schema import project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -89,6 +90,7 @@ class ConfigApplyStore:
     ) -> None:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
+                lock_config_authoring(conn)
                 for write in writes:
                     try:
                         self._run(conn, write)

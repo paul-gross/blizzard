@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
@@ -177,6 +178,7 @@ class RoutineStore:
     def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
+                lock_config_authoring(conn)
                 if scope_mint is not None:
                     ensure_scope(conn, scope_mint)
                 insert_routine(conn, routine, change)
@@ -192,6 +194,7 @@ class RoutineStore:
         self, routine: Routine, *, from_revision: int, change: ConfigChange, scope_mint: ScopeMint | None
     ) -> Routine:
         with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             if scope_mint is not None:
                 ensure_scope(conn, scope_mint)
             update_routine(conn, routine, from_revision, change)
@@ -203,6 +206,7 @@ class RoutineStore:
         """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins — with
         the revision move and the change row."""
         with self._store.write("record_lifecycle", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             record_routine_lifecycle(
                 conn, routine, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )

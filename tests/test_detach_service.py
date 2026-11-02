@@ -77,6 +77,11 @@ class _FakeChunkRepo:
         self.released.append((chunk_id, at))
         self.causes.append(cause)
 
+    def record_retirement_release_locked(
+        self, handle: ILockedChunkRead, route: Route, *, retirement_id: int, at: datetime
+    ) -> None:
+        self.record_route_released_locked(handle, route.chunk_id, at=at, cause=RouteReleaseCause.RETIREMENT)
+
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DetachService should not touch {name!r}")
 
@@ -134,6 +139,6 @@ def test_detach_records_its_own_cause() -> None:
 def test_retirements_release_records_its_own_cause() -> None:
     service, repo = _service(_route())
 
-    service.release_held(_CHUNK, runner_id="rn_1")
+    service.release_held(_CHUNK, runner_id="rn_1", expected_route=_route(), retirement_id=1)
 
     assert repo.causes == [RouteReleaseCause.RETIREMENT]

@@ -17,6 +17,7 @@ from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.projects.order import IWriteProjectPositions, PositionFact, RankedLink, in_landing_order
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.schema import project_repository_positions, repositories
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -82,6 +83,7 @@ class ProjectPositionStore:
         if not facts:
             return
         with self._store.write("record_positions") as conn:
+            lock_config_authoring(conn)
             conn.execute(
                 statements_of(conn).insert_rows(
                     project_repository_positions,

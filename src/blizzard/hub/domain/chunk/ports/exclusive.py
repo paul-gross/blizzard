@@ -76,6 +76,20 @@ class IChunkExclusiveWrites(Protocol):
         write repository's own ``*_locked`` method, taking this same handle."""
         ...
 
+    def locked_queue(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:
+        """Lock the queue position key, then named chunks in sorted order. Locked promotion
+        and demotion require this handle. The key protects position writes, not a ranking
+        resolved before the lock, which may already be stale."""
+        ...
+
+    def locked_dependency_graph(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:
+        """Lock the dependency graph key, then named chunks in sorted order."""
+        ...
+
+    def locked_claim(self, chunk_id: str) -> AbstractContextManager[ILockedChunkRead]:
+        """Lock the graph, then the dependent and its standing prerequisites in sorted order."""
+        ...
+
     def locked_work_refs(
         self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
     ) -> AbstractContextManager[ILockedWorkRefRead]:

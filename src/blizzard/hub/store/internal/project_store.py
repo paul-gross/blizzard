@@ -23,6 +23,7 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlugTaken,
 )
 from blizzard.hub.domain.projects.resolve import resolve
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.schema import project_former_slugs, projects
@@ -31,8 +32,14 @@ from blizzard.hub.store.scoped import ScopedConnections, statements_of
 _SLUGS = SlugTables(projects, project_former_slugs, "project_id", ProjectSlugTaken)
 
 
+def lock_project_slugs(conn: Connection, slugs: list[str]) -> None:
+    """Lock a complete set of project slug claims in the same order as single-record moves."""
+    _SLUGS.lock(conn, *slugs)
+
+
 def insert_project(conn: Connection, record: Project, change: ConfigChange) -> None:
     """The create body, inside the caller's transaction. :class:`ProjectSlugTaken` when refused."""
+    _SLUGS.lock(conn, record.slug)
     _SLUGS.claim(conn, record.project_id, record.slug)
     conn.execute(
         statements_of(conn)
@@ -55,6 +62,7 @@ def update_project(
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
     if left_slug is not None:
+        _SLUGS.lock(conn, record.slug, left_slug)
         _SLUGS.claim(conn, record.project_id, record.slug)
     moved = conn.execute(
         statements_of(conn)
@@ -90,6 +98,7 @@ class ProjectStore:
     def create(self, record: Project, *, change: ConfigChange) -> Project:
         try:
             with self._store.write("create", expect=(ProjectSlugTaken, IntegrityError)) as conn:
+                lock_config_authoring(conn)
                 insert_project(conn, record, change)
         except IntegrityError as exc:  # a concurrent write took the slug first
             raise ProjectSlugTaken(record.slug) from exc
@@ -98,6 +107,7 @@ class ProjectStore:
     def update(self, record: Project, *, from_revision: int, left_slug: str | None, change: ConfigChange) -> Project:
         try:
             with self._store.write("update", expect=(ProjectSlugTaken, ConfigRevisionConflict, IntegrityError)) as conn:
+                lock_config_authoring(conn)
                 update_project(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:  # a concurrent write took the slug first
             raise ProjectSlugTaken(record.slug) from exc

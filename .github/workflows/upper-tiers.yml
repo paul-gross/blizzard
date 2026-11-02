@@ -51,6 +51,40 @@ on:
         value: ${{ jobs.mock-ref.outputs.sha }}
 
 jobs:
+  postgres-lock-test:
+    name: PostgreSQL lock proof (blizzard:postgres-lock-test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: false
+      - name: bounded store-lock proof
+        env:
+          BLIZZARD_LOCK_TEST_PG_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+        run: mise run postgres-lock-test
+
   # Resolves the mock once so every tier, and the `proven-against` record `push.yml`
   # uploads, name one commit even if the mock lands mid-run. The resolution rules are
   # owned by the action, .github/actions/resolve-mock-ref.

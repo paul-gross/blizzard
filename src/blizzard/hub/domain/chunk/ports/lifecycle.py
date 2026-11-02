@@ -33,10 +33,12 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally."""
         ...
 
-    def record_pause_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
-        """Append a ``chunk.paused`` fact on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), so the status the pause was admitted at cannot move
-        between the check and this write. Returns the fresh ``chunk_pause_facts.id``."""
+    def record_pause_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, paused: bool, by: str, at: datetime
+    ) -> int:
+        """Append a pause or resume on the locked connection, with ``at`` stamped after locking.
+
+        Returns the fresh ``chunk_pause_facts.id`` (``bzh:store-exclusive-write``)."""
         ...
 
     def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:

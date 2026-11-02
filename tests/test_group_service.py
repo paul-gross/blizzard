@@ -196,6 +196,8 @@ class _FakeExclusiveWrites:
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.record_repo, self.facts_repo, self.dependencies_repo))
 
+    locked_dependency_graph = locked
+
 
 def _service(
     chunks: dict[str, Chunk],

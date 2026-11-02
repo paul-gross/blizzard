@@ -184,7 +184,7 @@ def _seed_unmet_dependent(hub: HubHarness, *, prerequisite_count: int) -> str:
     return dependent_id
 
 
-def test_claim_denial_query_count_is_independent_of_prerequisite_count(tmp_path: Path) -> None:
+def test_claim_denial_query_count_grows_only_for_prerequisite_locks(tmp_path: Path) -> None:
     (tmp_path / "few").mkdir()
     (tmp_path / "many").mkdir()
     few = build_hub(tmp_path / "few")
@@ -199,4 +199,4 @@ def test_claim_denial_query_count_is_independent_of_prerequisite_count(tmp_path:
     few_count = count_queries(few.engine, lambda: call(few, few_dependent_id))
     many_count = count_queries(many.engine, lambda: call(many, many_dependent_id))
 
-    assert few_count == many_count
+    assert many_count - few_count == 6

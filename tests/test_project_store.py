@@ -255,6 +255,20 @@ def test_an_edit_from_a_moved_revision_is_refused_and_writes_nothing(world: _Wor
     assert len(world.changes(RecordKind.PROJECT, created.project_id)) == 2
 
 
+def test_stale_slug_move_does_not_forget_a_former_slug(world: _World) -> None:
+    first = world.authoring().create("winter", "Winter", OP)
+    world.authoring().edit(first, ProjectEdit(slug="summer"), OP)
+    second = world.authoring().create("autumn", "Autumn", OP)
+    world.authoring().edit(second, ProjectEdit(name="Changed"), OP)
+
+    with pytest.raises(ConfigRevisionConflict):
+        world.authoring().edit(second, ProjectEdit(slug="winter"), OP)
+
+    resolved = world.projects().resolve("winter")
+    assert resolved is not None and resolved.project_id == first.project_id
+    assert _former_rows(world) == [("winter", first.project_id)]
+
+
 def test_a_rename_onto_a_slug_another_project_holds_is_refused(world: _World) -> None:
     created = world.authoring().create("winter", "Winter", OP)
     with pytest.raises(ProjectSlugTaken):

@@ -5,11 +5,17 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import zlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import URL, Engine, make_url
+from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.pool import Pool
 
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub.store.tenant_guard import install_tenant_guard
@@ -30,8 +36,33 @@ install_head_replay_guard()
 
 #: The verification tiers declared in ``pyproject.toml``'s ``markers`` list.
 _TIER_MARKERS = frozenset(
-    {"unit", "component", "service", "e2e", "crash_sweep", "rehearsal", "store_baseline", "winter_binding"}
+    {
+        "unit",
+        "component",
+        "service",
+        "e2e",
+        "crash_sweep",
+        "rehearsal",
+        "store_baseline",
+        "winter_binding",
+        "postgres_lock",
+    }
 )
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """The live database suite is collected only by its explicit task."""
+    if collection_path.name == "postgres_locks" and os.environ.get("BLIZZARD_POSTGRES_LOCK_TEST") != "1":
+        return True
+    return None
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if os.environ.get("BLIZZARD_POSTGRES_LOCK_TEST") != "1" and any(
+        "postgres_locks" in Path(arg.split("::", 1)[0]).parts for arg in session.config.args
+    ):
+        raise pytest.UsageError("postgres lock tests require BLIZZARD_POSTGRES_LOCK_TEST=1")
+
 
 #: Every collected item's nodeid missing every tier marker, populated by
 #: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
@@ -52,6 +83,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     unit`` and ``-m component`` -- a gap neither tier's total would catch. The record is
     taken before sharding, so whichever shard runs the marker check sees the whole suite.
     """
+    if os.environ.get("BLIZZARD_POSTGRES_LOCK_TEST") != "1" and any(
+        "postgres_locks" in item.path.parts for item in items
+    ):
+        raise pytest.UsageError("postgres lock tests require BLIZZARD_POSTGRES_LOCK_TEST=1")
     UNMARKED_TEST_NODEIDS[:] = [
         item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
     ]
@@ -123,7 +158,7 @@ def _strip_daemon_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def pytest_configure() -> None:
+def pytest_configure(config: pytest.Config) -> None:
     """Apply the daemon environment contract to the suite's environ: every hub and runner subprocess inherits it.
 
     That unsigns every git commit the suite spawns (parallel workers overload a host's gpg-agent), drops the legacy
@@ -134,6 +169,24 @@ def pytest_configure() -> None:
     os.environ.update(DAEMON_ENV["set"])
     install_tenant_guard()
     install_runner_guard()
+    if os.environ.get("BLIZZARD_POSTGRES_LOCK_TEST") == "1":
+        allowed: set[URL] = set()
+        config.stash[_LOCK_DATABASES] = allowed
+        check = _lock_connection_guard(allowed)
+        config.stash[_LOCK_GUARD] = check
+        event.listen(Engine, "do_connect", check)
+        event.listen(Pool, "connect", _reject_custom_creator)
+        patch = pytest.MonkeyPatch()
+        config.stash[_LOCK_PATCH] = patch
+        _guard_dbapi(patch, allowed)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    check = config.stash.get(_LOCK_GUARD, None)
+    if check is not None:
+        event.remove(Engine, "do_connect", check)
+        event.remove(Pool, "connect", _reject_custom_creator)
+        config.stash[_LOCK_PATCH].undo()
 
 
 @pytest.fixture(autouse=True)
@@ -146,3 +199,103 @@ def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         session_file.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")
     )
+
+
+_LOCK_DATABASES = pytest.StashKey[set[URL]]()
+_LOCK_GUARD = pytest.StashKey[Any]()
+_LOCK_PATCH = pytest.StashKey[pytest.MonkeyPatch]()
+_LOCK_APPROVED = "blizzard_lock_connection_approved"
+
+
+def _lock_connection_guard(allowed: set[URL]) -> Any:
+    """Reject unregistered connections from collection through session teardown."""
+
+    def check(dialect: Dialect, connection_record: Any, cargs: list[Any], cparams: dict[str, Any]) -> None:
+        params = dict(cparams)
+        params.pop("application_name", None)
+        if params.get("options") == "-c statement_timeout=8000":
+            params.pop("options")
+        if not any(
+            dialect.name == url.get_backend_name()
+            and dialect.driver == url.get_driver_name()
+            and dialect.create_connect_args(url) == (cargs, params)
+            for url in allowed
+        ):
+            raise AssertionError("postgres lock suite attempted an unregistered database connection")
+        connection_record.info[_LOCK_APPROVED] = True
+
+    return check
+
+
+def _reject_custom_creator(dbapi_connection: Any, connection_record: Any) -> None:
+    if not connection_record.info.pop(_LOCK_APPROVED, False):
+        dbapi_connection.close()
+        raise AssertionError("postgres lock suite attempted an unregistered database connection via custom creator")
+
+
+def _guard_dbapi(patch: pytest.MonkeyPatch, allowed: set[URL]) -> None:
+    """Guard supported direct DBAPI calls as well as SQLAlchemy's normal connection path."""
+    import sqlite3.dbapi2 as sqlite_dbapi
+
+    import psycopg
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    # libpq otherwise fills omitted parameters (including hostaddr and service)
+    # from the shell after our connection-string check.
+    for name in list(os.environ):
+        if name.startswith("PG"):
+            patch.delenv(name)
+
+    def refuse_sqlite(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("postgres lock suite attempted an unregistered database connection")
+
+    patch.setattr(sqlite3, "connect", refuse_sqlite)
+    patch.setattr(sqlite_dbapi, "connect", refuse_sqlite)
+    module_connect = psycopg.connect
+    class_connect = psycopg.Connection.connect.__func__
+
+    def check(conninfo: str, kwargs: dict[str, Any]) -> None:
+        # Psycopg-only connection controls do not affect the destination.
+        params = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in {"autocommit", "prepare_threshold", "context", "row_factory", "cursor_factory"}
+        }
+        try:
+            actual = conninfo_to_dict(make_conninfo(conninfo, **params))
+            actual.pop("application_name", None)
+            if actual.get("options") == "-c statement_timeout=8000":
+                actual.pop("options")
+            for url in allowed:
+                expected = {
+                    "host": url.host,
+                    "port": url.port,
+                    "dbname": url.database,
+                    "user": url.username,
+                    "password": url.password,
+                }
+                if actual == {k: str(v) for k, v in expected.items() if v is not None}:
+                    return
+        except (TypeError, ValueError, psycopg.ProgrammingError):
+            pass
+        raise AssertionError("postgres lock suite attempted an unregistered database connection")
+
+    def connect(conninfo: str = "", **kwargs: Any) -> Any:
+        check(conninfo, kwargs)
+        return module_connect(conninfo, **kwargs)
+
+    def class_connect_guard(cls: Any, conninfo: str = "", **kwargs: Any) -> Any:
+        check(conninfo, kwargs)
+        return class_connect(cls, conninfo, **kwargs)
+
+    patch.setattr(psycopg, "connect", connect)
+    patch.setattr(psycopg.Connection, "connect", classmethod(class_connect_guard))
+
+
+def allow_postgres_lock_database(request: pytest.FixtureRequest, url: str) -> None:
+    parsed = make_url(url)
+    if parsed.drivername == "postgresql":
+        parsed = parsed.set(drivername="postgresql+psycopg")
+    allowed = request.config.stash[_LOCK_DATABASES]
+    allowed.add(parsed)
+    request.addfinalizer(lambda: allowed.discard(parsed))

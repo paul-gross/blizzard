@@ -26,6 +26,7 @@ from blizzard.hub.domain.observability.transcripts import (
     lost_turns,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -161,12 +162,6 @@ def _records_for_lease_stmt(
 
 def _high_water_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
     return stmts.select(s.transcript_high_water, s.transcript_high_water.c.seq).where(
-        s.transcript_high_water.c.runner_id == runner_id
-    )
-
-
-def _high_water_owner_stmt(stmts: ScopedStatements, runner_id: str) -> Select[Any]:
-    return stmts.select(s.transcript_high_water, s.transcript_high_water.c.runner_id).where(
         s.transcript_high_water.c.runner_id == runner_id
     )
 
@@ -394,11 +389,13 @@ class TranscriptSegmentStore:
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_high_water") as conn:
-            existing = conn.execute(_high_water_owner_stmt(self._store, runner_id)).one_or_none()
+            lock_keys(conn, "transcript-high-water", [runner_id])
+            existing = conn.execute(_high_water_stmt(self._store, runner_id)).one_or_none()
             if existing is None:
                 conn.execute(_insert_high_water_stmt(self._store, runner_id, seq=seq, at=at))
                 return
-            conn.execute(_update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
+            if seq > existing.seq:
+                conn.execute(_update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
 
     def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)

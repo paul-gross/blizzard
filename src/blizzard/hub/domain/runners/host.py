@@ -256,9 +256,11 @@ class Host:
             raise RunnerAlreadyHosted(runner.runner_id, host_id=runner.host_id)
 
     def release(self, runner: RunnerRegistration) -> None:
-        """Refuse returning ``runner`` to standing alone unless it stands under this host."""
+        """Release only a runner under this host; a retired host may release only a retired runner."""
         if runner.host_id != self.host_id:
             raise RunnerNotUnderHost(runner.runner_id, host_id=self.host_id)
+        if self.retired and not runner.retired:
+            raise HostRetired(self.host_id, action="release refused; re-run retire first")
 
     def refuse_adding_runner(self) -> None:
         """Raise :class:`HostRetired` when this host may add no runner."""
@@ -357,10 +359,16 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
         ...
 
     def record_retirement(
-        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str
+        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str, force: bool = True
     ) -> tuple[int | None, int | None]:
         """Append ``fact`` (when given) and revoke the host's token, in one transaction. Returns the lifecycle fact
         id and the revocation id, each ``None`` when it wrote none."""
+        ...
+
+    def record_retirement_with_roster(
+        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str, force: bool
+    ) -> tuple[int | None, int | None, tuple[str, ...]]:
+        """Retire and return the runner ids under the host at the same registry-locked decision."""
         ...
 
     def revoke_token(self, host_id: str, *, at: datetime, by: str) -> int | None:

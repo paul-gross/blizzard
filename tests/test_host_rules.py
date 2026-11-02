@@ -125,7 +125,9 @@ def test_adopt_refuses_a_retired_runner_and_a_retired_host() -> None:
 
 def test_release_admits_only_a_runner_under_this_host_even_from_a_retired_host() -> None:
     _NEW.release(replace(_RUNNER, host_id="hs_a"))
-    _RETIRED.release(replace(_RUNNER, host_id="hs_a"))
+    _RETIRED.release(replace(_RUNNER, host_id="hs_a", retired=True))
+    with pytest.raises(HostRetired, match="re-run retire"):
+        _RETIRED.release(replace(_RUNNER, host_id="hs_a"))
     with pytest.raises(RunnerNotUnderHost):
         _NEW.release(_RUNNER)
     with pytest.raises(RunnerNotUnderHost):

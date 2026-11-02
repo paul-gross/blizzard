@@ -31,6 +31,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
     resolve_repository_reference,
 )
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_record_store import (
     StandingForge,
@@ -112,6 +113,7 @@ def insert_record(conn: Connection, record: ConfiguredRepository, change: Config
     :func:`referred_forge`."""
     forge = referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
     _check_secret(conn, record.fields.secret_name)
+    _SLUGS.lock(conn, record.slug)
     _SLUGS.claim(conn, record.repository_id, record.slug)
     holder = _coordinate_holder(conn, record)
     if holder is not None:
@@ -137,6 +139,7 @@ def update_record(
     forge = referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
     _check_secret(conn, record.fields.secret_name)
     if left_slug is not None:
+        _SLUGS.lock(conn, record.slug, left_slug)
         _SLUGS.claim(conn, record.repository_id, record.slug)
     holder = _coordinate_holder(conn, record)
     if holder is not None:
@@ -213,6 +216,7 @@ class RepositoryRecordStore:
                     *_FORGE_REFUSALS,
                 ),
             ) as conn:
+                lock_config_authoring(conn)
                 if forge is not None:
                     insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
@@ -241,6 +245,7 @@ class RepositoryRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
+                lock_config_authoring(conn)
                 if forge is not None:
                     insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
@@ -265,6 +270,7 @@ class RepositoryRecordStore:
         change: ConfigChange,
     ) -> ConfiguredRepository:
         with self._store.write("record_lifecycle", expect=(ConfigFieldError, ConfigRevisionConflict)) as conn:
+            lock_config_authoring(conn)
             record_lifecycle_fact(
                 conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )

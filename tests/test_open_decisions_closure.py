@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -15,11 +16,13 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     ChunkVerb,
     DecisionChoice,
+    DecisionClosed,
     decide_close_enqueue,
     verb_legal_from,
 )
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
 
@@ -88,6 +91,31 @@ def test_a_gate_on_a_stopped_chunk_leaves_the_open_list(tmp_path: Path) -> None:
         store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
 
     assert _open_ids(store) == []
+
+
+@pytest.mark.parametrize("close", ["stop", "transition"])
+def test_resolve_rechecks_stale_decision_and_chunk(tmp_path: Path, close: str) -> None:
+    store = _store_with_gate(tmp_path)
+    decision = store.decisions.get_decision("dec_1")
+    assert decision is not None
+    if close == "stop":
+        with store.exclusive.locked(["ch_1"]) as handle:
+            store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+    else:
+        _transition(store, to_node_id="nd_2", decision_id="dec_1")
+    service = DecisionService(
+        facts=store.facts,
+        route=store.route,
+        decisions=store.decisions,
+        exclusive=store.exclusive,
+        retired=Mock(),
+        clock=FixedClock(_T0),
+        closer_available=lambda _: True,
+    )
+    with pytest.raises(DecisionClosed):
+        service.resolve(decision, choice="ok", resolved_by="op")
+    current = store.decisions.get_decision("dec_1")
+    assert current is not None and current.resolved_choice is None
 
 
 def test_a_gate_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tmp_path: Path) -> None:

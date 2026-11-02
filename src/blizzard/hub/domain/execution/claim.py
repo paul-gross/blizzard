@@ -241,8 +241,7 @@ class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
     each its own error: unregistered (never connected included), retired, refused on version, ended, held route, not
     ``ready``, unmet prerequisite, a project the runner does not serve, then incapable runner (a registration
-    reporting no capabilities is incapable of everything). The runner-paused brake is judged before the lock
-    (:func:`refuse_paused_runner`)."""
+    reporting no capabilities is incapable of everything). The runner-paused brake is also rechecked under the lock."""
 
     chunk: Chunk
     graph: Graph
@@ -335,10 +334,9 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
-        # Checked before the lock: a paused runner is refused regardless of whether it
-        # would have won the race, so there is nothing here for the CAS to serialize.
+        # Refuse promptly, then recheck under the registry lock in case the brake changes.
         refuse_paused_runner(self._registry.get_runner(runner_id), runner_id=runner_id)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
+        with self._exclusive.locked_claim(chunk.chunk_id) as handle:
             return self._claim_locked(
                 handle, chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
             )
@@ -370,11 +368,12 @@ class ClaimService:
         # capability change can land after the pre-lock peek.
         edges = handle.standing_edges_touching(chunk.chunk_id)
         prerequisites = [e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk.chunk_id]
+        registration = refuse_paused_runner(handle.runner_registration(runner_id), runner_id=runner_id)
         ClaimAdmission(chunk, graph, facts).node(
             runner_id=runner_id,
             existing_route=handle.route_of(chunk.chunk_id),
             unmet_prerequisite=first_unmet_prerequisite(chunk.chunk_id, edges, handle.facts_for(prerequisites)),
-            registration=handle.runner_registration(runner_id),
+            registration=registration,
         )
         now = self._clock.now()
 

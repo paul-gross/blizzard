@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -430,11 +431,24 @@ class ChunkMovementStore:
                 )
             ).first()
             if already is None:
-                conn.execute(
-                    self._store.insert(s.question_answers).values(
-                        question_id=question_id, answer=answer, answered_by=by, answered_at=at
-                    )
-                )
+                try:
+                    with conn.begin_nested():
+                        conn.execute(
+                            self._store.insert(s.question_answers).values(
+                                question_id=question_id, answer=answer, answered_by=by, answered_at=at
+                            )
+                        )
+                except IntegrityError:
+                    # Only a competing answer is an expected conflict; preserve other integrity failures.
+                    if (
+                        conn.execute(
+                            self._store.select(s.question_answers, s.question_answers.c.question_id).where(
+                                s.question_answers.c.question_id == question_id
+                            )
+                        ).first()
+                        is None
+                    ):
+                        raise
         from_graph_id = graph_id_of(conn, chunk_id)
         if to_graph_id is not None:
             self._repin_by_restart(

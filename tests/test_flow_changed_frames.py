@@ -167,6 +167,38 @@ def test_a_lever_publishes_the_withdrawn_fact_of_each_waiting_submission(tmp_pat
     assert _frames(hub, since=since) == withdrawn
 
 
+def test_stopped_candidate_is_not_submitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = _hub(tmp_path)
+    chunk_id = _chunk(hub, _WIDGET)
+    lines = hub.services.flow_lines
+    submit = lines._submit
+
+    def stop_before_submit(standing: Any) -> Any:
+        assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+        return submit(standing)
+
+    monkeypatch.setattr(lines, "_submit", stop_before_submit)
+    assert lines.reconcile(0).submitted == 0
+    assert _facts(hub, chunk_id) == []
+    assert FlowStore(hub_store_connections(hub.engine), hub.clock).submissions_of(chunk_id) == []
+
+
+def test_restarted_candidate_is_not_submitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = _hub(tmp_path)
+    chunk_id = _chunk(hub, _WIDGET)
+    lines = hub.services.flow_lines
+    submit = lines._submit
+
+    def restart_before_submit(standing: Any) -> Any:
+        assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
+        return submit(standing)
+
+    monkeypatch.setattr(lines, "_submit", restart_before_submit)
+    assert lines.reconcile(0).submitted == 0
+    assert _facts(hub, chunk_id) == []
+    assert FlowStore(hub_store_connections(hub.engine), hub.clock).submissions_of(chunk_id) == []
+
+
 def test_a_lever_whose_write_rolled_back_publishes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _hub(tmp_path)
     chunk_id = _chunk(hub, _WIDGET)

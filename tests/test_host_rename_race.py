@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.runners.host import HostNameTaken, HostReport
+from blizzard.hub.domain.runners.host import (
+    HostAddition,
+    HostLifecycleFact,
+    HostNameTaken,
+    HostReport,
+    HostRetired,
+    HostTokenRotation,
+)
 from blizzard.hub.domain.runners.host_report import HostReportService
+from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRetired
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import build_hub
 
 pytestmark = pytest.mark.component
@@ -57,3 +67,63 @@ def test_a_report_that_loses_the_rename_race_still_lands_as_a_heartbeat(tmp_path
     assert reported.name == "two"
     after = store.get_host(ids["two"]["host_id"])
     assert after is not None and after.name == "two" and after.last_seen_at is not None
+
+
+def test_stale_host_writes_refuse_after_retirement_and_retirement_is_idempotent(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    host_id = hub.client.post("/api/hosts", json={"name": "one"}).json()["host_id"]
+    store = cast(HostRegistryStore, hub.services.hosts)
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+    fact = HostLifecycleFact(host_id, True, now, "test")
+    first, _ = store.record_retirement(host_id, fact=fact, at=now, by="test")
+    second, _ = store.record_retirement(host_id, fact=fact, at=now, by="test")
+    assert first is not None and second is None
+    with pytest.raises(HostRetired):
+        store.adopt(host_id, ())
+    with pytest.raises(HostRetired):
+        store.record_report(host_id, HostReport("new", None, (), (), ()), name="new", at=now)
+    with pytest.raises(HostRetired):
+        store.rotate_token(HostTokenRotation(host_id, "new-hash", now, "test"))
+    host = store.get_host(host_id)
+    assert host is not None and host.retired and host.name == "one" and host.token_hash is None
+
+
+def test_competing_host_additions_and_retirements_have_one_winner(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    store = cast(HostRegistryStore, hub.services.hosts)
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+
+    def add(number: int) -> bool:
+        try:
+            store.add(HostAddition(f"host-{number}", "same", f"hash-{number}", now, "test"))
+        except HostNameTaken:
+            return False
+        return True
+
+    with ThreadPoolExecutor(max_workers=2) as actors:
+        assert sorted(actors.map(add, (1, 2))) == [False, True]
+    hosts = store.list_hosts()
+    assert len(hosts) == 1
+    fact = HostLifecycleFact(hosts[0].host_id, True, now, "test")
+    with ThreadPoolExecutor(max_workers=2) as actors:
+        results = list(
+            actors.map(lambda _: store.record_retirement(fact.host_id, fact=fact, at=now, by="test"), range(2))
+        )
+    assert sum(fact_id is not None for fact_id, _ in results) == 1
+    assert sum(revocation_id is not None for _, revocation_id in results) == 1
+
+
+def test_stale_runner_placement_refuses_retired_host_or_runner(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hosts = cast(HostRegistryStore, hub.services.hosts)
+    runners = cast(RunnerRegistryStore, hub.services.registry)
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+    hosts.add(HostAddition("host-one", "one", "host-hash", now, "test"))
+    runners.add(RunnerAddition("runner-one", "one", "runner-hash", now, "test"))
+    runners.record_lifecycle("runner-one", retired=True, at=now, by="test")
+    with pytest.raises(RunnerRetired):
+        hosts.adopt("host-one", ("runner-one",))
+    hosts.record_retirement("host-one", fact=HostLifecycleFact("host-one", True, now, "test"), at=now, by="test")
+    with pytest.raises(HostRetired):
+        runners.add(RunnerAddition("runner-two", "two", "hash-two", now, "test", host_id="host-one"))
+    assert runners.get_runner("runner-two") is None

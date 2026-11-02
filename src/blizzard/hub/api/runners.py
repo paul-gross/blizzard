@@ -24,7 +24,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.execution.fleet import RetireOutcome
+from blizzard.hub.domain.execution.fleet import ReleasedRoute, RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
 from blizzard.hub.domain.runners.host import Host, HostRetired
@@ -32,6 +32,7 @@ from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
     RunnerBinding,
     RunnerHoldsRoutes,
+    RunnerLifecycleChanged,
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerNotRetired,
@@ -384,7 +385,7 @@ def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentRespons
     registration = _registration(services, runner_id)
     try:
         token = services.enrollment.enroll(registration)
-    except RunnerRetired as exc:
+    except (RunnerRetired, HostRetired) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
@@ -451,7 +452,7 @@ def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Servic
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
-    except RunnerHoldsRoutes as exc:
+    except (RunnerHoldsRoutes, RunnerLifecycleChanged) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)
     return RunnerRetireResponse(
@@ -470,11 +471,7 @@ def publish_retirement(
     """Publish what one runner retire wrote: a ``detached`` frame per released chunk (``changes`` holds each one read
     before the retire), the queue's change when any was released, and the runner's ``retired`` frame unless the retire
     was a re-run."""
-    for released in outcome.released:
-        change = changes.get(released.chunk_id) or chunk_events.ChunkChanged.before(services, released.chunk_id)
-        change.publish(cause="detached", key=f"route_released:{released.released_id}")
-    if outcome.released:
-        services.events.publish_queue_changed()  # released chunks re-enter the ready queue
+    publish_releases(services, outcome.released, changes=changes)
     if outcome.fact_id is not None:
         services.events.publish_runner_changed(
             registration.runner_id,
@@ -483,6 +480,19 @@ def publish_retirement(
             by=by,
             key=f"runner_lifecycle_facts:{outcome.fact_id}",
         )
+
+
+def publish_releases(
+    services: TenantServices,
+    released_routes: Sequence[ReleasedRoute],
+    *,
+    changes: Mapping[str, chunk_events.ChunkChanged],
+) -> None:
+    for released in released_routes:
+        change = changes.get(released.chunk_id) or chunk_events.ChunkChanged.before(services, released.chunk_id)
+        change.publish(cause="detached", key=f"route_released:{released.released_id}")
+    if released_routes:
+        services.events.publish_queue_changed()  # released chunks re-enter the ready queue
 
 
 @router.post(
@@ -494,15 +504,27 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
     """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired."""
     registration = _registration(services, runner_id)
     try:
-        fact_id = services.fleet.reinstate(registration, by=request.by)
-    except RunnerNotRetired as exc:
+        registration.reinstate(by=request.by, at=services.clock.now())
+        host = host_of(registration, hosts_of(services, [registration]))
+        if host is not None:
+            host.refuse_if_retired(action="runner reinstatement")
+        held = services.chunks.route.live_routes_of_runner(runner_id)
+        changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
+        released: list[ReleasedRoute] = []
+        try:
+            outcome = services.fleet.reinstate(registration, by=request.by, released=released)
+        except Exception:
+            publish_releases(services, released, changes=changes)
+            raise
+    except (RunnerNotRetired, HostRetired) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    publish_releases(services, outcome.released, changes=changes)
     services.events.publish_runner_changed(
         runner_id,
         kind="reinstated",
         runner_name=registration.name,
         by=request.by,
-        key=f"runner_lifecycle_facts:{fact_id}",
+        key=f"runner_lifecycle_facts:{outcome.fact_id}",
     )
     return _reread(services, runner_id)
 

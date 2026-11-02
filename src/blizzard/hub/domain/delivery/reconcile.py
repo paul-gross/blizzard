@@ -335,21 +335,35 @@ class FlowLineReconciler:
                 resolution=resolved.resolution,
             )
             return None
-        return self._flows.submit(
-            chunk.chunk_id,
-            node_id=node.node_id,
-            epoch=epoch,
-            generation=generation,
-            resources=held_resources(
-                resolved.resolution,
-                LandedRepos.of(artifacts).names
-                | no_code_repos(
-                    artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
-                ),
-                resolved.spec,
+        resources = held_resources(
+            resolved.resolution,
+            LandedRepos.of(artifacts).names
+            | no_code_repos(
+                artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
             ),
-            at=self._clock.now(),
+            resolved.spec,
         )
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            current = handle.facts(chunk.chunk_id)
+            record = handle.record(chunk.chunk_id)
+            if (
+                current is None
+                or record is None
+                or record.graph_id != graph.graph_id
+                or current.status() is not ChunkStatus.DELIVERING
+                or current.current_node_id() != node.node_id
+                or (current.latest_epoch() or 0) != epoch
+            ):
+                return None
+            return self._flows.submit_locked(
+                handle,
+                chunk.chunk_id,
+                node_id=node.node_id,
+                epoch=epoch,
+                generation=generation,
+                resources=resources,
+                at=self._clock.now(),
+            )
 
     def _generation(self, chunk_id: str, node_id: str, epoch: int) -> int | None:
         """The generation the visit submits at: 0 when never submitted, the next when its own turn closed its newest

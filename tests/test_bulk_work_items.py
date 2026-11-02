@@ -92,7 +92,7 @@ def test_an_unconfigured_source_and_a_failing_source_each_error_only_their_own_r
     good, bad, gone = _chunk(hub, "widget", "1"), _chunk(hub, "flaky", "9"), _chunk(hub, "widget", "2")
     # A pointer to a source nothing configures: seed it onto a chunk directly.
     hub_store = hub_store_connections(hub.engine)
-    refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
+    refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store))
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([gone]) as handle:
         refs.add_work_refs_locked(handle, gone, [WorkRef(source="retired", ref="5")], at=hub.clock.now())
 
@@ -124,7 +124,7 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
         )
         store = hub_store_connections(hub.engine)
         items = WorkItemStore(store)
-        refs = ChunkWorkRefsStore(store, hub.clock, facts=ChunkFactsStore(store, hub.clock))
+        refs = ChunkWorkRefsStore(store, hub.clock, facts=ChunkFactsStore(store))
         seed_runner(hub, "runner-x", name="r-x", register=False)
         ids: list[str] = []
         for i in range(count):

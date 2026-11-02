@@ -276,7 +276,9 @@ def test_retire_reads_its_routes_records_once_across_route_counts(
         registration = hub.services.registry.get_runner("runner-a")
         assert registration is not None
         monkeypatch.setattr(
-            DetachService, "release_held", lambda self, chunk, *, runner_id: released.append(chunk.chunk_id)
+            DetachService,
+            "release_held",
+            lambda self, chunk, *, runner_id, expected_route, retirement_id: released.append(chunk.chunk_id),
         )
         counts.append(
             count_queries(

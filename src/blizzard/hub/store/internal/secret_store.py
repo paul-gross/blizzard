@@ -27,10 +27,12 @@ from blizzard.hub.domain.config.secrets import (
     SealedValue,
     SecretAlreadyExists,
     SecretMetadata,
+    SecretRetired,
     SecretRevisionConflict,
     SecretRotationConflict,
     require_unreferenced,
 )
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_referrers import active_referrers
@@ -91,10 +93,9 @@ def insert_secret(
 def record_lifecycle_fact(
     conn: Connection, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange
 ) -> None:
-    """The retire/enable body, inside the caller's transaction. Retiring locks the secret row,
-    then refuses while an active record references it."""
+    """Serialize lifecycle facts with referrer decisions and refuse retirement while referenced."""
+    lock_secret_row(conn, name)
     if retired:
-        lock_secret_row(conn, name)
         require_unreferenced(name, active_referrers(conn, [name])[name])
     conn.execute(
         statements_of(conn).insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
@@ -111,6 +112,7 @@ class SecretStore:
     def create(self, name: str, *, sealed: SealedValue, at: datetime, by: str, change: ConfigChange) -> SecretMetadata:
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
+                lock_config_authoring(conn)
                 insert_secret(conn, name, sealed=sealed, at=at, by=by, change=change)
         except IntegrityError as exc:
             raise SecretAlreadyExists(name) from exc
@@ -120,6 +122,10 @@ class SecretStore:
         self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
     ) -> SecretMetadata:
         with self._store.write("replace") as conn:
+            lock_config_authoring(conn)
+            lock_secret_row(conn, name)
+            if secret_unavailable(conn, name) is True:
+                raise SecretRetired(name)
             moved = conn.execute(
                 self._store.update(secrets)
                 .where(secrets.c.name == name, secrets.c.revision == from_revision)
@@ -210,7 +216,8 @@ class SecretStore:
 
     def reseal(self, changes: list[Reseal]) -> None:
         with self._store.write("reseal", expect=(SecretRotationConflict,)) as conn:
-            for change in changes:
+            lock_config_authoring(conn)
+            for change in sorted(changes, key=lambda change: change.name):
                 moved = conn.execute(
                     self._store.update(secrets)
                     .where(
@@ -225,6 +232,7 @@ class SecretStore:
 
     def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
         with self._store.write("record_lifecycle") as conn:
+            lock_config_authoring(conn)
             record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
 
     @staticmethod

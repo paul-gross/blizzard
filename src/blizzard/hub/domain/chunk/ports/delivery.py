@@ -69,7 +69,8 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
     ) -> bool:
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
-        pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
+        pointer.source, pointer.ref, outcome)``, with at most one terminal outcome per pointer.
+        ``reason`` carries the failure/gone
         detail; ``None`` for ``closed``. A ``closed``/``gone``/``skipped`` outcome also retires the
         matching pending ``close_intents`` row, in the same transaction, whether or not
         this call wrote a fresh outcome row — a replay finishes an interrupted retirement;

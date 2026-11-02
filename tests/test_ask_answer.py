@@ -433,6 +433,21 @@ def test_a_restart_after_the_answer_supersedes_its_delivery(tmp_path: Path) -> N
     assert question["delivered_at"] is None
 
 
+def test_restart_answer_wins_over_a_later_direct_answer(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _ask(hub, chunk_id)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
+
+    response = hub.client.post("/api/questions/qn_1/answers", json={"answer": "late"})
+
+    assert response.status_code == 409
+    question = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]
+    assert question["answered"] is True
+    assert question["answer"] != "late"
+
+
 @pytest.mark.parametrize("end", ["stop", "complete"])
 def test_an_answer_on_an_ended_chunk_is_refused_and_the_question_stays_unanswered(tmp_path: Path, end: str) -> None:
     hub = build_hub(tmp_path)

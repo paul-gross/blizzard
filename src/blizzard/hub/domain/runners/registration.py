@@ -206,6 +206,7 @@ class RunnerRegistration:
     retired: bool = False
     retired_at: datetime | None = None
     retired_by: str | None = None
+    lifecycle_generation: int | None = None
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
     #: The served declaration: every entry the runner declared, each with the project it resolved to. Empty serves
@@ -825,9 +826,32 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         the freshly-written ``runner_local_pause_facts.id``."""
         ...
 
-    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
+    def record_lifecycle(
+        self,
+        runner_id: str,
+        *,
+        retired: bool,
+        at: datetime,
+        by: str,
+        force: bool = True,
+        expected_generation: int | None = None,
+    ) -> int:
         """Append a retire/reinstate fact; ``retired`` derives from the newest. Returns the
         freshly-written ``runner_lifecycle_facts.id`` — always writes, never a no-op."""
+        ...
+
+    def record_retirement(
+        self,
+        runner_id: str,
+        *,
+        at: datetime,
+        by: str,
+        force: bool,
+        expected_registration: RunnerRegistration | None = None,
+        expected_host_id: str | None = None,
+        expected_host_retired: bool = True,
+    ) -> tuple[int | None, int | None, int] | None:
+        """Decide and revoke atomically; skip a host sweep if its membership is no longer current."""
         ...
 
     def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
@@ -899,6 +923,21 @@ class RunnerNotRetired(Exception):
     def __init__(self, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is not retired")
         self.runner_id = runner_id
+
+
+class RunnerRetirementChanged(RunnerNotRetired):
+    """The retirement observed by reinstatement has been superseded."""
+
+    def __init__(self, runner_id: str) -> None:
+        Exception.__init__(self, f"runner {runner_id} retirement changed — retry reinstatement")
+        self.runner_id = runner_id
+
+
+class RunnerLifecycleChanged(Exception):
+    """The lifecycle observed by a retirement has changed; a fresh decision is required."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} lifecycle changed — retry retirement")
 
 
 class UnregisteredRedirect(Exception):

@@ -54,6 +54,27 @@ def _resolve(store: ChunkStores, decision_id: str, *, choice: str = "pass", by: 
     store.decisions.record_decision_resolution(decision_id, choice=choice, resolved_by=by, at=_T0)
 
 
+def test_resolution_first_write_wins(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _mint(store, "ch_1")
+    _record_decision(store, "ch_1", "dec_1")
+    assert (
+        store.decisions.record_decision_resolution(
+            "dec_1", choice="first", resolved_by="one", at=_T0, overrode_red_checks=True, note="reason"
+        )
+        is True
+    )
+    assert store.decisions.record_decision_resolution("dec_1", choice="second", resolved_by="two", at=_T0) is False
+    decision = store.decisions.get_decision("dec_1")
+    assert decision is not None
+    assert (decision.resolved_choice, decision.resolved_by, decision.overrode_red_checks, decision.note) == (
+        "first",
+        "one",
+        True,
+        "reason",
+    )
+
+
 def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
     """Closes ``decision_id`` — the movement fact `decision_for_chunk`'s
     ``_not_closed_clause`` reads to drop it from a chunk's live decision."""

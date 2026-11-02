@@ -14,10 +14,12 @@ from typing import Any
 from sqlalchemy import Connection, Row, desc
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
+from blizzard.hub.domain.chunk.ingest import require_unheld
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     HubWorkItem,
@@ -30,12 +32,19 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
+from blizzard.hub.store.internal.chunk_dependencies_store import (
+    DEPENDENCY_GRAPH_LOCK_KEY,
+    DEPENDENCY_GRAPH_LOCK_NAMESPACE,
+    release_outgoing_edges_conn,
+)
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     insert_chunk_rows,
+    lock_keys,
     record_deleted_row,
 )
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
@@ -48,6 +57,13 @@ class WorkItemStore:
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
+
+    def _admit_chunk(self, conn: Connection, chunk: Chunk, at: datetime) -> None:
+        # Same first lock as group and ingest; the guard must run in this transaction.
+        lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
+        clock = FixedClock(at)
+        refs = ChunkWorkRefsStore(self._store, clock, facts=ChunkFactsStore(self._store))
+        require_unheld(chunk.work_refs, refs.live_holders_conn(conn, chunk.work_refs))
 
     def get(self, source: str, ref: str) -> HubWorkItem | None:
         with self._store.read("get") as conn:
@@ -107,6 +123,7 @@ class WorkItemStore:
         :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.create_with_chunk`'s
         atomicity contract."""
         with self._store.write("create_with_chunk") as conn:
+            self._admit_chunk(conn, chunk, at)
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -151,6 +168,7 @@ class WorkItemStore:
         the item's run columns, on one ``engine.begin()`` connection — a routine run's own
         one-act mint. No promote rows are written: the chunk rests ``not_ready``."""
         with self._store.write("create_run_with_chunk") as conn:
+            self._admit_chunk(conn, chunk, at)
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -299,6 +317,7 @@ class WorkItemStore:
         :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
         already-closed proposal mints nothing."""
         with self._store.write("accept_create") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
             if not insert_garden_proposal_closure_row(
                 conn,
                 proposal_id=proposal_id,
@@ -310,6 +329,7 @@ class WorkItemStore:
                 pointer=pointer,
             ):
                 return None
+            self._admit_chunk(conn, chunk, at)
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,

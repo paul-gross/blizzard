@@ -133,9 +133,13 @@ def _publish_host_retirement(
     changes: dict[str, chunk_events.ChunkChanged],
 ) -> None:
     """The frames for what a host retire committed — each runner it retired, and the host's own fact."""
-    for registration in under:
-        if registration.runner_id in outcome.runners:
-            publish_retirement(services, registration, outcome.runners[registration.runner_id], by=by, changes=changes)
+    registrations = {registration.runner_id: registration for registration in under}
+    missing = outcome.runners.keys() - registrations.keys()
+    registrations.update(services.registry.get_runners(missing))
+    for runner_id, result in outcome.runners.items():
+        registration = registrations.get(runner_id)
+        if registration is not None:
+            publish_retirement(services, registration, result, by=by, changes=changes)
     if outcome.fact_id is not None:
         services.events.publish_host_changed(
             host.host_id, kind="retired", host_name=host.name, by=by, key=f"host_lifecycle_facts:{outcome.fact_id}"
@@ -215,6 +219,8 @@ def release_runners(host_id: str, request: HostRunnersRequest, services: Service
         services.host_enrollment.release(host, request.runner_ids, by=request.by)
     except (UnknownRunner, RunnerNotUnderHost) as exc:
         raise _unknown_runner(exc) from exc
+    except HostRetired as exc:
+        raise _conflict(exc) from exc
     services.events.publish_host_changed(host_id, kind="released", host_name=host.name, by=request.by)
     return _reread(services, host_id)
 

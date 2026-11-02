@@ -207,22 +207,27 @@ class DecisionService:
         ``decision_id``.
         :meth:`GateDecision.require_resolvable` decides the refusals; the chunk's derived
         status is read here for it."""
-        facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
-        decision.require_resolvable(choice=choice, chunk_status=facts.status())
-        won = self._decisions.record_decision_resolution(
-            decision.decision_id,
-            choice=choice,
-            resolved_by=resolved_by,
-            at=self._clock.now(),
-            overrode_red_checks=decision.overrides_red_checks(choice),
-            note=person_note(note),
-        )
-        if won:
+        with self._exclusive.locked([decision.chunk_id]) as handle:
+            current = self._decisions.lock_and_get_decision(handle, decision.decision_id)
+            if current is None:
+                raise ChunkNotFound(decision.chunk_id)
+            facts = ChunkFacts.or_default(handle.facts(decision.chunk_id))
+            current.require_resolvable(choice=choice, chunk_status=facts.status())
+            if current.resolved_choice is not None:
+                return ResolutionResult(
+                    resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or ""
+                )
+            won = self._decisions.record_decision_resolution_locked(
+                handle,
+                decision.decision_id,
+                choice=choice,
+                resolved_by=resolved_by,
+                at=self._clock.now(),
+                overrode_red_checks=current.overrides_red_checks(choice),
+                note=person_note(note),
+            )
+            assert won
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
-        # Lost the CAS — report the winner so the loser is told who resolved.
-        current = self._decisions.get_decision(decision.decision_id)
-        assert current is not None and current.resolved_choice is not None
-        return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")
 
 
 class RequeueService:

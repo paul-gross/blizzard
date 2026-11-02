@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import overload
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -72,6 +73,13 @@ class RetireOutcome:
 
     fact_id: int | None
     revocation_id: int | None
+    released: tuple[ReleasedRoute, ...]
+
+
+@domain_model
+@dataclass(frozen=True)
+class ReinstateOutcome:
+    fact_id: int
     released: tuple[ReleasedRoute, ...]
 
 
@@ -223,7 +231,29 @@ class FleetService:
         self._retired.refuse_if_retired(runner_id, action="heartbeat")
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
-    def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
+    @overload
+    def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome: ...
+
+    @overload
+    def retire(
+        self,
+        registration: RunnerRegistration,
+        *,
+        by: str,
+        force: bool,
+        expected_host_id: str,
+        expected_host_retired: bool = True,
+    ) -> RetireOutcome | None: ...
+
+    def retire(
+        self,
+        registration: RunnerRegistration,
+        *,
+        by: str,
+        force: bool,
+        expected_host_id: str | None = None,
+        expected_host_retired: bool = True,
+    ) -> RetireOutcome | None:
         """Record the fact and revoke the token first, so claims are refused from that instant,
         then release every held route through ``DetachService`` — a terminal chunk holds none.
         The registration decides the fact (:meth:`RunnerRegistration.retire`); a re-run writes
@@ -231,14 +261,26 @@ class FleetService:
         pre-lock holdings read."""
         runner_id = registration.runner_id
         now = self._clock.now()
-        fact = registration.retire(self.holdings(runner_id), force=force, by=by, at=now)
-        fact_id = None
-        if fact is not None:
-            fact_id = self._registry.record_lifecycle(runner_id, retired=fact.retired, at=fact.at, by=fact.by)
-        revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
-        routes = self._routes.live_routes_of_runner(runner_id)
-        records = self._records.get_many([route.chunk_id for route in routes])
-        released = tuple(self._release(route, records.get(route.chunk_id)) for route in routes)
+        if expected_host_id is None:
+            registration.retire(self.holdings(runner_id), force=force, by=by, at=now)
+        if expected_host_id is None:
+            decision = self._registry.record_retirement(
+                runner_id, at=now, by=by, force=force, expected_registration=registration
+            )
+        else:
+            decision = self._registry.record_retirement(
+                runner_id,
+                at=now,
+                by=by,
+                force=force,
+                expected_registration=registration,
+                expected_host_id=expected_host_id,
+                expected_host_retired=expected_host_retired,
+            )
+        if decision is None:
+            return None
+        fact_id, revocation_id, retirement_id = decision
+        released = self._sweep_retirement(runner_id, retirement_id=retirement_id)
         outcome = RetireOutcome(
             fact_id=fact_id, revocation_id=revocation_id, released=tuple(r for r in released if r is not None)
         )
@@ -258,21 +300,46 @@ class FleetService:
         facts = self._facts.status_facts_for([route.chunk_id for route in routes])
         return held_routes(routes, {chunk_id: f.status() for chunk_id, f in facts.items()})
 
-    def _release(self, route: Route, chunk: Chunk | None) -> ReleasedRoute | None:
+    def _release(self, route: Route, chunk: Chunk | None, *, retirement_id: int) -> ReleasedRoute | None:
         if chunk is None:  # pragma: no cover - a routed chunk always has its record
             return None
-        released_id = self._detach.release_held(chunk, runner_id=route.runner_id)
+        released_id = self._detach.release_held(
+            chunk, runner_id=route.runner_id, expected_route=route, retirement_id=retirement_id
+        )
         if released_id is None:  # released (or re-claimed elsewhere) since the holdings read
             return None
         return ReleasedRoute(chunk_id=route.chunk_id, released_id=released_id)
 
-    def reinstate(self, registration: RunnerRegistration, *, by: str) -> int:
-        """Record a ``retired=False`` fact, returning its id. The runner stays unenrolled —
+    def _sweep_retirement(self, runner_id: str, *, retirement_id: int) -> tuple[ReleasedRoute | None, ...]:
+        routes = self._routes.live_routes_of_runner(runner_id)
+        records = self._records.get_many([route.chunk_id for route in routes])
+        return tuple(self._release(route, records.get(route.chunk_id), retirement_id=retirement_id) for route in routes)
+
+    def reinstate(
+        self, registration: RunnerRegistration, *, by: str, released: list[ReleasedRoute] | None = None
+    ) -> ReinstateOutcome:
+        """Record a ``retired=False`` fact and return it with the swept releases. The runner stays unenrolled —
         its token was revoked at retire — so the operator enrolls it afresh."""
         fact = registration.reinstate(by=by, at=self._clock.now())
-        fact_id = self._registry.record_lifecycle(fact.runner_id, retired=fact.retired, at=fact.at, by=fact.by)
+        # Finish an interrupted retirement before changing its generation. Each release takes the
+        # chunk lock before the registry lock and fences both the route and retirement generation.
+        assert registration.lifecycle_generation is not None
+        committed = released if released is not None else []
+        routes = self._routes.live_routes_of_runner(registration.runner_id)
+        records = self._records.get_many([route.chunk_id for route in routes])
+        for route in routes:
+            release = self._release(route, records.get(route.chunk_id), retirement_id=registration.lifecycle_generation)
+            if release is not None:
+                committed.append(release)
+        fact_id = self._registry.record_lifecycle(
+            fact.runner_id,
+            retired=fact.retired,
+            at=fact.at,
+            by=fact.by,
+            expected_generation=registration.lifecycle_generation,
+        )
         _log.info("runner reinstated", runner_id=registration.runner_id, by=by)
-        return fact_id
+        return ReinstateOutcome(fact_id=fact_id, released=tuple(committed))
 
     def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
         """Revoke the runner's current token, leaving it added; returns the revocation id.

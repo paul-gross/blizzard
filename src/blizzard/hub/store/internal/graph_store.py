@@ -296,6 +296,7 @@ class GraphStore:
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         with self._store.write("mint") as conn:
+            lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [graph.name])
             self._mint_conn(conn, graph, definition_yaml=definition_yaml, at=at)
 
     def _mint_conn(self, conn: Connection, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
@@ -576,6 +577,13 @@ class GraphStore:
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins."""
         with self._store.write("record_lifecycle") as conn:
+            # Names are immutable. Resolve the key before taking the same lock that
+            # protects the default graph's enabled-by-name decision.
+            name = conn.execute(
+                self._store.select(graphs, graphs.c.name).where(graphs.c.graph_id == graph_id)
+            ).scalar_one_or_none()
+            if name is not None:
+                lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
             conn.execute(
                 self._store.insert(graph_lifecycle_facts).values(
                     graph_id=graph_id, retired=retired, set_at=at, set_by=by

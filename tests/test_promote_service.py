@@ -74,7 +74,7 @@ class _FakeChunkRepo:
         return self.promoted_ats_by_chunk
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked_queue(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _LockedFacts(self.facts))
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:

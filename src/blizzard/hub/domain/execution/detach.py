@@ -74,17 +74,21 @@ class DetachService:
                 handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.DETACH
             )
 
-    def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
+    def release_held(self, chunk: Chunk, *, runner_id: str, expected_route: Route, retirement_id: int) -> int | None:
         """:meth:`detach`, only while ``runner_id`` still holds the chunk — retirement's
         release pass. ``None`` when the route is gone, another runner's by now, or left on a
         terminal chunk, which holds no claim to release."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             route = handle.route_of(chunk.chunk_id)
             status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
-            if not releasable_by(route, status, runner_id=runner_id):
+            if (
+                not releasable_by(route, status, runner_id=runner_id)
+                or route is None
+                or route.route_id != expected_route.route_id
+            ):
                 return None
-            return self._route.record_route_released_locked(
-                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.RETIREMENT
+            return self._route.record_retirement_release_locked(
+                handle, expected_route, retirement_id=retirement_id, at=self._clock.now()
             )
 
 

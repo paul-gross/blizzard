@@ -79,11 +79,13 @@ def postgres_database(server_url: str) -> Iterator[str]:
         server = server.set(drivername="postgresql+psycopg")
     name = f"rehearsal_{uuid.uuid4().hex[:12]}"
     admin = sa.create_engine(server, isolation_level="AUTOCOMMIT")
-    with admin.connect() as connection:
-        connection.execute(sa.text(f'CREATE DATABASE "{name}"'))
     try:
-        yield server.set(database=name).render_as_string(hide_password=False)
-    finally:
         with admin.connect() as connection:
-            connection.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+            connection.execute(sa.text(f'CREATE DATABASE "{name}"'))
+        try:
+            yield server.set(database=name).render_as_string(hide_password=False)
+        finally:
+            with admin.connect() as connection:
+                connection.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+    finally:
         admin.dispose()

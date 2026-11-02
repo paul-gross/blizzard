@@ -30,7 +30,7 @@ def build_chunk_stores(store: ScopedConnections, clock: IClock, *, registry: Run
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
     first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
     their own read collaborator; ``exclusive`` holds the caller's shared ``registry``."""
-    facts = ChunkFactsStore(store, clock)
+    facts = ChunkFactsStore(store)
     record = ChunkRecordStore(store, clock)
     dependencies = ChunkDependenciesStore(store, clock)
     work_refs = ChunkWorkRefsStore(store, clock, facts=facts)

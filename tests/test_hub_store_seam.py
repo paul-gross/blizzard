@@ -93,7 +93,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkFactsStore",
-        lambda store: ChunkFactsStore(store, FixedClock(_NOW)),
+        lambda store: ChunkFactsStore(store),
         lambda a: a.load_facts("ch_x"),
         "load_facts",
     ),
@@ -111,7 +111,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkWorkRefsStore",
-        lambda store: ChunkWorkRefsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda store: ChunkWorkRefsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store)),
         # `find_live_holder` delegates to `live_holders([pointer])`, so the
         # driver fault it raises wraps `live_holders`' own operation name.
         lambda a: a.find_live_holder(WorkRef(source="s", ref="1")),
@@ -155,7 +155,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkEscalationsStore",
-        lambda store: ChunkEscalationsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda store: ChunkEscalationsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store)),
         lambda a: a.list_open_escalations(),
         "_newest_escalation_per_chunk",
     ),

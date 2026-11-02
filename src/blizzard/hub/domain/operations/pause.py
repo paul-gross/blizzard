@@ -55,11 +55,14 @@ class PauseService:
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             require_pausable(chunk.chunk_id, facts)
-            return self._lifecycle.record_pause_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
+            return self._lifecycle.record_pause_locked(handle, chunk.chunk_id, paused=True, by=by, at=self._clock.now())
 
     def resume(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.resumed`` — idempotent, never refused (:attr:`ChunkVerb.RESUME`).
 
         Returns the freshly-written ``chunk_pause_facts.id`` — always a fresh row, never a
         skipped write."""
-        return self._lifecycle.record_pause(chunk.chunk_id, paused=False, by=by, at=self._clock.now())
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            return self._lifecycle.record_pause_locked(
+                handle, chunk.chunk_id, paused=False, by=by, at=self._clock.now()
+            )

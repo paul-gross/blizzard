@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import HubHarness, build_hub, emitted_events, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -114,6 +115,41 @@ def test_usage_ingest_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert len(detail["usage"]) == 1  # not doubled
+    assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
+
+
+def test_usage_applied_before_retirement_is_marked_and_not_replayed(tmp_path: Path, monkeypatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    record = hub.services.facts._usage.record_usage
+    registry = hub.services.registry
+    assert isinstance(registry, RunnerRegistryStore)
+
+    def record_then_retire(*args, **kwargs):
+        result = record(*args, **kwargs)
+        registry.record_lifecycle("r1", retired=True, at=hub.services.clock.now(), by="test")
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(hub.services.facts._usage, "record_usage", record_then_retire)
+        first = _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2)
+    assert first["applied"] == [2] and first["high_water"] == 2
+
+    # A later admitted replay must see the durable mark, not apply the spend again.
+    registration = hub.services.registry.get_runner("r1")
+    assert registration is not None
+    registry.record_lifecycle(
+        "r1",
+        retired=False,
+        at=hub.services.clock.now(),
+        by="test",
+        expected_generation=registration.lifecycle_generation,
+    )
+    replay = _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2)
+    assert replay["already_applied"] == [2] and replay["applied"] == []
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len(detail["usage"]) == 1
     assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
 
 

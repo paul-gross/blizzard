@@ -643,7 +643,7 @@ class GroupService:
         and each folded chunk's standing dependency edges. Refused before any
         write when a merge id belongs to another project (:class:`ChunksInDifferentProjects`)
         or the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
-        with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
+        with self._cycle_lock, self._exclusive.locked_dependency_graph([survivor_id, *merge_ids]) as handle:
             return self._group_locked(handle, survivor_id, merge_ids)
 
     def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:

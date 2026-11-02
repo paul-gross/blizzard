@@ -131,6 +131,7 @@ class ChunkDeliveryStore:
         close_decision: CloseEnqueueDecision,
     ) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:
+            lock_chunk_row(conn, chunk_id)
             conn.execute(
                 self._store.insert(s.delivery_repo_landed).values(
                     chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, repository_id=repository_id, landed_at=at
@@ -140,6 +141,7 @@ class ChunkDeliveryStore:
 
     def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None:
         with self._store.write("record_delivery_landed") as conn:
+            lock_chunk_row(conn, chunk_id)
             conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
             enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
 
@@ -199,12 +201,18 @@ class ChunkDeliveryStore:
         """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s
         `IWriteChunkDeliveryRepository.record_work_item_closure`."""
         with self._store.write("record_work_item_closure") as conn:
+            lock_chunk_row(conn, chunk_id)
+            outcomes = (
+                [item.value for item in TERMINAL_CLOSE_OUTCOMES]
+                if outcome in TERMINAL_CLOSE_OUTCOMES
+                else [outcome.value]
+            )
             already = conn.execute(
                 self._store.select(s.work_item_closures, s.work_item_closures.c.id).where(
                     (s.work_item_closures.c.chunk_id == chunk_id)
                     & (s.work_item_closures.c.source == pointer.source)
                     & (s.work_item_closures.c.ref == pointer.ref)
-                    & (s.work_item_closures.c.outcome == outcome.value)
+                    & s.work_item_closures.c.outcome.in_(outcomes)
                 )
             ).first()
             wrote = already is None

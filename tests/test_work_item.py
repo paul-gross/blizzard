@@ -125,7 +125,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     )
     hub_store = hub_store_connections(hub.engine)
     items = WorkItemStore(hub_store)
-    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
+    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store))
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
     hub_item = seed_work_item(
         items,
@@ -198,7 +198,7 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget")})
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub_store = hub_store_connections(hub.engine)
-    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
+    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store))
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
         work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
 

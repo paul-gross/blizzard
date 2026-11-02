@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import FixedClock
@@ -74,6 +74,26 @@ def test_add_then_get_round_trips(tmp_path: Path) -> None:
 def test_get_unknown_id_is_none(tmp_path: Path) -> None:
     store = _store(tmp_path)
     assert store.get("fin_ghost") is None
+
+
+def test_lock_findings_acquires_distinct_rows_in_id_order(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    for fid in ("fin_a", "fin_b", "fin_c"):
+        _add(store, project, finding_id=fid)
+    locked: list[str] = []
+
+    def capture(conn: object, cursor: object, statement: str, parameters: tuple, context: object, many: bool) -> None:
+        if statement.lstrip().upper().startswith("UPDATE FINDINGS"):
+            locked.append(next(value for value in parameters if value in {"fin_a", "fin_b", "fin_c"}))
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with hub_store_connections(engine).write("test_order") as conn:
+            lock_findings(conn, ["fin_c", "fin_a", "fin_b", "fin_a"])
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert locked == ["fin_a", "fin_b", "fin_c"]
 
 
 def test_get_many_returns_only_the_known_ids_keyed_by_finding_id(tmp_path: Path) -> None:

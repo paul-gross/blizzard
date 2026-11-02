@@ -48,6 +48,16 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, state
 _DECISION_CLOSURE_TABLES = (s.transitions, s.chunk_migrations, s.escalations, s.chunk_restarts)
 
 
+def lock_decision_row(conn: Connection, decision_id: str) -> None:
+    """Serialize resolution checks on the decision, after tenant admission and before reading the guard."""
+    conn.execute(
+        statements_of(conn)
+        .update(s.decisions)
+        .where(s.decisions.c.decision_id == decision_id)
+        .values(submitted_at=s.decisions.c.submitted_at)
+    )
+
+
 class ChunkDecisionsStore:
     """The chunk's decision facts."""
 
@@ -61,6 +71,14 @@ class ChunkDecisionsStore:
                 self._store.select(s.decisions).where(s.decisions.c.decision_id == decision_id)
             ).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
+
+    def lock_and_get_decision(self, handle: ILockedChunkRead, decision_id: str) -> GateDecision | None:
+        conn = conn_of(handle)
+        lock_decision_row(conn, decision_id)
+        row = conn.execute(
+            self._store.select(s.decisions).where(s.decisions.c.decision_id == decision_id)
+        ).one_or_none()
+        return self._decision_row(conn, row) if row is not None else None
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> GateDecision | None:
         with self._store.read("find_decision") as conn:
@@ -370,24 +388,67 @@ class ChunkDecisionsStore:
         note: str | None = None,
     ) -> bool:
         with self._store.write("record_decision_resolution") as conn:
-            existing = conn.execute(
-                self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
-                    s.decision_resolutions.c.decision_id == decision_id
-                )
-            ).one_or_none()
-            if existing is not None:
-                return False  # first-write-wins: the loser is told who won
-            conn.execute(
-                self._store.insert(s.decision_resolutions).values(
-                    decision_id=decision_id,
-                    choice=choice,
-                    resolved_by=resolved_by,
-                    resolved_at=at,
-                    overrode_red_checks=overrode_red_checks,
-                    note=note,
-                )
+            lock_decision_row(conn, decision_id)
+            return self._record_resolution_conn(
+                conn,
+                decision_id,
+                choice=choice,
+                resolved_by=resolved_by,
+                at=at,
+                overrode_red_checks=overrode_red_checks,
+                note=note,
             )
-            return True
+
+    def record_decision_resolution_locked(
+        self,
+        handle: ILockedChunkRead,
+        decision_id: str,
+        *,
+        choice: str,
+        resolved_by: str,
+        at: datetime,
+        overrode_red_checks: bool = False,
+        note: str | None = None,
+    ) -> bool:
+        return self._record_resolution_conn(
+            conn_of(handle),
+            decision_id,
+            choice=choice,
+            resolved_by=resolved_by,
+            at=at,
+            overrode_red_checks=overrode_red_checks,
+            note=note,
+        )
+
+    def _record_resolution_conn(
+        self,
+        conn: Connection,
+        decision_id: str,
+        *,
+        choice: str,
+        resolved_by: str,
+        at: datetime,
+        overrode_red_checks: bool,
+        note: str | None,
+    ) -> bool:
+        existing = conn.execute(
+            self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
+                s.decision_resolutions.c.decision_id == decision_id
+            )
+        ).one_or_none()
+        if existing is not None:
+            return False  # first-write-wins: the loser is told who won
+        conn.execute(
+            self._store.insert(s.decision_resolutions).values(
+                decision_id=decision_id,
+                choice=choice,
+                resolved_by=resolved_by,
+                resolved_at=at,
+                overrode_red_checks=overrode_red_checks,
+                note=note,
+            )
+        )
+        return True
 
     def _decision_row(self, conn: Connection, row: Row[Any]) -> GateDecision:
         resolution = conn.execute(

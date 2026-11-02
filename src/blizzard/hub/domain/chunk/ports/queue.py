@@ -45,7 +45,9 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``) — a crash
         lands both facts or neither, never one without the other. Not idempotent: the caller
         judged, under the same lock, that the chunk is not currently promoted. Returns the freshly-written
-        ``chunk_promoted.id``."""
+        ``chunk_promoted.id``. The handle must come from ``locked_queue``, which locks the
+        queue key before the chunk. This protects position writes, not a ranking resolved
+        before the lock, which may already be stale."""
         ...
 
     def record_demote_with_position_locked(
@@ -55,7 +57,9 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         connection (``bzh:store-exclusive-write``) — a crash lands both
         facts or neither, never a demoted chunk ranked by its stale ready-queue position. Not idempotent:
         the caller judged, under the same lock, that the chunk is currently promoted. Returns the
-        freshly-written ``chunk_demoted.id``."""
+        freshly-written ``chunk_demoted.id``. The handle must come from ``locked_queue``,
+        which locks the queue key before the chunk. This protects position writes, not a
+        ranking resolved before the lock, which may already be stale."""
         ...
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:

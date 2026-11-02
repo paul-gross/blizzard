@@ -20,8 +20,11 @@ from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
+from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+
+DEPENDENCY_GRAPH_LOCK_NAMESPACE = "dependency_graph"
+DEPENDENCY_GRAPH_LOCK_KEY = "standing"
 
 
 class ChunkDependenciesStore:
@@ -120,10 +123,10 @@ class ChunkDependenciesStore:
     def release(
         self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge | None:
-        """Read-then-write on the same connection, so there is no window between the
-        two; see
+        """Lock the graph key before the read-then-write on the same connection; see
         :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IWriteChunkDependenciesRepository.release`."""
         with self._store.write("release") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
             if row is None:
                 return None

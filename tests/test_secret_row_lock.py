@@ -106,6 +106,9 @@ _WRITES: dict[str, Callable[[Connection], None]] = {
     "secret retire": lambda conn: secret_store.record_lifecycle_fact(
         conn, "gh", retired=True, at=_AT, by="op", change=_CHANGE
     ),
+    "secret enable": lambda conn: secret_store.record_lifecycle_fact(
+        conn, "gh", retired=False, at=_AT, by="op", change=_CHANGE
+    ),
     "work-source create": lambda conn: work_source_record_store.insert_record(conn, _SOURCE, _CHANGE),
     "work-source edit": lambda conn: work_source_record_store.update_record(conn, _SOURCE, 1, None, _CHANGE),
     "work-source enable": lambda conn: work_source_record_store.record_lifecycle_fact(

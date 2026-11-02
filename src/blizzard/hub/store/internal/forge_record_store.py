@@ -40,6 +40,7 @@ from blizzard.hub.domain.config.forges import (
     require_unused,
     resolve_forge_reference,
 )
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.forge_referrers import active_referrers
 from blizzard.hub.store.internal.former_slugs import SlugTables
@@ -135,6 +136,7 @@ def _columns(record: ConfiguredForge) -> dict[str, object]:
 def insert_forge(conn: Connection, record: ConfiguredForge, change: ConfigChange) -> None:
     """The create body, inside the caller's transaction. :class:`ForgeSlugTaken` or :class:`ForgeOriginTaken` when
     refused."""
+    _SLUGS.lock(conn, record.slug)
     _SLUGS.claim(conn, record.forge_id, record.slug)
     holder = _origin_holder(conn, record)
     if holder is not None:
@@ -161,6 +163,7 @@ def update_forge(
     rewriting every referrer's address columns."""
     lock_forge_row(conn, record.forge_id)
     if left_slug is not None:
+        _SLUGS.lock(conn, record.slug, left_slug)
         _SLUGS.claim(conn, record.forge_id, record.slug)
     holder = _origin_holder(conn, record)
     if holder is not None:
@@ -257,6 +260,7 @@ class ForgeRecordStore:
     def create(self, record: ConfiguredForge, *, change: ConfigChange) -> ConfiguredForge:
         try:
             with self._store.write("create", expect=(ForgeSlugTaken, ForgeOriginTaken, IntegrityError)) as conn:
+                lock_config_authoring(conn)
                 insert_forge(conn, record, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
@@ -269,6 +273,7 @@ class ForgeRecordStore:
             with self._store.write(
                 "update", expect=(ForgeSlugTaken, ForgeOriginTaken, ConfigRevisionConflict, IntegrityError)
             ) as conn:
+                lock_config_authoring(conn)
                 update_forge(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
@@ -291,6 +296,7 @@ class ForgeRecordStore:
         change: ConfigChange,
     ) -> ConfiguredForge:
         with self._store.write("record_lifecycle", expect=(ForgeInUse, ConfigRevisionConflict)) as conn:
+            lock_config_authoring(conn)
             record_forge_lifecycle(
                 conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )

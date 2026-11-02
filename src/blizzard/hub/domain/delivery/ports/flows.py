@@ -123,7 +123,7 @@ class IFlowChangePublisher(Protocol):
 
 
 class IWriteFlows(IReadFlows, Protocol):
-    """Read-write flows access. Every write runs under the tenant row lock, so arrivals and closures serialize."""
+    """Read-write flows access. Decisions serialize by chunk and resource; arrivals also serialize per tenant."""
 
     def submit(
         self,
@@ -140,10 +140,24 @@ class IWriteFlows(IReadFlows, Protocol):
         when that generation of the visit is already submitted."""
         ...
 
+    def submit_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        resources: Sequence[FlowResource],
+        at: datetime,
+    ) -> Submission | None:
+        """Submit on the chunk's locked transaction; duplicates write nothing."""
+        ...
+
     def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
         """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds, answering those facts.
-        Returns ``None``, writing nothing, when a closure already exists or the submission has an open turn, whose end
-        writes the closure."""
+        Returns ``None``, writing nothing, when the submission is absent, a closure already exists, or it has an open
+        turn, whose end writes the closure."""
         ...
 
     def take_turn(
@@ -155,9 +169,10 @@ class IWriteFlows(IReadFlows, Protocol):
         at: datetime,
     ) -> Turn | None:
         """Start a turn of the submission with a ``turn-started`` fact per flow it holds, in one transaction under the
-        tenant row lock and each held resource's lock. Returns ``None``, writing nothing, unless the submission is open
-        with no open turn, no flow it holds has an open turn, and every open submission ahead of it on those flows is
-        in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at all.
+        chunk's decision lock and each held resource's lock. Returns ``None``, writing nothing, unless the submission
+        is open with no open turn, no flow it holds has an open turn, and every open submission ahead of it on those
+        flows is in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at
+        all.
 
         The same transaction gives the submission terms for each repository it holds and has none for: those an
         earlier generation of the visit took, else the candidate in ``terms`` — so a retried turn keeps what its first
@@ -197,7 +212,8 @@ class IWriteFlows(IReadFlows, Protocol):
         """A turn's merge in one transaction admitted past the fence: the ``merged/<repo>`` marker, its
         ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the landing's flow and its
         ``flow-landed`` event row. A replay that finds the marker writes nothing. Answers whether the fence would have
-        refused, and the event row it wrote."""
+        refused, and the event row it wrote. A new landing requires an existing submission of the chunk holding the
+        named flow; mismatches raise ``ValueError`` before any landing rows are written."""
         ...
 
     def end_turn_interrupted(

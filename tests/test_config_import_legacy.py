@@ -15,8 +15,15 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.app import import_legacy_config
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.domain.config.carry_over import ImportStatus, LegacyImportRefused
+from blizzard.hub.domain.config.carry_over import (
+    ConfigImportFact,
+    ImportRead,
+    ImportStatus,
+    LegacyImport,
+    LegacyImportRefused,
+)
 from blizzard.hub.secrets import ENV_SECRET_KEY, secret_keys_dir
+from blizzard.hub.store.internal import config_import_store
 from blizzard.hub.store.schema import (
     artifacts,
     config_changes,
@@ -78,6 +85,43 @@ _TABLES = (
     project_source_links,
     project_repository_links,
 )
+
+
+def test_import_claim_rolls_back_and_retries(hub: HubConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine_from_url(hub.db_url)
+    store = config_import_store.ConfigImportStore(hub_store_connections(engine))
+    fact = ConfigImportFact(_AT, "test", ImportRead("test", (), ()))
+    imported = LegacyImport((), (), (), (), fact)
+    claim = config_import_store._claim_fact
+
+    def abort(conn: sa.Connection, fact: ConfigImportFact) -> None:
+        claim(conn, fact)
+        raise RuntimeError("abort after claim")
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(config_import_store, "_claim_fact", abort)
+            with pytest.raises(RuntimeError, match="abort after claim"):
+                store.write(imported)
+        assert not store.recorded()
+        assert store.write(imported) is True
+        assert store.write(imported) is False
+    finally:
+        engine.dispose()
+
+
+def test_import_accepts_preexisting_fact_at_another_id(hub: HubConfig) -> None:
+    engine = create_engine_from_url(hub.db_url)
+    store = config_import_store.ConfigImportStore(hub_store_connections(engine))
+    fact = ConfigImportFact(_AT, "test", ImportRead("test", (), ()))
+    try:
+        with engine.begin() as conn:
+            conn.execute(sa.insert(config_import_facts).values(id=23, imported_at=_AT, actor="test", read="{}"))
+        assert store.write(LegacyImport((), (), (), (), fact)) is False
+        with engine.connect() as conn:
+            assert conn.execute(sa.select(config_import_facts.c.id)).scalars().all() == [23]
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture

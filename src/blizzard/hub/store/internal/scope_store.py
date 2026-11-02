@@ -24,6 +24,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
@@ -164,6 +165,7 @@ class ScopeStore:
         never overwriting the description the winner minted, and writing no change row."""
         try:
             with self._store.write("ensure", expect=(IntegrityError,)) as conn:
+                lock_config_authoring(conn)
                 inserted = ensure_scope(conn, (record, change))
             if inserted:
                 return record
@@ -175,6 +177,7 @@ class ScopeStore:
 
     def update(self, record: Scope, *, from_revision: int, change: ConfigChange) -> Scope:
         with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             update_scope(conn, record, from_revision, change)
         return record
 
@@ -184,6 +187,7 @@ class ScopeStore:
         """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins — with the
         revision move and the change row."""
         with self._store.write("record_lifecycle", expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             record_scope_lifecycle(
                 conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
             )

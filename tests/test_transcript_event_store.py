@@ -781,6 +781,24 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
     assert store.derived_segment_ids() == frozenset()
 
 
+def test_drop_locks_all_segments_in_order_before_processing_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    calls: list[list[str]] = []
+    original = store_module.lock_keys
+
+    def record_locks(conn: Any, namespace: str, keys: list[str]) -> None:
+        calls.append(list(keys))
+        original(conn, namespace, keys)
+
+    monkeypatch.setattr(store_module, "_DROP_SEGMENTS_BATCH_SIZE", 1)
+    monkeypatch.setattr(store_module, "lock_keys", record_locks)
+    store.drop_segments(frozenset({"sg_z", "sg_a", "sg_m"}), at=_NOW)
+    assert calls == [["sg_a", "sg_m", "sg_z"]]
+
+
 def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))

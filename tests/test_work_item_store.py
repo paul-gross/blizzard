@@ -16,7 +16,8 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
@@ -69,6 +70,25 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
     assert fetched.stated_priority == "high"
     assert fetched.closed_at is None
     assert fetched.closure is None
+
+
+def test_authored_mint_refuses_a_pointer_acquired_after_its_precheck(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    pointer = WorkRef("hub", "reserved")
+    first = mint_chunk([pointer], graph_id="gr_1", at=_NOW, project_id=ProjectId(default_project(engine)))
+    second = mint_chunk([pointer], graph_id="gr_1", at=_NOW, project_id=ProjectId(default_project(engine)))
+    args = {
+        "pointer": pointer,
+        "title": "title",
+        "body": "body",
+        "author": WorkItemAuthor.user("usr_1"),
+        "stated_priority": None,
+        "at": _NOW,
+    }
+    store.create_with_chunk(**args, chunk=first)
+    with pytest.raises(IngestConflict) as refused:
+        store.create_with_chunk(**args, chunk=second)
+    assert refused.value.existing_chunk_id == first.chunk_id
 
 
 def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> None:

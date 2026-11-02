@@ -405,7 +405,7 @@ class _RegistryOf:
 
 class _UnenterableExclusiveWrites:
     @contextmanager
-    def locked(self, chunk_ids: object) -> Iterator[object]:
+    def locked_claim(self, chunk_id: str) -> Iterator[object]:
         raise AssertionError("the claim entered the lock for a runner refused on its own standing")
         yield
 

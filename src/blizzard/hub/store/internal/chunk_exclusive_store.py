@@ -22,15 +22,21 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILo
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
+from blizzard.hub.store.internal.chunk_dependencies_store import (
+    DEPENDENCY_GRAPH_LOCK_KEY,
+    DEPENDENCY_GRAPH_LOCK_NAMESPACE,
+    ChunkDependenciesStore,
+)
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, lock_chunk_row, lock_keys, route_of_conn
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.host_registry_store import lock_host_registry
 from blizzard.hub.store.internal.project_link_store import (
     PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
     projects_linking_sources_conn,
 )
+from blizzard.hub.store.internal.queue_lock import lock_queue_positions
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -47,6 +53,7 @@ class LockedChunkTransaction:
     _record: ChunkRecordStore
     _dependencies: ChunkDependenciesStore
     _registry: RunnerRegistryStore
+    locked_ids: frozenset[str]
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self._facts.load_facts_conn(self.conn, chunk_id)
@@ -125,15 +132,51 @@ class ChunkExclusiveWrites:
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
         with self._store.write("locked_chunk_transaction") as conn:
-            for chunk_id in sorted(set(chunk_ids)):
+            ids = frozenset(chunk_ids)
+            for chunk_id in sorted(ids):
                 lock_chunk_row(conn, chunk_id)
-            yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry)
+            yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
+
+    @contextmanager
+    def locked_queue(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
+        with self._store.write("locked_queue") as conn:
+            lock_queue_positions(conn)
+            ids = frozenset(chunk_ids)
+            for chunk_id in sorted(ids):
+                lock_chunk_row(conn, chunk_id)
+            yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
+
+    @contextmanager
+    def locked_dependency_graph(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
+        with self._store.write("locked_dependency_graph") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
+            ids = frozenset(chunk_ids)
+            for chunk_id in sorted(ids):
+                lock_chunk_row(conn, chunk_id)
+            yield LockedChunkTransaction(conn, self._facts, self._record, self._dependencies, self._registry, ids)
+
+    @contextmanager
+    def locked_claim(self, chunk_id: str) -> Generator[ILockedChunkRead, None, None]:
+        with self._store.write("locked_claim") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
+            edges = self._dependencies.standing_edges_for_conn(conn, chunk_id)
+            ids = {chunk_id, *(e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk_id)}
+            for locked_id in sorted(ids):
+                lock_chunk_row(conn, locked_id)
+            # Registry writers never acquire chunk rows while holding this key.
+            lock_host_registry(conn)
+            yield LockedChunkTransaction(
+                conn, self._facts, self._record, self._dependencies, self._registry, frozenset(ids)
+            )
 
     @contextmanager
     def locked_work_refs(
         self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
     ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._store.write("locked_work_ref_transaction") as conn:
+            # Group moves refs while holding this key. Take it before any project or
+            # pointer key so admission sees either side of the entire fold.
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
             if project is not None:
                 lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project])
             lock_keys(conn, _POINTER_LOCK_NAMESPACE, [pointer_lock_key(p) for p in pointers])

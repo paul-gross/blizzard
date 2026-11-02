@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_rows import lock_keys
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.project_position_store import newest_positions
 from blizzard.hub.store.schema import (
@@ -267,6 +268,7 @@ class ProjectLinkStore:
     def _create(self, operation: str, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
         try:
             with self._store.write(operation, expect=(IntegrityError,)) as conn:
+                lock_config_authoring(conn)
                 insert_link(conn, kind, project_id, name, change)
         except IntegrityError as exc:  # a concurrent first link of the same pair landed first
             raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=1) from exc
@@ -283,6 +285,7 @@ class ProjectLinkStore:
         change: ConfigChange,
     ) -> None:
         with self._store.write(operation, expect=(ConfigRevisionConflict,)) as conn:
+            lock_config_authoring(conn)
             record_link(
                 conn,
                 kind,

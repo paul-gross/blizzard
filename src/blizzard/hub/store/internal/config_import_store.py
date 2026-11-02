@@ -1,9 +1,8 @@
 """SQLAlchemy adapter for the legacy-config carry-over (package-private).
 
 One ``store.write`` runs the whole import through the per-record create bodies — so each keeps its
-in-transaction checks —, links what it created through the link bodies, and appends the ``config_import``
-fact last. The fact is re-checked first inside
-the same transaction, so two racing imports write once."""
+in-transaction checks —, links what it created through the link bodies, and commits the ``config_import``
+fact with them. A fixed fact id claims the hub-wide decision inside that transaction, so racing imports write once."""
 
 from __future__ import annotations
 
@@ -32,6 +31,7 @@ from blizzard.hub.store.internal import forge_record_store as forge_writes
 from blizzard.hub.store.internal import project_link_store as link_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
 from blizzard.hub.store.scoped import ScopedConnections
@@ -56,15 +56,28 @@ def _recorded(conn: Connection) -> bool:
     return conn.execute(select(config_import_facts.c.id).limit(1)).first() is not None
 
 
-def _append_fact(conn: Connection, fact: ConfigImportFact) -> None:
+def _claim_fact(conn: Connection, fact: ConfigImportFact) -> None:
+    """Claim the import by its primary key; an aborted import rolls this fact back too.
+
+    The initial read admits stores with older facts at any id. The savepoint makes a
+    losing insert readable on PostgreSQL, so only a genuine completed import is a replay.
+    """
     read = {
         "config_path": fact.read.config_path,
         "sources": list(fact.read.sources),
         "variables": list(fact.read.variables),
     }
-    conn.execute(
-        insert(config_import_facts).values(imported_at=fact.imported_at, actor=fact.actor, read=json.dumps(read))
-    )
+    try:
+        with conn.begin_nested():
+            conn.execute(
+                insert(config_import_facts).values(
+                    id=1, imported_at=fact.imported_at, actor=fact.actor, read=json.dumps(read)
+                )
+            )
+    except IntegrityError:
+        if _recorded(conn):
+            raise _AlreadyImported from None
+        raise
 
 
 class ConfigImportStore:
@@ -89,8 +102,10 @@ class ConfigImportStore:
     def write(self, imported: LegacyImport) -> bool:
         try:
             with self._store.write("import", expect=(_AlreadyImported, LegacyImportRefused)) as conn:
+                lock_config_authoring(conn)
                 if _recorded(conn):
                     raise _AlreadyImported
+                _claim_fact(conn, imported.fact)
                 for secret in imported.secrets:
                     try:
                         insert_secret(
@@ -114,7 +129,6 @@ class ConfigImportStore:
                     raise LegacyImportRefused(str(exc)) from exc
                 for link, change in imported.links:
                     _insert_link(conn, link, change)
-                _append_fact(conn, imported.fact)
         except _AlreadyImported:
             return False
         return True

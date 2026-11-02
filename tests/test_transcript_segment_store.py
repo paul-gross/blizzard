@@ -72,7 +72,6 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_lease_runner_ids_stmt": m._lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
         "_records_for_lease_stmt": m._records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
         "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
-        "_high_water_owner_stmt": m._high_water_owner_stmt(_STMTS, "r1"),
         "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
         "_epoch_owners_stmt": m._epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
         "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
@@ -169,7 +168,7 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    assert len(executed) == len(builders)
+    assert {arg.func.id for arg in executed if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)} == builders
     for arg in executed:
         built_by_a_builder = (
             isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")
@@ -178,6 +177,21 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 
 # --- codec round-trip ---------------------------------------------------------
+
+
+def test_high_water_never_moves_back_or_refreshes_on_stale_updates(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    scoped = hub_store_connections(engine)
+    store = TranscriptSegmentStore(scoped)
+    store.set_high_water("r1", seq=7, at=_NOW)
+    store.set_high_water("r1", seq=3, at=_NOW.replace(hour=1))
+    store.set_high_water("r1", seq=7, at=_NOW.replace(hour=2))
+    assert store.high_water("r1") == 7
+    with engine.connect() as conn:
+        row = conn.execute(scoped.select(s.transcript_high_water)).one()
+    assert row.updated_at == _NOW
+    store.set_high_water("r1", seq=9, at=_NOW.replace(hour=3))
+    assert store.high_water("r1") == 9
 
 
 def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:

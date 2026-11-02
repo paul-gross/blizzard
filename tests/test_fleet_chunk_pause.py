@@ -53,6 +53,19 @@ def test_fleet_resume_delegates_and_clears_the_pause(tmp_path: Path) -> None:
     assert detail["pause"] is None
 
 
+def test_repeated_resume_then_repause_replays_latest_fact(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _routed_chunk(hub)
+    base = f"/api/fleet/chunks/{chunk_id}"
+
+    for verb in ("pause", "resume", "resume", "pause"):
+        response = hub.client.post(f"{base}/{verb}")
+        assert response.status_code == 202, response.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["pause"] is not None
+
+
 def test_fleet_pause_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 

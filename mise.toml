@@ -40,6 +40,10 @@ run = "npx playwright test --project=journey"
 description = "Run the store baseline proof (blizzard:store-baseline) — a folded baseline revision builds exactly the store the floor release's own published history builds, for the hub and the runner, on SQLite and Postgres: same schema, same rows (minted ids and stamped instants read as such). Skips until a tree declares a BASELINE_FLOOR. Inputs: BLIZZARD_STORE_BASELINE_PG_URL (a Postgres server; unset skips the Postgres legs, and fails under CI). Needs `gh` access to download the floor's wheel (GH_TOKEN, and GH_REPO outside a GitHub checkout)"
 run = "BLIZZARD_STORE_BASELINE=1 uv run --extra postgres pytest -m store_baseline tests/test_store_baseline.py"
 
+[tasks.postgres-lock-test]
+description = "Run bounded live PostgreSQL store-lock proofs against BLIZZARD_LOCK_TEST_PG_URL"
+run = "BLIZZARD_POSTGRES_LOCK_TEST=1 uv run --extra postgres pytest -m postgres_lock tests/postgres_locks/"
+
 [tasks.rehearsal]
 description = "Run the upgrade rehearsal (blizzard:rehearsal) — each supported release's own published hub and runner, seeded through the mock-data CLI, upgraded hub first to the candidate while the old runner keeps landing work, then the runner, then both stores walked down to the release and forward again. Inputs: BLIZZARD_REHEARSAL_BASELINE (one tag; default every supported release), BLIZZARD_REHEARSAL_CANDIDATE (a directory holding the wheel and its -requirements-pg.txt; default a fresh build), BLIZZARD_REHEARSAL_PG_URL (a Postgres server; unset skips the Postgres backend), BLIZZARD_REHEARSAL_ROOT (where each leg's daemon dirs and logs go). Needs `gh` access and the sibling blizzard-mock worktree provisioned (winter provision <env>)"
 run = "scripts/rehearsal.sh"

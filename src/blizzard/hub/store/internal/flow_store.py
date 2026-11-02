@@ -1,15 +1,13 @@
 """SQLAlchemy adapter for the flows seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only (``bzh:facts-not-status``): a
-submission is open while it has no closure, a turn while it has no ``ended_at``; nothing here stores either. Every write
-opens on the tenant row's lock (``ScopedConnections.write``), which serializes the tenant's arrivals and closures; the
-unique keys are the backstop, not the guard."""
+submission is open while it has no closure, a turn while it has no ``ended_at``; nothing here stores either."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, cast
 
 from sqlalchemy import ColumnElement, Connection, FromClause, Row, and_, func
 
@@ -40,7 +38,7 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys, write_landing_rows
+from blizzard.hub.store.internal.chunk_rows import conn_of, lock_chunk_row, lock_keys, write_landing_rows
 from blizzard.hub.store.internal.flow_rows import (
     close_submission,
     end_turn,
@@ -48,6 +46,10 @@ from blizzard.hub.store.internal.flow_rows import (
     flow_of,
     flows_held,
     has_open_turn,
+    lock_flow_chunk,
+    lock_flow_resources,
+    lock_flow_submission,
+    lock_flow_turn,
     write_event,
     write_facts,
     write_landing,
@@ -63,6 +65,11 @@ _facts = s.flow_facts
 _terms = s.flow_submission_terms
 #: The ``keyed_locks`` namespace a turn takes its flows' resources under.
 _FLOW_LOCK_NAMESPACE = "flow"
+_ARRIVAL_LOCK_NAMESPACE = "flow-arrival"
+
+
+class _ChunkLocks(Protocol):
+    locked_ids: frozenset[str]
 
 
 class FlowStore:
@@ -284,35 +291,57 @@ class FlowStore:
         at: datetime,
     ) -> Submission | None:
         with self._store.write("submit_flow_visit") as conn:
-            already = conn.execute(
-                self._store.select(_sub, _sub.c.submission_id).where(
-                    _sub.c.chunk_id == chunk_id,
-                    _sub.c.node_id == node_id,
-                    _sub.c.epoch == epoch,
-                    _sub.c.generation == generation,
-                )
-            ).first()
-            if already is not None:
-                return None
-            # The tenant's newest plus one, read under the tenant row lock the write opened on.
-            arrival = (conn.execute(self._store.select(_sub, func.max(_sub.c.arrival))).scalar() or 0) + 1
-            submission_id = Id.mint(IdPrefix.FLOW_SUBMISSION, self._clock).value
-            conn.execute(
-                self._store.insert(_sub).values(
-                    submission_id=submission_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    epoch=epoch,
-                    generation=generation,
-                    arrival=arrival,
-                    submitted_at=at,
-                )
+            lock_chunk_row(conn, chunk_id)
+            return self._submit_on(
+                conn, chunk_id, node_id=node_id, epoch=epoch, generation=generation, resources=resources, at=at
             )
-            flows = tuple(self._flow_for(conn, resource, at=at) for resource in dict.fromkeys(resources))
-            for flow in flows:
-                conn.execute(self._store.insert(_held).values(submission_id=submission_id, flow_id=flow.flow_id))
-            write_facts(conn, flows, submission_id, chunk_id, kind="submitted", outcome=None, at=at)
-            return Submission(
+
+    def submit_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        resources: Sequence[FlowResource],
+        at: datetime,
+    ) -> Submission | None:
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("submission's chunk is not locked by this handle")
+        return self._submit_on(
+            conn_of(handle), chunk_id, node_id=node_id, epoch=epoch, generation=generation, resources=resources, at=at
+        )
+
+    def _submit_on(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        resources: Sequence[FlowResource],
+        at: datetime,
+    ) -> Submission | None:
+        lock_flow_chunk(conn, chunk_id)
+        lock_keys(conn, _ARRIVAL_LOCK_NAMESPACE, ["arrival"])
+        lock_keys(conn, _FLOW_LOCK_NAMESPACE, [resource.resource for resource in resources])
+        already = conn.execute(
+            self._store.select(_sub, _sub.c.submission_id).where(
+                _sub.c.chunk_id == chunk_id,
+                _sub.c.node_id == node_id,
+                _sub.c.epoch == epoch,
+                _sub.c.generation == generation,
+            )
+        ).first()
+        if already is not None:
+            return None
+        # Allocation and duplicate-visit admission share the tenant's arrival lock.
+        arrival = (conn.execute(self._store.select(_sub, func.max(_sub.c.arrival))).scalar() or 0) + 1
+        submission_id = Id.mint(IdPrefix.FLOW_SUBMISSION, self._clock).value
+        conn.execute(
+            self._store.insert(_sub).values(
                 submission_id=submission_id,
                 chunk_id=chunk_id,
                 node_id=node_id,
@@ -320,11 +349,27 @@ class FlowStore:
                 generation=generation,
                 arrival=arrival,
                 submitted_at=at,
-                flows=flows,
             )
+        )
+        flows = tuple(self._flow_for(conn, resource, at=at) for resource in dict.fromkeys(resources))
+        for flow in flows:
+            conn.execute(self._store.insert(_held).values(submission_id=submission_id, flow_id=flow.flow_id))
+        write_facts(conn, flows, submission_id, chunk_id, kind="submitted", outcome=None, at=at)
+        return Submission(
+            submission_id=submission_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            generation=generation,
+            arrival=arrival,
+            submitted_at=at,
+            flows=flows,
+        )
 
     def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("close_flow_submission") as conn:
+            if not lock_flow_submission(conn, submission_id):
+                return None
             if has_open_turn(conn, submission_id):
                 return None
             return close_submission(conn, submission_id, outcome=outcome, at=at)
@@ -338,11 +383,12 @@ class FlowStore:
         at: datetime,
     ) -> Turn | None:
         with self._store.write("take_turn") as conn:
+            if not lock_flow_submission(conn, submission_id):
+                return None
             row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
             if row is None:
                 return None
             flows = flows_held(conn, [submission_id]).get(submission_id, ())
-            lock_keys(conn, _FLOW_LOCK_NAMESPACE, [flow.resource for flow in flows])
             closed = conn.execute(
                 self._store.select(_closures, _closures.c.submission_id).where(
                     _closures.c.submission_id == submission_id
@@ -375,6 +421,17 @@ class FlowStore:
         at: datetime,
     ) -> tuple[FlowFactWritten, ...] | None:
         conn = conn_of(handle)
+        # Turn and submission ownership are immutable; checking before the flow lock
+        # prevents a handle for one chunk from acquiring another chunk's row lock.
+        joined = self._store.scope_join(_turns, _sub, _turns.c.submission_id == _sub.c.submission_id)
+        chunk_id = conn.execute(
+            self._store.select(joined, _sub.c.chunk_id).where(_turns.c.turn_id == turn_id, _turns.c.ended_at.is_(None))
+        ).scalar()
+        if chunk_id is None:
+            return None
+        if chunk_id not in cast(_ChunkLocks, handle).locked_ids:
+            raise ValueError("turn's chunk is not locked by this handle")
+        lock_flow_turn(conn, turn_id)
         ended = end_turn(conn, turn_id, outcome=outcome, at=at)
         if ended is None:
             return None
@@ -399,6 +456,26 @@ class FlowStore:
         close_decision: CloseEnqueueDecision,
     ) -> LandingWrite:
         with self._store.write("record_flow_landing") as conn:
+
+            def lock_landing() -> None:
+                chunk_id = conn.execute(
+                    self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == landing.submission_id)
+                ).scalar()
+                if chunk_id is None:
+                    raise ValueError("landing submission does not exist")
+                if chunk_id != landing.chunk_id:
+                    raise ValueError("landing chunk does not match submission")
+                # The chunk row is held, so its submission and holdings cannot change here.
+                lock_flow_chunk(conn, landing.chunk_id)
+                held = flows_held(conn, [landing.submission_id]).get(landing.submission_id, ())
+                if not any(
+                    (flow.flow_id, flow.repository_id, flow.branch)
+                    == (landing.flow.flow_id, landing.flow.repository_id, landing.flow.branch)
+                    for flow in held
+                ):
+                    raise ValueError("landing flow is not held by submission")
+                lock_flow_resources(conn, [landing.submission_id])
+
             refused, wrote = write_landing_rows(
                 conn,
                 landing.chunk_id,
@@ -412,6 +489,7 @@ class FlowStore:
                 close_decision=close_decision,
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
+                before_write=lock_landing,
             )
             if not wrote:
                 return LandingWrite(refused=refused, event_id=None)
@@ -422,6 +500,7 @@ class FlowStore:
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime
     ) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("end_turn_interrupted") as conn:
+            lock_flow_turn(conn, turn_id)
             ended = end_turn(conn, turn_id, outcome=TURN_INTERRUPTED, at=at)
             if ended is None:
                 return None

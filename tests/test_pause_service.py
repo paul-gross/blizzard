@@ -1,9 +1,7 @@
 """PauseService (unit tier) — the operator's per-chunk brake, facts only.
 
-A fake stands in for the lifecycle store — only ``record_pause`` is meaningfully
-implemented; every other seam raises loudly if called. ``facts`` is the caller's own
-already-loaded value now (``bzh:domain-takes-objects``), so each test builds it directly
-rather than handing it to the service through a fake repo."""
+A fake stands in for the lifecycle and exclusive-write seams; each test supplies the
+facts returned under the lock directly."""
 
 from __future__ import annotations
 
@@ -49,8 +47,11 @@ class _FakeChunkRepo:
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
         self.recorded.append((chunk_id, paused, by, at))
 
-    def record_pause_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> None:
-        self.recorded.append((chunk_id, True, by, at))
+    def record_pause_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, paused: bool, by: str, at: datetime
+    ) -> None:
+        assert handle is self
+        self.recorded.append((chunk_id, paused, by, at))
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:

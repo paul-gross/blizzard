@@ -68,6 +68,24 @@ class IReadChunkDecisionsRepository(Protocol):
 class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
     """Read-write chunk-decisions access."""
 
+    def lock_and_get_decision(self, handle: ILockedChunkRead, decision_id: str) -> GateDecision | None:
+        """Lock the decision after its chunk, then read its current state on the handle."""
+        ...
+
+    def record_decision_resolution_locked(
+        self,
+        handle: ILockedChunkRead,
+        decision_id: str,
+        *,
+        choice: str,
+        resolved_by: str,
+        at: datetime,
+        overrode_red_checks: bool = False,
+        note: str | None = None,
+    ) -> bool:
+        """Record the resolution on the connection holding the chunk and decision locks."""
+        ...
+
     def record_decision(
         self,
         *,

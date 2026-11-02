@@ -56,11 +56,18 @@ class HostRetirementService:
         under = self._runners.list_runners(include_retired=True, host_id=host.host_id)
         holdings = {r.runner_id: self._fleet.holdings(r.runner_id) for r in under if not r.retired}
         fact = host.retire(holdings, force=force, by=by, at=now)
-        fact_id, revocation_id = self._hosts.record_retirement(host.host_id, fact=fact, at=now, by=by)
+        fact_id, revocation_id, roster = self._hosts.record_retirement_with_roster(
+            host.host_id, fact=fact, at=now, by=by, force=force
+        )
+        # Membership can change after the host fact commits; keep the roster from that decision.
+        found = self._runners.get_runners(roster)
+        under = [found[runner_id] for runner_id in roster if runner_id in found]
         outcomes: dict[str, RetireOutcome] = {}
         for runner in under:
             try:
-                outcomes[runner.runner_id] = self._fleet.retire(runner, by=by, force=force)
+                outcome = self._fleet.retire(runner, by=by, force=force, expected_host_id=host.host_id)
+                if outcome is not None:
+                    outcomes[runner.runner_id] = outcome
             except RunnerHoldsRoutes as exc:
                 committed = HostRetireOutcome(fact_id=fact_id, revocation_id=revocation_id, runners=outcomes)
                 raise HostRetirementInterrupted(committed, exc) from exc

@@ -98,7 +98,7 @@ class DeleteService:
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
         — every guard read taken fresh under the row lock."""
-        with self._cycle_lock, self._exclusive.locked([chunk.chunk_id]) as handle:
+        with self._cycle_lock, self._exclusive.locked_dependency_graph([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)

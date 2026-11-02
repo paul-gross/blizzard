@@ -8,9 +8,10 @@ waiting submission and leaves a mid-turn one to its turn."""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import Table, func, select
@@ -127,6 +128,11 @@ def test_a_closed_submission_takes_no_turn(world: _World) -> None:
     world.flows.close(submission.submission_id, outcome="superseded", at=world.hub.clock.now())
 
     assert world.take(submission) is None
+
+
+def test_missing_submission_cannot_close_or_take_a_turn(world: _World) -> None:
+    assert world.flows.close("missing", outcome="stopped", at=world.hub.clock.now()) is None
+    assert world.flows.take_turn("missing", passed_over=frozenset(), terms=(), at=world.hub.clock.now()) is None
 
 
 def test_an_earlier_arrival_not_passed_over_keeps_the_turn_from_a_later_one(world: _World) -> None:
@@ -341,6 +347,38 @@ def test_ending_a_turn_twice_writes_nothing_the_second_time(world: _World) -> No
     assert world.kinds(submission).count(("turn-ended", "cut-off")) == 1
 
 
+def test_locked_end_checks_only_open_turns_and_accepts_any_locked_chunk(world: _World) -> None:
+    submission = world.submit(world.chunk("12"), _MAIN)
+    other = world.chunk("13")
+    turn_id = world.take(submission)
+    assert turn_id is not None
+    with world.chunks.exclusive.locked([other]) as handle:
+        assert (
+            world.flows.end_turn_locked(
+                handle, "missing", outcome="pending", closure=None, event=None, at=world.hub.clock.now()
+            )
+            is None
+        )
+        with pytest.raises(ValueError, match="not locked"):
+            world.flows.end_turn_locked(
+                handle, turn_id, outcome="pending", closure=None, event=None, at=world.hub.clock.now()
+            )
+    with world.chunks.exclusive.locked([other, submission.chunk_id]) as handle:
+        assert (
+            world.flows.end_turn_locked(
+                handle, turn_id, outcome="pending", closure=None, event=None, at=world.hub.clock.now()
+            )
+            is not None
+        )
+    with world.chunks.exclusive.locked([other]) as handle:
+        assert (
+            world.flows.end_turn_locked(
+                handle, turn_id, outcome="pending", closure=None, event=None, at=world.hub.clock.now()
+            )
+            is None
+        )
+
+
 def test_a_superseded_turn_closes_its_submission_in_the_same_write(world: _World) -> None:
     submission = world.submit(world.chunk(), _MAIN)
     turn_id = world.take(submission)
@@ -445,6 +483,80 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
         kind, detail = conn.execute(hub_scoped(select(s.event_log.c.kind, s.event_log.c.detail))).one()
     assert kind == "flow-landed"
     assert json.loads(detail)["members"] == [{"chunk_id": chunk_id, "project_id": "prj_default"}]
+
+
+def test_landing_replay_does_not_reject_a_mismatched_submission(world: _World) -> None:
+    first = world.submit(world.chunk("12"), _MAIN)
+    second = world.submit(world.chunk("13"), _OTHER)
+    landing = FlowLanding.of(first.flows[0], first, project_id="prj_default", node_name="deliver", revision="m1")
+
+    def record(value: FlowLanding) -> LandingWrite:
+        return world.flows.record_landing(
+            value,
+            close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
+            node_id=_NODE,
+            node_name="deliver",
+            epoch=0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            repo="acme/widget",
+            revision="m1",
+            at=world.hub.clock.now(),
+        )
+
+    assert record(landing).event_id is not None
+    assert record(replace(landing, submission_id=second.submission_id)).event_id is None
+    assert record(replace(landing, submission_id="missing")).event_id is None
+    assert record(replace(landing, flow=second.flows[0])).event_id is None
+
+
+@pytest.mark.parametrize("mismatch", ["flow", "flow_resource", "chunk", "missing"])
+def test_new_landing_rejects_mismatch_without_writes(world: _World, mismatch: str) -> None:
+    first = world.submit(world.chunk("12"), _MAIN)
+    second = world.submit(world.chunk("13"), _OTHER)
+    landing = FlowLanding.of(first.flows[0], first, project_id="prj_default", node_name="deliver", revision="m1")
+    landing = {
+        "flow": replace(landing, flow=second.flows[0]),
+        "flow_resource": replace(landing, flow=replace(first.flows[0], branch="other")),
+        "chunk": replace(landing, submission_id=second.submission_id),
+        "missing": replace(landing, submission_id="missing"),
+    }[mismatch]
+    tables = (s.artifacts, s.delivery_repo_landed, s.close_intents, s.flow_facts, s.event_log)
+    before = [world.count(table) for table in tables]
+    with pytest.raises(ValueError, match="landing"):
+        world.flows.record_landing(
+            landing,
+            node_id=_NODE,
+            node_name="deliver",
+            epoch=0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            repo="acme/widget",
+            revision="m1",
+            at=world.hub.clock.now(),
+            close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
+        )
+    assert [world.count(table) for table in tables] == before
+
+
+def test_landing_rolls_back_rows_when_flow_write_fails(world: _World) -> None:
+    submission = world.submit(world.chunk(), _MAIN)
+    landing = FlowLanding.of(
+        submission.flows[0], submission, project_id="prj_default", node_name="deliver", revision="m1"
+    )
+    tables = (s.artifacts, s.delivery_repo_landed, s.close_intents, s.flow_facts, s.event_log)
+    before = [world.count(table) for table in tables]
+    with patch("blizzard.hub.store.internal.flow_store.write_landing", side_effect=_Abort), pytest.raises(_Abort):
+        world.flows.record_landing(
+            landing,
+            node_id=_NODE,
+            node_name="deliver",
+            epoch=0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            repo="acme/widget",
+            revision="m1",
+            at=world.hub.clock.now(),
+            close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
+        )
+    assert [world.count(table) for table in tables] == before
 
 
 # --- levers -----------------------------------------------------------------------------------------------------------

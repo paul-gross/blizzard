@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy import Table
 from sqlalchemy.engine import Connection
 
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.scoped import statements_of
 
 
@@ -24,6 +25,10 @@ class SlugTables:
     former: Table
     id_column: str
     taken: Callable[[str], Exception]
+
+    def lock(self, conn: Connection, *slugs: str) -> None:
+        """Serialize claims and releases of these slugs, including absent former-slug rows."""
+        lock_keys(conn, f"slug:{self.records.name}", slugs)
 
     def claim(self, conn: Connection, record_id: str, slug: str) -> None:
         """``record_id`` takes ``slug``: :attr:`taken` when another record holds it as its current slug, and no

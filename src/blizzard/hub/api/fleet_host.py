@@ -20,9 +20,8 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.api.runners import hosts_of, publish_retirement, registry_view, served_projects
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace
-from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes
+from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes, RunnerLifecycleChanged
 from blizzard.hub.domain.runners.served import UnknownServedProject
 from blizzard.wire.facts import HostFactAck, HostFactBatch
 from blizzard.wire.host import HostRecordResponse, HostReportRequest, HostRunnerAddRequest, HostRunnerView
@@ -126,9 +125,17 @@ def retire_host_runner(
     held = services.chunks.route.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
-        outcome: RetireOutcome = services.fleet.retire(registration, by=request.by, force=request.force)
-    except RunnerHoldsRoutes as exc:
+        outcome = services.fleet.retire(
+            registration,
+            by=request.by,
+            force=request.force,
+            expected_host_id=principal.host_id,
+            expected_host_retired=False,
+        )
+    except (RunnerHoldsRoutes, RunnerLifecycleChanged) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if outcome is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)
     refreshed = services.registry.get_runner(runner_id)
     assert refreshed is not None  # just retired, so the runner exists

@@ -99,7 +99,7 @@ class DemoteService:
         )
         if landing.renormalized:
             write_positions_fn(self._queue, QueueList.NOT_READY)(list(landing.renormalized), at=now)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
+        with self._exclusive.locked_queue([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)

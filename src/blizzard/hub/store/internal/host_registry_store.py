@@ -21,22 +21,37 @@ from blizzard.hub.domain.runners.host import (
     HostLifecycleFact,
     HostNameTaken,
     HostReport,
+    HostRetired,
     HostTokenRotation,
     HostUsage,
     HostWorkspace,
     IWriteHostRegistry,
     RunnerAlreadyHosted,
+    RunnerNotUnderHost,
 )
-from blizzard.hub.domain.runners.registration import DeclaredSubscription
+from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerRetired
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.host_usage import read_host_usage
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
+from blizzard.hub.store.internal.retirement_holdings import retirement_holdings
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 _Lifecycle = tuple[bool, datetime | None, str | None]
+_REGISTRY_LOCK = "host-live-name-registry"
 
 
-def _locked_token_hash(conn: Connection, host_id: str) -> str | None:
+def lock_host_registry(conn: Connection) -> None:
+    """Serialize host membership and lifecycle decisions before host or runner row writes."""
+    lock_keys(conn, _REGISTRY_LOCK, ["registry"])
+
+
+def refuse_retired_host(conn: Connection, host_id: str, *, action: str) -> None:
+    if HostRegistryStore.lifecycle_many(conn, [host_id])[host_id][0]:
+        raise HostRetired(host_id, action=action)
+
+
+def locked_host_token_hash(conn: Connection, host_id: str) -> str | None:
     """The host's current token hash, read under its row's write lock — a no-op ``UPDATE`` as the transaction's first
     statement, then the read (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
     stmts = statements_of(conn)
@@ -58,7 +73,7 @@ class HostRegistryStore:
             row = conn.execute(self._store.select(s.hosts).where(s.hosts.c.host_id == host_id)).one_or_none()
             if row is None:
                 return None
-            return self._host(row, self._lifecycle_many(conn, [host_id])[host_id])
+            return self._host(row, self.lifecycle_many(conn, [host_id])[host_id])
 
     def get_hosts(self, host_ids: Iterable[str]) -> dict[str, Host]:
         ids = list(dict.fromkeys(host_ids))
@@ -71,13 +86,13 @@ class HostRegistryStore:
                 for batch in id_batches(ids)
                 for row in conn.execute(self._store.select(hosts).where(hosts.c.host_id.in_(batch)))
             ]
-            lifecycle = self._lifecycle_many(conn, [row.host_id for row in rows])
+            lifecycle = self.lifecycle_many(conn, [row.host_id for row in rows])
             return {row.host_id: self._host(row, lifecycle[row.host_id]) for row in rows}
 
     def list_hosts(self, *, include_retired: bool = False) -> list[Host]:
         with self._store.read("list_hosts") as conn:
             rows = conn.execute(self._store.select(s.hosts).order_by(s.hosts.c.added_at, s.hosts.c.host_id)).all()
-            lifecycle = self._lifecycle_many(conn, [row.host_id for row in rows])
+            lifecycle = self.lifecycle_many(conn, [row.host_id for row in rows])
             return [
                 self._host(row, lifecycle[row.host_id])
                 for row in rows
@@ -106,13 +121,13 @@ class HostRegistryStore:
     def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
         mark = s.host_high_water
         with self._store.write("set_host_high_water") as conn:
-            existing = conn.execute(
-                self._store.select(mark, mark.c.host_id).where(mark.c.host_id == host_id)
-            ).one_or_none()
+            lock_keys(conn, "host-high-water", [host_id])
+            existing = conn.execute(self._store.select(mark, mark.c.seq).where(mark.c.host_id == host_id)).one_or_none()
             if existing is None:
                 conn.execute(self._store.insert(mark).values(host_id=host_id, seq=seq, updated_at=at))
                 return
-            conn.execute(self._store.update(mark).where(mark.c.host_id == host_id).values(seq=seq, updated_at=at))
+            if seq > existing.seq:
+                conn.execute(self._store.update(mark).where(mark.c.host_id == host_id).values(seq=seq, updated_at=at))
 
     def record_external_usage(
         self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
@@ -121,6 +136,9 @@ class HostRegistryStore:
         usage = s.host_external_usage
         match = (usage.c.host_id == host_id, usage.c.slug == slug)
         with self._store.write("record_host_external_usage") as conn:
+            lock_host_registry(conn)
+            refuse_retired_host(conn, host_id, action="fact ingest")
+            lock_keys(conn, "host-external-usage", [json.dumps([host_id, slug])])
             if conn.execute(self._store.select(usage, usage.c.host_id).where(*match)).one_or_none() is None:
                 conn.execute(
                     self._store.insert(usage).values(
@@ -146,6 +164,9 @@ class HostRegistryStore:
         missed = s.host_external_usage_misses
         match = (missed.c.host_id == host_id, missed.c.slug == slug)
         with self._store.write("record_host_external_usage_miss") as conn:
+            lock_host_registry(conn)
+            refuse_retired_host(conn, host_id, action="fact ingest")
+            lock_keys(conn, "host-external-usage-miss", [json.dumps([host_id, slug])])
             if conn.execute(self._store.select(missed, missed.c.host_id).where(*match)).one_or_none() is None:
                 conn.execute(
                     self._store.insert(missed).values(
@@ -161,7 +182,8 @@ class HostRegistryStore:
 
     def add(self, addition: HostAddition) -> None:
         with self._store.write("add_host") as conn:
-            # The tenant-row lock the scoped write takes serializes two adds of one name.
+            lock_host_registry(conn)
+            lock_keys(conn, "host-name", ["registry"])
             if addition.name in self._live_names(conn, None):
                 raise HostNameTaken(addition.name)
             conn.execute(
@@ -191,10 +213,12 @@ class HostRegistryStore:
             refreshed["name"] = name
         match = s.hosts.c.host_id == host_id
         with self._store.write("record_host_report") as conn:
+            lock_host_registry(conn)
+            lock_keys(conn, "host-name", ["registry"])
+            refuse_retired_host(conn, host_id, action="report")
             if not conn.execute(self._store.update(s.hosts).where(match).values(refreshed)).rowcount:
                 raise LookupError(f"host {host_id!r} was never added")
-            # The tenant-row lock the scoped write takes serializes a rename against an add or another rename, so the
-            # domain's earlier check cannot go stale before this write lands.
+            # Recheck on the registry-locked connection; the domain's earlier read can be stale.
             if name is not None and name in self._live_names(conn, host_id):
                 raise HostNameTaken(name)
             # Stamped only while unset, so of two racing first reports exactly one reads as first.
@@ -205,31 +229,94 @@ class HostRegistryStore:
 
     def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
         with self._store.write("adopt_runners") as conn:
+            lock_host_registry(conn)
+            refuse_retired_host(conn, host_id, action="adoption")
             self._place(conn, host_id, runner_ids)
 
     def release(self, host_id: str, runner_ids: Sequence[str]) -> None:
         runners = s.runner_registrations
         with self._store.write("release_runners") as conn:
-            for batch in id_batches(list(runner_ids)):
-                conn.execute(
+            lock_host_registry(conn)
+            locked_host_token_hash(conn, host_id)
+            host_retired = self.lifecycle_many(conn, [host_id])[host_id][0]
+            retired = newest_retired_select(
+                statements_of(conn), s.runner_lifecycle_facts, s.runner_lifecycle_facts.c.runner_id
+            )
+            for runner_id in sorted(set(runner_ids)):
+                if host_retired:
+                    row = conn.execute(
+                        self._store.select(runners, runners.c.runner_id).where(
+                            runners.c.runner_id == runner_id, runners.c.host_id == host_id
+                        )
+                    ).one_or_none()
+                    if (
+                        row is not None
+                        and conn.execute(
+                            self._store.select(runners, runners.c.runner_id).where(
+                                runners.c.runner_id == runner_id, runners.c.runner_id.in_(retired)
+                            )
+                        ).one_or_none()
+                        is None
+                    ):
+                        raise HostRetired(host_id, action="release refused; re-run retire first")
+                result = conn.execute(
                     self._store.update(runners)
-                    .where(runners.c.host_id == host_id, runners.c.runner_id.in_(batch))
+                    .where(runners.c.host_id == host_id, runners.c.runner_id == runner_id)
                     .values(host_id=None)
                 )
+                if not result.rowcount:
+                    raise RunnerNotUnderHost(runner_id, host_id=host_id)
 
     def record_retirement(
-        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str
+        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str, force: bool = True
     ) -> tuple[int | None, int | None]:
+        fact_id, revocation_id, _ = self.record_retirement_with_roster(host_id, fact=fact, at=at, by=by, force=force)
+        return fact_id, revocation_id
+
+    def record_retirement_with_roster(
+        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str, force: bool
+    ) -> tuple[int | None, int | None, tuple[str, ...]]:
         with self._store.write("record_host_retirement") as conn:
+            lock_host_registry(conn)
+            locked_host_token_hash(conn, host_id)
             fact_id = None
-            if fact is not None:
+            retired = self.lifecycle_many(conn, [host_id])[host_id][0]
+            ids = tuple(
+                conn.execute(
+                    self._store.select(s.runner_registrations, s.runner_registrations.c.runner_id)
+                    .where(s.runner_registrations.c.host_id == host_id)
+                    .order_by(s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id)
+                ).scalars()
+            )
+            if fact is not None and fact.retired and not retired and not force:
+                row = conn.execute(self._store.select(s.hosts).where(s.hosts.c.host_id == host_id)).one()
+                host = self._host(row, (False, None, None))
+                retired_ids = set(
+                    conn.execute(
+                        self._store.select(s.runner_registrations, s.runner_registrations.c.runner_id).where(
+                            s.runner_registrations.c.runner_id.in_(ids),
+                            s.runner_registrations.c.runner_id.in_(
+                                newest_retired_select(
+                                    statements_of(conn), s.runner_lifecycle_facts, s.runner_lifecycle_facts.c.runner_id
+                                )
+                            ),
+                        )
+                    ).scalars()
+                )
+                host.retire(
+                    retirement_holdings(self._store, conn, [i for i in ids if i not in retired_ids]),
+                    force=False,
+                    by=by,
+                    at=at,
+                )
+            if fact is not None and not (fact.retired and retired):
                 result = conn.execute(
                     self._store.insert(s.host_lifecycle_facts).values(
                         host_id=host_id, retired=fact.retired, set_at=fact.at, set_by=fact.by
                     )
                 )
                 fact_id = _inserted_id(result)
-            return fact_id, self._revoke(conn, host_id, at=at, by=by)
+            return fact_id, self._revoke(conn, host_id, at=at, by=by), ids
 
     def revoke_token(self, host_id: str, *, at: datetime, by: str) -> int | None:
         # The revocation fact and the nulled hash land in one transaction, so a token always resolves or reads as
@@ -241,7 +328,9 @@ class HostRegistryStore:
         # The replaced hash's revocation and the new hash land in one transaction, and the row lock makes a
         # concurrent rotation read the hash this one stored, so every replaced hash is revoked.
         with self._store.write("rotate_host_token") as conn:
-            replaced = _locked_token_hash(conn, rotation.host_id)
+            lock_host_registry(conn)
+            refuse_retired_host(conn, rotation.host_id, action="enrollment")
+            replaced = locked_host_token_hash(conn, rotation.host_id)
             revocation_id: int | None = None
             if replaced is not None:
                 revocation_id = _inserted_id(
@@ -264,7 +353,7 @@ class HostRegistryStore:
     # --- helpers ------------------------------------------------------------
 
     def _revoke(self, conn: Connection, host_id: str, *, at: datetime, by: str) -> int | None:
-        token_hash = _locked_token_hash(conn, host_id)
+        token_hash = locked_host_token_hash(conn, host_id)
         if token_hash is None:
             return None
         revocation_id = _inserted_id(
@@ -279,8 +368,22 @@ class HostRegistryStore:
 
     def _place(self, conn: Connection, host_id: str, runner_ids: Sequence[str]) -> None:
         """Place each runner under ``host_id`` iff it still stands alone; one that does not rolls the write back."""
+        locked_host_token_hash(conn, host_id)
+        refuse_retired_host(conn, host_id, action="adoption")
         runners = s.runner_registrations
-        for runner_id in runner_ids:
+        retired = newest_retired_select(
+            statements_of(conn), s.runner_lifecycle_facts, s.runner_lifecycle_facts.c.runner_id
+        )
+        retired_ids = set(
+            conn.execute(
+                self._store.select(runners, runners.c.runner_id).where(
+                    runners.c.runner_id.in_(runner_ids), runners.c.runner_id.in_(retired)
+                )
+            ).scalars()
+        )
+        if retired_ids:
+            raise RunnerRetired(sorted(retired_ids)[0], action="adoption")
+        for runner_id in sorted(runner_ids):
             placed = conn.execute(
                 self._store.update(runners)
                 .where(runners.c.runner_id == runner_id, runners.c.host_id.is_(None))
@@ -298,7 +401,7 @@ class HostRegistryStore:
         return set(conn.execute(query).scalars().all())
 
     @staticmethod
-    def _lifecycle_many(conn: Connection, host_ids: Sequence[str]) -> dict[str, _Lifecycle]:
+    def lifecycle_many(conn: Connection, host_ids: Sequence[str]) -> dict[str, _Lifecycle]:
         """Every listed host's ``(retired, at, by)`` off its newest lifecycle fact, one query per id batch."""
         result: dict[str, _Lifecycle] = dict.fromkeys(host_ids, (False, None, None))
         for batch in id_batches(list(host_ids)):

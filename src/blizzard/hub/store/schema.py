@@ -1514,7 +1514,7 @@ flow_submissions = Table(
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("generation", Integer, nullable=False),
-    Column("arrival", Integer, nullable=False),  # the tenant's newest plus one, under the tenant row lock
+    Column("arrival", Integer, nullable=False),  # the tenant's newest plus one, under the arrival key lock
     Column("submitted_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flow_submissions_tenant_id"), nullable=False),
     PrimaryKeyConstraint("submission_id", name="pk_flow_submissions"),

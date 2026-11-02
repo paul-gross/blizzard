@@ -12,11 +12,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, Table, func, select
+from sqlalchemy import Connection, Engine, Table, func, select
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, TurnEvent
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import flow_rows
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
 
@@ -117,6 +118,41 @@ def test_a_submission_with_an_open_turn_is_not_closed(world: _World, flows: Flow
 
     assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is None
     assert _count(world.engine, s.flow_submission_closures) == 0
+
+
+def test_resource_free_submission_turn_and_closure_are_exclusive(flows: FlowStore) -> None:
+    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[], at=_AT)
+    assert submission is not None
+    turn = flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=(), at=_AT)
+    assert turn is not None
+    assert flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=(), at=_AT) is None
+    assert flows.close(submission.submission_id, outcome="stopped", at=_AT) is None
+    assert flows.end_turn_interrupted(turn.turn_id, withdrawal="stopped", event=_INTERRUPTED, at=_AT) is not None
+    assert flows.end_turn_interrupted(turn.turn_id, withdrawal="stopped", event=_INTERRUPTED, at=_AT) is None
+    assert flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=(), at=_AT) is None
+    assert flows.close(submission.submission_id, outcome="stopped", at=_AT) is None
+
+
+def test_withdraw_waiting_locks_only_open_submissions_resources(
+    world: _World, flows: FlowStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    current = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_OTHER], at=_AT)
+    assert old is not None and current is not None
+    assert flows.close(old.submission_id, outcome="superseded", at=_AT) is not None
+    locked: list[str] = []
+    real_lock = flow_rows.lock_flow_resources
+
+    def capture(conn: Connection, submission_ids: list[str]) -> None:
+        locked.extend(submission_ids)
+        real_lock(conn, submission_ids)
+
+    monkeypatch.setattr(flow_rows, "lock_flow_resources", capture)
+    with hub_store_connections(world.engine).write("withdraw_test") as conn:
+        flow_rows.withdraw_waiting(conn, "ch_1", outcome="stopped", at=_AT)
+    assert locked == [current.submission_id]
+    visit = flows.submission_for_visit("ch_1", node_id="nd_deliver", epoch=1)
+    assert visit is not None and visit.closed == "stopped"
 
 
 def test_the_floor_walk_returns_only_open_submissions_at_or_above_the_floor(flows: FlowStore) -> None:

@@ -13,8 +13,18 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.runners.registration import STALE_AFTER
-from tests.support import HubHarness, TenantHarness, build_hub, emitted_events, pointer_token, seed_runner
+from blizzard.hub.store import schema as s
+from tests.support import (
+    HubHarness,
+    TenantHarness,
+    build_hub,
+    emitted_events,
+    hub_store_connections,
+    pointer_token,
+    seed_runner,
+)
 
 pytestmark = pytest.mark.component
 
@@ -429,13 +439,11 @@ def test_a_token_enrolled_on_a_retired_host_is_refused_403(tmp_path: Path) -> No
     added = _add_host(hub)
     host_id = added["host_id"]
     hub.client.post(f"/api/hosts/{host_id}/retire", json={})
-    hosts = hub.services.hosts
-    from blizzard.foundation.tokens import TokenHash
-    from blizzard.hub.domain.runners.host import HostTokenRotation
-
-    hosts.rotate_token(  # type: ignore[attr-defined]
-        HostTokenRotation(host_id, TokenHash("late").hex, hub.clock.now(), "racer")
-    )
+    # Seed a legacy or otherwise inconsistent credential directly: normal rotation now
+    # correctly refuses a retired host under the registry lock.
+    store = hub_store_connections(hub.engine)
+    with store.write("seed_retired_host_token") as conn:
+        conn.execute(store.update(s.hosts).where(s.hosts.c.host_id == host_id).values(token_hash=TokenHash("late").hex))
 
     resp = hub.client.get("/api/fleet/host", headers=_bearer("late"))
 
@@ -488,7 +496,7 @@ def test_a_rerun_over_a_retired_host_retires_the_runners_a_crash_left_unretired(
     assert hub.client.get("/api/runners/rn_a").json()["retired"] is True
 
 
-def test_a_runner_gaining_a_route_after_the_check_is_a_409_and_the_committed_host_retirement_is_published(
+def test_a_runner_gaining_a_route_after_the_check_refuses_before_host_retirement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     hub = build_hub(tmp_path)
@@ -513,9 +521,9 @@ def test_a_runner_gaining_a_route_after_the_check_is_a_409_and_the_committed_hos
     assert refused.status_code == 409, refused.text
     assert chunk_id in refused.json()["detail"]
     assert "rn_a" in refused.json()["detail"]
-    assert hub.client.get(f"/api/hosts/{host_id}").json()["retired"] is True
+    assert hub.client.get(f"/api/hosts/{host_id}").json()["retired"] is False
     assert hub.client.get("/api/runners/rn_a").json()["retired"] is False
-    assert len([f for f in _host_frames(hub, since) if "retired" in f["data"]]) == 1
+    assert not [f for f in _host_frames(hub, since) if "retired" in f["data"]]
 
 
 def test_a_rerun_over_a_crash_left_runner_holding_a_chunk_is_a_409(tmp_path: Path) -> None:

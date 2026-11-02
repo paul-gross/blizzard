@@ -2,8 +2,8 @@
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.dependencies``);
 :func:`decide_declare` owns what declaring decides, and release has no window. Declaring runs
-under the row lock (``bzh:store-exclusive-write``) plus a residual per-tenant
-``threading.Lock`` the cycle check alone still needs — pinned by
+under the dependency graph key and chunk row locks, as well as the existing per-tenant
+``threading.Lock`` — pinned by
 ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
 
 from __future__ import annotations
@@ -136,9 +136,7 @@ class DependencyService:
         # ``bzh:store-exclusive-write`` — the row lock over the two named chunks.
         self._exclusive = exclusive
         self._clock = clock
-        # The residual per-tenant lock: row locks alone cannot
-        # close a race between two declares closing a cycle through chunks neither one
-        # names, so the cycle check itself still needs one lock over the tenant's whole dependency graph.
+        # Retain the in-process lock alongside the store's dependency-graph key.
         self._cycle_lock = cycle_lock
 
     def declare(self, dependent: Chunk, prerequisite: PrerequisiteScope, *, by: str) -> DependencyEdge:
@@ -147,7 +145,7 @@ class DependencyService:
         Reads the standing edges, the dependent's facts, and the prerequisite's ephemerality under
         the lock, and writes whatever :func:`decide_declare` decides."""
         prerequisite_id = prerequisite.chunk_id
-        with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite_id]) as handle:
+        with self._cycle_lock, self._exclusive.locked_dependency_graph([dependent.chunk_id, prerequisite_id]) as handle:
             decision = decide_declare(
                 handle.standing_edges(),
                 dependent=dependent,
