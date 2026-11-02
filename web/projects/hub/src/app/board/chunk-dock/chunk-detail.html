@@ -3,11 +3,13 @@
 } @else {
   <fleet-kit-async-state
     [state]="state()"
-    loadingText="LOADING…"
-    loadingTestid="chunk-detail-loading"
+    loadingMode="content"
     errorText="FAILED TO LOAD CHUNK"
     errorTestid="chunk-detail-error"
   >
+    <!-- The detail query has no placeholder data, so switching chunks re-enters loading and draws this
+         skeleton again rather than the previous chunk's panel. -->
+    <app-chunk-detail-skeleton loading data-testid="chunk-detail-loading" />
     @if (detail(); as d) {
       <app-chunk-detail-panel
         [detail]="d"

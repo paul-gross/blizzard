@@ -217,23 +217,33 @@ describe('ChunkGeneralTab', () => {
   });
 
   it('forwards issuePanePlacement to the issue pane, defaulting to center', async () => {
-    const loading: WorkItemsState = { status: 'loading', items: [] };
+    const failed: WorkItemsState = { status: 'error', items: [] };
 
     const centered = TestBed.createComponent(ChunkGeneralTab);
     centered.componentRef.setInput('detail', DETAIL);
-    centered.componentRef.setInput('workItems', loading);
+    centered.componentRef.setInput('workItems', failed);
     await centered.whenStable();
     expect(
-      (centered.nativeElement as HTMLElement).querySelector('[data-testid="issue-loading"]')?.classList.contains('inline'),
+      (centered.nativeElement as HTMLElement).querySelector('[data-testid="issue-error"]')?.classList.contains('inline'),
     ).toBe(false);
 
     const inlined = TestBed.createComponent(ChunkGeneralTab);
     inlined.componentRef.setInput('detail', DETAIL);
-    inlined.componentRef.setInput('workItems', loading);
+    inlined.componentRef.setInput('workItems', failed);
     inlined.componentRef.setInput('issuePanePlacement', 'inline');
     await inlined.whenStable();
     expect(
-      (inlined.nativeElement as HTMLElement).querySelector('[data-testid="issue-loading"]')?.classList.contains('inline'),
+      (inlined.nativeElement as HTMLElement).querySelector('[data-testid="issue-error"]')?.classList.contains('inline'),
     ).toBe(true);
+  });
+
+  it('holds a skeleton row in the issue pane while the work items load', async () => {
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', DETAIL);
+    fixture.componentRef.setInput('workItems', { status: 'loading', items: [] } satisfies WorkItemsState);
+    await fixture.whenStable();
+    const loading = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="issue-loading"]');
+    expect(loading?.querySelectorAll('fleet-kit-skeleton')).toHaveLength(2);
+    expect(loading?.textContent?.trim()).toBe('');
   });
 });

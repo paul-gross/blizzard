@@ -2,13 +2,17 @@
   <fleet-kit-async-state
     [state]="triadState()"
     [placement]="placement()"
-    loadingText="Loading work items…"
-    loadingTestid="issue-loading"
+    loadingMode="content"
     errorText="Could not read the work items — content is unavailable."
     errorTestid="issue-error"
     emptyText="This chunk has no linked work items."
     emptyTestid="issue-empty"
   >
+    <!-- One stand-in row, shaped like an issue list's accordion header: the name, then the ref at its end. -->
+    <div loading class="skeleton" aria-hidden="true" data-testid="issue-loading">
+      <fleet-kit-skeleton class="skeleton-name" [rows]="1" />
+      <fleet-kit-skeleton class="skeleton-ref" [rows]="1" />
+    </div>
     <fleet-chunk-issue-list [items]="workItems().items" />
   </fleet-kit-async-state>
 </div>

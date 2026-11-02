@@ -234,6 +234,21 @@ describe('ChunkDetail container', () => {
     expect(rest?.textContent).toContain('SELECT');
   });
 
+  it('holds the dock-shaped skeleton while the detail is read, then the panel in its place', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const loading = el.querySelector('[data-testid="chunk-detail-loading"]');
+    expect(loading?.tagName.toLowerCase()).toBe('app-chunk-detail-skeleton');
+    expect(loading?.textContent?.trim()).toBe('');
+
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="chunk-detail-loading"]')).toBeNull();
+    expect(el.querySelector('app-chunk-detail-panel')).not.toBeNull();
+  });
+
   it('renders an error state, not an endless LOADING…, when the detail read fails', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_missing');

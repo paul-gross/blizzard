@@ -26,6 +26,7 @@ import {
 } from '../../core/mutation-keys';
 import { openDetail, openProjectColor, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
+import { ChunkDetailSkeleton } from './chunk-detail-skeleton';
 
 /**
  * The chunk detail **container** (`bzh:frontend-container-presentational`) — owns the
@@ -40,7 +41,7 @@ import { ChunkDetailPanel } from './chunk-detail-panel';
 @Component({
   selector: 'app-chunk-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkDetailPanel, KitAsyncState],
+  imports: [ChunkDetailPanel, ChunkDetailSkeleton, KitAsyncState],
   templateUrl: './chunk-detail.html',
   styleUrl: './chunk-detail.css',
 })

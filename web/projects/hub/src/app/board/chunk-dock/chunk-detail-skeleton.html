@@ -1,0 +1,35 @@
+<div class="frame">
+  <div class="head">
+    <div class="title">
+      <fleet-kit-skeleton class="id" [rows]="1" />
+      <fleet-kit-skeleton class="sub" [rows]="1" />
+    </div>
+    <div class="controls">
+      <fleet-kit-skeleton class="control" [rows]="1" />
+      <fleet-kit-skeleton class="control" [rows]="1" />
+    </div>
+  </div>
+  <div class="body">
+    <div class="col">
+      <fleet-kit-skeleton class="label" [rows]="1" />
+      @for (row of factRows; track row) {
+        <div class="fact">
+          <fleet-kit-skeleton class="fact-label" [rows]="1" />
+          <fleet-kit-skeleton class="fact-value" [rows]="1" />
+        </div>
+      }
+    </div>
+    <div class="col">
+      <fleet-kit-skeleton class="label" [rows]="1" />
+      @for (row of historyRows; track row) {
+        <fleet-kit-skeleton class="line" [rows]="1" />
+      }
+    </div>
+    <div class="col">
+      <fleet-kit-skeleton class="label" [rows]="1" />
+      @for (row of artifactRows; track row) {
+        <fleet-kit-skeleton class="line" [rows]="2" />
+      }
+    </div>
+  </div>
+</div>
