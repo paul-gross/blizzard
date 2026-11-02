@@ -14,7 +14,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.config.apply import LinkRecord
 from blizzard.hub.domain.config.carry_over import (
     CommitCoordinate,
     ConfigImportFact,
@@ -26,6 +25,7 @@ from blizzard.hub.domain.config.carry_over import (
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
+from blizzard.hub.domain.config.records import ConfiguredLink
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
 from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
 
@@ -135,7 +135,7 @@ class ConfigImportStore:
         return True
 
 
-def _insert_link(conn: Connection, link: LinkRecord, change: ConfigChange) -> None:
+def _insert_link(conn: Connection, link: ConfiguredLink, change: ConfigChange) -> None:
     link_writes.insert_link(conn, link_writes.LINK_KINDS[link.KIND], link.project_id, link.target(), change)
 
 

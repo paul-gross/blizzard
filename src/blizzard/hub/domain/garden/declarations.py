@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.config.apply import DeclarableRecord, DeclaredReferences
+from blizzard.hub.domain.config.apply import DeclaredReferences
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.records import NamedRetirableConfiguredRecord
 from blizzard.hub.domain.garden.routines import (
     SCOPES_FIELD,
     Routine,
@@ -41,7 +42,7 @@ class ScopeDeclaration:
     def key(self) -> tuple[str, str]:
         return (self.project_id, self.name)
 
-    def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
+    def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
         try:
             ScopeSlug.parse(self.name)
         except ScopeSlugError as exc:
@@ -51,12 +52,14 @@ class ScopeDeclaration:
         return Scope.new(ScopeSlug.parse(self.name), self.description, ctx, project_id=self.project_id, at=at)
 
     def edit_record(
-        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
+        self, record: NamedRetirableConfiguredRecord, ctx: ChangeContext, *, at: datetime
     ) -> tuple[Scope, ConfigChange] | None:
         assert isinstance(record, Scope)
         return record.edit(self.edit, ctx, if_match=None, at=at)
 
-    def settle(self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime) -> None:
+    def settle(
+        self, record: NamedRetirableConfiguredRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
+    ) -> None:
         return None
 
 
@@ -80,7 +83,7 @@ class RoutineDeclaration:
     def key(self) -> tuple[str, str]:
         return (self.project_id, self.name)
 
-    def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
+    def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
         """The graph resolves to an enabled one when the entry creates the routine or moves it to another
         graph, and every scope it names is stored or declared in its project; the harness preference is
         well-formed."""
@@ -116,13 +119,13 @@ class RoutineDeclaration:
         )
 
     def edit_record(
-        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
+        self, record: NamedRetirableConfiguredRecord, ctx: ChangeContext, *, at: datetime
     ) -> tuple[Routine, ConfigChange] | None:
         assert isinstance(record, Routine)
         return record.edit(self.edit, ctx, if_match=None, at=at)
 
     def settle(
-        self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
+        self, record: NamedRetirableConfiguredRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
     ) -> tuple[Routine, ConfigChange] | None:
         """Move the linked set to the stated one; the routine's default scope always stays a member."""
         assert isinstance(record, Routine)

@@ -16,6 +16,7 @@ from typing import ClassVar, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
@@ -27,7 +28,7 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
@@ -210,14 +211,13 @@ class Routine:
         self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
     ) -> ConfigChange:
         """The change row a verb on this routine writes, in the routine's project."""
-        return ConfigChange.of(
+        return lifecycle.change_row(
             ctx, RecordKind.ROUTINE, self.name, revision, op, changes, at, project_id=self.project_id
         )
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("routine", self.name, current=self.revision)
+        lifecycle.require_revision(if_match, self.revision, kind="routine", key=self.name)
 
     def edit(
         self, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -232,7 +232,7 @@ class Routine:
         changes = merged._diff(self)
         if not changes:
             return None
-        edited = replace(merged, revision=self.revision + 1)
+        edited = replace(merged, revision=lifecycle.next_revision(self.revision))
         return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
@@ -240,11 +240,11 @@ class Routine:
     ) -> tuple[Routine, ConfigChange] | None:
         """Retire or enable; ``None`` when the routine already stands there (a redundant verb writes nothing)."""
         self.require_revision(if_match)
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+        op = lifecycle.transition(self.retired, retired)
+        if op is None:
             return None
-        moved = replace(self, revision=self.revision + 1, retired=retired)
-        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        moved = replace(self, revision=lifecycle.next_revision(self.revision), retired=retired)
+        flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, self._change(ctx, moved.revision, op, flip, at)
 
     def with_scopes(
@@ -254,10 +254,10 @@ class Routine:
         ``scopes``; ``None`` when the set is unchanged."""
         self.require_revision(if_match)
         old, new = sorted(set(linked)), sorted(set(scopes))
-        if old == new:
+        changes = lifecycle.field_changes(((SCOPES_FIELD, old, new),))
+        if not changes:
             return None
-        moved = replace(self, revision=self.revision + 1)
-        changes = (FieldChange(SCOPES_FIELD, old, new),)
+        moved = replace(self, revision=lifecycle.next_revision(self.revision))
         return moved, self._change(ctx, moved.revision, ChangeOp.EDIT, changes, at)
 
     def require_own_scope(self, scope: Scope) -> None:
@@ -298,13 +298,9 @@ class Routine:
     def _diff(self, old: Routine | None) -> tuple[FieldChange, ...]:
         """The fields that differ from ``old``, by wire name. With no ``old`` (a create),
         every field is listed against ``None``."""
-        changes: list[FieldChange] = []
-        for name in _FIELDS:
-            new_value = getattr(self, name)
-            old_value = None if old is None else getattr(old, name)
-            if old_value != new_value:
-                changes.append(FieldChange(name, old_value, new_value))
-        return tuple(changes)
+        return lifecycle.field_changes(
+            (name, None if old is None else getattr(old, name), getattr(self, name)) for name in _FIELDS
+        )
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

@@ -29,7 +29,8 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.lifecycle import change_row, field_changes, next_revision, require_revision, transition
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project
@@ -146,12 +147,11 @@ class Scope:
         self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
     ) -> ConfigChange:
         """The change row a verb on this scope writes, in the scope's project."""
-        return ConfigChange.of(ctx, RecordKind.SCOPE, self.slug, revision, op, changes, at, project_id=self.project_id)
+        return change_row(ctx, RecordKind.SCOPE, self.slug, revision, op, changes, at, project_id=self.project_id)
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("scope", self.slug, current=self.revision)
+        require_revision(if_match, self.revision, kind="scope", key=self.slug)
 
     def edit(
         self, edit: ScopeEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -163,10 +163,10 @@ class Scope:
             return None
         if edit.description is None:
             raise ConfigFieldError(_DESCRIPTION, "must not be null")
-        if edit.description == self.description:
+        changes = field_changes(((_DESCRIPTION, self.description, edit.description),))
+        if not changes:
             return None
-        edited = replace(self, description=edit.description, revision=self.revision + 1)
-        changes = (FieldChange(_DESCRIPTION, self.description, edit.description),)
+        edited = replace(self, description=edit.description, revision=next_revision(self.revision))
         return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
@@ -174,11 +174,11 @@ class Scope:
     ) -> tuple[Scope, ConfigChange] | None:
         """Retire or enable; ``None`` when the scope already stands there (a redundant verb writes nothing)."""
         self.require_revision(if_match)
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+        op = transition(self.retired, retired)
+        if op is None:
             return None
-        moved = replace(self, revision=self.revision + 1, retired=retired)
-        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        moved = replace(self, revision=next_revision(self.revision), retired=retired)
+        flip = field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, self._change(ctx, moved.revision, op, flip, at)
 
 

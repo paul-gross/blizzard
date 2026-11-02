@@ -21,7 +21,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import secret_lifecycle
-from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION, LinkRecord
+from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import (
@@ -38,6 +38,7 @@ from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_URL,
     LegacyKeys,
 )
+from blizzard.hub.domain.config.records import ConfiguredLink
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     ConfiguredRepository,
@@ -158,7 +159,7 @@ class LegacyImport:
     work_sources: tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
-    links: tuple[tuple[LinkRecord, ConfigChange], ...] = ()
+    links: tuple[tuple[ConfiguredLink, ConfigChange], ...] = ()
 
 
 class ImportStatus(StrEnum):
@@ -194,7 +195,7 @@ class IImportLinks(Protocol):
         ctx: ChangeContext,
         *,
         at: datetime,
-    ) -> tuple[tuple[LinkRecord, ConfigChange], ...]:
+    ) -> tuple[tuple[ConfiguredLink, ConfigChange], ...]:
         """Each link record with its change. :class:`LegacyImportRefused` when no project can be chosen."""
         ...
 

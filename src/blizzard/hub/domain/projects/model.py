@@ -14,7 +14,14 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.lifecycle import (
+    change_row,
+    field_changes,
+    next_revision,
+    require_revision,
+    slug_left_for,
+)
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import parse_color
@@ -129,8 +136,7 @@ class Project:
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("project", self.project_id, current=self.revision)
+        require_revision(if_match, self.revision, kind="project", key=self.project_id)
 
     def edit(
         self, edit: ProjectEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -148,26 +154,22 @@ class Project:
         changes = _diff(self, edited)
         if not changes:
             return None
-        edited = replace(edited, revision=self.revision + 1)
+        edited = replace(edited, revision=next_revision(self.revision))
         return edited, edited._change(ctx, ChangeOp.EDIT, changes, at)
 
     def slug_left_for(self, edited: Project) -> str | None:
         """The slug this record leaves when ``edited`` replaces it — ``None`` when the slug stays."""
-        return self.slug if edited.slug != self.slug else None
+        return slug_left_for(self.slug, edited.slug)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
-        return ConfigChange.of(
+        return change_row(
             ctx, RecordKind.PROJECT, self.project_id, self.revision, op, changes, at, project_id=self.project_id
         )
 
 
 def _diff(old: Project | None, new: Project) -> tuple[FieldChange, ...]:
     """The fields that differ, by wire name; with no ``old`` (a create), every field against ``None``."""
-    return tuple(
-        FieldChange(name, None if old is None else getattr(old, name), getattr(new, name))
-        for name in _FIELDS
-        if old is None or getattr(old, name) != getattr(new, name)
-    )
+    return field_changes((name, None if old is None else getattr(old, name), getattr(new, name)) for name in _FIELDS)
 
 
 def sole_project(projects: Sequence[Project]) -> Project:

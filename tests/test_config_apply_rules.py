@@ -415,6 +415,9 @@ class _StoodInProject:
     slug: str = "web"
     revision: int = 1
 
+    def require_revision(self, if_match: int | None) -> None:
+        assert if_match is None or if_match == self.revision
+
 
 def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes() -> None:
     repository = _declared_repo("r")

@@ -7,32 +7,26 @@ linked or unlinked."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar, Protocol, Self
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
-    FIELDED_RECORD_TRANSITIONS,
     ChangeContext,
     ChangeOp,
     ConfigChange,
     FieldChange,
     RecordKind,
-    RecordState,
-    Verdict,
 )
-from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.
 LINKED_FIELD = "linked"
-
-#: Which link verbs are legal from which state: an unlinked link is a retired one.
-_TRANSITIONS: Mapping[RecordState, Mapping[ChangeOp, Verdict]] = FIELDED_RECORD_TRANSITIONS
 
 
 @domain_model
@@ -52,8 +46,7 @@ class _Link:
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict(self.LABEL, f"{self.project_id}/{self.target()}", current=self.revision)
+        lifecycle.require_revision(if_match, self.revision, kind=self.LABEL, key=f"{self.project_id}/{self.target()}")
 
     def unlink(self, ctx: ChangeContext, *, if_match: int | None, at: datetime) -> tuple[Self, ConfigChange] | None:
         """Retire the link; ``None`` when it is already unlinked."""
@@ -67,14 +60,15 @@ class _Link:
         self, linked: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[Self, ConfigChange] | None:
         self.require_revision(if_match)
-        op = ChangeOp.ENABLE if linked else ChangeOp.RETIRE
-        if _TRANSITIONS[RecordState.of(not self.linked)][op] is Verdict.NO_OP:
+        op = lifecycle.transition(not self.linked, not linked)
+        if op is None:
             return None
-        moved = replace(self, revision=self.revision + 1, linked=linked)
-        return moved, moved._change(ctx, op, (FieldChange(LINKED_FIELD, self.linked, linked),), at)
+        moved = replace(self, revision=lifecycle.next_revision(self.revision), linked=linked)
+        changes = lifecycle.field_changes(((LINKED_FIELD, self.linked, linked),))
+        return moved, moved._change(ctx, op, changes, at)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
-        return ConfigChange.of(
+        return lifecycle.change_row(
             ctx, self.KIND, self.target(), self.revision, op, changes, at, project_id=self.project_id
         )
 
