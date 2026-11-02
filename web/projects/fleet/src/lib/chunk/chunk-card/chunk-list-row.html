@@ -62,6 +62,7 @@
         <span class="r-name">{{ holder.name }}</span>
       </span>
     }
+    <span class="progress"><ng-content select="[chunkRowProgress]" /></span>
     <span class="step">
       <span class="step-name" [title]="card().stepTitle ?? card().step">{{ card().step }}</span>
       @if (gated()) {

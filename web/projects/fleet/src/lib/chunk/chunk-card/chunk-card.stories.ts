@@ -1,8 +1,8 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { type Meta, moduleMetadata, type StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import type { Tone } from '../../kit';
-import { ChunkCard } from './chunk-card';
+import { ChunkCard, ChunkCardProgress } from './chunk-card';
 import type { ChunkCardView } from './chunk-card.model';
 
 /** A card as the hub fills it: work items, a place on a flow, an open PR, and its cost. */
@@ -49,6 +49,7 @@ const TONES: readonly Tone[] = ['running', 'needs', 'waiting', 'takeover', 'spaw
 const meta: Meta<ChunkCard> = {
   title: 'Chunk/Card',
   component: ChunkCard,
+  decorators: [moduleMetadata({ imports: [ChunkCardProgress] })],
   args: { card: HUB_CARD, selected: false, gated: false, canControl: false, showHolder: false, selectChunk: fn(), promote: fn() },
   render: (args) => ({
     props: args,
@@ -75,6 +76,28 @@ export const RunnerFilledWithWorker: Story = {
         <fleet-chunk-card [card]="card" [selected]="selected" [showHolder]="showHolder" (selectChunk)="selectChunk($event)">
           <span chunkCardWorker style="font-size: var(--fs-xs); color: var(--label)">beta · RUNNING · 12s</span>
         </fleet-chunk-card>
+      </div>`,
+  }),
+};
+/** A stand-in for an app's progress mark — the hub projects its graph-progress strip here. */
+const PROGRESS = `<span fleetChunkCardProgress style="display: block; height: 6px; background: var(--cyan-dim)"></span>`;
+
+export const HubFilledWithProgress: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <div style="width: 260px">
+        <fleet-chunk-card [card]="card" [selected]="selected" (selectChunk)="selectChunk($event)">${PROGRESS}</fleet-chunk-card>
+      </div>`,
+  }),
+};
+export const ProgressWithoutCost: Story = {
+  args: { card: { ...HUB_CARD, cost: null } },
+  render: (args) => ({
+    props: args,
+    template: `
+      <div style="width: 260px">
+        <fleet-chunk-card [card]="card" (selectChunk)="selectChunk($event)">${PROGRESS}</fleet-chunk-card>
       </div>`,
   }),
 };

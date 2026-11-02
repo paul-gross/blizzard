@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { BoardShell } from './board-shell';
 import { laneSkeletonCounts, listSkeletonCount } from './board-skeletons.model';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const LANE_SKELETONS = new Map([
   ['notready', 3],
@@ -15,6 +16,7 @@ const LANE_SKELETONS = new Map([
 
 describe('BoardShell loading skeletons', () => {
   beforeEach(async () => {
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],

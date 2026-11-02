@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import type { BoardLaneMove, BoardReposition } from '../board-shell/board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
+import { stubNodeStrip } from '../node-strip/node-strip.stub';
 
 const RUNNER_ID = 'rn_01M49GZR9G2S7PT1TB5ZT4E4AX';
 
@@ -45,6 +46,7 @@ describe('BoardList', () => {
   let selected: string[];
 
   const render = async (rendered: BoardListGroups, permissions: { canReorder?: boolean; canControl?: boolean } = {}) => {
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [BoardList],
       providers: [provideZonelessChangeDetection()],
@@ -290,6 +292,26 @@ describe('BoardList', () => {
       expect(open.contains(link)).toBe(false);
       expect(open.contains(el.querySelector('[data-testid="list-row-fold"]'))).toBe(false);
       expect(selected).toEqual([]);
+    });
+  });
+
+  describe('the step and node strip', () => {
+    const step = (el: HTMLElement) => el.querySelector('.step-name');
+
+    it('names the step by graph/node once the graph is read, the node id in its hover', async () => {
+      const el = await render(running(card('a', { graphId: 'gr_1', graphName: 'adv-dwf' })));
+      expect(step(el)?.textContent?.trim()).toBe('adv-dwf/build');
+      expect(step(el)?.getAttribute('title')).toBe('adv-dwf/build (nd_build)');
+    });
+
+    it('keeps the bare node until the graph is read', async () => {
+      expect(step(await render(running(card('a'))))?.textContent?.trim()).toBe('build');
+    });
+
+    it('carries the strip on a mid-graph row only', async () => {
+      const el = await render(groups({ live: [entry('running', card('r', { graphId: 'gr_1' }))], ready: [ready('q')] }));
+      const strips = [...el.querySelectorAll('[data-testid="node-strip-stub"]')];
+      expect(strips.map((strip) => strip.getAttribute('data-chunk'))).toEqual(['ch_01r']);
     });
   });
 });

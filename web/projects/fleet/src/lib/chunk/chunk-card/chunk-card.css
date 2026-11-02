@@ -97,6 +97,12 @@
 .cost-row {
   justify-content: flex-end;
 }
+/* A projected progress mark takes whatever room the cost leaves. */
+.progress {
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: center;
+}
 .cost-row .done-at {
   margin-right: auto;
 }

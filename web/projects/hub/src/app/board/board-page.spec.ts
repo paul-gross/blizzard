@@ -9,7 +9,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { BoardShell } from './board-shell/board-shell';
 import { compactRef, hubClient, hubQueueKey, lensedKey } from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { graphView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
@@ -147,9 +147,9 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
       };
     }
     if (path.endsWith('/work-items')) return { items: [] };
+    if (path.startsWith('/api/graphs/')) return graphView({ graph_id: path.slice('/api/graphs/'.length), name: 'default' });
     const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
     if (detail !== null) return detail[1] === GONE ? stubError(404, { detail: 'not found' }) : DETAIL(detail[1]);
-
     return {};
   };
 }

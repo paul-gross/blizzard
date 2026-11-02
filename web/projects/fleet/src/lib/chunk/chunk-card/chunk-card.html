@@ -65,8 +65,12 @@
       }
     </div>
   }
-  @if (card().completedAt || card().cost) {
+  <!-- The cost row: a progress mark on its left where one is projected, the cost flush right. -->
+  @if (progress() || card().completedAt || card().cost) {
     <span class="row cost-row" data-testid="card-cost-row">
+      @if (progress()) {
+        <span class="progress"><ng-content select="[fleetChunkCardProgress]" /></span>
+      }
       @if (card().completedAt; as completedAt) {
         <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
       }

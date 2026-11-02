@@ -8,6 +8,8 @@ import { type BoardCard, boardCardView } from '../board-card/board-card-view.mod
 import type { BoardLaneMove, BoardReorderList, BoardReposition } from '../board-shell/board-column';
 import { resolveDrop } from '../board-shell/board-drop.model';
 import { LaneIcon } from '../lane-icon/lane-icon';
+import { NodeStrip } from '../node-strip/node-strip';
+import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { BoardListRowSkeleton } from './board-list-row-skeleton';
 
@@ -45,7 +47,7 @@ export function listDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardListRowSkeleton, CdkDrag, ChunkListRow, CdkDropList, LaneIcon, NgTemplateOutlet, ReorderGrip],
+  imports: [BoardListRowSkeleton, CdkDrag, ChunkListRow, CdkDropList, LaneIcon, NgTemplateOutlet, NodeStrip, ReorderGrip],
   templateUrl: './board-list.html',
   styleUrl: './board-list.css',
 })
@@ -73,6 +75,8 @@ export class BoardList {
   /** Emitted when a row is dropped across the line into the other ranked list. */
   readonly laneMove = output<BoardLaneMove>();
 
+  protected readonly showsNodeStrip = showsNodeStrip;
+
   protected readonly readyDropId = listDropId('ready');
   protected readonly backlogDropId = listDropId('notready');
 
@@ -80,7 +84,7 @@ export class BoardList {
   protected readonly views = computed(() => {
     const groups = this.groups();
     const entries = [...groups.live, ...groups.ready, ...groups.backlog, ...groups.done];
-    return new Map(entries.map((entry) => [entry.card.chunkId, boardCardView(entry.card)]));
+    return new Map(entries.map((entry) => [entry.card.chunkId, boardCardView(entry.card, 'row')]));
   });
 
   /** Whether any row renders at all. */

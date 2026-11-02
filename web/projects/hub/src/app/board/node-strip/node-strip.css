@@ -1,0 +1,56 @@
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+/* Groups of ten, set apart the way a subscription's window blocks are. */
+.strip {
+  display: flex;
+  width: 100%;
+  gap: 5px;
+  min-width: 0;
+}
+.group {
+  display: flex;
+  /* Each group asks for its blocks at full width, and gives way only when the row runs short. */
+  flex: 0 1 calc(var(--blocks) * 1.5rem + (var(--blocks) - 1) * 2px);
+  gap: 2px;
+  min-width: 0;
+}
+:host(.dense) .group {
+  gap: 1px;
+}
+/* Each block the fleet registry's agent-cell rendered height (7px plus its 1px borders), up to 1.5rem wide, giving way when there are many. */
+.block {
+  flex: 1 1 0;
+  max-width: 1.5rem;
+  min-width: 2px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: #000;
+}
+.block[data-state='passed'] {
+  background: var(--green);
+  border-color: var(--green-dim);
+}
+.block[data-state='failed'] {
+  background: var(--red);
+  border-color: var(--red-dim);
+}
+/* The node the chunk stands on: the registry's overload cyan, on its pulse. */
+.block[data-state='current'] {
+  background: var(--cyan);
+  border-color: var(--cyan-dim);
+  animation: node-strip-current 2s ease-in-out infinite;
+}
+@keyframes node-strip-current {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .block[data-state='current'] {
+    animation: none;
+  }
+}

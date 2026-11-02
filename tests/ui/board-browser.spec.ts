@@ -179,10 +179,10 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   await expect(page.getByTestId('runner-hub-paused')).toBeVisible();
   await expect(page.getByTestId('runner-locally-paused')).toHaveCount(0);
 
-  // B runs on to done; its card's node slot is the one place "done" renders.
+  // B runs on to done; its card's node slot is the one place "done" renders, named with its graph once that is read.
   expect(await stepUntil(runnerHost, () => status(chunkB), (s) => ['done', 'needs_human', 'stopped'].includes(s))).toBe('done');
   await expect(colCards('done')).toHaveCount(1);
-  await expect(col('done').getByTestId('chunk-node')).toHaveText('done');
+  await expect(col('done').getByTestId('chunk-node')).toHaveText(/^(?:[\w-]+\/)?done$/);
   await expect(col('done').getByTestId('chunk-status')).toHaveCount(0);
 
   // The dock, still on B, renders its node history and artifacts, each artifact a link.

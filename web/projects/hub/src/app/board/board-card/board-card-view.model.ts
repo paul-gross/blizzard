@@ -16,6 +16,7 @@ import {
   type WorkLine,
 } from 'fleet';
 import type { FlowPlaceLine } from '../flows/flow-place.model';
+import { graphStepLabel, runnerBoardLabel, STEP_RUNNER_SEP } from '../node-strip/node-strip.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -30,6 +31,10 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
+  /** The chunk's graph, from `ChunkSummary.graph_id` — null when it names none. */
+  readonly graphId?: string | null;
+  /** The chunk's graph's name, once its graph is read — null until then or when unresolvable. */
+  readonly graphName?: string | null;
   /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
   readonly workLines: readonly WorkLine[];
   /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
@@ -94,16 +99,25 @@ function stepTitle(label: string, nodeId: string): string | null {
   return nodeId && nodeId !== label ? `${label} (${nodeId})` : label || null;
 }
 
+/** Which shared component a view feeds: the lane grid's card, or the list view's row. */
+export type BoardCardSurface = 'card' | 'row';
+
 /**
  * A board card as the fleet card and list row draw it. Its tone is the status's (`STATUS_TONE`). The status word is
  * said only where it says more than the lane — never in the DONE lane, whose step already says it; a stopped chunk's
  * step is the status word, its last node being noise once it has stopped. The completion stamp is a done-lane card's
  * alone, and the blocked marking names the blocker's own status only when exactly one chunk blocks this one — a count
  * names no single chunk.
+ *
+ * A node step is prefixed with its graph's name (`adv-dwf/pre-push`) once that graph is read. On the card, whose step
+ * row is the only place the holder is named, the holding runner follows it as the mobile card writes it
+ * (`adv-dwf/pre-push · xps/r-claude`); the list row names the holder in a cell of its own.
  */
-export function boardCardView(card: BoardCard): ChunkCardView {
-  const step = stepLabel(card.status, card.node);
+export function boardCardView(card: BoardCard, surface: BoardCardSurface = 'card'): ChunkCardView {
   const { runnerId, runnerName, hostName } = card;
+  const label = graphStepLabel(card.graphName, card.node, stepLabel(card.status, card.node));
+  const parts = runnerId ? runnerBoardParts(runnerId, runnerName, hostName) : null;
+  const step = surface === 'card' && parts ? label + STEP_RUNNER_SEP + runnerBoardLabel(parts) : label;
   return {
     chunkId: card.chunkId,
     shortId: card.shortId,
@@ -114,7 +128,7 @@ export function boardCardView(card: BoardCard): ChunkCardView {
     stepTitle: stepTitle(step, card.nodeId),
     workLines: card.workLines,
     itemsRead: card.itemsRead,
-    holder: runnerId ? { ...runnerBoardParts(runnerId, runnerName, hostName), title: runnerTitle(runnerId, runnerName, hostName) } : null,
+    holder: runnerId && parts ? { ...parts, title: runnerTitle(runnerId, runnerName, hostName) } : null,
     blocked: card.blockedOn
       ? {
           label: blockedLabel(card.blockedOn, card.blockedCount),

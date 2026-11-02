@@ -25,6 +25,7 @@ import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skele
 import { injectProjectsQuery } from '../core/projects.query';
 import { UnservedBanner } from './unserved/unserved-banner';
 import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
+import { injectHubGraphNamesQuery } from '../graphs/graphs.query';
 import { DeliveryBand } from './flows/delivery-band';
 import { injectDockUrlSelection } from './flows/dock-url-selection';
 import { FlowRecord } from './flows/flow-record';
@@ -238,6 +239,9 @@ export class BoardPage {
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
+
+  /** Each board chunk's graph name by graph id — the cards name the graph beside the node. */
+  protected readonly graphNames = injectHubGraphNamesQuery(() => this.boardChunks().flatMap((c) => (c.graph_id ? [c.graph_id] : [])));
 
   /** The flow whose record the dock shows, or `null` — never set while a chunk is open. */
   protected readonly selectedFlow = computed(() => this.selection.flowId());

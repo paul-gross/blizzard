@@ -8,6 +8,7 @@ import { assetArtifactView, chunkDetail, commitArtifactView, transitionView } fr
 import { ChunkCard } from 'fleet';
 import { type BoardCard, boardCardView } from './board-card/board-card-view.model';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
+import { stubNodeStrip } from './node-strip/node-strip.stub';
 
 /**
  * The shared hover tint (`--tint-hover`/`--tint-selected`) distinguishes a hovered row from a
@@ -59,6 +60,7 @@ async function loadDesignTokens(): Promise<void> {
 
 async function renderCard(card: BoardCard, selected: boolean): Promise<HTMLElement> {
   TestBed.resetTestingModule();
+  stubNodeStrip();
   await TestBed.configureTestingModule({
     imports: [ChunkCard],
     providers: [provideZonelessChangeDetection()],
@@ -212,6 +214,7 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
   it('washes a hovered history row', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [ChunkTimeline],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
@@ -241,6 +244,7 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
   it('reads a selected row as distinct from a merely hovered one', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [ChunkTimeline],
       providers: [provideZonelessChangeDetection()],
@@ -282,6 +286,7 @@ describe('chunk-timeline (Quick Reference) full-bleed row shell sweep (web:shell
   it("reaches its zero-padded ancestor's full width instead of floating inset from it", async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [ChunkTimeline],
       providers: [provideZonelessChangeDetection()],
@@ -361,6 +366,7 @@ describe('chunk-artifacts row hover tint shell sweep (web:shell-sweep)', () => {
   it('washes the bordered row of a hovered artifact link', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
+    stubNodeStrip();
     await TestBed.configureTestingModule({
       imports: [ChunkArtifacts],
       providers: [provideZonelessChangeDetection(), provideRouter([])],

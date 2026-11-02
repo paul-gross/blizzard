@@ -1,8 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Directive, computed, contentChild, input, output, signal } from '@angular/core';
 
 import { FleetWhen } from '../../core/when-display';
 import { KitBadge, KitButton, KitSelectRow, KitSkeleton, projectTint, toneColor } from '../../kit';
 import { type ChunkCardView, foldTitles } from './chunk-card.model';
+
+/**
+ * Marks the element projected into {@link ChunkCard}'s progress slot, so the card observes slot occupancy through a
+ * content query and draws its cost row for it. Carries no behavior.
+ */
+@Directive({ selector: '[fleetChunkCardProgress]' })
+export class ChunkCardProgress {}
 
 /**
  * One chunk as a board card, for every lane of either app's board. `[attr.data-chunk]` carries the full chunk id, a
@@ -10,7 +17,8 @@ import { type ChunkCardView, foldTitles } from './chunk-card.model';
  *
  * The edge and the id are drawn in the chunk's status tone (`toneColor`, through one bound `--edge` property); a
  * selected card's edge yields to the selection cyan. What only one app draws enters through a named slot — a live
- * worker's line under the titles (`[chunkCardWorker]`) — so the card never reaches into either app.
+ * worker's line under the titles (`[chunkCardWorker]`) and a progress mark on the cost row's left
+ * (`[fleetChunkCardProgress]`, the cost staying flush right) — so the card never reaches into either app.
  *
  * Presentational only (`bzh:frontend-container-presentational`): every output carries the chunk id.
  */
@@ -43,6 +51,9 @@ export class ChunkCard {
 
   /** Emitted with the chunk id when a promotable card's Promote is clicked. */
   readonly promote = output<string>();
+
+  /** Whatever is in the progress slot on this render, or `undefined` — the cost row draws for it. */
+  protected readonly progress = contentChild(ChunkCardProgress);
 
   protected readonly projectTint = computed(() => projectTint(this.card().projectColor));
 

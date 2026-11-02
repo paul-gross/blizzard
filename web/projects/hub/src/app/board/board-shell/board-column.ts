@@ -3,7 +3,9 @@ import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { ChunkCard, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
+import { ChunkCard, ChunkCardProgress, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
+import { NodeStrip } from '../node-strip/node-strip';
+import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { resolveDrop } from './board-drop.model';
 
@@ -62,7 +64,7 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardSkeleton, ChunkCard, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
+  imports: [BoardCardSkeleton, ChunkCard, ChunkCardProgress, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
@@ -79,7 +81,10 @@ export class BoardColumn {
   readonly skeletons = input(0);
 
   /** Each card as the fleet card draws it. */
-  protected readonly views = computed(() => this.cards().map(boardCardView));
+  protected readonly views = computed(() => this.cards().map((card) => boardCardView(card)));
+
+  /** The cards mid-graph, by chunk id — each carries the graph-progress strip in its cost row. */
+  protected readonly strips = computed(() => new Map(this.cards().filter(showsNodeStrip).map((card) => [card.chunkId, card])));
 
   /** One index per skeleton, for the template's loop. */
   protected readonly skeletonIndexes = computed(() => Array.from({ length: this.skeletons() }, (_, i) => i));

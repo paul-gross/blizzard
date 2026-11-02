@@ -110,6 +110,9 @@ export class BoardShell {
    * once its chunk's arrive, and holds a skeleton in its place until then. */
   readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
 
+  /** Each graph's name by graph id, as read so far — a card names its chunk's graph once it is here. */
+  readonly graphNames = input<ReadonlyMap<string, string>>(new Map());
+
   /** How many card skeletons each lane draws while the chunk read loads (`laneSkeletonCounts`). */
   readonly laneSkeletons = input<ReadonlyMap<string, number>>(new Map());
 
@@ -167,6 +170,8 @@ export class BoardShell {
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
+        graphId: chunk.graph_id ?? null,
+        graphName: (chunk.graph_id && this.graphNames().get(chunk.graph_id)) || null,
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,

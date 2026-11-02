@@ -42,6 +42,12 @@ export interface GlanceRow extends RowWork {
   /** `paused` or `stopped`, which the icon alone cannot tell from its lane on a touch screen; else `null`. */
   readonly statusWord: string | null;
   readonly node: string;
+  /** The raw `nd_` id of the node it stands on, `''` when none. */
+  readonly nodeId: string;
+  readonly terminal: boolean;
+  readonly graphId: string | null;
+  /** The chunk's graph's name once read, else `null`. */
+  readonly graphName: string | null;
   /** The holding runner's host and name, or `null` when none holds it. */
   readonly runner: RunnerBoardParts | null;
   readonly gated: boolean;
@@ -52,6 +58,8 @@ export interface GlanceRow extends RowWork {
   readonly estimatedCostUsd: number | null;
   /** The chunk's project palette color, which tints the card as it does a desktop card; `null` untinted. */
   readonly projectColor: string | null;
+  /** The chunk's completion instant, from `ChunkSummary.completed_at` — null outside the done lane. */
+  readonly completedAt: string | null;
 }
 
 /** The mobile list in render order: attention and work in flight, then READY over BACKLOG, then done today. */
@@ -81,10 +89,12 @@ export function glanceListGroups(
   projectColors: ReadonlyMap<string, string>,
   now: number,
   workItems: ReadonlyMap<string, WorkItemsView>,
+  graphNames: ReadonlyMap<string, string> = new Map(),
 ): GlanceListGroups {
   const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
   const gated = new Set(decisions.map((decision) => decision.chunk_id));
   const byLane = new Map<string, GlanceRow[]>();
+  const doneAt = new Map<string, number>();
   for (const chunk of chunks) {
     const lane = chunkLane(chunk);
     const row: GlanceRow = {
@@ -94,6 +104,10 @@ export function glanceListGroups(
       status: chunk.status,
       statusWord: chunk.status === 'paused' || chunk.status === 'stopped' ? chunk.status : null,
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+      nodeId: chunk.current_node_id ?? '',
+      terminal: chunk.terminal ?? false,
+      graphId: chunk.graph_id ?? null,
+      graphName: (chunk.graph_id && graphNames.get(chunk.graph_id)) || null,
       runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,
       gated: gated.has(chunk.chunk_id),
       ask: asks.get(chunk.chunk_id) ?? null,
@@ -102,10 +116,12 @@ export function glanceListGroups(
       costPartial: chunk.cost?.cost_partial ?? false,
       estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
       projectColor: projectColors.get(chunk.project_id ?? '') ?? null,
+      completedAt: lane === DONE_LANE ? (chunk.completed_at ?? null) : null,
     };
     if (lane === DONE_LANE) {
       const age = ageMs(chunk.completed_at, now);
       if (age === null || age > DONE_TODAY_WINDOW_MS) continue;
+      doneAt.set(chunk.chunk_id, now - age);
     }
     byLane.set(lane, [...(byLane.get(lane) ?? []), row]);
   }
@@ -114,6 +130,25 @@ export function glanceListGroups(
     live: [...lane('needs'), ...lane('waiting'), ...lane('running'), ...lane(UNKNOWN_LANE)],
     ready: byRank(lane('ready'), readyOrder),
     backlog: byRank(lane('notready'), backlogOrder),
-    done: lane(DONE_LANE),
+    done: lane(DONE_LANE).sort((a, b) => (doneAt.get(b.chunkId) ?? 0) - (doneAt.get(a.chunkId) ?? 0)),
   };
+}
+
+/** A vital the mobile list can be narrowed to. */
+export type GlanceFilter = 'needs' | 'running' | 'ready' | 'done';
+
+/** The cards one vital counts — the same rows {@link glanceVitals} counts for it, in list order. */
+export function filterGlanceRows(list: GlanceListGroups, filter: GlanceFilter | null): readonly GlanceRow[] {
+  switch (filter) {
+    case 'needs':
+      return list.live.filter((row) => row.lane === 'needs' || row.lane === 'waiting');
+    case 'running':
+      return list.live.filter((row) => row.lane === 'running');
+    case 'ready':
+      return list.ready;
+    case 'done':
+      return list.done;
+    default:
+      return [];
+  }
 }
