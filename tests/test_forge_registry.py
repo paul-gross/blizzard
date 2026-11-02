@@ -36,6 +36,7 @@ from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, ForgeRateLimited, MergeMethod
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
@@ -112,7 +113,7 @@ class _World:
         self.transports: list[_Transport] = []
         self.hold_next = False
         self.next_headers: dict[str, str] = {}
-        self.budgets = ForgeBudgets(clock=clock)
+        self.budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
         self.key = BudgetKey(self.forge_id, "gh")
         self.registry = ForgeRegistry(
             records=self.stores.repository_records,

@@ -19,6 +19,7 @@ from blizzard.hub.delivery.actions.landing.repo import LandingRun as _Run
 from blizzard.hub.delivery.actions.landing.repo import RepoLanding as _Target
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
 from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
+from blizzard.hub.forge.budget import BudgetReading
 from blizzard.hub.forge.internal.github_landing import ATTEMPT_TIMEOUT_SECONDS, GitHubLanding
 from blizzard.hub.forge.landing import (
     ChangeListing,
@@ -39,6 +40,7 @@ from blizzard.hub.forge.landing import (
     UpdateMethod,
     UpdateOutcome,
 )
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
 
 pytestmark = pytest.mark.unit
@@ -86,7 +88,7 @@ class Harness:
         self.clock = FixedClock(_NOW)
         self.sleeps: list[float] = []
         self.lock_during_sleep: list[bool] = []
-        self.learned: list[Mapping[str, str]] = []
+        self.learned: list[BudgetReading] = []
         binding = ForgeBinding(
             kind="github",
             api_url=api_url,
@@ -94,6 +96,7 @@ class Harness:
             repo="widget",
             token="tok",
             write_lock=lambda: self.lock,
+            dialect=rate_dialect("github"),
             learn=self.learned.append,
         )
         self.forge = GitHubLanding(

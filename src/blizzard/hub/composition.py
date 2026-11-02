@@ -205,6 +205,7 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
@@ -996,7 +997,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_exclusive = chunk_stores.exclusive
     live = build_live_config(stores, cipher=parts.secret_cipher)
     # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
-    forge_budgets = ForgeBudgets(clock=clock)
+    forge_budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
     work_sources = parts.work_sources(stores, live, forge_budgets)
     forges = parts.forges(stores, live, forge_budgets)
     transcript_caps = parts.transcript_caps

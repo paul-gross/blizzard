@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.forge.budget import BudgetKey
+from blizzard.hub.forge.budget import BudgetKey, BudgetReading
 from tests.support import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
@@ -178,18 +178,9 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
     assert hub.client.get("/api/forges/ghe").json()["budgets"] == []
     budgets = hub.services.forge_budgets
     reset = hub.clock.now().replace(microsecond=0) + timedelta(minutes=5)
-    stamp = str(int(reset.timestamp()))
-    budgets.learn(
-        BudgetKey(forge_id, "gh-token"),
-        {"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "1200", "X-RateLimit-Reset": stamp},
-    )
-    budgets.learn(
-        BudgetKey(forge_id, None), {"X-RateLimit-Limit": "60", "X-RateLimit-Remaining": "7", "X-RateLimit-Reset": stamp}
-    )
-    budgets.learn(
-        BudgetKey("other-forge", None),
-        {"X-RateLimit-Limit": "60", "X-RateLimit-Remaining": "1", "X-RateLimit-Reset": stamp},
-    )
+    budgets.learn(BudgetKey(forge_id, "gh-token"), BudgetReading("core", 5000, 1200, reset))
+    budgets.learn(BudgetKey(forge_id, None), BudgetReading("core", 60, 7, reset))
+    budgets.learn(BudgetKey("other-forge", None), BudgetReading("core", 60, 1, reset))
 
     shown = hub.client.get("/api/forges/ghe").json()["budgets"]
 

@@ -57,7 +57,9 @@ class WorkSourceEntry:
         kind = kinds.get(record.fields.provider)
         if kind is None:
             raise WorkSourceError(f"work source {record.slug} has unknown provider {record.fields.provider!r}")
-        gate = budgets.sweeping(record.fields.forge_id, record.fields.secret) if budgets is not None else None
+        gate = (
+            budgets.sweeping(record.fields.forge_id, record.fields.secret, forge.kind) if budgets is not None else None
+        )
         if gate is None:
             return kind(record, forge, secret) if instrument is None else kind(record, forge, secret, instrument)
 

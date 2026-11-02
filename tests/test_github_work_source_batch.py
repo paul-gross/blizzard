@@ -13,6 +13,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import WorkItem, WorkSourceError
 
@@ -59,7 +60,7 @@ def _answer(request: httpx2.Request) -> httpx2.Response:
 
 class _World:
     def __init__(self, answer: Callable[[httpx2.Request], httpx2.Response] = _answer) -> None:
-        self.budgets = ForgeBudgets(clock=FixedClock(_NOW))
+        self.budgets = ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect)
         self.requests: list[httpx2.Request] = []
         self._answer = answer
 
@@ -68,7 +69,7 @@ class _World:
         return self._answer(request)
 
     def source(self, base_url: str = "http://forge") -> GitHubWorkSource:
-        gate = self.budgets.sweeping(_FORGE, "gh")
+        gate = self.budgets.sweeping(_FORGE, "gh", "github")
         client = httpx2.Client(base_url=base_url, transport=httpx2.MockTransport(self._handle))
         client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
         return GitHubWorkSource(client, source_id="widget", slug="widget", repo="acme/widget", web_base="x", gate=gate)
@@ -110,7 +111,9 @@ def test_the_graphql_url_is_derived_from_the_rest_base(base_url: str, path: str)
 
 def test_a_turn_away_sends_nothing_and_names_the_lift_on_every_ref() -> None:
     world = _World()
-    world.budgets.learn(_KEY, {**_rate(40), "X-RateLimit-Resource": "core"})
+    reading = rate_dialect("github").reading({**_rate(40), "X-RateLimit-Resource": "core"}, _NOW)
+    assert reading is not None
+    world.budgets.learn(_KEY, reading)
     result = world.source().fetch_many([_ref(1), _ref(2)], include_comments=False)
     assert world.requests == []
     for outcome in result.values():

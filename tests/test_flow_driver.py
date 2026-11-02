@@ -32,9 +32,10 @@ from blizzard.hub.domain.delivery.reconcile import (
     _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched seam's parameter type is module-private
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
-from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -671,7 +672,9 @@ def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log
         "X-RateLimit-Remaining": "30",
         "X-RateLimit-Reset": str(int(reset.timestamp())),
     }
-    budgets.learn(key, headers)
+    reading = rate_dialect("github").reading(headers, world.hub.clock.now())
+    assert reading is not None
+    budgets.learn(key, reading)
 
     for _ in range(2):
         with pytest.raises(ForgeBudgetLow):
@@ -713,17 +716,10 @@ def test_a_new_window_drains_its_notice_again(world: World) -> None:
 
 def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain() -> None:
     clock = FixedClock(datetime(2026, 10, 29, 12, 0, tzinfo=UTC))
-    budgets = ForgeBudgets(clock=clock)
+    budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
     key = BudgetKey("github", None)
     budgets.spent(key, clock.now() + timedelta(minutes=1))
-    budgets.learn(
-        key,
-        {
-            "X-RateLimit-Limit": "100",
-            "X-RateLimit-Remaining": "10",
-            "X-RateLimit-Reset": str(int((clock.now() + timedelta(minutes=1)).timestamp())),
-        },
-    )
+    budgets.learn(key, BudgetReading("core", 100, 10, clock.now() + timedelta(minutes=1)))
     with pytest.raises(ForgeBudgetLow):
         budgets.admit(key, ForgePriority.SWEEPING)
 

@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Protocol
 
-from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
@@ -27,7 +26,14 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
-from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.budget import (
+    BudgetKey,
+    BudgetReading,
+    ForgeBudgetLow,
+    ForgeBudgets,
+    ForgePriority,
+    IForgeRateDialect,
+)
 from blizzard.hub.forge.landing import (
     OPERATION_CAPABILITY,
     Change,
@@ -45,6 +51,7 @@ from blizzard.hub.forge.landing import (
     Rerun,
     Update,
 )
+from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.live_config import ConfigObjectCache
 
 
@@ -56,12 +63,11 @@ class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
         ...
 
 
-@domain_model
 @dataclass(frozen=True)
 class ForgeBinding:
     """Everything one repository's adapter is built from. ``write_lock`` answers the lock every write on this forge
-    and credential goes out under; it is called on the loop the adapter runs on. ``learn`` takes every answer's headers
-    into the forge and credential's rate budget."""
+    and credential goes out under; it is called on the loop the adapter runs on. ``dialect`` is the forge kind's way of
+    reading its answers' rate facts, and ``learn`` takes every reading into the forge and credential's rate budget."""
 
     kind: str
     api_url: str
@@ -69,7 +75,8 @@ class ForgeBinding:
     repo: str
     token: str
     write_lock: Callable[[], asyncio.Lock]
-    learn: Callable[[Mapping[str, str]], None]
+    dialect: IForgeRateDialect
+    learn: Callable[[BudgetReading], None]
 
 
 class WriteLocks:
@@ -188,6 +195,7 @@ class ForgeRegistry:
                 repo=fields.repo,
                 token=token,
                 write_lock=partial(self._locks.lock, forge.forge_id, fields.secret_name),
+                dialect=rate_dialect(forge.kind),
                 learn=partial(self._budgets.learn, BudgetKey(forge.forge_id, fields.secret_name)),
             )
         )
