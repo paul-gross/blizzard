@@ -31,7 +31,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlugTaken
-from blizzard.hub.domain.projects.order import RepositoryNotLinked
+from blizzard.hub.domain.projects.order import LandingOrderConflict, RepositoryNotLinked
 from blizzard.wire.project import (
     LandingOrderRequest,
     LandingPositionRequest,
@@ -107,6 +107,12 @@ def _unprocessable(field: str, message: str, kind: str = "value_error", where: s
 
 def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+def _landing_order_conflict(exc: LandingOrderConflict) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT, detail={"code": exc.code, "message": f"{exc}; run it again"}
+    )
 
 
 def _not_found(detail: str) -> HTTPException:
@@ -328,12 +334,15 @@ def put_landing_order(
     """Rank `repositories` `1.0`, `2.0`, … in the list's order and leave every other linked repository unranked,
     writing a fact only for a link whose position changes — putting the order the project has writes nothing.
     Answers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a
-    repository the project does not link, and 422 for one named twice."""
+    repository the project does not link, and 422 for one named twice; 409 `landing_order_conflict` when concurrent
+    landing-order writes keep changing the order between this one's read and its write."""
     try:
         repositories = [_linked_repository(ref, "repositories", project, services) for ref in request.repositories]
         services.project_authoring.order_repositories(project, repositories, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message, exc.code) from exc
+    except LandingOrderConflict as exc:
+        raise _landing_order_conflict(exc) from exc
     return _repository_links(project, services)
 
 
@@ -349,7 +358,9 @@ def position_repository(
     `unranked: true`, writing one fact at the midpoint between its new neighbours — after renumbering the ranked
     repositories `1.0`, `2.0`, … when no midpoint is left. Answers the project's links in their new order. 404 unknown
     project; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`
-    for a move both unranked and after a repository, after itself, or after an unranked repository."""
+    for a move both unranked and after a repository, after itself, or after an unranked repository; 409
+    `landing_order_conflict` when concurrent landing-order writes keep changing the order between this one's read and
+    its write."""
     try:
         repository = _linked_repository(request.repository, "repository", project, services)
         after = (
@@ -362,4 +373,6 @@ def position_repository(
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message, exc.code) from exc
+    except LandingOrderConflict as exc:
+        raise _landing_order_conflict(exc) from exc
     return _repository_links(project, services)

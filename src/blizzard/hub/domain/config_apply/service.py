@@ -74,6 +74,7 @@ from blizzard.hub.domain.projects.declarations import (
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId, ProjectSlug
+from blizzard.hub.domain.projects.order import IReadProjectPositions
 
 
 @domain_model
@@ -141,6 +142,7 @@ class ConfigApplication:
         forges: IReadForgeRepository,
         projects: IReadProjectRepository,
         links: IReadProjectLinks,
+        positions: IReadProjectPositions,
         scopes: IReadScopeRepository,
         routines: IReadRoutineRepository,
         routine_scopes: IReadRoutineScopeRepository,
@@ -155,6 +157,7 @@ class ConfigApplication:
         self._forges = forges
         self._projects = projects
         self._links = links
+        self._positions = positions
         self._scopes = scopes
         self._routines = routines
         self._routine_scopes = routine_scopes
@@ -302,6 +305,7 @@ class ConfigApplication:
         # across the projects first, then read once per seam.
         source_projects: list[ProjectId] = []
         repository_projects: list[ProjectId] = []
+        ordering: list[ProjectId] = []
         listed_sources: list[tuple[ProjectId, WorkSourceId]] = []
         listed_repositories: list[tuple[ProjectId, RepositoryId]] = []
         for entry in entries.projects:
@@ -316,6 +320,8 @@ class ConfigApplication:
                     for reference in entry.sources
                     if (ref := source_lookup.resolve(reference)) is not None
                 )
+            if entry.landing_order is not None:
+                ordering.append(held)
             if entry.repositories is None and entry.landing_order is not None:
                 repository_projects.append(held)
             if entry.repositories is not None:
@@ -325,6 +331,9 @@ class ConfigApplication:
                     for reference in entry.repositories
                     if (ref := planned.resolve(reference)) is not None
                 )
+        # Read before the links that carry the positions: a landing-order fact landing between the two leaves the
+        # sequence stale, so the apply is refused rather than appending a diff planned on positions it never read.
+        landing_seqs = self._positions.landing_seqs(ordering)
         for standing in links.sources_of_projects(source_projects).values():
             source_links.update({(link.project_id, link.work_source_id): link for link in standing})
         listed = links.source_links_for(listed_sources).values()
@@ -342,6 +351,7 @@ class ConfigApplication:
             former_sources=former_sources,
             repositories=planned.repositories,
             former_repositories=dict(planned.former),
+            landing_seqs=landing_seqs,
         )
         return plan_projects(list(entries.projects), stored, ctx, pick=self._pick, at=self._clock.now())
 

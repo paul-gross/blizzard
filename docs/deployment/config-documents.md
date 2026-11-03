@@ -126,7 +126,8 @@ the per-record verbs give, each located at its entry:
 - **422** for an invalid entry, a missing or retired secret, a name listed twice, a work source slugged `hub`, or a
   document that does not decode. The error's `loc` names the entry and field, such as `body.work_sources.1.provider`.
 - **409** for a taken name, a taken provider and locator or forge coordinate, or a record that changed while the apply
-  ran.
+  ran — a project's `landing_order` included, when another landing-order write for the project lands while the apply
+  runs. Running the apply again plans it on the order that write left.
 
 ## Dry run
 

@@ -2050,7 +2050,8 @@ export const createProjectGardenProposalApiProjectsProjectGardenProposalsPost = 
  * Rank `repositories` `1.0`, `2.0`, … in the list's order and leave every other linked repository unranked,
  * writing a fact only for a link whose position changes — putting the order the project has writes nothing.
  * Answers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a
- * repository the project does not link, and 422 for one named twice.
+ * repository the project does not link, and 422 for one named twice; 409 `landing_order_conflict` when concurrent
+ * landing-order writes keep changing the order between this one's read and its write.
  */
 export const putLandingOrderApiProjectsProjectLandingOrderPut = <ThrowOnError extends boolean = false>(options: Options<PutLandingOrderApiProjectsProjectLandingOrderPutData, ThrowOnError>): RequestResult<PutLandingOrderApiProjectsProjectLandingOrderPutResponses, PutLandingOrderApiProjectsProjectLandingOrderPutErrors, ThrowOnError> => (options.client ?? client).put<PutLandingOrderApiProjectsProjectLandingOrderPutResponses, PutLandingOrderApiProjectsProjectLandingOrderPutErrors, ThrowOnError>({
     url: '/api/projects/{project}/landing-order',
@@ -2068,7 +2069,9 @@ export const putLandingOrderApiProjectsProjectLandingOrderPut = <ThrowOnError ex
  * `unranked: true`, writing one fact at the midpoint between its new neighbours — after renumbering the ranked
  * repositories `1.0`, `2.0`, … when no midpoint is left. Answers the project's links in their new order. 404 unknown
  * project; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`
- * for a move both unranked and after a repository, after itself, or after an unranked repository.
+ * for a move both unranked and after a repository, after itself, or after an unranked repository; 409
+ * `landing_order_conflict` when concurrent landing-order writes keep changing the order between this one's read and
+ * its write.
  */
 export const positionRepositoryApiProjectsProjectLandingOrderPositionPost = <ThrowOnError extends boolean = false>(options: Options<PositionRepositoryApiProjectsProjectLandingOrderPositionPostData, ThrowOnError>): RequestResult<PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponses, PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors, ThrowOnError> => (options.client ?? client).post<PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponses, PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors, ThrowOnError>({
     url: '/api/projects/{project}/landing-order/position',

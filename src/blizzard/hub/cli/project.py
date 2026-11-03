@@ -220,7 +220,11 @@ def project_unlink(
 
 
 def _order_refusals(project: str) -> dict[int, str]:
-    return {404: f"no project {project}", 422: "landing order refused"}
+    return {
+        404: f"no project {project}",
+        409: "landing order changed while it was written",
+        422: "landing order refused",
+    }
 
 
 def _show_order(cli: CliContext, project: str, body: Any) -> None:

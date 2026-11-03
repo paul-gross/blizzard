@@ -20,7 +20,7 @@ from blizzard.hub.domain.config.repositories import ConfiguredRepository, Reposi
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project
-from blizzard.hub.domain.projects.order import PositionFact, RepositoryNotLinked
+from blizzard.hub.domain.projects.order import LandingOrderConflict, PositionFact, RepositoryNotLinked
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -65,7 +65,7 @@ class _World:
         return self.config.create_repository_naming(name, None, draft, choice, OP).record
 
     def order(self) -> list[tuple[str, float | None]]:
-        return [(link.slug, link.position) for link in self.positions.landing_links(self.project.project_id)]
+        return [(link.slug, link.position) for link in self.positions.landing_links(self.project.project_id).links]
 
     def put(self, *names: str) -> list[tuple[str, float | None]]:
         written = self.authoring.order_repositories(self.project, [self.repos[name] for name in names], OP)
@@ -145,13 +145,32 @@ def test_a_move_into_a_spent_gap_renumbers_then_takes_the_midpoint(world: _World
     world.put("api", "lib", "web")
     pid = world.project.project_id
     spent = math.nextafter(1.0, 2.0)
-    world.positions.record_positions(pid, [PositionFact(world.repos["lib"].repository_id, spent)], at=_T0, by=OP.actor)
+    seq = world.positions.landing_links(pid).seq
+    world.positions.record_positions(
+        pid, [PositionFact(world.repos["lib"].repository_id, spent)], from_seq=seq, at=_T0, by=OP.actor
+    )
     assert world.order() == [("api", 1.0), ("lib", spent), ("web", 3.0)]
     facts = world.facts()
     world.authoring.position_repository(world.project, world.repos["web"], OP, after=world.repos["api"])
     assert world.order() == [("api", 1.0), ("web", 1.5), ("lib", 2.0)]
     # lib renumbered to 2.0, then web at the midpoint; api already stood at 1.0.
     assert world.facts() == facts + 2
+
+
+def test_a_position_write_planned_on_a_stale_sequence_is_refused_appending_nothing(world: _World) -> None:
+    pid = world.project.project_id
+    assert world.positions.landing_links(pid).seq == 0
+    world.put("api", "lib", "web")
+    read = world.positions.landing_links(pid).seq
+    world.put("web", "lib", "api")
+    facts = world.facts()
+    with pytest.raises(LandingOrderConflict) as refused:
+        world.positions.record_positions(
+            pid, [PositionFact(world.repos["lib"].repository_id, 5.0)], from_seq=read, at=_T0, by=OP.actor
+        )
+    assert (refused.value.code, refused.value.expected) == ("landing_order_conflict", read)
+    assert world.facts() == facts
+    assert world.order() == [("web", 1.0), ("lib", 2.0), ("api", 3.0)]
 
 
 def test_relinking_a_repository_restores_its_position(world: _World) -> None:

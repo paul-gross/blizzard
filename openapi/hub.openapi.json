@@ -30950,7 +30950,7 @@
     },
     "/api/projects/{project}/landing-order": {
       "put": {
-        "description": "Rank `repositories` `1.0`, `2.0`, \u2026 in the list's order and leave every other linked repository unranked,\nwriting a fact only for a link whose position changes \u2014 putting the order the project has writes nothing.\nAnswers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a\nrepository the project does not link, and 422 for one named twice.",
+        "description": "Rank `repositories` `1.0`, `2.0`, \u2026 in the list's order and leave every other linked repository unranked,\nwriting a fact only for a link whose position changes \u2014 putting the order the project has writes nothing.\nAnswers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a\nrepository the project does not link, and 422 for one named twice; 409 `landing_order_conflict` when concurrent\nlanding-order writes keep changing the order between this one's read and its write.",
         "operationId": "put_landing_order_api_projects__project__landing_order_put",
         "parameters": [
           {
@@ -31019,7 +31019,7 @@
     },
     "/api/projects/{project}/landing-order/position": {
       "post": {
-        "description": "Move `repository` to just after `after_repository`, to the front when that is null, or to unranked with\n`unranked: true`, writing one fact at the midpoint between its new neighbours \u2014 after renumbering the ranked\nrepositories `1.0`, `2.0`, \u2026 when no midpoint is left. Answers the project's links in their new order. 404 unknown\nproject; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`\nfor a move both unranked and after a repository, after itself, or after an unranked repository.",
+        "description": "Move `repository` to just after `after_repository`, to the front when that is null, or to unranked with\n`unranked: true`, writing one fact at the midpoint between its new neighbours \u2014 after renumbering the ranked\nrepositories `1.0`, `2.0`, \u2026 when no midpoint is left. Answers the project's links in their new order. 404 unknown\nproject; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`\nfor a move both unranked and after a repository, after itself, or after an unranked repository; 409\n`landing_order_conflict` when concurrent landing-order writes keep changing the order between this one's read and\nits write.",
         "operationId": "position_repository_api_projects__project__landing_order_position_post",
         "parameters": [
           {

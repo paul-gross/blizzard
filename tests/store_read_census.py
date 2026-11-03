@@ -2841,6 +2841,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.work_source_id]
     ),
     (IReadProjectPositions, "landing_links"): lambda w: w.hub.services.project_positions.landing_links(w.project_id),
+    (IReadProjectPositions, "landing_seqs"): lambda w: w.hub.services.project_positions.landing_seqs([w.project_id]),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
         w.project_id, w.work_source_id, w.clock.now()
     ),

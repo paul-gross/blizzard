@@ -115,9 +115,10 @@ blizzard hub project get blizzard
 repository becomes unranked. Setting the order the project already has writes nothing. `position` moves one repository
 just after a ranked one (`--after`), to the front (`--first`), or out of the ranking (`--unranked`); give exactly one.
 Both take each repository by id or slug, print the project's repositories in their new order, and are refused
-`422 repository_not_linked` for a repository the project does not link. `show` lists the repositories in landing order,
-each with its position or `unranked`, and `GET /api/projects/{project}/repository-links` returns them in that order with
-each link's `position`, `null` when unranked.
+`422 repository_not_linked` for a repository the project does not link. A write that another landing-order write keeps
+overtaking between its read and its own write is refused `409 landing_order_conflict`; run it again. `show` lists the
+repositories in landing order, each with its position or `unranked`, and `GET /api/projects/{project}/repository-links`
+returns them in that order with each link's `position`, `null` when unranked.
 
 Unlinking a repository takes it out of the order; linking it again restores its position. A reorder reaches the next
 `deliver` step: a step that has taken its first turn keeps the order it took
