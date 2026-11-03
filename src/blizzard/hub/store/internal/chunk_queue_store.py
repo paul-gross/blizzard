@@ -9,10 +9,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
+from sqlalchemy import Connection
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import (
+    BACKLOG_RANKING_LOCK,
+    READY_RANKING_LOCK,
+    IWriteChunkQueueRepository,
+)
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     after_newest,
@@ -22,7 +28,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 class ChunkQueueStore:
@@ -32,11 +38,11 @@ class ChunkQueueStore:
         self._store = store
         self._clock = clock
 
-    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
+    def queue_positions(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, float]:
         """The newest explicit queue position per chunk among ``chunk_ids`` — the ordering
         the peek honours."""
         result: dict[str, float] = {}
-        with self._store.read("queue_positions") as conn:
+        with connection_in(self._store, transaction, "queue_positions") as conn:
             for batch in id_batches(chunk_ids):
                 rows = conn.execute(
                     newest_fact_select(
@@ -51,10 +57,10 @@ class ChunkQueueStore:
                 result.update((r.chunk_id, float(r.position)) for r in rows)
         return result
 
-    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
+    def promoted_ats(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, datetime]:
         """Each currently promoted chunk's newest ``chunk_promoted.promoted_at`` among ``chunk_ids``."""
         result: dict[str, datetime] = {}
-        with self._store.read("promoted_ats") as conn:
+        with connection_in(self._store, transaction, "promoted_ats") as conn:
             for batch in id_batches(chunk_ids):
                 result.update(currently_promoted_ats(conn, batch))
         return result
@@ -68,54 +74,71 @@ class ChunkQueueStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else None
 
-    def record_promote_with_position_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    def record_promote_with_position(
+        self, chunk_id: str, *, position: float, at: datetime, transaction: LockedTransaction
     ) -> int:
         # One transaction: a crash between the two writes would otherwise let a stale
         # backlog position outrank the stamp on restart.
         return insert_promote_rows(
-            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, position=position, at=at
+            self._ranked_chunk_connection(transaction, chunk_id, READY_RANKING_LOCK),
+            chunk_id,
+            position=position,
+            at=at,
         )
 
-    def record_demote_with_position_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    def record_demote_with_position(
+        self, chunk_id: str, *, position: float, at: datetime, transaction: LockedTransaction
     ) -> int:
         # One transaction: a crash between the two writes would otherwise rank the demoted chunk
         # by its stale ready-queue position, which the shared newest-wins positions would keep.
         return insert_demote_rows(
-            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, position=position, at=at
+            self._ranked_chunk_connection(transaction, chunk_id, BACKLOG_RANKING_LOCK),
+            chunk_id,
+            position=position,
+            at=at,
         )
 
-    def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+    def record_queue_positions(
+        self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
+    ) -> None:
         """`src/blizzard/hub/domain/chunk/ports/queue.py`'s `IWriteChunkQueueRepository.record_queue_positions`.
 
         One multi-row insert carries every pair."""
+        conn = connection_for(self._store, transaction, key=READY_RANKING_LOCK)
         if not positions:
             return
-        with self._store.write("record_queue_positions") as conn:
-            conn.execute(
-                self._store.insert(s.queue_positions),
-                [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
-            )
+        conn.execute(
+            self._store.insert(s.queue_positions),
+            [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
+        )
 
-    def record_backlog_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+    def record_backlog_positions(
+        self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
+    ) -> None:
+        conn = connection_for(self._store, transaction, key=BACKLOG_RANKING_LOCK)
         if not positions:
             return
-        with self._store.write("record_backlog_positions") as conn:
-            chunk_ids = [chunk_id for chunk_id, _ in positions]
-            # `.in_()` reads over id_batches, not one read per pair.
-            promoted: set[str] = set()
-            for batch in id_batches(chunk_ids):
-                promoted |= currently_promoted_ats(conn, batch).keys()
-            rows = [
-                {"chunk_id": chunk_id, "position": position, "set_at": at}
-                for chunk_id, position in positions
-                # promoted since the caller resolved backlog candidates — not this write's chunk anymore;
-                # a chunk demoted since its promotion is a backlog chunk again and keeps its stamp
-                if chunk_id not in promoted
-            ]
-            if rows:
-                conn.execute(self._store.insert(s.queue_positions), rows)
+        chunk_ids = [chunk_id for chunk_id, _ in positions]
+        # `.in_()` reads over id_batches, not one read per pair.
+        promoted: set[str] = set()
+        for batch in id_batches(chunk_ids):
+            promoted |= currently_promoted_ats(conn, batch).keys()
+        # A legacy store-side predicate, kept as recorded debt (``bzh:store-refuses-stale``): a pair
+        # naming a currently promoted chunk is dropped, a chunk demoted since its promotion is not.
+        rows = [
+            {"chunk_id": chunk_id, "position": position, "set_at": at}
+            for chunk_id, position in positions
+            if chunk_id not in promoted
+        ]
+        if rows:
+            conn.execute(self._store.insert(s.queue_positions), rows)
+
+    def _ranked_chunk_connection(
+        self, transaction: LockedTransaction, chunk_id: str, ranking_lock: tuple[str, str]
+    ) -> Connection:
+        """``transaction``'s connection, refused unless it locks both ``chunk_id`` and ``ranking_lock``."""
+        connection_for(self._store, transaction, key=ranking_lock)
+        return connection_for(self._store, transaction, chunk=chunk_id)
 
 
 _queue_conforms: type[IWriteChunkQueueRepository] = ChunkQueueStore

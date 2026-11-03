@@ -84,6 +84,7 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthor,
     WorkRef,
 )
+from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
@@ -105,6 +106,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
@@ -513,6 +515,14 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     place of the old single ``ChunkStore``'s bare method call."""
     store = hub_store_connections(engine)
     return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store), transactions=HubTransactions(store))
+
+
+@contextmanager
+def ranking_unit(engine: Engine, *, lock: tuple[str, str] = READY_RANKING_LOCK) -> Generator[LockedTransaction]:
+    """A hub unit over ``engine`` graduated on one list's ranking ``lock`` — the authority a
+    position write requires, for a test seeding positions straight through the queue store."""
+    with HubTransactions(hub_store_connections(engine)).begin() as transaction:
+        yield transaction.lock_set(keys=[lock])
 
 
 def make_graph(
@@ -2159,7 +2169,7 @@ def make_ready(hub: HubHarness, chunk_id: str) -> None:
     finds it ``ready``. Bypasses the HTTP route: no operator session and no SSE frame."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None, f"unknown chunk {chunk_id}"
-    hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())
+    hub.services.promote.promote(chunk)
 
 
 def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> RouteClaimReply:

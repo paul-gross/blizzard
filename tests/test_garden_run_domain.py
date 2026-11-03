@@ -63,16 +63,20 @@ class _FakeChunkRecords:
     def get(self, chunk_id: str, *, transaction: object = None) -> Chunk | None:
         return self.chunks.get(chunk_id)
 
-    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+    def get_many(self, chunk_ids: Sequence[str], *, transaction: object = None) -> dict[str, Chunk]:
         return {chunk_id: c for chunk_id in chunk_ids if (c := self.chunks.get(chunk_id)) is not None}
 
     def graph_id_of_many(self, chunk_ids: Sequence[str]) -> dict[str, str]:
         return {chunk_id: c.graph_id for chunk_id in chunk_ids if (c := self.chunks.get(chunk_id)) is not None}
 
-    def list_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+    def list_ready(
+        self, *, statuses: Mapping[str, ChunkStatus] | None = None, transaction: object = None
+    ) -> list[Chunk]:
         return []
 
-    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+    def list_not_ready(
+        self, *, statuses: Mapping[str, ChunkStatus] | None = None, transaction: object = None
+    ) -> list[Chunk]:
         return []
 
     def list_all(self) -> list[Chunk]:
@@ -112,10 +116,10 @@ class _FakeChunkFacts:
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return self.load_facts_for(chunk_ids)
 
-    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for(self, chunk_ids: Sequence[str], *, transaction: object = None) -> dict[str, ChunkFacts]:
         return self.load_facts_for(chunk_ids)
 
-    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self, *, transaction: object = None) -> dict[str, ChunkStatus]:
         return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:

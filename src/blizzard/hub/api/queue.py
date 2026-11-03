@@ -40,6 +40,7 @@ from blizzard.hub.domain.operations.queue import (
     QueueEntry,
     QueueList,
     QueuePage,
+    RankedOrder,
     SelfAnchoredMove,
     entries_of,
     queue_match_policy,
@@ -84,67 +85,55 @@ def _blocked_markings(
     return derive_blocked_prerequisites(edges, {**statuses, **resolved})
 
 
-def _resolved(
-    list_: QueueList, chunk_ids: Sequence[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
-) -> list[Chunk]:
+def _resolved(list_: QueueList, chunk_ids: Sequence[str], services: TenantServices) -> list[Chunk]:
     """The chunks ``chunk_ids`` name, in the order named — one batched read. An id naming no chunk
     is refused as outside ``list_`` (:class:`NotInList`), the same ``409`` as one that exists
-    elsewhere. A repeated id resolves to the same chunk each time, so the domain still sees the repeat."""
+    elsewhere; a chunk that does not exist stands in no list. A repeated id resolves to the same
+    chunk each time, so the domain still sees the repeat."""
     found = services.chunks.record.get_many(chunk_ids)
     for chunk_id in chunk_ids:
         if chunk_id not in found:
-            raise NotInList.of(chunk_id, list_, statuses)
+            raise NotInList(chunk_id, list_, None)
     return [found[chunk_id] for chunk_id in chunk_ids]
 
 
 def _resolved_move(
-    list_: QueueList,
-    chunk_id: str,
-    after_chunk_id: str | None,
-    services: TenantServices,
-    statuses: Mapping[str, ChunkStatus],
+    list_: QueueList, chunk_id: str, after_chunk_id: str | None, services: TenantServices
 ) -> tuple[Chunk, Chunk | None]:
     """The chunk a move names and its anchor (``None``: the top), resolved as :func:`_resolved` does."""
     named = [chunk_id] if after_chunk_id is None else [chunk_id, after_chunk_id]
-    chunk, *anchors = _resolved(list_, named, services, statuses)
+    chunk, *anchors = _resolved(list_, named, services)
     return chunk, anchors[0] if anchors else None
 
 
-def _replace(
-    list_: QueueList, chunk_ids: list[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
-) -> list[Chunk]:
+def _replace(list_: QueueList, chunk_ids: list[str], services: TenantServices) -> RankedOrder:
     """Replace ``list_``'s order — the body ``PUT /api/queue`` and ``PUT /api/backlog`` share,
-    differing only in which list they rank (``bzh:ranking-is-per-list``). ``statuses`` is the
-    caller's one-per-request derivation, threaded through."""
+    differing only in which list they rank (``bzh:ranking-is-per-list``) — and return the order
+    the domain wrote with the statuses it decided on."""
     try:
-        ordered = services.queue.reorder(list_, _resolved(list_, chunk_ids, services, statuses), statuses=statuses)
+        ranked = services.queue.reorder(list_, _resolved(list_, chunk_ids, services))
     except DuplicateReorderIds as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except NotInList as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
-    return ordered
+    return ranked
 
 
-def _reposition(
-    list_: QueueList,
-    chunk_id: str,
-    after_chunk_id: str | None,
-    services: TenantServices,
-    statuses: Mapping[str, ChunkStatus],
-) -> None:
+def _reposition(list_: QueueList, chunk_id: str, after_chunk_id: str | None, services: TenantServices) -> RankedOrder:
     """Move one chunk within ``list_`` — the body ``POST /api/queue/position`` and
     ``POST /api/backlog/position`` share, differing only in which list they rank
-    (``bzh:ranking-is-per-list``). ``statuses`` is the caller's one-per-request derivation,
-    threaded through."""
+    (``bzh:ranking-is-per-list``) — and return the order the move leaves with the statuses it
+    decided on."""
     try:
-        chunk, after = _resolved_move(list_, chunk_id, after_chunk_id, services, statuses)
-        services.queue.move(list_, chunk, after, statuses=statuses)
+        chunk, after = _resolved_move(list_, chunk_id, after_chunk_id, services)
+        ranked = services.queue.reposition(list_, chunk, after)
     except SelfAnchoredMove as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except NotInList as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
+    return ranked
 
 
 def _projects_of(services: TenantServices, entries: Iterable[QueueEntry]) -> dict[ProjectId, Project]:
@@ -184,7 +173,20 @@ class ReadyQueue:
     def of(
         cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], *, project: ProjectId | None = None
     ) -> ReadyQueue:
-        entries = entries_of(services.queue.ordered_ready(statuses=statuses), None if project is None else {project})
+        return cls.ranked(services, services.queue.ordered_ready(statuses=statuses), statuses, project=project)
+
+    @classmethod
+    def ranked(
+        cls,
+        services: TenantServices,
+        ordered: Sequence[Chunk],
+        statuses: Mapping[str, ChunkStatus],
+        *,
+        project: ProjectId | None = None,
+    ) -> ReadyQueue:
+        """The queue as ``ordered`` ranks it — a write's own decided order — decorated with
+        ``statuses``' blocked markings."""
+        entries = entries_of(ordered, None if project is None else {project})
         return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
 
     @property
@@ -321,11 +323,10 @@ def replace_queue(request: QueueReplaceRequest, services: Services) -> QueuePeek
     Resolves every named id against the current ready set: ``409`` names the first id
     that is not ready, ``422`` a duplicate id. An unnamed ready chunk keeps its relative
     order, appended after the named ones."""
-    statuses = services.chunks.facts.load_live_statuses()
-    _replace(QueueList.READY, request.chunk_ids, services, statuses)
-    # A position write changes no chunk's status, so the pre-write `statuses` still
-    # holds for the re-render — no second derivation.
-    return ReadyQueue.of(services, statuses).view
+    ranked = _replace(QueueList.READY, request.chunk_ids, services)
+    # A position write changes no chunk's status, so the statuses the unit decided on still
+    # decorate the order it wrote — no second derivation.
+    return ReadyQueue.ranked(services, ranked.ordered, ranked.statuses).view
 
 
 @router.post(
@@ -337,11 +338,10 @@ def reposition_queue(request: QueuePositionRequest, services: Services) -> Queue
     Resolves both ids against the current ready set: ``409`` names either one if it is
     not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
     the top of the queue."""
-    statuses = services.chunks.facts.load_live_statuses()
-    _reposition(QueueList.READY, request.chunk_id, request.after_chunk_id, services, statuses)
-    # A position write changes no chunk's status, so the pre-write `statuses` still
-    # holds for the re-render — no second derivation.
-    return ReadyQueue.of(services, statuses).view
+    ranked = _reposition(QueueList.READY, request.chunk_id, request.after_chunk_id, services)
+    # A position write changes no chunk's status, so the statuses the unit decided on still
+    # decorate the order it wrote — no second derivation.
+    return ReadyQueue.ranked(services, ranked.ordered, ranked.statuses).view
 
 
 @dto
@@ -358,7 +358,13 @@ class Backlog:
 
     @classmethod
     def of(cls, services: TenantServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
-        entries = entries_of(services.queue.ordered_not_ready(statuses=statuses))
+        return cls.ranked(services, services.queue.ordered_not_ready(statuses=statuses), statuses)
+
+    @classmethod
+    def ranked(cls, services: TenantServices, ordered: Sequence[Chunk], statuses: Mapping[str, ChunkStatus]) -> Backlog:
+        """The backlog as ``ordered`` ranks it — a write's own decided order — decorated with
+        ``statuses``' blocked markings."""
+        entries = entries_of(ordered)
         return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
 
     @property
@@ -407,11 +413,10 @@ def replace_backlog(request: BacklogReplaceRequest, services: Services) -> Backl
     Resolves every named id against the current ``not_ready`` set: ``409`` names the
     first id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps
     its relative order, appended after the named ones."""
-    statuses = services.chunks.facts.load_live_statuses()
-    _replace(QueueList.NOT_READY, request.chunk_ids, services, statuses)
-    # A position write changes no chunk's status, so the pre-write `statuses` still
-    # holds for the re-render — no second derivation.
-    return Backlog.of(services, statuses).view
+    ranked = _replace(QueueList.NOT_READY, request.chunk_ids, services)
+    # A position write changes no chunk's status, so the statuses the unit decided on still
+    # decorate the order it wrote — no second derivation.
+    return Backlog.ranked(services, ranked.ordered, ranked.statuses).view
 
 
 @router.post(
@@ -423,11 +428,10 @@ def reposition_backlog(request: BacklogPositionRequest, services: Services) -> B
     Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
     it is not ``not_ready``, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves
     the chunk to the top of the backlog."""
-    statuses = services.chunks.facts.load_live_statuses()
-    _reposition(QueueList.NOT_READY, request.chunk_id, request.after_chunk_id, services, statuses)
-    # A position write changes no chunk's status, so the pre-write `statuses` still
-    # holds for the re-render — no second derivation.
-    return Backlog.of(services, statuses).view
+    ranked = _reposition(QueueList.NOT_READY, request.chunk_id, request.after_chunk_id, services)
+    # A position write changes no chunk's status, so the statuses the unit decided on still
+    # decorate the order it wrote — no second derivation.
+    return Backlog.ranked(services, ranked.ordered, ranked.statuses).view
 
 
 @router.post(

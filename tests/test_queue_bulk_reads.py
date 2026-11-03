@@ -22,6 +22,7 @@ from blizzard.hub.domain.operations.queue import QueueService
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support import (
     HubHarness,
     build_hub,
@@ -119,9 +120,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self, *, transaction: Transaction | None = None) -> dict[str, ChunkStatus]:
         self.load_live_statuses_calls += 1
-        return super().load_live_statuses()
+        return super().load_live_statuses(transaction=transaction)
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
@@ -144,7 +145,11 @@ def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
             hub.services,
             chunks=replace(hub.services.chunks, facts=counting, record=record),
             queue=QueueService(
-                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+                queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue),
+                record=record,
+                facts=counting,
+                transactions=HubTransactions(hub_store_connections(hub.engine)),
+                clock=hub.clock,
             ),
         ),
     )
@@ -183,6 +188,7 @@ def test_replace_issues_one_load_live_statuses_call_on_success(tmp_path: Path, p
     resp = hub.client.put(path, json={"chunk_ids": [b, a]})
 
     assert resp.status_code == 200, resp.text
+    # The unit's one derivation decides the order the write lands on and decorates the response.
     assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
@@ -192,12 +198,14 @@ def test_replace_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, 
     promote = path == "/api/queue"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
+    elsewhere = ingest(hub, [{"source": "default", "ref": "2"}], promote=not promote)
 
     counting = _wire_counting_facts(hub)
 
-    resp = hub.client.put(path, json={"chunk_ids": ["ch_not_a_member"]})
+    resp = hub.client.put(path, json={"chunk_ids": [elsewhere]})
 
     assert resp.status_code == 409, resp.text
+    # The unit's one derivation finds the named chunk in the other list.
     assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
@@ -214,6 +222,7 @@ def test_reposition_issues_one_load_live_statuses_call_on_success(tmp_path: Path
     resp = hub.client.post(path, json={"chunk_id": b, "after_chunk_id": None if a == b else a})
 
     assert resp.status_code == 200, resp.text
+    # The unit's one derivation decides the slot the write lands on and decorates the response.
     assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
@@ -223,22 +232,38 @@ def test_reposition_issues_one_load_live_statuses_call_on_conflict(tmp_path: Pat
     promote = path == "/api/queue/position"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
+    elsewhere = ingest(hub, [{"source": "default", "ref": "2"}], promote=not promote)
 
     counting = _wire_counting_facts(hub)
 
-    resp = hub.client.post(path, json={"chunk_id": "ch_not_a_member", "after_chunk_id": None})
+    resp = hub.client.post(path, json={"chunk_id": elsewhere, "after_chunk_id": None})
 
     assert resp.status_code == 409, resp.text
+    # The unit's one derivation finds the named chunk in the other list.
     assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
+
+
+@pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
+def test_an_unknown_id_is_refused_without_deriving_statuses(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path)
+    counting = _wire_counting_facts(hub)
+
+    replaced = hub.client.put(path, json={"chunk_ids": ["ch_no_such_chunk"]})
+    moved = hub.client.post(f"{path}/position", json={"chunk_id": "ch_no_such_chunk", "after_chunk_id": None})
+
+    assert replaced.status_code == 409, replaced.text
+    assert moved.status_code == 409, moved.text
+    assert counting.load_live_statuses_calls == 0
 
 
 @pytest.mark.parametrize(("path", "promote"), _PEEKS)
 def test_whole_order_replace_writes_every_position_in_one_transaction_regardless_of_length(
     tmp_path: Path, path: str, promote: bool
 ) -> None:
-    """A whole-order replace of N chunks costs one write transaction, not N — the
-    statement count must not grow with the queue's length."""
+    """A whole-order replace over N chunks costs one write transaction, not N — the
+    statement count must not grow with the queue's length. Each names only the list's last
+    chunk, so the row locks the replace declares stay the same while every position is rewritten."""
     replace_path = "/api/queue" if path == "/api/queue" else "/api/backlog"
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
@@ -248,7 +273,7 @@ def test_whole_order_replace_writes_every_position_in_one_transaction_regardless
     large_ids = [ingest(large, [{"source": "default", "ref": str(i)}], promote=promote) for i in range(9)]
 
     def call(hub: HubHarness, ids: list[str]) -> None:
-        resp = hub.client.put(replace_path, json={"chunk_ids": list(reversed(ids))})
+        resp = hub.client.put(replace_path, json={"chunk_ids": [ids[-1]]})
         assert resp.status_code == 200, resp.text
 
     small_count = count_queries(small.engine, lambda: call(small, small_ids))

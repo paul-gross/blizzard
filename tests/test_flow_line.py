@@ -481,10 +481,10 @@ class _Facts:
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         raise NotImplementedError
 
-    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for(self, chunk_ids: Sequence[str], *, transaction: object = None) -> dict[str, ChunkFacts]:
         raise NotImplementedError
 
-    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self, *, transaction: object = None) -> dict[str, ChunkStatus]:
         raise NotImplementedError
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:

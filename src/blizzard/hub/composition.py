@@ -1176,10 +1176,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         promote=PromoteService(
-            record=chunk_record, queue=chunk_queue, facts=chunk_facts, exclusive=chunk_exclusive, clock=clock
+            record=chunk_record, queue=chunk_queue, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
         demote=DemoteService(
-            record=chunk_record, queue=chunk_queue, facts=chunk_facts, exclusive=chunk_exclusive, clock=clock
+            record=chunk_record, queue=chunk_queue, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
         claim=ClaimService(
             route=chunk_route,
@@ -1261,7 +1261,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graph_yaml=parts.graph_yaml,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
-        queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
+        queue=QueueService(
+            queue=chunk_queue, record=chunk_record, facts=chunk_facts, transactions=stores.transactions, clock=clock
+        ),
         group=GroupService(
             work_refs=chunk_work_refs,
             dependencies=chunk_dependencies,
