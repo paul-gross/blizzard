@@ -20,11 +20,11 @@ def test_record_marker_refuses_naming_its_removal_and_posts_nothing(monkeypatch:
 
     assert result.exit_code != 0
     assert "no longer runs commands" in result.output
-    assert "removed in 0.4" in result.output
+    assert "removed in 0.5" in result.output
 
 
 def test_record_marker_refuses_with_no_content_argument() -> None:
     result = bind_stubs().runner.invoke(hub_group, ["record-marker", "merged/x"])
 
     assert result.exit_code != 0
-    assert "0.4" in result.output
+    assert "0.5" in result.output
