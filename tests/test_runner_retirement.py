@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
@@ -378,11 +379,11 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     release_held = detach.release_held
     retired_at_release: list[bool] = []
 
-    def observed(chunk: Chunk, *, runner_id: str) -> int | None:
-        registration = hub.services.registry.get_runner(runner_id)
+    def observed(chunk: Chunk, *, runner: RunnerLifecycleVersion) -> int | None:
+        registration = hub.services.registry.get_runner(runner.runner_id)
         assert registration is not None
         retired_at_release.append(registration.retired)
-        return release_held(chunk, runner_id=runner_id)
+        return release_held(chunk, runner=runner)
 
     monkeypatch.setattr(detach, "release_held", observed)
 

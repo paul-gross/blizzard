@@ -27,6 +27,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, DeleteService
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -283,7 +284,7 @@ def test_retire_reads_its_routes_records_once_across_route_counts(
         registration = hub.services.registry.get_runner("runner-a")
         assert registration is not None
 
-        def release_held(self: DetachService, chunk: Chunk, *, runner_id: str) -> None:
+        def release_held(self: DetachService, chunk: Chunk, *, runner: RunnerLifecycleVersion) -> None:
             released.append(chunk.chunk_id)
 
         monkeypatch.setattr(DetachService, "release_held", release_held)

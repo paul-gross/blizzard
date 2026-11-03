@@ -25,7 +25,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.execution.fleet import RetireOutcome
+from blizzard.hub.domain.execution.fleet import ReinstateInterrupted, ReleasedRoute, RetireInterrupted, RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
 from blizzard.hub.domain.runners.gate_enforceability import flag_unenforceable_gates
@@ -476,14 +476,18 @@ def resume_runner(runner_id: str, request: RunnerPauseRequest, services: Service
 def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Services) -> RunnerRetireResponse:
     """Retire a runner — its token is revoked and its claims and registrations refused;
     409 naming each held chunk unless ``force``, which releases them. Re-running on a
-    retired runner re-runs the release pass. A first retire whose runner gained a newer
-    retirement or reinstatement after it was read records no fact and is refused 409; run it
-    again."""
+    retired runner re-runs the release pass. A retire — a re-run included — whose runner
+    was retired or reinstated after it was read is refused 409, revoking no token and
+    releasing no route the runner holds since; what it committed first is still published.
+    Run it again."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
+    except RetireInterrupted as exc:
+        publish_retirement(services, registration, exc.committed, by=request.by, changes=changes)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)
@@ -503,11 +507,7 @@ def publish_retirement(
     """Publish what one runner retire wrote: a ``detached`` frame per released chunk (``changes`` holds each one read
     before the retire), the queue's change when any was released, and the runner's ``retired`` frame unless the retire
     was a re-run."""
-    for released in outcome.released:
-        change = changes.get(released.chunk_id) or chunk_events.ChunkChanged.before(services, released.chunk_id)
-        change.publish(cause="detached", key=f"route_released:{released.released_id}")
-    if outcome.released:
-        services.events.publish_queue_changed()  # released chunks re-enter the ready queue
+    _publish_releases(services, outcome.released, changes)
     if outcome.fact_id is not None:
         services.events.publish_runner_changed(
             registration.runner_id,
@@ -518,6 +518,18 @@ def publish_retirement(
         )
 
 
+def _publish_releases(
+    services: TenantServices, released: Sequence[ReleasedRoute], changes: Mapping[str, chunk_events.ChunkChanged]
+) -> None:
+    """A ``detached`` frame per released chunk, each from its state read before the write when ``changes`` holds
+    it, and the queue's change when any was released."""
+    for route in released:
+        change = changes.get(route.chunk_id) or chunk_events.ChunkChanged.before(services, route.chunk_id)
+        change.publish(cause="detached", key=f"route_released:{route.released_id}")
+    if released:
+        services.events.publish_queue_changed()  # released chunks re-enter the ready queue
+
+
 @router.post(
     "/runners/{runner_id}/reinstate",
     response_model=RunnerRegistryView,
@@ -525,18 +537,25 @@ def publish_retirement(
 )
 def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
     """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
-    under a retired host, and when its lifecycle moved while the reinstate was decided."""
+    under a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left
+    held is released first, as the retire's own release pass would, and its ``detached`` frame published."""
     registration = _registration(services, runner_id)
+    held = services.chunks.route.live_routes_of_runner(runner_id)
+    changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
-        fact_id = services.fleet.reinstate(registration, by=request.by)
+        outcome = services.fleet.reinstate(registration, by=request.by)
+    except ReinstateInterrupted as exc:
+        _publish_releases(services, exc.released, changes)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (RunnerNotRetired, HostRetired, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    _publish_releases(services, outcome.released, changes)
     services.events.publish_runner_changed(
         runner_id,
         kind="reinstated",
         runner_name=registration.name,
         by=request.by,
-        key=f"runner_lifecycle_facts:{fact_id}",
+        key=f"runner_lifecycle_facts:{outcome.fact_id}",
     )
     return _reread(services, runner_id)
 
@@ -550,11 +569,12 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
 def revoke_runner_token(
     runner_id: str, request: RunnerLifecycleRequest, services: Services
 ) -> RunnerTokenRevocationResponse:
-    """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled."""
+    """Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired
+    or reinstated while the revocation was decided."""
     registration = _registration(services, runner_id)
     try:
         revocation_id = services.fleet.revoke_token(registration, by=request.by)
-    except RunnerNotEnrolled as exc:
+    except (RunnerNotEnrolled, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_runner_changed(
         runner_id,

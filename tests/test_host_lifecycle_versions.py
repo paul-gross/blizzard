@@ -122,9 +122,11 @@ def test_a_stale_runner_version_refuses_each_write_and_writes_nothing(
         )
     with pytest.raises(RunnerLifecycleConflict):
         runners.record_lifecycle("rn_a", retired=False, at=_AT, by="op", expected_lifecycle=0)
+    with pytest.raises(RunnerLifecycleConflict):
+        runners.revoke_token("rn_a", at=_AT, by="op", expected_lifecycle=0)
 
     assert _runner(runners).host_id is None
-    assert _runner(runners).retired
+    assert _runner(runners).retired and _runner(runners).token_hash == "runner-hash"
     assert hosts.get_host("hs_b") is None
 
 
@@ -151,13 +153,16 @@ def test_each_write_joins_a_supplied_unit_and_rolls_back_with_it(
         hosts.add(HostAddition("hs_b", "other", "hash-b", at=_AT, by="op"), transaction=unit)
         hosts.record_retirement(_V0, fact=HostLifecycleFact("hs_a", True, _AT, "op"), at=_AT, by="op", transaction=unit)
         runners.add(RunnerAddition("rn_c", "c", "hash-c", at=_AT, by="op"), transaction=unit)
-        runners.record_lifecycle("rn_a", retired=True, at=_AT, by="op", expected_lifecycle=0, transaction=unit)
+        retired = runners.record_lifecycle(
+            "rn_a", retired=True, at=_AT, by="op", expected_lifecycle=0, transaction=unit
+        )
+        runners.revoke_token("rn_a", at=_AT, by="op", expected_lifecycle=retired, transaction=unit)
         raise _Rollback
 
     host = hosts.get_host("hs_a")
     runner = runners.get_runner("rn_a")
     assert host is not None and not host.retired and host.lifecycle_version == 0
-    assert runner is not None and not runner.retired and runner.host_id is None
+    assert runner is not None and not runner.retired and runner.host_id is None and runner.token_hash == "runner-hash"
     assert hosts.get_host("hs_b") is None and runners.get_runner("rn_c") is None
 
 

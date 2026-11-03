@@ -14,6 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteReleaseCause, holds_claim
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
 #: The statuses detach may release a live route from: every non-terminal one, ``delivering`` included.
@@ -74,17 +75,24 @@ class DetachService:
                 handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.DETACH
             )
 
-    def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
-        """:meth:`detach`, only while ``runner_id`` still holds the chunk — retirement's
-        release pass. ``None`` when the route is gone, another runner's by now, or left on a
-        terminal chunk, which holds no claim to release."""
+    def release_held(self, chunk: Chunk, *, runner: RunnerLifecycleVersion) -> int | None:
+        """:meth:`detach`, only while ``runner`` still holds the chunk — retirement's release
+        pass, for the retirement ``runner``'s lifecycle version stands at. ``None`` when the route
+        is gone, another runner's by now, or left on a terminal chunk, which holds no claim to
+        release. A runner whose lifecycle has moved past that version since raises
+        :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`, releasing
+        nothing: a route it holds may be one it claimed after it was reinstated."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             route = handle.route_of(chunk.chunk_id)
             status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
-            if not releasable_by(route, status, runner_id=runner_id):
+            if not releasable_by(route, status, runner_id=runner.runner_id):
                 return None
             return self._route.record_route_released_locked(
-                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.RETIREMENT
+                handle,
+                chunk.chunk_id,
+                at=self._clock.now(),
+                cause=RouteReleaseCause.RETIREMENT,
+                expected_runner=runner,
             )
 
 

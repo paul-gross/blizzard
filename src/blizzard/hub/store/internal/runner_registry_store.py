@@ -509,10 +509,19 @@ class RunnerRegistryStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
+    def revoke_token(
+        self,
+        runner_id: str,
+        *,
+        at: datetime,
+        by: str,
+        expected_lifecycle: int,
+        transaction: Transaction | None = None,
+    ) -> int | None:
         # The revocation fact and the nulled hash land in one transaction, so a token always resolves or
         # reads as revoked; the row lock orders it against a concurrent rotation.
-        with self._store.write("revoke_token") as conn:
+        with connection_in(self._store, transaction, "revoke_token", write=True) as conn:
+            require_runner_lifecycles(conn, {runner_id: expected_lifecycle})
             token_hash = locked_token_hash(conn, runner_id)
             if token_hash is None:
                 return None

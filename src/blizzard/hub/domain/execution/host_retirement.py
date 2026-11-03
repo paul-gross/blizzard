@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.execution.fleet import FleetService, RetireOutcome
+from blizzard.hub.domain.execution.fleet import FleetService, RetireInterrupted, RetireOutcome
 from blizzard.hub.domain.runners.host import Host, IWriteHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerHoldsRoutes, RunnerLifecycleConflict
@@ -29,9 +29,14 @@ class HostRetireOutcome:
 class HostRetirementInterrupted(Exception):
     """A runner's retire refused after the host's own retirement committed: it gained a live route after the host's
     refusal check, so its non-forced retire refused, or its lifecycle moved after the roster was read. ``committed`` is
-    what did land: the host's fact and revocation, and each runner retired before the refusal."""
+    what did land: the host's fact and revocation, each runner retired before the refusal, and whatever the refusing
+    runner's own retire committed before it refused."""
 
-    def __init__(self, committed: HostRetireOutcome, refusal: RunnerHoldsRoutes | RunnerLifecycleConflict) -> None:
+    def __init__(
+        self,
+        committed: HostRetireOutcome,
+        refusal: RunnerHoldsRoutes | RunnerLifecycleConflict | RetireInterrupted,
+    ) -> None:
         super().__init__(str(refusal))
         self.committed = committed
 
@@ -54,10 +59,10 @@ class HostRetirementService:
         from that instant. Each runner under it as that write left it is then retired with the same ``force``: from
         that instant no write adds a live runner under the host or releases an unretired one, so the roster read after
         it holds every runner the retire still has to retire, and none moved to another host before the fact landed.
-        The roster is read once: a runner it holds already retired is re-run over as :meth:`FleetService.retire`
-        re-runs, revoking and releasing whatever that runner holds when its turn comes. A crash between the two leaves
-        runners under a retired host unretired; a re-run writes no second host fact and re-runs each runner's retire,
-        which finishes it."""
+        Each runner's retire acts only on the lifecycle version the roster read it at, so one released from the host
+        and reinstated before its turn refuses (:class:`HostRetirementInterrupted`) rather than losing its fresh
+        token or routes. A crash between the two leaves runners under a retired host unretired; a re-run writes no
+        second host fact and re-runs each runner's retire, which finishes it."""
         now = self._clock.now()
         under = self._runners.list_runners(include_retired=True, host_id=host.host_id)
         holdings = {r.runner_id: self._fleet.holdings(r.runner_id) for r in under if not r.retired}
@@ -70,7 +75,9 @@ class HostRetirementService:
         for runner in roster:
             try:
                 outcomes[runner.runner_id] = self._fleet.retire(runner, by=by, force=force)
-            except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
+            except (RunnerHoldsRoutes, RunnerLifecycleConflict, RetireInterrupted) as exc:
+                if isinstance(exc, RetireInterrupted):
+                    outcomes[runner.runner_id] = exc.committed
                 committed = HostRetireOutcome(fact_id=fact_id, revocation_id=revocation_id, runners=outcomes)
                 raise HostRetirementInterrupted(committed, exc) from exc
         _log.info(

@@ -14,17 +14,19 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, held_routes
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.runners.host import Host, HostLifecycleConflict, HostRetired, IReadHostRegistry
-from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion, RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
     IWriteRunnerRegistry,
+    LifecycleFact,
     RetiredRunnerGuard,
     RunnerBinding,
     RunnerCapability,
     RunnerDeclining,
+    RunnerLifecycleConflict,
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerRegistration,
@@ -78,6 +80,36 @@ class RetireOutcome:
     released: tuple[ReleasedRoute, ...]
 
 
+@domain_model
+@dataclass(frozen=True)
+class ReinstateOutcome:
+    """What one reinstate wrote: the ``retired=False`` fact's id, and each route the retirement it reversed had left
+    held, released first."""
+
+    fact_id: int
+    released: tuple[ReleasedRoute, ...]
+
+
+class RetireInterrupted(Exception):
+    """A retire's release pass refused after its fact or revocation, or a release, committed. ``committed`` is what
+    landed — the fact and revocation, and the releases before the refusal — and ``refusal`` is why the rest did not."""
+
+    def __init__(self, committed: RetireOutcome, refusal: RunnerLifecycleConflict) -> None:
+        super().__init__(str(refusal))
+        self.committed = committed
+        self.refusal = refusal
+
+
+class ReinstateInterrupted(Exception):
+    """A reinstate refused after its release pass released a route. ``released`` is each release that committed, and
+    ``refusal`` is why the rest — the ``retired=False`` fact included — did not."""
+
+    def __init__(self, released: tuple[ReleasedRoute, ...], refusal: RunnerLifecycleConflict | HostRetired) -> None:
+        super().__init__(str(refusal))
+        self.released = released
+        self.refusal = refusal
+
+
 class FleetService:
     """Register runners, refresh liveness, set the declarative pause brake, and retire."""
 
@@ -86,6 +118,7 @@ class FleetService:
         *,
         registry: IWriteRunnerRegistry,
         hosts: IReadHostRegistry,
+        transactions: IHubTransactions,
         routes: IReadChunkRouteRepository,
         records: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
@@ -99,6 +132,8 @@ class FleetService:
         self._registry = registry
         # The host a runner stands under, whose retirement a reinstate is decided against.
         self._hosts = hosts
+        # The unit a retire's fact and revocation land in together.
+        self._transactions = transactions
         # The tenant's projects, which a served declaration resolves against.
         self._served_projects = served_projects
         # Retirement's holdings read and release pass — the hub's existing detach path.
@@ -236,30 +271,43 @@ class FleetService:
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
         then release every held route through ``DetachService`` — a terminal chunk holds none.
-        The registration decides the fact (:meth:`RunnerRegistration.retire`), which lands only on
-        the lifecycle version it was decided on — :class:`RunnerLifecycleConflict` otherwise, before
-        anything else is written. A re-run writes no fact and re-runs the revocation and the release
-        pass, which also catches a claim that slipped past the pre-lock holdings read; neither of
-        those is conditioned on the version the re-run read."""
+        The registration decides the fact (:meth:`RunnerRegistration.retire`); a re-run writes
+        none and re-runs the revocation and the release pass, which also catches a claim that
+        slipped past the pre-lock holdings read.
+
+        Every write acts only on the retirement it belongs to. The fact lands on the lifecycle
+        version ``registration`` was read at, and the revocation, in the same unit, on the version
+        the fact left — or, on a re-run, the one read; either refusing raises
+        :class:`RunnerLifecycleConflict` with nothing written. Each release is conditioned on that
+        same version, so a runner reinstated meanwhile keeps a route it claimed since: the first
+        refusal stops the pass and raises :class:`RetireInterrupted` with what committed, or — when
+        nothing did — the :class:`RunnerLifecycleConflict` itself."""
         runner_id = registration.runner_id
         now = self._clock.now()
         fact = registration.retire(self.holdings(runner_id), force=force, by=by, at=now)
         fact_id = None
-        if fact is not None:
-            fact_id = self._registry.record_lifecycle(
-                runner_id,
-                retired=fact.retired,
-                at=fact.at,
-                by=fact.by,
-                expected_lifecycle=registration.lifecycle_version,
+        version = registration.lifecycle_version
+        with self._transactions.begin() as unit:
+            if fact is not None:
+                fact_id = version = self._registry.record_lifecycle(
+                    runner_id,
+                    retired=fact.retired,
+                    at=fact.at,
+                    by=fact.by,
+                    expected_lifecycle=version,
+                    transaction=unit,
+                )
+            revocation_id = self._registry.revoke_token(
+                runner_id, at=now, by=by, expected_lifecycle=version, transaction=unit
             )
-        revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
-        routes = self._routes.live_routes_of_runner(runner_id)
-        records = self._records.get_many([route.chunk_id for route in routes])
-        released = tuple(self._release(route, records.get(route.chunk_id)) for route in routes)
-        outcome = RetireOutcome(
-            fact_id=fact_id, revocation_id=revocation_id, released=tuple(r for r in released if r is not None)
-        )
+        released, conflict = self._release_pass(RunnerLifecycleVersion(runner_id, version))
+        outcome = RetireOutcome(fact_id=fact_id, revocation_id=revocation_id, released=released)
+        if conflict is not None:
+            # A re-run over a runner holding no token writes neither a fact nor a revocation.
+            wrote = fact_id is not None or revocation_id is not None or bool(released)
+            if not wrote:
+                raise conflict
+            raise RetireInterrupted(outcome, conflict) from conflict
         _log.info(
             "runner retired",
             runner_id=runner_id,
@@ -276,37 +324,74 @@ class FleetService:
         facts = self._facts.status_facts_for([route.chunk_id for route in routes])
         return held_routes(routes, {chunk_id: f.status() for chunk_id, f in facts.items()})
 
-    def _release(self, route: Route, chunk: Chunk | None) -> ReleasedRoute | None:
+    def _release_pass(
+        self, runner: RunnerLifecycleVersion
+    ) -> tuple[tuple[ReleasedRoute, ...], RunnerLifecycleConflict | None]:
+        """Release every route ``runner`` still holds, each conditioned on its lifecycle version: the releases that
+        committed, and the :class:`RunnerLifecycleConflict` that stopped the pass, ``None`` when none did. Each
+        release commits on its own, so the caller decides what a stopped pass means."""
+        routes = self._routes.live_routes_of_runner(runner.runner_id)
+        records = self._records.get_many([route.chunk_id for route in routes])
+        released: list[ReleasedRoute] = []
+        for route in routes:
+            try:
+                done = self._release(route, records.get(route.chunk_id), runner)
+            except RunnerLifecycleConflict as exc:
+                return tuple(released), exc
+            if done is not None:
+                released.append(done)
+        return tuple(released), None
+
+    def _release(self, route: Route, chunk: Chunk | None, runner: RunnerLifecycleVersion) -> ReleasedRoute | None:
         if chunk is None:  # pragma: no cover - a routed chunk always has its record
             return None
-        released_id = self._detach.release_held(chunk, runner_id=route.runner_id)
+        released_id = self._detach.release_held(chunk, runner=runner)
         if released_id is None:  # released (or re-claimed elsewhere) since the holdings read
             return None
         return ReleasedRoute(chunk_id=route.chunk_id, released_id=released_id)
 
-    def reinstate(self, registration: RunnerRegistration, *, by: str) -> int:
-        """Record a ``retired=False`` fact, returning its id. The runner stays unenrolled —
-        its token was revoked at retire — so the operator enrolls it afresh. A runner under a
-        retired host stays retired (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and
-        so does one whose host retires before the fact lands. The fact lands only on the
-        runner's lifecycle version as read — :class:`RunnerLifecycleConflict` otherwise."""
+    def reinstate(self, registration: RunnerRegistration, *, by: str) -> ReinstateOutcome:
+        """Finish the retirement ``registration`` was read at, then reverse it. The runner stays
+        unenrolled — its token was revoked at retire — so the operator enrolls it afresh. A
+        runner under a retired host stays retired
+        (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and so does one whose host
+        retires before the fact lands. Every route the runner still holds is released first, as
+        the retire's own pass would, each conditioned on the version read; the ``retired=False``
+        fact then lands on that same version. A runner whose lifecycle moved raises
+        :class:`RunnerLifecycleConflict`; once a release has committed, any refusal raises
+        :class:`ReinstateInterrupted` carrying those releases."""
         fact = registration.reinstate(by=by, at=self._clock.now())
         host = self._host_of(registration)
         if host is not None:
             host.refuse_reinstating_runner()
+        runner = RunnerLifecycleVersion(registration.runner_id, registration.lifecycle_version)
+        released, refusal = self._release_pass(runner)
+        fact_id: int | None = None
+        if refusal is None:
+            try:
+                fact_id = self._record_reinstatement(fact, runner, host)
+            except (RunnerLifecycleConflict, HostRetired) as exc:
+                refusal = exc
+        if fact_id is None:
+            assert refusal is not None  # no fact is written only on a refusal
+            if not released:
+                raise refusal
+            raise ReinstateInterrupted(released, refusal) from refusal
+        _log.info("runner reinstated", runner_id=registration.runner_id, by=by, released=[r.chunk_id for r in released])
+        return ReinstateOutcome(fact_id=fact_id, released=released)
+
+    def _record_reinstatement(self, fact: LifecycleFact, runner: RunnerLifecycleVersion, host: Host | None) -> int:
         try:
-            fact_id = self._registry.record_lifecycle(
+            return self._registry.record_lifecycle(
                 fact.runner_id,
                 retired=fact.retired,
                 at=fact.at,
                 by=fact.by,
-                expected_lifecycle=registration.lifecycle_version,
+                expected_lifecycle=runner.version,
                 expected_host=None if host is None else HostLifecycleVersion(host.host_id, host.lifecycle_version),
             )
         except HostLifecycleConflict as exc:
             raise HostRetired(exc.host_id, action="reinstating a runner under it") from exc
-        _log.info("runner reinstated", runner_id=registration.runner_id, by=by)
-        return fact_id
 
     def _host_of(self, registration: RunnerRegistration) -> Host | None:
         """The host ``registration`` stands under, ``None`` for a runner standing alone."""
@@ -319,9 +404,15 @@ class FleetService:
 
     def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
         """Revoke the runner's current token, leaving it added; returns the revocation id.
-        Refuses with :class:`RunnerNotEnrolled` when it holds none."""
+        Refuses with :class:`RunnerNotEnrolled` when it holds none, and with
+        :class:`RunnerLifecycleConflict` when it was retired or reinstated since it was read."""
         revocation = registration.revoke_token(by=by, at=self._clock.now())
-        revocation_id = self._registry.revoke_token(revocation.runner_id, at=revocation.at, by=revocation.by)
+        revocation_id = self._registry.revoke_token(
+            revocation.runner_id,
+            at=revocation.at,
+            by=revocation.by,
+            expected_lifecycle=registration.lifecycle_version,
+        )
         if revocation_id is None:  # revoked concurrently between the read and the write
             raise RunnerNotEnrolled(registration.runner_id)
         _log.info("runner token revoked", runner_id=registration.runner_id, by=by)

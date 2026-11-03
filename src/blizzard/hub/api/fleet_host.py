@@ -20,7 +20,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.api.runners import executors_for, hosts_of, publish_retirement, registry_view, served_projects
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.execution.fleet import RetireOutcome
+from blizzard.hub.domain.execution.fleet import RetireInterrupted, RetireOutcome
 from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace
 from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes, RunnerLifecycleConflict
 from blizzard.hub.domain.runners.served import UnknownServedProject
@@ -120,8 +120,8 @@ def retire_host_runner(
 ) -> RunnerRetireResponse:
     """Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does — 409 naming each held
     chunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a
-    first retire whose runner gained a newer retirement or reinstatement after it was read records no fact and is
-    refused 409."""
+    retire — a re-run included — whose runner was retired or reinstated after it was read is refused 409, revoking no
+    token and releasing no route the runner holds since; what it committed first is still published."""
     registration = services.registry.get_runner(runner_id)
     if registration is None or registration.host_id != principal.host_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
@@ -129,6 +129,9 @@ def retire_host_runner(
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
         outcome: RetireOutcome = services.fleet.retire(registration, by=request.by, force=request.force)
+    except RetireInterrupted as exc:
+        publish_retirement(services, registration, exc.committed, by=request.by, changes=changes)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)

@@ -63,6 +63,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     fleet = FleetService(
         registry=RunnerRegistryStore(store),
         hosts=HostRegistryStore(store),
+        transactions=HubTransactions(store),
         routes=chunks.route,
         records=chunks.record,
         facts=chunks.facts,

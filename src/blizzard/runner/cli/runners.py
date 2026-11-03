@@ -247,8 +247,7 @@ def _retire_at_hub(ctx: click.Context, config: HostConfig, token: str, target: _
             answer = host_clients(token).retire_runner(target.runner_id, force=force)
         except HostRunnerRetireRefused as exc:
             raise click.ClickException(
-                f"runner {target.name} ({target.runner_id}) still holds chunks, so nothing was retired: {exc.detail}. "
-                "Re-run with --force to release them"
+                f"the hub refused to retire runner {target.name} ({target.runner_id}): {exc.detail}"
             ) from exc
         except HubClientError as exc:
             raise click.ClickException(f"cannot retire runner {target.name} at the hub at {hub}: {exc}") from exc

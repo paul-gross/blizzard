@@ -282,7 +282,9 @@ def revoke_host_token(host_id: str, request: HostLifecycleRequest, services: Ser
 def retire_host(host_id: str, request: HostRetireRequest, services: Services) -> HostRetireResponse:
     """Retire a host — its token is revoked and every runner under it retired; 409 naming each runner's held chunks
     unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host
-    retired by another retire while this one was decided is refused 409; run it again."""
+    retired by another retire while this one was decided is refused 409, and so is a retire reaching a runner retired
+    or reinstated since the runners under the host were read, which leaves that runner's token and chunks alone; what
+    the retire committed is still published. Run it again."""
     host = _host(services, host_id)
     under = services.registry.list_runners(include_retired=True, host_id=host_id)
     held = [route for r in under for route in services.chunks.route.live_routes_of_runner(r.runner_id)]
