@@ -493,12 +493,12 @@ def _stands_at(facts: ChunkFacts, submission: Submission) -> bool:
 
 def is_current(facts: ChunkFacts, submission: Submission) -> bool:
     """The submission's visit is the chunk's current one: it stands at the node, at the submission's epoch."""
-    return _stands_at(facts, submission) and (facts.latest_epoch() or 0) == submission.epoch
+    return facts.visit_is_current(submission.node_id, epoch=submission.epoch)
 
 
 def may_pass(facts: ChunkFacts, submission: Submission) -> bool:
     """The submission's visit may take a pass: its chunk is ``delivering`` and the visit is its current one."""
-    return facts.status() is ChunkStatus.DELIVERING and is_current(facts, submission)
+    return facts.delivering_at(submission.node_id, epoch=submission.epoch)
 
 
 def held_by_a_person(facts: ChunkFacts, submission: Submission) -> bool:

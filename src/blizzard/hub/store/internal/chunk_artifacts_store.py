@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Row, or_
+from sqlalchemy import Connection, Row, or_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -23,6 +24,7 @@ from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
@@ -34,6 +36,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
@@ -166,8 +169,8 @@ class ChunkArtifactsStore:
             for chunk_id in chunk_ids
         }
 
-    def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
-        with self._store.read("load_artifacts") as conn:
+    def load_artifacts(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[StoredArtifact]:
+        with connection_in(self._store, transaction, "load_artifacts") as conn:
             return [
                 _stored_artifact(a)
                 for a in conn.execute(
@@ -280,11 +283,11 @@ class ChunkArtifactsStore:
         content: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: Transaction | None = None,
     ) -> bool:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
-        with self._store.write("record_hub_artifact") as conn:
-            lock_chunk_row(conn, chunk_id)
+        with self._hub_artifact_connection(chunk_id, transaction) as conn:
             already = conn.execute(
                 self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
                     (s.artifacts.c.chunk_id == chunk_id)
@@ -316,6 +319,19 @@ class ChunkArtifactsStore:
             if is_landing_marker(name, content):
                 enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
             return True
+
+    @contextmanager
+    def _hub_artifact_connection(
+        self, chunk_id: str, transaction: Transaction | None
+    ) -> Generator[Connection, None, None]:
+        """The caller's unit, which must lock ``chunk_id``, or a scoped write of its own that locks it first
+        (``bzh:store-exclusive-write``)."""
+        if transaction is not None:
+            yield connection_for(self._store, transaction, chunk=chunk_id)
+            return
+        with self._store.write("record_hub_artifact") as conn:
+            lock_chunk_row(conn, chunk_id)
+            yield conn
 
     def record_landing(
         self,

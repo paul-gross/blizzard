@@ -51,13 +51,13 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-lost": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "critical"),
     "owner-unresolvable": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_owner_unresolvable", "critical"),
     "no-acceptable-harness": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
-    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeRouter._unroutable", "critical"),
+    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeRouter._unroutable_on", "critical"),
     "hub-action-overran": Recorded("hub/delivery/flow_turn.py:TurnRunner._answer", "warning"),
     "turn-interrupted": Recorded("hub/domain/delivery/reconcile.py:FlowLineReconciler.end_unanswered", "warning"),
     "flow-landed": Recorded("hub/store/internal/flow_rows.py:write_landing", "info"),
     "hub-action-missing": Recorded("hub/delivery/hub_node.py:HubNodeRouter.escalate_action_missing", "critical"),
-    "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeRouter._record_refusal_event", "critical"),
-    "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeRouter._record_refusal_event", "critical"),
+    "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeRouter.refuse", "critical"),
+    "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeRouter.refuse", "critical"),
     "forge-capability-missing": Recorded(
         "hub/delivery/hub_node.py:HubNodeRouter.escalate_capability_missing", "warning"
     ),

@@ -15,6 +15,7 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -23,6 +24,12 @@ from blizzard.hub.domain.runners.route import Route
 class ILockedChunkRead(Protocol):
     """Every guard read a locked writer consults, resolved on the one connection its row
     lock was taken on — so no guard read can race the write it precedes."""
+
+    @property
+    def transaction(self) -> LockedTransaction:
+        """The locked unit this handle reads in, which a repository method taking ``transaction`` joins
+        (``bzh:transaction-participation``)."""
+        ...
 
     def facts(self, chunk_id: str) -> ChunkFacts | None: ...
     def facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

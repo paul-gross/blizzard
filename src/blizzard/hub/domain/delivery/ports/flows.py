@@ -262,7 +262,8 @@ class IHubStepRefusals(Protocol):
         detail: str,
         resolution: RepositoryResolution | None = None,
     ) -> object:
-        """Record why the visit cannot run as its ``hub-log.<step>`` artifact and route its failure choice."""
+        """Record why the visit cannot run as its ``hub-log.<step>`` artifact and route its failure choice — together,
+        in one transaction, or not at all."""
         ...
 
     def escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int) -> bool:

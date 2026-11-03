@@ -1270,6 +1270,19 @@ class ChunkFacts:
         )
         return not left and (self.latest_epoch() or 0) <= epoch
 
+    def visit_is_current(self, node_id: str, *, epoch: int) -> bool:
+        """``node_id``'s visit at ``epoch`` is the chunk's current one: its newest movement enters the node, and no
+        newer epoch has been minted. It reads no status; :meth:`delivering_at` adds the one a visit is decided on."""
+        movement = self.latest_movement()
+        return movement is not None and movement.node_id == node_id and (self.latest_epoch() or 0) == epoch
+
+    def delivering_at(self, node_id: str, *, epoch: int) -> bool:
+        """The chunk is ``delivering`` at its current visit, ``node_id``'s at ``epoch`` — what a hub visit's
+        submission, its pass, and its refusal are each decided on. A pause mints no epoch, so a chunk paused or held
+        by a person at its node can still stand at the visit's epoch without delivering, and none of the three is
+        taken for it."""
+        return self.status() is ChunkStatus.DELIVERING and self.visit_is_current(node_id, epoch=epoch)
+
     def accepted_transition_target(self, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of the transition already recorded out of ``from_node_id`` at
         ``epoch`` — the replay key — or ``None``."""

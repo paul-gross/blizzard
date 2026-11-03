@@ -28,7 +28,7 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
 from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -59,11 +59,11 @@ _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTIO
 _CHUNK_LOCKED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
 
-def _written_id(row_id: int | None) -> int:
-    """The row id a write that always returns one answered."""
-    if row_id is None:
-        raise TypeError("the write answered no row id")
-    return row_id
+def _logged(written: int | LoggedEvent | None) -> LoggedEvent:
+    """The event an ``event.recorded`` write answered."""
+    if not isinstance(written, LoggedEvent):
+        raise TypeError("the write answered no logged event")
+    return written
 
 
 def requires_route_token(kind: str, chunk_id: str | None) -> bool | None:
@@ -119,13 +119,14 @@ class PushedFact:
 @dataclass(frozen=True)
 class _Landing:
     """An admitted fact's write, decided from reads taken before its unit opens. ``write`` runs in the unit that
-    advances the mark and answers the row id the ack carries, or the write fence's refusal; ``locks`` names the
-    chunk whose row lock that unit declares; ``committed`` runs on what ``write`` answered once the unit commits —
-    a frame published, a line logged — and never when it rolls back (``bzh:publish-after-commit``)."""
+    advances the mark and answers the row id the ack carries — or the event it logged, whose row id the ack carries
+    — or the write fence's refusal; ``locks`` names the chunk whose row lock that unit declares; ``committed`` runs
+    on what ``write`` answered once the unit commits — a frame published, a line logged — and never when it rolls
+    back (``bzh:publish-after-commit``)."""
 
-    write: Callable[[Transaction], int | FenceRefusal | None]
+    write: Callable[[Transaction], int | LoggedEvent | FenceRefusal | None]
     locks: str | None = None
-    committed: Callable[[int | None], object] | None = None
+    committed: Callable[[int | LoggedEvent | None], object] | None = None
 
 
 @domain_model
@@ -325,7 +326,7 @@ class FactIngestService:
             )
         if landing.committed is not None:
             landing.committed(written)
-        return True, written
+        return True, written.row_id if isinstance(written, LoggedEvent) else written
 
     def _landing(
         self,
@@ -474,14 +475,7 @@ class FactIngestService:
                 at=now,
                 transaction=transaction,
             ),
-            committed=lambda event_id: self._events.publish(
-                _written_id(event_id),
-                kind=wire_kind,
-                runner_id=runner_id,
-                runner_name=runner_name,
-                chunk_id=chunk_id,
-                project_id=project_id,
-            ),
+            committed=lambda written: self._events.publish(_logged(written)),
         )
 
     def _external_usage_landing(self, runner_id: str, kind: str, fact: Payload, *, now: datetime) -> _Landing | None:

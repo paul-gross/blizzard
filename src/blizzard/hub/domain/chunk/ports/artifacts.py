@@ -11,13 +11,15 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 class IReadChunkArtifactsRepository(Protocol):
     """Read-only chunk-artifacts access."""
 
-    def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
-        """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
+    def load_artifacts(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[StoredArtifact]:
+        """Every artifact row of a chunk; the caller resolves latest-by-epoch. Read in ``transaction`` when given
+        (``bzh:transaction-participation``)."""
         ...
 
     def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:
@@ -63,13 +65,15 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         content: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: Transaction | None = None,
     ) -> bool:
         """Append one hub-node progress artifact OUTSIDE a transition.
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
         recorded this artifact writes nothing a second time. Also behind the write fence
         (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
-        worker-produced one. Returns True iff it wrote."""
+        worker-produced one. Written in ``transaction`` when given — a unit that locks the chunk — else in a write of
+        its own that locks it first (``bzh:transaction-participation``). Returns True iff it wrote."""
         ...
 
     def record_landing(

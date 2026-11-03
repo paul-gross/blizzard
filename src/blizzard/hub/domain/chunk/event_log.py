@@ -1,16 +1,36 @@
 """Recording an operational event is what publishes it (``bzh:operational-event-log``):
 one domain service holds both the write seam and the publisher seam, so every
-event-authoring call site gets the live broadcast without knowing the broker exists."""
+event-authoring call site gets the live broadcast without knowing the broker exists. A row
+written inside a caller's unit hands its frame back instead, for the caller to publish once
+the unit commits (``bzh:publish-after-commit``)."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
+from typing import overload
 
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
+
+
+@domain_model
+@dataclass(frozen=True)
+class LoggedEvent:
+    """An ``event_log`` row a unit wrote, and the ``event-logged`` frame :meth:`EventLogService.publish` announces
+    for it once that unit has committed."""
+
+    row_id: int
+    severity: EventLogSeverity
+    kind: str
+    chunk_id: str | None
+    runner_id: str | None
+    runner_name: str | None
+    project_id: ProjectId | None
 
 
 class EventLogService:
@@ -27,6 +47,40 @@ class EventLogService:
         self._events = events
         self._publisher = publisher
 
+    @overload
+    def record(
+        self,
+        *,
+        kind: EventLogKind,
+        runner_id: str | None,
+        chunk_id: str | None,
+        project_id: ProjectId | None,
+        lease_id: str | None,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+        runner_name: str | None = None,
+        transaction: None = None,
+    ) -> int: ...
+
+    @overload
+    def record(
+        self,
+        *,
+        kind: EventLogKind,
+        runner_id: str | None,
+        chunk_id: str | None,
+        project_id: ProjectId | None,
+        lease_id: str | None,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+        runner_name: str | None = None,
+        transaction: Transaction,
+    ) -> LoggedEvent: ...
+
     def record(
         self,
         *,
@@ -41,7 +95,7 @@ class EventLogService:
         at: datetime,
         runner_name: str | None = None,
         transaction: Transaction | None = None,
-    ) -> int:
+    ) -> int | LoggedEvent:
         """Append the row, then publish an ``event-logged`` frame keyed off the row it
         just wrote. Returns the freshly-written ``event_log.id``. Severity is
         derived from ``kind`` (a function of it, never paired independently). The frame
@@ -49,11 +103,11 @@ class EventLogService:
         never stores it. ``project_id`` is the frame's, ``None`` for a row naming no chunk or one the caller
         could not resolve.
 
-        Joined to ``transaction``, the row lands in that unit and its frame waits on the unit: the unit's owner
-        publishes it through :meth:`publish` once the unit commits, and never when it rolls back
-        (``bzh:publish-after-commit``)."""
-        event_id = self._events.record_event(
-            severity=EVENT_LOG_SEVERITY[kind],
+        With ``transaction``, the row is written in that unit and nothing is published: the
+        :class:`LoggedEvent` returned is the frame, for the caller to :meth:`publish` once the unit commits."""
+        severity = EVENT_LOG_SEVERITY[kind]
+        row_id = self._events.record_event(
+            severity=severity,
             kind=kind,
             runner_id=runner_id,
             chunk_id=chunk_id,
@@ -64,35 +118,29 @@ class EventLogService:
             at=at,
             transaction=transaction,
         )
-        if transaction is None:
-            self.publish(
-                event_id,
-                kind=kind,
-                runner_id=runner_id,
-                runner_name=runner_name,
-                chunk_id=chunk_id,
-                project_id=project_id,
-            )
-        return event_id
-
-    def publish(
-        self,
-        event_id: int,
-        *,
-        kind: EventLogKind,
-        runner_id: str | None,
-        runner_name: str | None,
-        chunk_id: str | None,
-        project_id: ProjectId | None,
-    ) -> None:
-        """Publish the ``event-logged`` frame of the committed row ``event_id`` — the frame :meth:`record` leaves to
-        the owner of the unit it wrote that row in."""
-        self._publisher.publish_event_logged(
-            severity=EVENT_LOG_SEVERITY[kind],
+        logged = LoggedEvent(
+            row_id=row_id,
+            severity=severity,
             kind=kind,
             chunk_id=chunk_id,
             runner_id=runner_id,
             runner_name=runner_name,
-            key=f"event_log:{event_id}",
             project_id=project_id,
         )
+        if transaction is not None:
+            return logged
+        self.publish(logged)
+        return row_id
+
+    def publish(self, *logged: LoggedEvent) -> None:
+        """Publish each row's ``event-logged`` frame, in order — called once the unit that wrote them committed."""
+        for event in logged:
+            self._publisher.publish_event_logged(
+                severity=event.severity,
+                kind=event.kind,
+                chunk_id=event.chunk_id,
+                runner_id=event.runner_id,
+                runner_name=event.runner_name,
+                key=f"event_log:{event.row_id}",
+                project_id=event.project_id,
+            )
