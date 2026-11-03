@@ -10,14 +10,16 @@ from typing import Protocol
 from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 
 
 class IReadChunkRouteRepository(Protocol):
     """Read-only chunk-route access."""
 
-    def route_of(self, chunk_id: str) -> Route | None:
-        """The chunk's live route (runner/workspace/envs), or None if unclaimed/released."""
+    def route_of(self, chunk_id: str, *, transaction: Transaction | None = None) -> Route | None:
+        """The chunk's live route (runner/workspace/envs), or None if unclaimed/released — read in
+        ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def load_all_routes(self) -> dict[str, Route]:

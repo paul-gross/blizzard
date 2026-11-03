@@ -1187,6 +1187,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             decisions=chunk_decisions,
             escalations=chunk_escalations,
             exclusive=chunk_exclusive,
+            transactions=stores.transactions,
             route=chunk_route,
             artifacts=chunk_artifacts,
             retired=retired,
