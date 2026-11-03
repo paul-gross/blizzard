@@ -34,6 +34,7 @@ from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
     RunnerBinding,
     RunnerHoldsRoutes,
+    RunnerLifecycleConflict,
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerNotRetired,
@@ -475,13 +476,15 @@ def resume_runner(runner_id: str, request: RunnerPauseRequest, services: Service
 def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Services) -> RunnerRetireResponse:
     """Retire a runner — its token is revoked and its claims and registrations refused;
     409 naming each held chunk unless ``force``, which releases them. Re-running on a
-    retired runner re-runs the release pass."""
+    retired runner re-runs the release pass. A first retire whose runner gained a newer
+    retirement or reinstatement after it was read records no fact and is refused 409; run it
+    again."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
-    except RunnerHoldsRoutes as exc:
+    except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)
     return RunnerRetireResponse(
@@ -521,11 +524,12 @@ def publish_retirement(
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
-    """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired."""
+    """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
+    under a retired host, and when its lifecycle moved while the reinstate was decided."""
     registration = _registration(services, runner_id)
     try:
         fact_id = services.fleet.reinstate(registration, by=request.by)
-    except RunnerNotRetired as exc:
+    except (RunnerNotRetired, HostRetired, RunnerLifecycleConflict) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_runner_changed(
         runner_id,

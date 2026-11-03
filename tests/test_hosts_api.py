@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import STALE_AFTER
 from tests.support import HubHarness, TenantHarness, build_hub, emitted_events, pointer_token, seed_runner
 
@@ -479,7 +480,9 @@ def test_a_rerun_over_a_retired_host_retires_the_runners_a_crash_left_unretired(
     host = hub.services.hosts.get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
-    hub.services.hosts.record_retirement(host_id, fact=fact, at=hub.clock.now(), by="op")  # type: ignore[attr-defined]
+    hub.services.hosts.record_retirement(  # type: ignore[attr-defined]
+        HostLifecycleVersion(host_id, host.lifecycle_version), fact=fact, at=hub.clock.now(), by="op"
+    )
     assert hub.client.get("/api/runners/rn_a").json()["retired"] is False
 
     rerun = hub.client.post(f"/api/hosts/{host_id}/retire", json={"by": "op"})
@@ -528,7 +531,9 @@ def test_a_rerun_over_a_crash_left_runner_holding_a_chunk_is_a_409(tmp_path: Pat
     host = hub.services.hosts.get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
-    hub.services.hosts.record_retirement(host_id, fact=fact, at=hub.clock.now(), by="op")  # type: ignore[attr-defined]
+    hub.services.hosts.record_retirement(  # type: ignore[attr-defined]
+        HostLifecycleVersion(host_id, host.lifecycle_version), fact=fact, at=hub.clock.now(), by="op"
+    )
 
     rerun = hub.client.post(f"/api/hosts/{host_id}/retire", json={"by": "op"})
 

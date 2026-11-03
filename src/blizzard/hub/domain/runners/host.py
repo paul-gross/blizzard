@@ -3,7 +3,12 @@
 A host's ``host_id`` is the hub-minted ``hs_`` id, its one identity. Derived rather than stored: **liveness**
 (``last_seen_at`` against :data:`~blizzard.hub.domain.runners.registration.STALE_AFTER`, at read time), **never
 connected** (no ``registered_at``) and **retired** (the newest appended lifecycle fact). ``token_hash`` is the one
-mutable exception; a revoked hash is kept as a fact."""
+mutable exception; a revoked hash is kept as a fact.
+
+The runners standing under a host — ``runner_registrations.host_id`` — are its retirement's durable roster: a retire
+commits the host's fact first and retires the runners after, so a write that moves a runner onto or off a host lands
+only while the host, and each runner it moves, still stands at the lifecycle version it was decided on
+(``bzh:write-reestablishes-read``)."""
 
 from __future__ import annotations
 
@@ -16,6 +21,8 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
@@ -161,6 +168,9 @@ class Host:
     retired: bool = False
     retired_at: datetime | None = None
     retired_by: str | None = None
+    #: The id of the newest lifecycle fact, ``0`` for a host with none — the version a write decided on this host is
+    #: conditioned on.
+    lifecycle_version: int = 0
 
     def never_connected(self) -> bool:
         """Whether the host was added but has never reported."""
@@ -256,14 +266,23 @@ class Host:
             raise RunnerAlreadyHosted(runner.runner_id, host_id=runner.host_id)
 
     def release(self, runner: RunnerRegistration) -> None:
-        """Refuse returning ``runner`` to standing alone unless it stands under this host."""
+        """Refuse returning ``runner`` to standing alone unless it stands under this host. A retired host releases
+        only a retired runner: one its retire has not reached yet raises :class:`HostRetirementUnfinished`, since the
+        roster is how a re-run of the retire finds it."""
         if runner.host_id != self.host_id:
             raise RunnerNotUnderHost(runner.runner_id, host_id=self.host_id)
+        if self.retired and not runner.retired:
+            raise HostRetirementUnfinished(self.host_id, runner.runner_id)
 
     def refuse_adding_runner(self) -> None:
         """Raise :class:`HostRetired` when this host may add no runner."""
         if not self.permits(HostVerb.ADD_RUNNER):
             raise HostRetired(self.host_id, action="adding a runner")
+
+    def refuse_reinstating_runner(self) -> None:
+        """Raise :class:`HostRetired` when this host may hold no live runner, so a runner under it stays retired."""
+        if not self.permits(HostVerb.ADD_RUNNER):
+            raise HostRetired(self.host_id, action="reinstating a runner under it")
 
     def retire(
         self, holdings: Mapping[str, Sequence[Route]], *, force: bool, by: str, at: datetime
@@ -318,10 +337,19 @@ class IReadHostRegistry(Protocol):
 class IWriteHostRegistry(IReadHostRegistry, Protocol):
     """Adds the host registry writes."""
 
-    def add(self, addition: HostAddition) -> None:
+    def add(
+        self,
+        addition: HostAddition,
+        *,
+        expected_runners: Mapping[str, int] | None = None,
+        transaction: Transaction | None = None,
+    ) -> None:
         """Insert ``addition`` as a never-connected host and place its ``adopt`` runners under it, in one
-        transaction. Raises :class:`HostNameTaken` when a live host already holds the name, and
-        :class:`RunnerAlreadyHosted` when an adopted runner came to stand under a host first."""
+        transaction. ``expected_runners`` holds each adopted runner's lifecycle version the add was decided on, one for
+        every runner ``adopt`` names (:class:`ValueError` otherwise). Raises
+        :class:`HostNameTaken` when a live host already holds the name, :class:`RunnerAlreadyHosted` when an adopted
+        runner came to stand under a host first, and
+        :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict` when one moved past its version."""
         ...
 
     def record_report(self, host_id: str, report: HostReport, *, name: str | None, at: datetime) -> bool:
@@ -331,9 +359,19 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
         first raises :class:`HostNameTaken`, with nothing written."""
         ...
 
-    def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
-        """Place the runners under ``host_id``, in one transaction. Raises :class:`RunnerAlreadyHosted` when one
-        came to stand under a host first."""
+    def adopt(
+        self,
+        host: HostLifecycleVersion,
+        runner_ids: Sequence[str],
+        *,
+        expected_runners: Mapping[str, int],
+        transaction: Transaction | None = None,
+    ) -> None:
+        """Place the runners under ``host``, in one transaction, while the host stands at the lifecycle version the
+        adoption was decided on and each runner at its ``expected_runners`` version. Raises
+        :class:`RunnerAlreadyHosted` when one came to stand under a host first, :class:`HostLifecycleConflict` when the
+        host moved past its version, and :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`
+        when a runner did; nothing is written."""
         ...
 
     def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
@@ -352,15 +390,33 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
         """Upsert the host's newest miss for ``slug``, in its own table; no row for ``host_id`` is required."""
         ...
 
-    def release(self, host_id: str, runner_ids: Sequence[str]) -> None:
-        """Return the runners under ``host_id`` to standing alone, keeping their ids and tokens."""
+    def release(
+        self,
+        host: HostLifecycleVersion,
+        runner_ids: Sequence[str],
+        *,
+        expected_runners: Mapping[str, int],
+        transaction: Transaction | None = None,
+    ) -> None:
+        """Return the runners under ``host`` to standing alone, keeping their ids and tokens, all or none, while the
+        host stands at the lifecycle version the release was decided on and each runner at its ``expected_runners``
+        version. Raises :class:`HostLifecycleConflict` or
+        :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict` otherwise, and
+        :class:`RunnerNotUnderHost` for a runner that no longer stands under the host; nothing is written."""
         ...
 
     def record_retirement(
-        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str
+        self,
+        host: HostLifecycleVersion,
+        *,
+        fact: HostLifecycleFact | None,
+        at: datetime,
+        by: str,
+        transaction: Transaction | None = None,
     ) -> tuple[int | None, int | None]:
-        """Append ``fact`` (when given) and revoke the host's token, in one transaction. Returns the lifecycle fact
-        id and the revocation id, each ``None`` when it wrote none."""
+        """Append ``fact`` (when given) and revoke the host's token, in one transaction, while the host stands at the
+        lifecycle version the retire was decided on; :class:`HostLifecycleConflict` otherwise, writing nothing.
+        Returns the lifecycle fact id and the revocation id, each ``None`` when it wrote none."""
         ...
 
     def revoke_token(self, host_id: str, *, at: datetime, by: str) -> int | None:
@@ -380,6 +436,28 @@ class HostRetired(Exception):
     def __init__(self, host_id: str, *, action: str) -> None:
         super().__init__(f"host {host_id} is retired — {action} refused")
         self.host_id = host_id
+
+
+class HostRetirementUnfinished(Exception):
+    """A release named a runner its retired host's retire has not retired yet — the roster is how a re-run of the
+    retire finds it."""
+
+    def __init__(self, host_id: str, runner_id: str) -> None:
+        super().__init__(
+            f"host {host_id} is retired but runner {runner_id} under it is not — re-run the host's retire to finish it "
+            "before releasing the runner"
+        )
+        self.host_id = host_id
+        self.runner_id = runner_id
+
+
+class HostLifecycleConflict(Exception):
+    """A write was decided on a lifecycle version of the host a newer lifecycle fact has since moved past."""
+
+    def __init__(self, host_id: str, *, expected: int) -> None:
+        super().__init__(f"host {host_id} changed after it was read — run it again")
+        self.host_id = host_id
+        self.expected = expected
 
 
 class HostNameTaken(Exception):

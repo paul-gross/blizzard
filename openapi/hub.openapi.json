@@ -27749,7 +27749,7 @@
     },
     "/api/fleet/host/runners": {
       "post": {
-        "description": "Add a runner under the calling host, in the host's tenant, as an operator's add would \u2014 its id and bearer token\nare minted together and the plaintext token is returned once. An entry of ``projects`` naming no project of the\ntenant is refused 422, and nothing is added.",
+        "description": "Add a runner under the calling host, in the host's tenant, as an operator's add would \u2014 its id and bearer token\nare minted together and the plaintext token is returned once. An entry of ``projects`` naming no project of the\ntenant is refused 422, and a host retired before the add lands 403; nothing is added.",
         "operationId": "add_host_runner_api_fleet_host_runners_post",
         "requestBody": {
           "content": {
@@ -27791,7 +27791,7 @@
     },
     "/api/fleet/host/runners/{runner_id}/retire": {
       "post": {
-        "description": "Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does \u2014 409 naming each held\nchunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404).",
+        "description": "Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does \u2014 409 naming each held\nchunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a\nfirst retire whose runner gained a newer retirement or reinstatement after it was read records no fact and is\nrefused 409.",
         "operationId": "retire_host_runner_api_fleet_host_runners__runner_id__retire_post",
         "parameters": [
           {
@@ -29776,7 +29776,7 @@
         ]
       },
       "post": {
-        "description": "Add a host under ``name`` \u2014 the hub mints its id and bearer token together, and the plaintext token is returned\nonce. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as\nunknown (404), one already under a host or a retired one 409, and nothing is added. A name a live host holds is\nrefused 409.",
+        "description": "Add a host under ``name`` \u2014 the hub mints its id and bearer token together, and the plaintext token is returned\nonce. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as\nunknown (404), one already under a host or a retired one 409, and so is one retired or reinstated while the add\nwas decided; nothing is added. A name a live host holds is refused 409.",
         "operationId": "add_host_api_hosts_post",
         "requestBody": {
           "content": {
@@ -29861,7 +29861,7 @@
     },
     "/api/hosts/{host_id}/adoptions": {
       "post": {
-        "description": "Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one\nalready under a host or a retired one 409, and so is a retired host.",
+        "description": "Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one\nalready under a host or a retired one 409, and so is a retired host \u2014 one retired while the adoption was decided\nincluded \u2014 and a runner retired or reinstated meanwhile.",
         "operationId": "adopt_runners_api_hosts__host_id__adoptions_post",
         "parameters": [
           {
@@ -29957,7 +29957,7 @@
     },
     "/api/hosts/{host_id}/releases": {
       "post": {
-        "description": "Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under\nthe host is refused as unknown (404).",
+        "description": "Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under\nthe host is refused as unknown (404). A retired host releases only retired runners: an unretired one is refused 409\nuntil the host's retire is re-run. A host or runner whose lifecycle moved while the release was decided is refused\n409; run it again.",
         "operationId": "release_runners_api_hosts__host_id__releases_post",
         "parameters": [
           {
@@ -30010,7 +30010,7 @@
     },
     "/api/hosts/{host_id}/retire": {
       "post": {
-        "description": "Retire a host \u2014 its token is revoked and every runner under it retired; 409 naming each runner's held chunks\nunless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass.",
+        "description": "Retire a host \u2014 its token is revoked and every runner under it retired; 409 naming each runner's held chunks\nunless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host\nretired by another retire while this one was decided is refused 409; run it again.",
         "operationId": "retire_host_api_hosts__host_id__retire_post",
         "parameters": [
           {
@@ -34175,7 +34175,7 @@
     },
     "/api/runners/{runner_id}/reinstate": {
       "post": {
-        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired.",
+        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided.",
         "operationId": "reinstate_runner_api_runners__runner_id__reinstate_post",
         "parameters": [
           {
@@ -34281,7 +34281,7 @@
     },
     "/api/runners/{runner_id}/retire": {
       "post": {
-        "description": "Retire a runner \u2014 its token is revoked and its claims and registrations refused;\n409 naming each held chunk unless ``force``, which releases them. Re-running on a\nretired runner re-runs the release pass.",
+        "description": "Retire a runner \u2014 its token is revoked and its claims and registrations refused;\n409 naming each held chunk unless ``force``, which releases them. Re-running on a\nretired runner re-runs the release pass. A first retire whose runner gained a newer\nretirement or reinstatement after it was read records no fact and is refused 409; run it\nagain.",
         "operationId": "retire_runner_api_runners__runner_id__retire_post",
         "parameters": [
           {

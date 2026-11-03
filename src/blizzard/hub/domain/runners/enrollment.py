@@ -14,6 +14,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
     IWriteRunnerRegistry,
     RunnerAddition,
@@ -55,21 +56,25 @@ class RunnerEnrollmentService:
         self._clock = clock
 
     def add(
-        self, name: str, *, by: str, projects: Sequence[str] | None = None, host_id: str | None = None
+        self, name: str, *, by: str, projects: Sequence[str] | None = None, host: HostLifecycleVersion | None = None
     ) -> AddedRunner:
         """Mint a runner's ``rn_`` id and bearer token together and record it as a never-connected
         registration under the initial ``name``, added now by ``by``. Names are not unique: adding a
         name some runner already holds adds another runner. ``projects`` is the served declaration it
         starts with (:func:`~blizzard.hub.domain.runners.served.declaration_at_add`); an entry that
         resolves to no project raises :class:`~blizzard.hub.domain.runners.served.UnknownServedProject`
-        before anything is minted. ``host_id`` is the host it is added under, if any."""
+        before anything is minted. ``host`` is the host it is added under, if any, at the lifecycle version the add was
+        decided on: a host that has moved past it raises
+        :class:`~blizzard.hub.domain.runners.host.HostLifecycleConflict`, and nothing is added."""
         served = declaration_at_add(projects, self._served_projects)
         runner_id = Id.mint(IdPrefix.RUNNER, self._clock).value
         token = secrets.token_urlsafe(_TOKEN_BYTES)
+        host_id = None if host is None else host.host_id
         self._registry.add(
             RunnerAddition(
                 runner_id, name, TokenHash(token).hex, at=self._clock.now(), by=by, served=served, host_id=host_id
-            )
+            ),
+            expected_host=host,
         )
         _log.info(
             "runner added", runner_id=runner_id, name=name, by=by, projects=[e.entry for e in served], host_id=host_id
