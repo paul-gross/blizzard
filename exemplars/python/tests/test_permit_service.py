@@ -4,22 +4,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Sequence
-from contextlib import AbstractContextManager, contextmanager
-from dataclasses import dataclass, field, replace
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.project_colors import ProjectColor
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from exemplar.foundation.permits import PermitState
 from exemplar.hub.domain.permits.model import (
-    ILockedPermitRead,
     IWritePermitRepository,
     Permit,
     PermitAlreadyRequested,
+    PermitChanged,
     PermitFact,
     PermitFactKind,
     PermitPage,
@@ -51,15 +51,6 @@ _REQUESTED = Permit.request("pm_a", project_id=_ALPHA.project_id, holder="ada", 
 
 
 @dataclass
-class _FakeLockedPermitRead:
-    rows: dict[str, Permit]
-    permit_id: str
-
-    def permit(self) -> Permit:
-        return self.rows[self.permit_id]
-
-
-@dataclass
 class _FakePermitRepository:
     rows: dict[str, Permit] = field(default_factory=dict[str, Permit])
     facts: list[PermitFact] = field(default_factory=list[PermitFact])
@@ -88,22 +79,15 @@ class _FakePermitRepository:
             raise PermitAlreadyRequested(permit.holder, capability=permit.capability)
         self.rows[permit.permit_id] = permit
 
-    def locked(self, permit_id: str) -> AbstractContextManager[ILockedPermitRead]:
-        return self._locked(permit_id)
-
-    @contextmanager
-    def _locked(self, permit_id: str) -> Generator[ILockedPermitRead, None, None]:
-        yield _FakeLockedPermitRead(self.rows, permit_id)
-
-    def record_fact_locked(self, held: ILockedPermitRead, fact: PermitFact) -> None:
+    def record_fact(self, fact: PermitFact, *, expected: int, transaction: Transaction | None = None) -> None:
+        held = self.rows[fact.permit_id]
+        if held.revision != expected:
+            raise PermitChanged(fact.permit_id, expected=expected)
         self.facts.append(fact)
-        self.rows[fact.permit_id] = replace(self.rows[fact.permit_id], latest=fact)
+        self.rows[fact.permit_id] = held.recorded(fact)
 
 
 _fake_permit_repository_conforms: type[IWritePermitRepository] = _FakePermitRepository
-
-
-_fake_locked_permit_read_conforms: type[ILockedPermitRead] = _FakeLockedPermitRead
 
 
 def _service(permits: _FakePermitRepository) -> PermitService:
@@ -139,7 +123,7 @@ def test_grant_records_the_models_fact_at_the_clock_reading_and_returns_it_as_la
 
     assert permits.facts == [PermitFact("pm_a", PermitFactKind.GRANTED, at=_AT, by="op")]
     assert granted.latest == permits.facts[0]
-    assert granted.state() is PermitState.GRANTED
+    assert (granted.state(), granted.revision) == (PermitState.GRANTED, _REQUESTED.revision + 1)
 
 
 def test_revoke_records_the_note_the_model_decided() -> None:
@@ -160,13 +144,14 @@ def test_a_refused_verb_records_nothing() -> None:
     assert permits.facts == []
 
 
-def test_a_verb_decides_on_the_locked_reread_not_the_callers_copy() -> None:
+def test_a_verb_on_a_copy_another_write_moved_surfaces_permit_changed_and_records_nothing_more() -> None:
+    """The second operator's revoke is legal from the state they read and from the one now held; it is refused
+    because the revision moved, not re-decided on the fresh state."""
     permits = _FakePermitRepository(rows={"pm_a": _REQUESTED})
     service = _service(permits)
-    service.revoke(_REQUESTED, note="leaked", by="other")
+    service.grant(_REQUESTED, by="op")
 
-    with pytest.raises(PermitVerbRefused) as refused:
-        service.grant(_REQUESTED, by="op")
+    with pytest.raises(PermitChanged):
+        service.revoke(_REQUESTED, note="leaked", by="other")
 
-    assert refused.value.state is PermitState.REVOKED
-    assert len(permits.facts) == 1
+    assert [fact.kind for fact in permits.facts] == [PermitFactKind.GRANTED]

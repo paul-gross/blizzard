@@ -123,3 +123,12 @@ def test_a_blank_revocation_note_is_refused(note: str) -> None:
         _GRANTED.revoke(note=note, by="op", at=_AT)
 
     assert refused.value.permit_id == "pm_a"
+
+
+def test_a_recorded_fact_becomes_the_newest_one_revision_on() -> None:
+    fact = _REQUESTED.grant(by="op", at=_AT)
+
+    recorded = _REQUESTED.recorded(fact)
+
+    assert (recorded.latest, recorded.revision, recorded.state()) == (fact, 2, PermitState.GRANTED)
+    assert _REQUESTED.revision == 1

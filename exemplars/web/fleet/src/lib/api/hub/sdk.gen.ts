@@ -52,22 +52,24 @@ export const getPermitApiPermitsPermitIdGet = <ThrowOnError extends boolean = fa
 /**
  * Grant Permit
  *
- * Grant a requested permit: 200, 404 for one the tenant does not hold, 409 for one not requested.
+ * Grant a requested permit: 200, 404 for one the tenant does not hold, 409 for one not requested or changed since
+ * it was read.
  */
 export const grantPermitApiPermitsPermitIdGrantPost = <ThrowOnError extends boolean = false>(options: Options<GrantPermitApiPermitsPermitIdGrantPostData, ThrowOnError>): RequestResult<GrantPermitApiPermitsPermitIdGrantPostResponses, GrantPermitApiPermitsPermitIdGrantPostErrors, ThrowOnError> => (options.client ?? client).post<GrantPermitApiPermitsPermitIdGrantPostResponses, GrantPermitApiPermitsPermitIdGrantPostErrors, ThrowOnError>({ url: '/api/permits/{permit_id}/grant', ...options });
 
 /**
  * Resume Permit
  *
- * Resume a suspended permit: 200, 404 for one the tenant does not hold, 409 for one not suspended.
+ * Resume a suspended permit: 200, 404 for one the tenant does not hold, 409 for one not suspended or changed since
+ * it was read.
  */
 export const resumePermitApiPermitsPermitIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumePermitApiPermitsPermitIdResumePostData, ThrowOnError>): RequestResult<ResumePermitApiPermitsPermitIdResumePostResponses, ResumePermitApiPermitsPermitIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumePermitApiPermitsPermitIdResumePostResponses, ResumePermitApiPermitsPermitIdResumePostErrors, ThrowOnError>({ url: '/api/permits/{permit_id}/resume', ...options });
 
 /**
  * Revoke Permit
  *
- * Revoke a live permit: 200, 404 for one the tenant does not hold, 409 for one already revoked, 422 for a blank
- * note.
+ * Revoke a live permit: 200, 404 for one the tenant does not hold, 409 for one already revoked or changed since it
+ * was read, 422 for a blank note.
  */
 export const revokePermitApiPermitsPermitIdRevokePost = <ThrowOnError extends boolean = false>(options: Options<RevokePermitApiPermitsPermitIdRevokePostData, ThrowOnError>): RequestResult<RevokePermitApiPermitsPermitIdRevokePostResponses, RevokePermitApiPermitsPermitIdRevokePostErrors, ThrowOnError> => (options.client ?? client).post<RevokePermitApiPermitsPermitIdRevokePostResponses, RevokePermitApiPermitsPermitIdRevokePostErrors, ThrowOnError>({
     url: '/api/permits/{permit_id}/revoke',
@@ -81,6 +83,7 @@ export const revokePermitApiPermitsPermitIdRevokePost = <ThrowOnError extends bo
 /**
  * Suspend Permit
  *
- * Suspend a granted permit: 200, 404 for one the tenant does not hold, 409 for one not granted.
+ * Suspend a granted permit: 200, 404 for one the tenant does not hold, 409 for one not granted or changed since
+ * it was read.
  */
 export const suspendPermitApiPermitsPermitIdSuspendPost = <ThrowOnError extends boolean = false>(options: Options<SuspendPermitApiPermitsPermitIdSuspendPostData, ThrowOnError>): RequestResult<SuspendPermitApiPermitsPermitIdSuspendPostResponses, SuspendPermitApiPermitsPermitIdSuspendPostErrors, ThrowOnError> => (options.client ?? client).post<SuspendPermitApiPermitsPermitIdSuspendPostResponses, SuspendPermitApiPermitsPermitIdSuspendPostErrors, ThrowOnError>({ url: '/api/permits/{permit_id}/suspend', ...options });

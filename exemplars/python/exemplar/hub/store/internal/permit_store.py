@@ -1,15 +1,13 @@
 """SQLAlchemy adapter for the permit repository seams (package-private)."""
 
 # exemplar: bzh:tenant-scoped-store, bzh:bulk-reconstitution, bzh:newest-per-key-read, bzh:page-bounded-read,
-# bzh:store-exclusive-write, bzh:sql-portable.
+# bzh:store-refuses-stale, bzh:transaction-participation, bzh:sql-portable.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
-from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Protocol, cast
+from typing import Any
 
 from sqlalchemy import Select, and_, or_
 from sqlalchemy.engine import Connection, Row
@@ -18,14 +16,16 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_in
 from exemplar.hub.domain.permits.model import (
-    ILockedPermitRead,
     IWritePermitRepository,
     Permit,
     PermitAlreadyRequested,
+    PermitChanged,
     PermitFact,
     PermitFactKind,
     PermitPage,
@@ -42,26 +42,6 @@ _FACT_COLUMNS = (
 
 #: ``list_page``'s cursor, already total: ``(requested_at, permit_id)``.
 _CURSOR_ARITY = 2
-
-
-@dataclass(frozen=True)
-class LockedPermitTransaction:
-    """The concrete read handle, reading on :attr:`conn`, the connection the permit's row was locked on."""
-
-    conn: Connection
-    permit_id: str
-
-    def permit(self) -> Permit:
-        return _permits_on(self.conn, [self.permit_id])[self.permit_id]
-
-
-class _LockedConnection(Protocol):
-    conn: Connection
-
-
-def conn_of(held: ILockedPermitRead) -> Connection:
-    """The connection a domain-held :class:`ILockedPermitRead` was opened on."""
-    return cast(_LockedConnection, held).conn
 
 
 class PermitStore:
@@ -100,29 +80,32 @@ class PermitStore:
                         capability=permit.capability,
                         requested_at=permit.requested_at,
                         requested_by=permit.requested_by,
+                        revision=permit.revision,
                     )
                 )
         except IntegrityError as exc:  # a duplicate of the project's holder and capability
             raise PermitAlreadyRequested(permit.holder, capability=permit.capability) from exc
 
-    @contextmanager
-    def locked(self, permit_id: str) -> Generator[ILockedPermitRead, None, None]:
-        with self._store.write("locked") as conn:
+    def record_fact(self, fact: PermitFact, *, expected: int, transaction: Transaction | None = None) -> None:
+        """The conditional ``UPDATE`` is the check and the write in one statement: a fact decided on a revision since
+        moved changes no row and raises :class:`PermitChanged`."""
+        with connection_in(self._store, transaction, "record_fact", write=True) as conn:
+            moved = conn.execute(
+                self._store.update(permits)
+                .where(permits.c.permit_id == fact.permit_id, permits.c.revision == expected)
+                .values(revision=permits.c.revision + 1)
+            ).rowcount
+            if moved != 1:
+                raise PermitChanged(fact.permit_id, expected=expected)
             conn.execute(
-                self._store.update(permits).where(permits.c.permit_id == permit_id).values(permit_id=permit_id)
+                self._store.insert(permit_facts).values(
+                    permit_id=fact.permit_id,
+                    kind=fact.kind.value,
+                    recorded_at=fact.at,
+                    recorded_by=fact.by,
+                    note=fact.note,
+                )
             )
-            yield LockedPermitTransaction(conn, permit_id)
-
-    def record_fact_locked(self, held: ILockedPermitRead, fact: PermitFact) -> None:
-        conn_of(held).execute(
-            self._store.insert(permit_facts).values(
-                permit_id=fact.permit_id,
-                kind=fact.kind.value,
-                recorded_at=fact.at,
-                recorded_by=fact.by,
-                note=fact.note,
-            )
-        )
 
 
 def _permits_on(conn: Connection, permit_ids: Sequence[str]) -> dict[str, Permit]:
@@ -191,6 +174,7 @@ def _permit_of(row: Row[Any], latest: PermitFact | None) -> Permit:
         capability=row.capability,
         requested_at=row.requested_at,
         requested_by=row.requested_by,
+        revision=row.revision,
         latest=latest,
     )
 
