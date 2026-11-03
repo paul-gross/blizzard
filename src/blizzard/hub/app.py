@@ -14,6 +14,7 @@ import random
 import time
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import partial
 
 import httpx2
@@ -25,7 +26,7 @@ from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard import __version__
-from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
@@ -595,7 +596,7 @@ def build_hosted_app(
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     stepped = os.environ.get("BLIZZARD_TEST_FLOW_STEP") == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
-    test_clock = FixedClock(SystemClock().now()) if stepped else None
+    test_clock = FixedClock(datetime.now(UTC)) if stepped else None
     core = build_hub_core(engine, clock=test_clock) if test_clock is not None else build_process_core(engine)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)

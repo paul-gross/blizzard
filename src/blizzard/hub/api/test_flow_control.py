@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.auth.permissions import Permission
@@ -38,7 +39,7 @@ def flow_control_router(driver: FlowDriver, clock: FixedClock) -> APIRouter:
                 await task
                 raise
             return {
-                "now": clock.now().isoformat(),
+                "now": iso_utc(clock.now()),
                 "reconciled": len(result.reconciled),
                 "skipped": len(result.skipped),
                 "failed": len(result.failed),
@@ -53,6 +54,6 @@ def flow_control_router(driver: FlowDriver, clock: FixedClock) -> APIRouter:
     async def advance(body: AdvanceClock) -> dict[str, str]:
         async with lock:
             clock.advance(timedelta(seconds=body.seconds))
-            return {"now": clock.now().isoformat()}
+            return {"now": iso_utc(clock.now())}
 
     return router
