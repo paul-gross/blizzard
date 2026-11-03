@@ -200,6 +200,14 @@ def hub_level_connections(engine: Engine) -> HubStoreConnections:
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
 
 
+@contextmanager
+def chunk_unit(store: ScopedConnections, *chunk_ids: str) -> Generator[LockedTransaction]:
+    """A hub unit over ``store`` graduated on ``chunk_ids`` — the authority a chunk-locked write
+    requires, for a test writing straight through a store."""
+    with HubTransactions(store).begin() as transaction:
+        yield transaction.lock_chunks(chunk_ids)
+
+
 _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyDictionary()
 
 

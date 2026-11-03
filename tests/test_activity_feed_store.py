@@ -25,7 +25,15 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, Runner
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import chunk_stores, hub_store_connections, migrate_to, migrated_hub_at, seed_chunk, seed_graph
+from tests.support import (
+    chunk_stores,
+    chunk_unit,
+    hub_store_connections,
+    migrate_to,
+    migrated_hub_at,
+    seed_chunk,
+    seed_graph,
+)
 
 pytestmark = pytest.mark.component
 
@@ -240,7 +248,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, engine = _store(tmp_path)
     store.questions.record_question(
         question_id="qn_1",
         chunk_id="ch_1",
@@ -253,7 +261,8 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
         asked_at=_at(1),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
-    store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2))
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
     row = _row_for(store, "question-answered")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"

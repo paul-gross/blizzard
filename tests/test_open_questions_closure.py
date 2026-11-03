@@ -8,13 +8,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, verb_legal_from
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
+from tests.support import chunk_stores, chunk_unit, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -22,6 +24,10 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _store_with_question(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
+    return _seeded(tmp_path, chunk_id)[0]
+
+
+def _seeded(tmp_path: Path, chunk_id: str = "ch_1") -> tuple[ChunkStores, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
@@ -39,7 +45,7 @@ def _store_with_question(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
         asked_at=_T0,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
-    return store
+    return store, engine
 
 
 def _open_ids(store: ChunkStores) -> list[str]:
@@ -73,8 +79,9 @@ def test_an_unanswered_question_on_a_live_chunk_is_open(tmp_path: Path) -> None:
 
 
 def test_an_answered_question_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_question(tmp_path)
-    store.questions.answer_question("qn_1", answer="yes", answered_by="op", at=_T0)
+    store, engine = _seeded(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.questions.answer_question("qn_1", answer="yes", answered_by="op", at=_T0, transaction=unit)
 
     assert _open_ids(store) == []
 
@@ -104,3 +111,13 @@ def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_answer_window(
     status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
 
     assert ("qn_1" in _open_ids(store)) is verb_legal_from(ChunkVerb.ANSWER_QUESTION, status)
+
+
+def test_an_answer_write_refuses_a_unit_not_locking_the_questions_chunk(tmp_path: Path) -> None:
+    store, engine = _seeded(tmp_path)
+
+    with pytest.raises(TransactionMisuse), chunk_unit(hub_store_connections(engine), "ch_other") as unit:
+        store.questions.answer_question("qn_1", answer="yes", answered_by="op", at=_T0, transaction=unit)
+
+    stored = store.questions.get_question("qn_1")
+    assert stored is not None and not stored.answered

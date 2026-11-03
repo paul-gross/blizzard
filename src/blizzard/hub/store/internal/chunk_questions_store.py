@@ -15,12 +15,14 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 class ChunkQuestionsStore:
@@ -30,8 +32,8 @@ class ChunkQuestionsStore:
         self._store = store
         self._clock = clock
 
-    def get_question(self, question_id: str) -> NodeQuestion | None:
-        with self._store.read("get_question") as conn:
+    def get_question(self, question_id: str, *, transaction: Transaction | None = None) -> NodeQuestion | None:
+        with connection_in(self._store, transaction, "get_question") as conn:
             row = conn.execute(
                 QUESTIONS.select(self._store).where(s.questions.c.question_id == question_id)
             ).one_or_none()
@@ -109,24 +111,28 @@ class ChunkQuestionsStore:
             )
             return None
 
-    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
-        # First-write-wins CAS: the answer row's PK is (tenant_id, question_id), so a racing
-        # second insert in the same tenant raises IntegrityError and the loser reads back the winner.
+    def answer_question(
+        self, question_id: str, *, answer: str, answered_by: str, at: datetime, transaction: LockedTransaction
+    ) -> AnswerOutcome:
+        conn = connection_for(self._store, transaction)
+        chunk_id = conn.execute(
+            self._store.select(s.questions, s.questions.c.chunk_id).where(s.questions.c.question_id == question_id)
+        ).scalar_one()
+        connection_for(self._store, transaction, chunk=chunk_id)
+        # First-write-wins CAS: the answer row's PK is (tenant_id, question_id), so a second insert
+        # in the same tenant raises IntegrityError — in a savepoint, leaving the unit usable — and
+        # the loser reads back the winner.
         try:
-            with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
+            with conn.begin_nested():
                 conn.execute(
                     self._store.insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
                     )
                 )
-            return AnswerOutcome(
-                won=True, question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
-            )
         except IntegrityError:
-            with self._store.read("answer_question_conflict_lookup") as conn:
-                winner = conn.execute(
-                    self._store.select(s.question_answers).where(s.question_answers.c.question_id == question_id)
-                ).one()
+            winner = conn.execute(
+                self._store.select(s.question_answers).where(s.question_answers.c.question_id == question_id)
+            ).one()
             return AnswerOutcome(
                 won=False,
                 question_id=question_id,
@@ -134,6 +140,7 @@ class ChunkQuestionsStore:
                 answered_by=winner.answered_by,
                 answered_at=winner.answered_at,
             )
+        return AnswerOutcome(won=True, question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at)
 
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
         with self._store.write("record_answer_delivered") as conn:

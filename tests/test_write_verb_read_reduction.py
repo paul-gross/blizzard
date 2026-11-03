@@ -1,6 +1,7 @@
 """The derive-once read sweep (component tier): a single-chunk write verb's
 domain gate reuses `ChunkChanged.before`'s own facts load instead of reloading them, and
-`answer_question` stops re-reading the question row it already has once it wins the CAS.
+`answer_question` reads the question and its chunk's facts once on the route and once under
+the chunk lock, never again to find the winner's chunk.
 Identity resolves through one `Depends(require(...))` now, not a second manual resolve."""
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     HubHarness,
@@ -54,27 +56,19 @@ def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
     return counting
 
 
-@dataclass
-class _CountingQuestions:
-    """Forwards every call to the hub's real questions store, counting only
-    ``get_question`` — the read ``answer_question`` used to issue twice per request."""
+def _record_calls(monkeypatch: pytest.MonkeyPatch, store_type: type, method: str) -> list[tuple[str, Any]]:
+    """Record ``(first argument, transaction)`` for every call to ``store_type.method`` on any
+    instance — the route's repositories and the ones composition hands the domain services
+    alike, so a service's own re-read is counted beside the route's."""
+    original = getattr(store_type, method)
+    calls: list[tuple[str, Any]] = []
 
-    inner: Any
-    get_question_calls: int = 0
+    def recording(self: Any, key: str, *args: Any, **kwargs: Any) -> Any:
+        calls.append((key, kwargs.get("transaction")))
+        return original(self, key, *args, **kwargs)
 
-    def get_question(self, question_id: str) -> Any:
-        self.get_question_calls += 1
-        return self.inner.get_question(question_id)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.inner, name)
-
-
-def _wire_counting_questions(hub: HubHarness) -> _CountingQuestions:
-    counting = _CountingQuestions(hub.services.chunks.questions)
-    assert hub.app is not None
-    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, questions=counting)))
-    return counting
+    monkeypatch.setattr(store_type, method, recording)
+    return calls
 
 
 @dataclass
@@ -126,31 +120,36 @@ def test_stop_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
     assert counting.load_facts_calls[chunk_id] == 2
 
 
-def test_answer_question_calls_load_facts_exactly_twice(tmp_path: Path) -> None:
-    """Already 2 before and after (``QuestionService.answer`` never touches facts) —
-    pre-write via ``ChunkChanged.before``, post-write via ``publish``; unchanged by this
-    phase, which instead drops the extra ``get_question`` read below."""
+def test_answer_question_loads_facts_twice_on_the_route_and_once_under_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3 per request: pre-write via ``ChunkChanged.before`` and post-write via ``publish``,
+    each a scoped read, with ``QuestionService.answer``'s re-read under the chunk lock between
+    them — the read its decision rests on."""
     hub = build_hub(tmp_path)
     chunk_id = ask_question(hub)
-    counting = _wire_counting_facts(hub)
+    calls = _record_calls(monkeypatch, ChunkFactsStore, "load_facts")
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
 
     assert resp.status_code == 201, resp.text
-    assert counting.load_facts_calls[chunk_id] == 2
+    assert [transaction is not None for key, transaction in calls if key == chunk_id] == [False, True, False]
 
 
-def test_answer_question_calls_get_question_exactly_once(tmp_path: Path) -> None:
-    """Before: 2 (the pre-answer read, then re-reading the just-written winner to find
-    its ``chunk_id``). After: 1 — the pre-answer read already names that chunk."""
+def test_answer_question_reads_the_question_once_on_the_route_and_once_under_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2 per request: the route's pre-answer read, which names the chunk to lock, and
+    ``QuestionService.answer``'s re-read under that lock. The winner is never re-read to find
+    its ``chunk_id`` — the pre-answer read already names it."""
     hub = build_hub(tmp_path)
     ask_question(hub)
-    counting = _wire_counting_questions(hub)
+    calls = _record_calls(monkeypatch, ChunkQuestionsStore, "get_question")
 
     resp = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
 
     assert resp.status_code == 201, resp.text
-    assert counting.get_question_calls == 1
+    assert [(key, transaction is not None) for key, transaction in calls] == [("qn_1", False), ("qn_1", True)]
 
 
 # --- identity resolves once per request, under auth.mode = "oauth" -----------------

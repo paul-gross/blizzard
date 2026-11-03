@@ -1,8 +1,9 @@
 """The ask/answer domain rule.
 
 Landing the durable question row (the chunk parks at ``waiting_on_human``) and applying
-the **first-write-wins CAS** answer — the answer-row primary key is the fence, and the
-loser is told who won. Open/answered derives from the answer row (``bzh:facts-not-status``).
+the **first-write-wins** answer — decided under the question's chunk lock, the loser told
+who won, with the answer-row primary key as the backstop. Open/answered derives from the
+answer row (``bzh:facts-not-status``).
 """
 
 from __future__ import annotations
@@ -16,8 +17,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.chunk.model import AnswerOutcome, ChunkFacts, NodeQuestion
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 _log = get_logger("blizzard.hub.questions")
 
@@ -53,11 +56,34 @@ class AskedQuestion:
     options: Sequence[str] = ()
 
 
+def lost_to(question: NodeQuestion) -> AnswerOutcome | None:
+    """The losing outcome an answer to ``question`` meets once it is already answered, naming the
+    winning answer; ``None`` while it is still open."""
+    if question.answer is None or question.answered_by is None or question.answered_at is None:
+        return None
+    return AnswerOutcome(
+        won=False,
+        question_id=question.question_id,
+        answer=question.answer,
+        answered_by=question.answered_by,
+        answered_at=question.answered_at,
+    )
+
+
 class QuestionService:
     """Land questions and answers at the hub."""
 
-    def __init__(self, *, questions: IWriteChunkQuestionsRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        questions: IWriteChunkQuestionsRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._questions = questions
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def record_asked(self, fact: AskedQuestion) -> FenceRefusal | None:
@@ -81,14 +107,26 @@ class QuestionService:
             _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
         return refusal
 
-    def answer(self, question: NodeQuestion, facts: ChunkFacts, *, answer: str, answered_by: str) -> AnswerOutcome:
-        """Apply the answer first-write-wins; the CAS lives in the store. Takes the loaded question
-        and its chunk's facts (``bzh:domain-takes-objects``): an ended chunk's question raises
-        :class:`~blizzard.hub.domain.chunk.model.QuestionClosed`."""
-        question.require_answerable(facts.status())
-        outcome = self._questions.answer_question(
-            question.question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
-        )
+    def answer(self, question: NodeQuestion, *, answer: str, answered_by: str) -> AnswerOutcome:
+        """Apply the answer first-write-wins to the loaded ``question`` (``bzh:domain-takes-objects``),
+        deciding from the question and its chunk's facts re-read under the chunk's lock in the unit
+        that writes it (``bzh:write-reestablishes-read``): an ended chunk's question raises
+        :class:`~blizzard.hub.domain.chunk.model.QuestionClosed`, and one already answered loses to
+        that answer and writes nothing."""
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([question.chunk_id])
+            current = self._questions.get_question(question.question_id, transaction=locked) or question
+            facts = ChunkFacts.or_default(self._facts.load_facts(question.chunk_id, transaction=locked))
+            current.require_answerable(facts.status())
+            outcome = lost_to(current)
+            if outcome is None:
+                outcome = self._questions.answer_question(
+                    question.question_id,
+                    answer=answer,
+                    answered_by=answered_by,
+                    at=self._clock.now(),
+                    transaction=locked,
+                )
         _log.info("answer applied", question_id=question.question_id, won=outcome.won, answered_by=outcome.answered_by)
         return outcome
 

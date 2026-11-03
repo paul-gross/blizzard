@@ -23,7 +23,7 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
-from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed, QuestionState
+from blizzard.hub.domain.chunk.model import NodeQuestion, QuestionClosed, QuestionState
 from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
@@ -114,9 +114,7 @@ def answer_question(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
     change = chunk_events.ChunkChanged.before(services, pre_answer.chunk_id)
     try:
-        outcome = services.questions.answer(
-            pre_answer, ChunkFacts.or_default(change.facts), answer=request.answer, answered_by=identity.username
-        )
+        outcome = services.questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)
     except QuestionClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     result = AnswerResult(

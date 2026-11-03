@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import AnswerOutcome, WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
@@ -48,6 +48,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
     RecordedEvents,
+    chunk_unit,
     default_project,
     default_tenant,
     hub_scoped,
@@ -269,18 +270,23 @@ def _ask(tenants: _Tenants, tenant: TenantId, question: str) -> ChunkQuestionsSt
     return ChunkQuestionsStore(store, FixedClock(_AT))
 
 
+def _answer(tenants: _Tenants, tenant: TenantId, questions: ChunkQuestionsStore, answer: str, by: str) -> AnswerOutcome:
+    with chunk_unit(scoped_connections(tenants.engine, tenant), f"ch_{tenant}") as unit:
+        return questions.answer_question("qn_shared", answer=answer, answered_by=by, at=_AT, transaction=unit)
+
+
 def test_a_question_id_reused_in_another_tenant_is_a_different_question(tenants: _Tenants) -> None:
     first = _ask(tenants, tenants.first, "ship it?")
     second = _ask(tenants, tenants.second, "roll back?")
 
-    assert first.answer_question("qn_shared", answer="yes", answered_by="alice", at=_AT).won
+    assert _answer(tenants, tenants.first, first, "yes", "alice").won
     first.record_answer_delivered(question_id="qn_shared", chunk_id=f"ch_{tenants.first}", at=_AT)
     unanswered = second.get_question("qn_shared")
     assert unanswered is not None
     assert (unanswered.question, unanswered.answered, unanswered.delivered) == ("roll back?", False, False)
 
-    assert second.answer_question("qn_shared", answer="no", answered_by="bob", at=_AT).won
-    lost = first.answer_question("qn_shared", answer="maybe", answered_by="carol", at=_AT)
+    assert _answer(tenants, tenants.second, second, "no", "bob").won
+    lost = _answer(tenants, tenants.first, first, "maybe", "carol")
     assert (lost.won, lost.answer) == (False, "yes")
     answered = second.get_question("qn_shared")
     assert answered is not None
