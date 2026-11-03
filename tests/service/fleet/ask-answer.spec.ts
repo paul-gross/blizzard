@@ -1,4 +1,4 @@
-import { assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
+import { assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const questionText = 'Which API style should the endpoint use?';
 const branch = 'feature/scripted-build';
@@ -36,7 +36,7 @@ async function scenario({ api, cli, forge, issue, repository, runnerHosts }: Wor
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness, host.cliBinary) } })).status).toBe(201);
   const { chunk } = await issue('ask/answer', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const parked = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
+  const parked = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const question = (detail.questions as { question_id: string; session_id: string; options: string[] }[])[0]!;
   const before = (await host.mockSessions()).find((record) => record.session_id === question.session_id);
@@ -45,7 +45,7 @@ async function scenario({ api, cli, forge, issue, repository, runnerHosts }: Wor
   const still = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const open = (await api.get('/api/questions')).body as { question_id: string }[];
   const result = await cli(['hub', 'question', 'answer', question.question_id, answer(repo.name, host.cliBinary), '--by', 'alice']);
-  const landed = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => ['done', 'needs_human', 'stopped'].includes(status));
+  const landed = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status));
   const closed = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.questions as { question_id: string; answered: boolean; delivered: boolean }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   const session = (await host.mockSessions()).find((record) => record.session_id === question.session_id);

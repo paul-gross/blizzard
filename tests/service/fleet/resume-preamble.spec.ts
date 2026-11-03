@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type HubApi, type Repository, type RunnerHosts } from '../../harness/fixtures';
+import { chunkProgress, expect, leaseProgress, stepUntil, test, type HubApi, type Repository, type RunnerHosts } from '../../harness/fixtures';
 
 const RUNNER_PROMPT = [
   'LAYER-ONE-BLIZZARD-FRAMING-SENTINEL',
@@ -89,13 +89,13 @@ async function scenario(fixtures: {
 
   if (replace) {
     const reviews = await stepUntil(host, async () => (await runner.leasesForChunk(id)).body.items,
-      (leases) => leases.some((lease) => lease.node_name === 'review'), 80);
+      (leases) => leases.some((lease) => lease.node_name === 'review'), { stallPasses: 80, progress: leaseProgress });
     expect(reviews.filter((lease) => lease.node_name === 'build')).toHaveLength(1);
     expect((await host.api.replaceWorkspacePrompt(workspaceId, { prompt: REPLACEMENT_PROMPT })).body)
       .toMatchObject({ prompt: REPLACEMENT_PROMPT, source: 'override' });
   }
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
-    (body) => body.status === 'done' || body.status === 'needs_human', 80);
+    (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(detail.status).toBe('done');
   expect(detail.landed).toBe(true);
 

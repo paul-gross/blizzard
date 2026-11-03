@@ -1,4 +1,4 @@
-import { assertNoLeaks, assertPlatformNesting, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
+import { assertNoLeaks, assertPlatformNesting, assertSkeleton, chunkProgress, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 
@@ -20,7 +20,7 @@ async function firstBounce({ api, forge, issue, repository, runnerHosts }: World
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
   const { chunk } = await issue('armed conflict', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.bounces.length > 0 || ['done', 'stopped', 'needs_human'].includes(state.status));
+  await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.bounces.length > 0 || ['done', 'stopped', 'needs_human'].includes(state.status), { progress: chunkProgress });
   await expect.poll(async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, { timeout: 30000 }).toBe('running');
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];

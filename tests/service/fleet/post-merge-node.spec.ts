@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -42,7 +42,7 @@ test('test_authored_landed_edge_runs_a_post_merge_node_after_landing', async ({ 
   expect((await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify(graph) } })).status).toBe(201);
   const { chunk } = await issue('post-merge node', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done');
+  const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done', { progress: chunkProgress });
   expect(detail.status).toBe('done');
   const history = detail.history as { from_node_name: string; to_node_name: string | null; to_node_id: string; choice_name: string }[];
   expect(history.map((t) => [t.from_node_name, t.to_node_name, t.choice_name])).toEqual(expect.arrayContaining([

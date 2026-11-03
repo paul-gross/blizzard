@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { expect, stepChunkUntil, test } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -38,7 +38,7 @@ test('test_basic_workspace_chunk_lands_without_winter', async ({ repository, iss
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const { chunk } = await issue('basic workspace', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
+  await stepChunkUntil(host, api, chunk.chunk_id, (status) => status === 'done');
   expect(host.workspaceLayout(chunk.chunk_id, repo.name)).toEqual({ landed: true, project: true, winter: false });
   expect(await host.originTree(repo.name, 'main')).toContain('LANDED.md');
   expect(host.winterInvoked()).toBe(false);

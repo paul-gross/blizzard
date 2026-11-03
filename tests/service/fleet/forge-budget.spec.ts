@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type HubApi, type Repository, type Wire } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type HubApi, type Repository, type Wire } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-hub', hubConfig: async ({ hubConfig }, use) => {
   await use({ ...hubConfig, annotation_interval_seconds: 1n });
@@ -68,7 +68,7 @@ test('test_a_low_budget_turns_the_sweep_away_while_a_landing_proceeds', async ({
   await sweep('forge_status');
   expect(await labels(second.issue.number)).toEqual([]);
   expect(await budget()).toEqual(low);
-  const done = await stepUntil(host, () => detail(api, second.chunk.chunk_id), (row) => ['done', 'stopped', 'needs_human'].includes(row.status), 80);
+  const done = await stepUntil(host, () => detail(api, second.chunk.chunk_id), (row) => ['done', 'stopped', 'needs_human'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
   expect(done.status).toBe('done');
   expect(await host.originTree(repo.name, 'main')).toContain('LANDED.md');
   expect((await budget())!.remaining).toBeLessThan(low!.remaining);
@@ -102,7 +102,7 @@ for (const lever of ['rate_limited', 'secondary_rate_limited']) {
     const name = `${repo.owner}/${repo.name}`;
     expect((await forge.call('POST', `/_levers/${lever}`, { repo: name })).status).toBe(200);
     const armed = Date.now();
-    const pending = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending !== null, 80);
+    const pending = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending !== null, { stallPasses: 80, progress: chunkProgress });
     const refused = Date.now();
     expect(pending.status).toBe('delivering');
     expect(pending.landed).toBe(false);

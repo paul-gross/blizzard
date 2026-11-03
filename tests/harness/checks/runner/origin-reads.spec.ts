@@ -1,12 +1,10 @@
-import { expect, runnerTest as test } from '../../fixtures';
-import type { RunnerHost } from '../../fixtures';
+import { expect, runnerTest as test, stepUntil } from '../../fixtures';
 
 // A mock worker pushes two commits to a branch of the minted world's origin, one of them touching `LANDED.md` alone;
 // the bare-origin reads are then asked of that push.
 
 const BRANCH = 'feature/origin-reads';
 const REPO = 'toy-api';
-const MAX_STEPS = 40;
 
 const COMMIT = "'git', '-C', repo, '-c', 'user.email=mock@blizzard.local', '-c', 'user.name=Mock Worker', 'commit', '-m'";
 const BUILD = [
@@ -41,18 +39,9 @@ const graph = {
   },
 };
 
-async function stepUntilPushed(host: RunnerHost): Promise<string> {
-  for (let pass = 0; pass < MAX_STEPS; pass++) {
-    const head = await host.originHead(REPO, BRANCH);
-    if (head !== undefined) return head;
-    await host.step();
-  }
-  throw new Error(`the worker's push did not reach the origin within ${MAX_STEPS} passes\n${host.logTail()}`);
-}
-
 test('the reads see a worker’s push by branch and by the sha originHead answers', async ({ mockHub, runnerHost }) => {
   await mockHub.seed.chunk(graph as never);
-  const head = await stepUntilPushed(runnerHost);
+  const head = (await stepUntil(runnerHost, () => runnerHost.originHead(REPO, BRANCH), (pushed) => pushed !== undefined))!;
 
   for (const ref of [BRANCH, head]) {
     const tree = await runnerHost.originTree(REPO, ref);

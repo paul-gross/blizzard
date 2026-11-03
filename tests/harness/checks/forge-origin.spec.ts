@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../fixtures';
+import { expect, stepChunkUntil, test } from '../fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -35,7 +35,7 @@ test('a runner push and a forge landing share the test repository without changi
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const { chunk } = await issue('shared bare origin', { repository: target });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
+  await stepChunkUntil(host, api, chunk.chunk_id, (status) => status === 'done');
 
   const landed = await host.originHead(target.name, 'main');
   expect(await host.originFile(target.name, 'main', 'LANDED.md'), JSON.stringify((await api.get(`/api/chunks/${chunk.chunk_id}`)).body)).toBe('from the runner\n');

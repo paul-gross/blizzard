@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -42,7 +42,7 @@ for (const [title, judgement] of [
     expect((await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify(graph) } })).status).toBe(201);
     const { chunk } = await issue(title, { repository: repo });
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-    const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done');
+    const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done', { progress: chunkProgress });
     if (title === 'test_a_red_check_through_a_non_gated_fail_routes_normally') {
       expect(detail.history.map((entry: { choice_name: string }) => entry.choice_name)).toEqual(expect.arrayContaining(['fail', 'pass']));
     }

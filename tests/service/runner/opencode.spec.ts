@@ -1,4 +1,4 @@
-import { expect, runnerTest as test } from '../../harness/fixtures';
+import { expect, leaseProgress, runnerTest as test, stepUntil } from '../../harness/fixtures';
 import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // The OpenCode binding on a stepped runner host: worker turns run under `mock-opencode`, every wait is a step of the host,
@@ -7,7 +7,7 @@ import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures'
 const REPO = 'toy-api';
 const BUILD_BRANCH = 'feature/scripted-build';
 const WORK_REFS = [{ source: 'mock', ref: 'blizzard/toy-api/issues/1' }];
-const MAX_STEPS = 600;
+const STALL_PASSES = 600;
 
 test.setTimeout(90_000);
 
@@ -182,17 +182,6 @@ const ROOT_STEP_BEFORE_TASK = [
   TASK_CALL,
 ];
 
-/** Steps the host until `reached` holds, failing after `MAX_STEPS` passes with the last state it saw. */
-async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean): Promise<T> {
-  let state = await read();
-  for (let pass = 0; !reached(state); pass++) {
-    if (pass === MAX_STEPS) throw new Error(`not reached within ${MAX_STEPS} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
-    await host.step();
-    state = await read();
-  }
-  return state;
-}
-
 /** The sum of the input tokens of the `step-finish` parts of `messages`. */
 function stepInput(messages: { parts: { type: string; tokens?: { input: number } }[] }[]): number {
   return messages.flatMap((message) => message.parts).reduce((sum, part) => sum + (part.type === 'step-finish' ? (part.tokens?.input ?? 0) : 0), 0);
@@ -211,7 +200,7 @@ async function seeded(mockHub: MockHub, runnerHost: RunnerHost, spec: MockChunkS
   const leases = async () => (await runner.leases()).body.items.filter((lease) => lease.chunk_id === chunkId).sort((a, b) => a.epoch - b.epoch);
   const landed = async (): Promise<void> => {
     try {
-      await stepUntil(runnerHost, status, (current) => current === 'done');
+      await stepUntil(runnerHost, status, (current) => current === 'done', { stallPasses: STALL_PASSES });
     } catch (error) {
       const held = await leases();
       const turns = await Promise.all(held.map(async (lease) => (await runner.leaseTranscript(lease.lease_id)).body.turns.map((turn) => `${turn.kind}: ${turn.text}${turn.tool ? ` ${turn.tool.name} ${turn.tool.output}` : ''}`)));
@@ -257,7 +246,7 @@ test.describe('with a published bundle', () => {
     const dashboard = await runner.dashboard();
     expect(dashboard.body.harness_health.items.find((item) => item.harness_id === 'opencode')?.available).toBe(true);
 
-    const listed = await stepUntil(runnerHost, leases, (held) => held.length > 0);
+    const listed = await stepUntil(runnerHost, leases, (held) => held.length > 0, { stallPasses: STALL_PASSES, progress: leaseProgress });
     const lease = listed[0]!;
     expect((await runner.heartbeat(lease.lease_id)).status).toBe(200);
     // The lease is open until a pass reaps it, so its heartbeat is read before the next step.
@@ -266,7 +255,7 @@ test.describe('with a published bundle', () => {
     await runnerHost.step();
     expect((await runner.dashboard()).body.runner.last_tick_at).not.toBeNull();
 
-    await stepUntil(runnerHost, leases, (held) => held.some((l) => l.chunk_id === chunkId && l.state === 'closed'));
+    await stepUntil(runnerHost, leases, (held) => held.some((l) => l.chunk_id === chunkId && l.state === 'closed'), { stallPasses: STALL_PASSES, progress: leaseProgress });
     const transcript = (await runner.leaseTranscript(lease.lease_id)).body;
     const config = transcript.turns.find((turn) => turn.kind === 'tool' && turn.tool?.name === 'Bash');
     expect(JSON.parse(config?.tool?.output ?? 'null')).toEqual({ bash: 'deny', question: 'deny' });

@@ -1,4 +1,4 @@
-import { expect, runningLeaseWithWorker, SPAWN_HOLD, stepUntil, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
+import { expect, leaseProgress, runningLeaseWithWorker, SPAWN_HOLD, stepUntil, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
 
 // A real runner host stepped against the test's own mock hub, whose levers manufacture the rare states a runner must
 // survive: an unreachable hub, a dropped ack, a stale envelope, a denied claim, a failing or slow transcript route, a
@@ -287,7 +287,7 @@ test('test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped
 
   expect((await mockHub.seed.stop(chunkId)).status).toBe(200);
 
-  const closed = await stepUntil(runnerHost, () => soleLease(runnerHost, chunkId), (current) => current.closed_at !== null);
+  const closed = await stepUntil(runnerHost, () => soleLease(runnerHost, chunkId), (current) => current.closed_at !== null, { progress: leaseProgress });
   // Released by PULL's abandon, not transitioned by an ordinary completion racing the stop.
   expect(closed).toMatchObject({ lease_id: lease.lease_id, closure_reason: 'released' });
   expect(await chunkStatus(mockHub, runnerHost, chunkId)).toBe('stopped');

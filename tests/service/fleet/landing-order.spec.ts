@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -43,7 +43,7 @@ async function lever(forge: ForgeApi, repos: Repository[], armed: boolean) {
 
 async function pending(api: HubApi, host: RunnerHost, id: string) {
   const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-    (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
   expect(detail.pending).not.toBeNull();
 }
 
@@ -56,7 +56,7 @@ async function terms(api: HubApi, id: string) {
 
 async function landed(api: HubApi, host: RunnerHost, id: string, expected: Repository[]) {
   const done = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-    (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status), 80);
+    (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status), { stallPasses: 80, progress: chunkProgress });
   expect([done.status, done.landed]).toEqual(['done', true]);
   const facts: Wire.LandingFactView[] = [];
   let cursor: number | null = 0;
@@ -104,7 +104,7 @@ test('test_a_library_ranked_first_lands_before_its_consumer', async ({ repositor
   const { chunk } = await issue('LIBRARY.md', { repository: consumer });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
   const done = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body,
-    (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status), 80);
+    (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status), { stallPasses: 80, progress: chunkProgress });
   expect([done.status, done.landed]).toEqual(['done', true]);
   const facts: Wire.LandingFactView[] = [];
   let cursor: number | null = 0;

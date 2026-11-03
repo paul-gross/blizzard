@@ -1,5 +1,5 @@
 import { parse } from 'yaml';
-import { expect, stepUntilStalled, test } from '../../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 const ROUTINE = 'ideation-e2e';
 const scopes = {
@@ -223,8 +223,8 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   const detailOf = async (id: string) => (await api.get<{ status: string; history: { from_node_name: string; choice_name: string }[];
     questions: { question_id: string; question: string }[] }>(`/api/chunks/${id}`)).body;
   const finish = async (id: string) => {
-    const detail = await stepUntilStalled(runnerHost, () => detailOf(id),
-      (value) => ['done', 'needs_human', 'stopped'].includes(value.status), 120);
+    const detail = await stepUntil(runnerHost, () => detailOf(id),
+      (value) => ['done', 'needs_human', 'stopped'].includes(value.status), { stallPasses: 120, progress: chunkProgress });
     expect(detail.status).toBe('done');
     return detail;
   };
@@ -235,8 +235,8 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   };
   const viaAsk = async (path: string, scope: string, answer: string, questionText: string, expected: string[][]) => {
     const id = await start(path, scope);
-    const parked = await stepUntilStalled(runnerHost, () => detailOf(id),
-      (value) => ['waiting_on_human', 'done', 'needs_human'].includes(value.status), 120);
+    const parked = await stepUntil(runnerHost, () => detailOf(id),
+      (value) => ['waiting_on_human', 'done', 'needs_human'].includes(value.status), { stallPasses: 120, progress: chunkProgress });
     expect(parked.status).toBe('waiting_on_human');
     expect(parked.questions).toHaveLength(1);
     expect(parked.questions[0]!.question).toContain(questionText);

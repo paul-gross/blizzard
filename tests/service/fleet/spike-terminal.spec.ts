@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -29,7 +29,7 @@ test('test_spike_chunk_terminates_with_only_asset_artifacts', async ({ repositor
   expect((await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify(graph) } })).status).toBe(201);
   const { issue: filedIssue, chunk } = await issue('spike toy-api', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done');
+  const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done', { progress: chunkProgress });
   expect(detail.status).toBe('done');
   const artifacts = detail.artifacts as { kind: string; name: string; content: string }[];
   expect(new Set(artifacts.map((artifact) => artifact.kind))).toEqual(new Set(['asset']));

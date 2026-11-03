@@ -1,4 +1,4 @@
-import { assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
+import { assertSkeleton, chunkProgress, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
 
 function graph(repo: Repository, name = 'default-delivery', pollTimeout = 600) {
   return {
@@ -56,7 +56,7 @@ async function pulls(forge: ForgeApi, repo: Repository): Promise<Pull[]> {
  */
 async function drive(host: RunnerHost, api: HubApi, id: string, reached: (state: Wire.ChunkDetail) => boolean) {
   const read = async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
-  let state = await stepUntil(host, read, (s) => reached(s) || s.pending !== null);
+  let state = await stepUntil(host, read, (s) => reached(s) || s.pending !== null, { progress: chunkProgress });
   await expect.poll(async () => reached((state = await read())), { timeout: 60000 }).toBe(true);
   return state;
 }

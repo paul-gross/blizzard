@@ -1,4 +1,4 @@
-import { assertInvocations, assertRunnerNesting, expect, isFleet, roleOf, stepUntil, test, traced, type RunnerHost, type WorkerCheckpoint } from '../../harness/fixtures';
+import { assertInvocations, assertRunnerNesting, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, stepUntil, test, traced, type WorkerCheckpoint } from '../../harness/fixtures';
 
 const branch = 'feature/mixed-lineage';
 const buildFile = 'LANDED-MIXED-BUILD.md';
@@ -48,7 +48,7 @@ async function traverse({ api, issue, repository, runnerHosts, runnerConfig, wor
   await host.stop();
   await host.restart();
   workerCheckpoint.release('after-declare');
-  const status = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (value) => ['done', 'stopped', 'needs_human'].includes(value));
+  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'stopped', 'needs_human'].includes(value));
   return { repo, host, chunk, runner, leases: await leases(), mid, midHead, firstPid, secondPid, thirdPid: host.pid, status, nodeIds };
 }
 

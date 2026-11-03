@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -23,7 +23,7 @@ test('test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event', async ({ 
 
   const subscription = await events.open({ barrier: true });
   const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body,
-    (body) => body.status === 'needs_human', 80);
+    (body) => body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(detail.status).toBe('needs_human');
   const attempts = (await runnerHost.runners['runner-local']!.leasesForChunk(chunkId)).body.items
     .filter((lease) => lease.node_name === 'build')

@@ -56,19 +56,19 @@ test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on
     host,
     async () => (await runner.leases()).body.items.find((item) => item.chunk_id === first),
     (lease) => lease !== undefined,
-    PASSES,
+    { stallPasses: PASSES },
   );
-  await stepUntil(host, async () => (await runner.leaseUsage(spent!.lease_id)).body.items.length, (count) => count > 0, PASSES);
+  await stepUntil(host, async () => (await runner.leaseUsage(spent!.lease_id)).body.items.length, (count) => count > 0, { stallPasses: PASSES });
 
   // The spend stands inside the window: the runner is declined on the budget and mints no lease.
   const second = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
-  await stepUntil(host, declining, (levers) => levers.length === 1 && levers[0] === 'budget', PASSES);
+  await stepUntil(host, declining, (levers) => levers.length === 1 && levers[0] === 'budget', { stallPasses: PASSES });
   expect((await runner.leases()).body.items.filter((item) => item.chunk_id === second)).toEqual([]);
 
   // The spend ages out of the window: the budget admits again and the runner carries on.
   await budgetAdmits(host);
-  await stepUntil(host, async () => (await runner.leases()).body.items.some((item) => item.chunk_id === second), Boolean, PASSES);
-  await stepUntil(host, declining, (levers) => levers.length === 0, PASSES);
+  await stepUntil(host, async () => (await runner.leases()).body.items.some((item) => item.chunk_id === second), Boolean, { stallPasses: PASSES });
+  await stepUntil(host, declining, (levers) => levers.length === 0, { stallPasses: PASSES });
 });
 
 test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped', async ({ mockHub, runnerHosts }) => {
@@ -81,11 +81,11 @@ test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_trip
 
   await mockHub.seed.chunk(pricedChunk());
   // The ceiling is judged at the start of a pass, before that pass's worker has spent: the first lease is unpaused.
-  await stepUntil(host, async () => (await leasesOf('build')).length, (count) => count > 0, PASSES);
+  await stepUntil(host, async () => (await leasesOf('build')).length, (count) => count > 0, { stallPasses: PASSES });
   expect((await runner.status()).body.pause.local).toBe(false);
 
   // The admitted step spends through the budget and on to the ceiling: the ceiling trips.
-  const pause = await stepUntil(host, async () => (await runner.status()).body.pause, (state) => state.local, PASSES);
+  const pause = await stepUntil(host, async () => (await runner.status()).body.pause, (state) => state.local, { stallPasses: PASSES });
   expect(pause.local_reason).toContain('spend ceiling');
 
   // The spend ages out of the window, which would admit the budget again; the ceiling stays tripped.

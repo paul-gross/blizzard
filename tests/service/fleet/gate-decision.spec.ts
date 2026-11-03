@@ -1,4 +1,4 @@
-import { assertIdentity, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
+import { assertIdentity, assertSkeleton, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 
@@ -19,12 +19,12 @@ async function gated({ api, cli, forge, issue, repository, runnerHosts }: World)
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
   const { chunk } = await issue('gate', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const parked = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
+  const parked = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const decision = detail.decision as { decision_id: string; node_name: string; choices: { name: string }[] };
   const listed = await cli(['hub', 'decision', 'list']);
   const resolved = await cli(['hub', 'decision', 'resolve', decision.decision_id, 'approve', '--by', 'alice', '--json']);
-  const landed = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => ['done', 'needs_human', 'stopped'].includes(status));
+  const landed = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status));
   const open = (await api.get('/api/decisions')).body.decisions as { decision_id: string }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   return { repo, host, chunk, parked, detail, decision, listed, resolved, landed, open, pulls };

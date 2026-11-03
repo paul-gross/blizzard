@@ -1,4 +1,4 @@
-import { expect, runnerTest as test, stepUntil, type MockChunkSpec } from '../../fixtures';
+import { expect, leaseProgress, runnerTest as test, stepUntil, type MockChunkSpec } from '../../fixtures';
 
 const RUNNER = 'runner-local';
 
@@ -43,7 +43,7 @@ test('a worker held at a checkpoint keeps its lease open until released, then co
   expect((await lease())?.closed_at ?? null).toBeNull();
 
   workerCheckpoint.release('gate');
-  const closed = await stepUntil(runnerHost, lease, (found) => found?.closed_at != null);
+  const closed = await stepUntil(runnerHost, lease, (found) => found?.closed_at != null, { progress: leaseProgress });
   expect(closed?.state).toBe('closed');
   const released = await environments();
   expect(released.filter((environment) => environment.held || environment.chunk_id === chunkId)).toEqual([]);
@@ -53,6 +53,6 @@ test('a checkpoint released before the worker arrives lets it straight through',
   workerCheckpoint.release('early');
   const runner = runnerHost.runners[RUNNER]!;
   const chunkId = (await mockHub.seed.chunk(checkpointed(workerCheckpoint.snippet('early')))).body.chunk_id;
-  await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId), (found) => found?.closed_at != null);
+  await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId), (found) => found?.closed_at != null, { progress: leaseProgress });
   await workerCheckpoint.reached('early');
 });

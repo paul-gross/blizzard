@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 const build = (repo: string): string => [
   'import os, pathlib, subprocess',
@@ -57,7 +57,7 @@ test('test_session_modes_resume_targeted_and_fresh_across_a_cycle', async ({ api
   const id = chunk.chunk_id;
   expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
-    (body) => body.status === 'done' || body.status === 'needs_human', 80);
+    (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(detail.status).toBe('done');
   expect(detail.landed).toBe(true);
 
@@ -96,7 +96,7 @@ test('test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model
   const id = chunk.chunk_id;
   expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
-    (body) => body.status === 'done' || body.status === 'needs_human', 80);
+    (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(detail.status).toBe('done');
   expect(detail.landed).toBe(true);
 

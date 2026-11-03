@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../harness/fixtures';
+import { expect, stepChunkUntil, test } from '../harness/fixtures';
 
 // The runner's own panel updates live over its event stream with no reload: a chunk the stepped host claims appears on
 // the panel's board well inside the panel's one-minute poll backstop, so only a pushed frame can have put it there, and
@@ -42,7 +42,7 @@ test('test_runner_panel_updates_live_over_sse_with_no_reload', async ({ api, iss
   await expect(card).toHaveCount(1, { timeout: PUSHED_WITHIN });
 
   // The host steps the chunk to done; the ended chunk stays on the board, in the Done lane, with no live worker.
-  await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body.status, (status) => status === 'done');
+  await stepChunkUntil(runnerHost, api, chunkId, (status) => status === 'done');
   await expect(doneCard).toHaveCount(1, { timeout: PUSHED_WITHIN });
   await expect(card.getByTestId('chunk-row-worker')).toHaveCount(0);
 });

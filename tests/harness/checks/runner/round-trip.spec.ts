@@ -1,12 +1,10 @@
-import { expect, runnerTest as test } from '../../fixtures';
-import type { RunnerHost } from '../../fixtures';
+import { expect, runnerTest as test, stepUntil } from '../../fixtures';
 
 // A chunk's life on a real runner host against a mock hub, driven only by steps: the host claims it, a mock worker
 // commits and pushes, and the completion reaches the hub. Every wait below is a step of the host, never the clock.
 
 const BRANCH = 'feature/round-trip';
 const REPO = 'toy-api';
-const MAX_STEPS = 40;
 
 // The worker is a program: it works the branch in its worktree, commits, and pushes it to the world's origin.
 const BUILD = [
@@ -37,17 +35,6 @@ const buildThenDeliver = {
     },
   },
 };
-
-/** Steps the host until `reached` holds, failing after `MAX_STEPS` passes with the last state it saw. */
-async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean): Promise<T> {
-  let state = await read();
-  for (let pass = 0; !reached(state); pass++) {
-    if (pass === MAX_STEPS) throw new Error(`not reached within ${MAX_STEPS} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
-    await host.step();
-    state = await read();
-  }
-  return state;
-}
 
 test('a claimed chunk is worked by the mock worker, pushed, completed, and its lease read back', async ({ mockHub, runnerHost, runnerStream }) => {
   const runner = runnerHost.runners['runner-local']!;

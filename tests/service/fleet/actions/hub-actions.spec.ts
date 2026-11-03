@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 const REPO = 'toy-api';
 const LANDED = 'ACTION_LANDED.md';
@@ -52,7 +52,7 @@ test('test_land_lands_a_chunk_against_the_mock_forge', async ({ api, issue, repo
   }] } });
   const { chunk } = await issue('actions', { repository: target });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', 80);
+  const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', { stallPasses: 80, progress: chunkProgress });
   expect(detail.landed).toBe(true);
   const after = await ref();
   expect(after).toBeTruthy();
@@ -72,7 +72,7 @@ test('test_test_actions_drive_hub_nodes', async ({ api, issue, runnerHost }) => 
   expect((await api.post('/api/graphs', { data: { definition_yaml: actionGraph('pass\n', TEST_NODES, 'pick') } })).status).toBe(201);
   const { chunk } = await issue('test actions');
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', 80);
+  const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', { stallPasses: 80, progress: chunkProgress });
   expect((detail.history as { choice_name: string }[]).map((item) => item.choice_name).slice(-2)).toEqual(['onward', 'done']);
   expect(Object.fromEntries((detail.artifacts as { name: string; content: string }[]).filter((item) => item.name.startsWith('test-sequence/')).map((item) => [item.name, item.content]))).toEqual({
     'test-sequence/0': 'pending', 'test-sequence/1': 'done',
