@@ -20,9 +20,8 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import connection_for, connection_in
+from blizzard.hub.store.transactions import chunk_locked_connection, connection_for, connection_in
 
 
 class ChunkQuestionsStore:
@@ -78,9 +77,9 @@ class ChunkQuestionsStore:
         options: list[str],
         asked_at: datetime,
         harness_id: str | None = None,
+        transaction: Transaction | None = None,
     ) -> FenceRefusal | None:
-        with self._store.write("record_question") as conn:
-            lock_chunk_row(conn, chunk_id)
+        with chunk_locked_connection(self._store, chunk_id, transaction, "record_question") as conn:
             exists = conn.execute(
                 self._store.select(s.questions, s.questions.c.question_id).where(
                     s.questions.c.question_id == question_id
@@ -142,8 +141,10 @@ class ChunkQuestionsStore:
             )
         return AnswerOutcome(won=True, question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at)
 
-    def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
-        with self._store.write("record_answer_delivered") as conn:
+    def record_answer_delivered(
+        self, *, question_id: str, chunk_id: str, at: datetime, transaction: Transaction | None = None
+    ) -> None:
+        with connection_in(self._store, transaction, "record_answer_delivered", write=True) as conn:
             conn.execute(
                 self._store.insert(s.answer_deliveries).values(
                     question_id=question_id, chunk_id=chunk_id, delivered_at=at

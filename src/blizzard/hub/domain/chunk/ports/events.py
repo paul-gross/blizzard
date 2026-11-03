@@ -11,6 +11,7 @@ from typing import Protocol
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -80,8 +81,10 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         message: str,
         detail: Mapping[str, object] | None,
         at: datetime,
+        transaction: Transaction | None = None,
     ) -> int:
-        """Append one ``event_log`` row — never mutated once written.
+        """Append one ``event_log`` row — never mutated once written — in ``transaction`` when given
+        (``bzh:transaction-participation``).
 
         ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
         respectively; ``detail`` is opaque, serialized to JSON text by the store. Returns

@@ -388,9 +388,16 @@ class RunnerRegistryStore:
             return int(key[0]) if key is not None else 0
 
     def record_local_pause(
-        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+        self,
+        runner_id: str,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        reason: str | None = None,
+        transaction: Transaction | None = None,
     ) -> int:
-        with self._store.write("record_local_pause") as conn:
+        with connection_in(self._store, transaction, "record_local_pause", write=True) as conn:
             result = conn.execute(
                 self._store.insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
@@ -400,13 +407,21 @@ class RunnerRegistryStore:
             return int(key[0]) if key is not None else 0
 
     def record_external_usage(
-        self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
         # the registration, and must not stall this runner's high-water mark waiting.
         # Upserts on (runner_id, slug) — one row per declared subscription,
         # so a sibling slug's row is untouched by this one's write.
-        with self._store.write("record_external_usage") as conn:
+        with connection_in(self._store, transaction, "record_external_usage", write=True) as conn:
             existing = conn.execute(
                 self._store.select(s.runner_external_usage, s.runner_external_usage.c.runner_id).where(
                     s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
@@ -431,11 +446,19 @@ class RunnerRegistryStore:
             )
 
     def record_external_usage_miss(
-        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         # Sibling to `record_external_usage`: same no-FK, no-known-runner-required upsert on
         # (runner_id, slug) — its own table, never overwriting the sample row it joins at read.
-        with self._store.write("record_external_usage_miss") as conn:
+        with connection_in(self._store, transaction, "record_external_usage_miss", write=True) as conn:
             existing = conn.execute(
                 self._store.select(s.runner_external_usage_misses, s.runner_external_usage_misses.c.runner_id).where(
                     s.runner_external_usage_misses.c.runner_id == runner_id,

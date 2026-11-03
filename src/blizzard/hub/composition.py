@@ -1253,6 +1253,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             events=event_log,
             fleet=fleet,
             retired=retired,
+            transactions=stores.transactions,
             clock=clock,
         ),
         transcript_ingest=TranscriptIngestService(

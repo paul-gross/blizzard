@@ -30,11 +30,13 @@ from blizzard.hub.domain.chunk.model import (
     RouteReleaseCause,
 )
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.fact_families import FactTable, entry_of
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
+from blizzard.hub.store.transactions import connection_in
 
 # The hub coordinator's own reserved ``transitions.runner_id`` — the only fact-table
 # difference between a ``hub-advanced`` and a ``node-completed`` transition.
@@ -542,10 +544,11 @@ class ChunkEventsStore:
         message: str,
         detail: Mapping[str, object] | None,
         at: datetime,
+        transaction: Transaction | None = None,
     ) -> int:
         # Append-only operational fact, no epoch fence. `detail` serializes
         # to JSON text here; `chunk_id` is None for a runner-scoped event.
-        with self._store.write("record_event") as conn:
+        with connection_in(self._store, transaction, "record_event", write=True) as conn:
             result = conn.execute(
                 self._store.insert(s.event_log).values(
                     severity=severity,
