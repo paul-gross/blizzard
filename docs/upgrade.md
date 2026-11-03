@@ -19,6 +19,31 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 [`docs/versioning.md`](./versioning.md) owns what counts as breaking and the floor a runner may lag its hub down to.
 
+## Upgrading to 0.4.0
+
+### Store baseline at 0.2.0
+
+Both stores' migration histories up to 0.2.0 are folded into one baseline revision each: this release migrates a hub or
+runner store at 0.2.0 or later, and refuses an older one as below its baseline. Migrate an older store with 0.2.0 first,
+as [Before you pull](#before-you-pull) says.
+
+### Hub steps take turns on their flows
+
+The hub now takes every hub step as a turn on the flows the step holds, one per repository branch, where it ran one hub
+step at a time across the fleet:
+
+- Landings onto different branches run side by side, and a garden delivery or a review's findings no longer wait behind
+  any landing.
+- A chunk's landing no longer needs its runner. `hub-advance` no longer runs a step: it wakes the hub, answers
+  `ran: false`, and says in its detail where the visit stands.
+- Stopping, restarting or completing a chunk mid-pass lets that pass finish, and its branch stays held until it does.
+- A step cut off at its deadline three times running escalates to a person with the cause `hub-action-stuck`.
+- A chunk paused at a hub node no longer lands while it is paused: it waits for its resume.
+
+The last is the one change that asks something of you. A chunk paused at a hub node when you install this release lands
+only once someone resumes it, with `blizzard hub chunk resume <id>`. A chunk you leave paused keeps its place at its
+node and takes no turn until then.
+
 ## Upgrading to 0.3.0
 
 ### Usage-limit brake carry-over
@@ -75,29 +100,6 @@ To go back to an older release, walk the hub store down on this image first ([`d
 older hub then runs each node's untouched `run:` again. A chunk escalated meanwhile stays escalated.
 
 ## Upgrading to the next release
-
-### Store baseline at 0.2.0
-
-Both stores' migration histories up to 0.2.0 are folded into one baseline revision each: this release migrates a hub or
-runner store at 0.2.0 or later, and refuses an older one as below its baseline. Migrate an older store with 0.2.0 first,
-as [Before you pull](#before-you-pull) says.
-
-### Hub steps take turns on their flows
-
-The hub now takes every hub step as a turn on the flows the step holds, one per repository branch, where it ran one hub
-step at a time across the fleet:
-
-- Landings onto different branches run side by side, and a garden delivery or a review's findings no longer wait behind
-  any landing.
-- A chunk's landing no longer needs its runner. `hub-advance` no longer runs a step: it wakes the hub, answers
-  `ran: false`, and says in its detail where the visit stands.
-- Stopping, restarting or completing a chunk mid-pass lets that pass finish, and its branch stays held until it does.
-- A step cut off at its deadline three times running escalates to a person with the cause `hub-action-stuck`.
-- A chunk paused at a hub node no longer lands while it is paused: it waits for its resume.
-
-The last is the one change that asks something of you. A chunk paused at a hub node when you install this release lands
-only once someone resumes it, with `blizzard hub chunk resume <id>`. A chunk you leave paused keeps its place at its
-node and takes no turn until then.
 
 ## Upgrading to 0.2.0
 
