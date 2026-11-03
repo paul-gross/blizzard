@@ -258,8 +258,8 @@
         "quote": "hub item and its chunk live and die together"
       },
       "markers": [
-        "any source pointer on the same chunk survives untouched",
-        "deletes its unacquired holder chunk in the same stroke"
+        "items from configured forge sources are left untouched",
+        "deletes its unacquired holder chunk rather than refusing"
       ],
       "sites": [
         {
@@ -279,7 +279,7 @@
         "quote": "one or two sentences, at most 300 characters"
       },
       "markers": [
-        "one or two sentences at most 300 characters"
+        "description at most 300 characters"
       ],
       "sites": [
         {
