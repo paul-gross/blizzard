@@ -1,7 +1,7 @@
 ---
 kind: deprecated
 surfaces: [cli]
-removes-in: "0.4"
+removes-in: "0.5"
 ---
 
 `blizzard hub repo`'s `--forge-api-url`, and `blizzard hub source`'s `--api-base` and `--web-base` and

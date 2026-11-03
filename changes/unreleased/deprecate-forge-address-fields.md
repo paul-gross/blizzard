@@ -1,7 +1,7 @@
 ---
 kind: deprecated
 surfaces: [http-api]
-removes-in: "0.4"
+removes-in: "0.5"
 ---
 
 The forge address fields of repositories and work sources are deprecated: `forge_api_url` on a repository, and
