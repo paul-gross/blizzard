@@ -125,9 +125,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       # The unit and component tiers both run under pytest against sqlite (hermetic,
-      # token-free). The e2e acceptance loop (tests/e2e, marked e2e + skipif
-      # BLIZZARD_E2E!=1) is excluded here — it is the local `mise run e2e` smoke test
-      # that self-manages the live stack over a blizzard-mock fixture.
+      # token-free).
       - name: pytest
         env:
           BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}

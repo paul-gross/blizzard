@@ -13,7 +13,7 @@
 # The full suite at a tag is the merge gate (unit + component) PLUS every upper tier, which
 # upper-tiers.yml defines once for this workflow and `pr.yml` alike: the service tier, the FULL
 # kill-9 crash sweep (every registry point, not the bounded subset the master `push` gate runs),
-# the e2e acceptance loop including the Playwright browser scenario, the acceptance journey, and
+# the acceptance journey, and
 # the hub-image and compose smokes. The mock-backed tiers run against the two-repo checkout
 # (blizzard + blizzard-mock) with the mock at the tag of the same name
 # (.github/actions/resolve-mock-ref). They are winter-free: no winter source is checked out, and

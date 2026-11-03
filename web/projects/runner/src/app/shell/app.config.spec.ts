@@ -11,7 +11,7 @@ import { appConfig } from './app.config';
  * app's own production provider list — every other
  * `SessionRecovery` spec assembles its own providers (`session-recovery.spec.ts`),
  * which would stay green even if `app.config.ts` forgot to call
- * `provideSessionRecovery()`. `blizzard:e2e` gates no PR and no push
+ * `provideSessionRecovery()`. no other tier pins this
  * (`bzh:gating-tier-pins-production-paths`), so this is the one `web:unit-test`
  * asserting against `appConfig.providers` itself rather than a hand-assembled list.
  */

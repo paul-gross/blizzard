@@ -19,7 +19,7 @@ const LAST_TENANT_KEY = 'blizzard.tenant.last';
 
 /**
  * The browser world: the page's `baseURL` is the test's hub, which serves the built board, the page opens in the test's
- * own tenant rather than at the board's tenant picker, and the two viewport sizes the e2e tier reads from the same file.
+ * own tenant rather than at the board's tenant picker, and the two viewport sizes the UI tier reads from the same file.
  */
 export const uiWorld = tenancy.extend<UiFixtures>({
   baseURL: async ({ testHub }, use) => {

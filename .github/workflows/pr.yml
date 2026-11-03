@@ -2,9 +2,9 @@
 #
 # ruff + pyright + eslint + client-drift check + the unit and component tiers, with every
 # upper tier a REAL gate alongside them, each its own parallel job: the service tier, the FULL
-# kill-9 crash sweep, the e2e acceptance loop, the acceptance journey, and the hub-image and
+# kill-9 crash sweep, the acceptance journey, and the hub-image and
 # compose smokes (blizzard-context verification/blizzard.md: blizzard:service-test,
-# blizzard:crash-sweep, blizzard:e2e, blizzard:journey, blizzard:image-smoke,
+# blizzard:crash-sweep, blizzard:journey, blizzard:image-smoke,
 # blizzard:compose-smoke). A change to a store revision also runs the store baseline proof, and
 # a release cut (a commit carrying a `Release-Cut:` trailer) also runs the upgrade rehearsal
 # against a wheel built from the pull request's head. So a release needs no local test run: the

@@ -1,6 +1,6 @@
 """The process launchers every live-stack scenario shares — tier-neutral.
 
-The e2e, service, crash, and winter tiers bring up the same daemons: the mock forge over the fixture's bare
+The service, crash, and winter tiers bring up the same daemons: the mock forge over the fixture's bare
 origins, a hub daemon fronting it, and an in-process runner driven tick by tick against its own local API.
 This module owns those launchers, the sibling ``blizzard-mock`` discovery they need, and the fixture
 identity they address the forge and hub under.
@@ -22,7 +22,6 @@ import httpx2
 import uvicorn
 
 from blizzard.foundation.cli_spans import ENV_TRACE_SEND_CAP_MS
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
@@ -30,7 +29,6 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.config_inputs import load_hub_config
-from tests.fleet_traces import PLANT_DIR_VAR, FleetCollector
 from tests.fleet_world import REPO_NAME, basic_workspace
 from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, sampler_without_credentials
@@ -53,7 +51,7 @@ REPO = f"{OWNER}/{REPO_NAME}"
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # The vars every scenario's worker child needs, via the allowlist's operator-extension knob: the mock's own, and the
 # worker send cap a loaded test machine raises.
-MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR, ENV_TRACE_SEND_CAP_MS)
+MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, ENV_TRACE_SEND_CAP_MS)
 
 
 # --------------------------------------------------------------------------- #
@@ -142,24 +140,16 @@ def run_hub(
     annotate: bool = False,
     annotation_interval_seconds: int | None = None,
     extra_env: Mapping[str, str] | None = None,
-    collector: FleetCollector | None = None,
-    platform_spans: bool = False,
-    settle_seconds: int = 0,
     egress: EgressConfig | None = None,
     rehost: bool = False,
     test_actions: bool = True,
 ) -> Generator[httpx2.Client]:
     """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
     instead of initializing it; ``egress`` replaces the ``[egress]`` block. The test actions are admitted behind both
-    of their fences unless ``test_actions`` is off, and with no crash point armed the crash fence never kills. Traced (exporting to ``collector``,
-    sweeping every second, settling for ``settle_seconds``) when a usable collector is given — with platform spans
-    on at a zero root sample ratio when ``platform_spans``, so only spans parented on a sampled context export;
-    otherwise every inherited ``OTEL_*`` is stripped so a developer's own endpoint never receives e2e spans."""
-    export_to = collector if collector is not None and collector.available else None
+    of their fences unless ``test_actions`` is off, and with no crash point armed the crash fence never kills. Every
+    inherited ``OTEL_*`` is stripped so a developer's own endpoint never receives test spans."""
     env = {
         **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
-        # A short batch delay puts the inline platform spans in the file before the sweep's roots.
-        **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
         **(TEST_ACTION_FENCES if test_actions else {}),
         **(extra_env or {}),
     }
@@ -169,7 +159,7 @@ def run_hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not rehost:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    if export_to or annotation_interval_seconds is not None or egress is not None:
+    if annotation_interval_seconds is not None or egress is not None:
         # Flags read once, at `host` startup.
         config = load_hub_config(hub_dir)
         overrides: dict[str, object] = {}
@@ -177,10 +167,6 @@ def run_hub(
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
         if egress is not None:
             overrides["egress"] = egress
-        if export_to:
-            overrides["tracing"] = TracingConfig(
-                sweep_seconds=1, settle_seconds=settle_seconds, platform=platform_spans, platform_sample_ratio=0.0
-            )
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"

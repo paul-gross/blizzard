@@ -215,7 +215,7 @@ function pickAnother(artifacts: readonly ArtifactView[], current: string | null)
  * screen holds still). Each half is pinned on the producing side so a rename
  * fails where it is made:
  *
- * - `chunk-detail` / `detail-id` — by the board's browser e2e tier;
+ * - `chunk-detail` / `detail-id` — by the board's browser UI tier;
  * - `artifacts-tab-artifact` / `artifacts-tab-artifact-key` — by
  *   `fleet`'s `chunk/chunk-page/chunk-page-artifacts-tab.spec.ts`, which exists partly for this.
  *

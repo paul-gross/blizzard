@@ -9,7 +9,7 @@
 # it: neither needs the gate's result, and waiting on it put both on the run's longest path. Only
 # `dev-image` publishes, and it waits on every proof; a red run's wheel is never a dogfood build.
 #
-# The rest of the suite (e2e, journey, the two smokes) is the pull request's gate, `full_suite` in
+# The rest of the suite (ui, journey, the two smokes) is the pull request's gate, `full_suite` in
 # upper-tiers.yml: the `edge` channel is not held behind it, and an admin's direct push is ungated by
 # design. upper-tiers.yml owns the sibling `blizzard-mock` checkout the mock-backed tiers need and the
 # crash-sweep-profile rationale. The upgrade rehearsal (rehearsal.yml) runs here, on a release cut's pull

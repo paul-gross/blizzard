@@ -1,6 +1,6 @@
 """The platform tiers and the CI workflows stay winter-free.
 
-The service, e2e, and crash tiers run their runners on the built-in ``basic`` provider over a fixture minted without a
+The service and crash tiers run their runners on the built-in ``basic`` provider over a fixture minted without a
 winter source, and the workflows check out only ``blizzard`` and ``blizzard-mock``. The winter binding's own tests are
 the local-only ``winter_binding`` tier (``tests/winter/``). A static scan keeps either from drifting back, and pins that
 every checkout in a job that runs tests leaves no credentials behind.
@@ -20,14 +20,14 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 _ROOT = repo_root()
-_PLATFORM_TIERS = ("service", "e2e", "crash")
+_PLATFORM_TIERS = ("service", "crash")
 _PLAYWRIGHT_TIERS = ("harness", "service", "journey")
 _WORKFLOWS = sorted((_ROOT / ".github" / "workflows").glob("*.yml"))
 
 #: Configures the winter provider or hands a fixture a winter source — what a platform-tier module must never do.
 _WINTER_BOUND = re.compile(r"""provider\s*=\s*["']winter["']|--winter-source|winter_source|WINTER_SOURCE""")
 #: A step command that runs tests.
-_RUNS_TESTS = re.compile(r"pytest|mise run e2e|mise run journey|mise run playwright|playwright test")
+_RUNS_TESTS = re.compile(r"pytest|mise run journey|mise run playwright|playwright test")
 
 
 def _platform_modules() -> list[Path]:
@@ -97,7 +97,6 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
         ("upper-tiers.yml", "service-tier"),
         ("upper-tiers.yml", "service-playwright"),
         ("upper-tiers.yml", "crash-sweep"),
-        ("upper-tiers.yml", "e2e"),
         ("upper-tiers.yml", "journey"),
         ("isolation-cross-check.yml", "declared"),
         ("isolation-cross-check.yml", "raised"),
