@@ -135,14 +135,14 @@ def test_an_init_over_an_older_store_records_the_revisions_it_moved_between(tmp_
     config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     head = runner.script_head()
-    runner.downgrade("20261008_1500_scope_surrogate")
+    runner.downgrade("20261018_1200_project_color")
 
     init_hub(tmp_path)
 
     engine = create_engine_from_url(config.db_url)
     try:
         details = [hub_event_detail(row) for row in hub_event_rows(engine, "hub-migrated")]
-        assert {"from": "20261008_1500_scope_surrogate", "to": head} in details
+        assert {"from": "20261018_1200_project_color", "to": head} in details
         assert len(details) == 2
     finally:
         engine.dispose()
@@ -152,15 +152,15 @@ def test_a_migrate_from_an_older_store_records_the_revisions_it_moved_between(tm
     config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     head = runner.script_head()
-    runner.downgrade("20261008_1500_scope_surrogate")
+    runner.downgrade("20261018_1200_project_color")
 
     migrate_hub(tmp_path)
 
     engine = create_engine_from_url(config.db_url)
     try:
         migrated = hub_event_rows(engine, "hub-migrated")[-1]
-        assert hub_event_detail(migrated) == {"from": "20261008_1500_scope_surrogate", "to": head}
-        assert migrated.message == f"hub store migrated from revision 20261008_1500_scope_surrogate to {head}"
+        assert hub_event_detail(migrated) == {"from": "20261018_1200_project_color", "to": head}
+        assert migrated.message == f"hub store migrated from revision 20261018_1200_project_color to {head}"
     finally:
         engine.dispose()
 
@@ -169,12 +169,12 @@ def test_a_downgrade_records_the_revisions_it_moved_between(tmp_path: Path) -> N
     config = init_hub(tmp_path)
     head = hub_runtime.migration_runner(config).script_head()
 
-    migrate_hub(tmp_path, down="20261008_1600_hub_event_log_move")
+    migrate_hub(tmp_path, down="20261018_1200_project_color")
 
     engine = create_engine_from_url(config.db_url)
     try:
         details = [hub_event_detail(row) for row in hub_event_rows(engine, "hub-migrated")]
-        assert {"from": head, "to": "20261008_1600_hub_event_log_move"} in details
+        assert {"from": head, "to": "20261018_1200_project_color"} in details
     finally:
         engine.dispose()
 
@@ -182,7 +182,7 @@ def test_a_downgrade_records_the_revisions_it_moved_between(tmp_path: Path) -> N
 def test_a_downgrade_below_the_hub_log_records_nothing_and_exits_cleanly(tmp_path: Path) -> None:
     config = init_hub(tmp_path)
 
-    migrate_hub(tmp_path, down="20261008_1000_drop_work_item_proposals")
+    migrate_hub(tmp_path, down="base")
     migrate_hub(tmp_path, down="base")
 
     assert hub_runtime.migration_runner(config).current_revision() is None

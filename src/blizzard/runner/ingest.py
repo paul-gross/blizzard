@@ -111,7 +111,7 @@ _COPY_PREFIX = "ingest-copy-"
 
 #: The revision from which every runner-owned table carries its runner, so one runner's rows can be removed from a
 #: store that holds others.
-_RUNNER_SCOPE_REVISION = "20261011_1000_runner_scope"
+_RUNNER_SCOPE_REVISION = "20261015_1000_host_ingests"
 
 #: The first bytes of every SQLite database file.
 _SQLITE_HEADER = b"SQLite format 3\x00"

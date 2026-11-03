@@ -15,7 +15,7 @@ test.use({ coldInit: true });
 // place with `data/runner.db` untouched. The holder is a real host the subject's lock links to; the store is read only
 // before a host starts or after it stops.
 
-const PARENT = '20261011_1000_runner_scope';
+const PARENT = '20261015_1000_host_ingests';
 const NO_HUB = 'http://127.0.0.1:9';
 const CURRENT = /store: .* is at the revision this build expects/;
 

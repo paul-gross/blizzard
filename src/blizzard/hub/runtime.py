@@ -30,7 +30,7 @@ from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 MIGRATE_COMMAND = "blizzard hub migrate"
 
 #: The first revision that creates ``hub_event_log``; a store ending below it has nowhere to record a move.
-HUB_LOG_FLOOR_REVISION = "20261008_1100_tenants"
+HUB_LOG_FLOOR_REVISION = "20261018_1200_project_color"
 
 #: Opens the hub's own event log for a resolved config and closes it on exit; the engine URL is known only once the
 #: config has loaded, so the seam is a factory.

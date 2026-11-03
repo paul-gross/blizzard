@@ -207,7 +207,7 @@ def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_ser
 
 def test_a_plain_upgrade_of_an_existing_host_store_succeeds_while_a_host_holds_the_lock(tmp_path: Path) -> None:
     root = _host(tmp_path)
-    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261015_1000_host_ingests")
 
     with HostLock.acquire(HostLayout(root)):
         result = CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(root)])
@@ -285,7 +285,7 @@ def test_every_verb_that_moves_the_store_refuses_while_a_pre_host_daemon_answers
 def test_a_plain_upgrade_of_an_existing_store_refuses_a_pre_host_daemon_and_nothing_else(tmp_path: Path) -> None:
     root = _host(tmp_path)
     layout = HostLayout(root)
-    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261015_1000_host_ingests")
     holder = _answered_by(root)
 
     with pytest.raises(ConfigError, match=r"runner\.sock"):
