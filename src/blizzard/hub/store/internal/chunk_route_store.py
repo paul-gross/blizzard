@@ -223,6 +223,9 @@ class ChunkRouteStore:
     ) -> FenceRefusal | None:
         with self._store.write("record_lease_minted") as conn:
             lock_chunk_row(conn, chunk_id)
+            # Match claim's chunk-before-registry order; retirement never holds a chunk here.
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, claimant.runner_id, action="fact ingest")
             admission = mint_admission(conn, chunk_id, epoch=epoch, runner_id=claimant.runner_id)
             refusal = admission.refusal(claimant)
             if refusal is not None:
