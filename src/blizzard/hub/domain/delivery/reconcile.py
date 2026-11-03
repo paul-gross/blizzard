@@ -46,6 +46,7 @@ from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.tenancy import TenantClosed
@@ -89,6 +90,18 @@ class _Standing:
     epoch: int
     entered_at: datetime
 
+    def holds(self, chunk: Chunk | None, facts: ChunkFacts | None) -> bool:
+        """Whether the chunk, as ``chunk`` and ``facts`` read it now, still stands at this visit: ``delivering`` on
+        the same graph, its newest movement entering this node, at this epoch."""
+        return (
+            chunk is not None
+            and facts is not None
+            and chunk.graph_id == self.graph.graph_id
+            and facts.status() is ChunkStatus.DELIVERING
+            and facts.current_node_id() == self.node.node_id
+            and (facts.latest_epoch() or 0) == self.epoch
+        )
+
 
 class FlowLineReconciler:
     """One tenant's reconcile, admission, and the turns no task answers for. Every flow write goes through
@@ -109,11 +122,13 @@ class FlowLineReconciler:
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
         exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         lines: FlowLineFactory,
         clock: IClock,
     ) -> None:
         self._flows = flows
         self._exclusive = exclusive
+        self._transactions = transactions
         self._refusals = refusals
         self._facts = facts
         self._record = record
@@ -328,10 +343,13 @@ class FlowLineReconciler:
 
     def submit(self, standing: _Standing, artifacts: Sequence[StoredArtifact]) -> Submission | None:
         """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
-        moved — or refuse it, routing its failure choice, when it cannot name them."""
+        moved — or refuse it, routing its failure choice, when it cannot name them. The submission is decided from the
+        chunk's facts, record, and the visit's newest submission re-read under the chunk's lock in the unit that writes
+        it (``bzh:write-reestablishes-read``): a chunk no longer standing at the visit, or a visit whose generation is
+        taken, writes nothing."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
-        generation = self._generation(chunk.chunk_id, node.node_id, epoch)
-        if generation is None:
+        # A visit with no generation left to submit is skipped before it is resolved; the unit decides again.
+        if self._generation(chunk.chunk_id, node.node_id, epoch) is None:
             return None
         resolved = resolve_visit(
             artifacts,
@@ -353,26 +371,40 @@ class FlowLineReconciler:
                 resolution=resolved.resolution,
             )
             return None
-        return self._flows.submit(
-            chunk.chunk_id,
-            node_id=node.node_id,
-            epoch=epoch,
-            generation=generation,
-            resources=held_resources(
-                resolved.resolution,
-                LandedRepos.of(artifacts).names
-                | no_code_repos(
-                    artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
-                ),
-                resolved.spec,
+        resources = held_resources(
+            resolved.resolution,
+            LandedRepos.of(artifacts).names
+            | no_code_repos(
+                artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
             ),
-            at=self._clock.now(),
+            resolved.spec,
         )
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
+            current = self._record.get(chunk.chunk_id, transaction=locked)
+            if not standing.holds(current, facts):
+                return None
+            generation = self._generation(chunk.chunk_id, node.node_id, epoch, transaction=locked)
+            if generation is None:
+                return None
+            return self._flows.submit(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                epoch=epoch,
+                generation=generation,
+                resources=resources,
+                at=self._clock.now(),
+                transaction=locked,
+            )
 
-    def _generation(self, chunk_id: str, node_id: str, epoch: int) -> int | None:
+    def _generation(
+        self, chunk_id: str, node_id: str, epoch: int, *, transaction: Transaction | None = None
+    ) -> int | None:
         """The generation the visit submits at: 0 when never submitted, the next when its own turn closed its newest
-        ``superseded`` — its resources moved — and ``None`` when that one is open or closed otherwise."""
-        latest = self._flows.submission_for_visit(chunk_id, node_id=node_id, epoch=epoch)
+        ``superseded`` — its resources moved — and ``None`` when that one is open or closed otherwise. Read in
+        ``transaction`` when given."""
+        latest = self._flows.submission_for_visit(chunk_id, node_id=node_id, epoch=epoch, transaction=transaction)
         if latest is None:
             return 0
         return latest.generation + 1 if latest.closed == TURN_SUPERSEDED else None

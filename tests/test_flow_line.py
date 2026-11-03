@@ -434,7 +434,9 @@ class _Flows:
     def open_turns(self) -> list[Turn]:
         return self.turns
 
-    def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
+    def submission_for_visit(
+        self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
+    ) -> Submission | None:
         raise NotImplementedError
 
     def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:

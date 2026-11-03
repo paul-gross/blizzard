@@ -29,6 +29,7 @@ from blizzard.hub.domain.delivery.flows import (
     Withdrawal,
 )
 from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.tenancy import TenantId
 
 
@@ -44,8 +45,11 @@ class IReadFlows(Protocol):
         """Every turn of this tenant with no ``ended_at``."""
         ...
 
-    def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
-        """The visit's newest-generation submission, open or closed, or ``None`` when it was never submitted."""
+    def submission_for_visit(
+        self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
+    ) -> Submission | None:
+        """The visit's newest-generation submission, open or closed, or ``None`` when it was never submitted — read
+        in ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
@@ -147,10 +151,12 @@ class IWriteFlows(IReadFlows, Protocol):
         generation: int,
         resources: Sequence[FlowResource],
         at: datetime,
+        transaction: LockedTransaction,
     ) -> Submission | None:
         """Submit the visit at ``generation`` to the flows of ``resources``, creating any flow not yet made, at the
-        tenant's next arrival, with a ``submitted`` fact per flow — one transaction. Returns ``None``, writing nothing,
-        when that generation of the visit is already submitted."""
+        tenant's next arrival, with a ``submitted`` fact per flow — in ``transaction``, a unit that locks the visit's
+        chunk, where whether the chunk still stands at the visit is decided (``bzh:transaction-participation``).
+        Returns ``None``, writing nothing, when that generation of the visit is already submitted."""
         ...
 
     def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:

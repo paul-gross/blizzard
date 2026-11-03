@@ -1346,6 +1346,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             catalogue=parts.actions.catalogue,
             refusals=hub_router,
             exclusive=chunk_exclusive,
+            transactions=stores.transactions,
             lines=flow_line_factory,
             clock=clock,
         ),

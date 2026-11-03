@@ -32,7 +32,7 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import HubHarness, build_hub, chunk_stores, hub_scoped, hub_store_connections, ingest
+from tests.support import HubHarness, build_hub, chunk_stores, chunk_unit, hub_scoped, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
 
@@ -60,10 +60,17 @@ class _World:
     def chunk(self, ref: str = "12") -> str:
         return ingest(self.hub, [{"source": "default", "ref": ref}])
 
-    def submit(self, chunk_id: str, *resources: FlowResource) -> Submission:
-        submission = self.flows.submit(
-            chunk_id, node_id=_NODE, epoch=0, generation=0, resources=list(resources), at=self.hub.clock.now()
-        )
+    def submit(self, chunk_id: str, *resources: FlowResource, generation: int = 0) -> Submission:
+        with chunk_unit(hub_store_connections(self.hub.engine), chunk_id) as unit:
+            submission = self.flows.submit(
+                chunk_id,
+                node_id=_NODE,
+                epoch=0,
+                generation=generation,
+                resources=list(resources),
+                at=self.hub.clock.now(),
+                transaction=unit,
+            )
         assert submission is not None
         return submission
 
@@ -571,10 +578,7 @@ def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_
             handle, turn, outcome="superseded", closure="superseded", event=None, at=world.hub.clock.now()
         )
 
-    second = world.flows.submit(
-        chunk_id, node_id=_NODE, epoch=0, generation=1, resources=[_OTHER], at=world.hub.clock.now()
-    )
-    assert second is not None
+    second = world.submit(chunk_id, _OTHER, generation=1)
     turn = world.take(second)
     assert turn is not None
     world.flows.record_landing(
