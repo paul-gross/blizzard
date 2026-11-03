@@ -10,23 +10,30 @@ import hashlib
 import itertools
 import zlib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Insert, Row, Select, Update, func
+from sqlalchemy import Connection, Insert, Row, Select, Update, func
 
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.observability.transcripts import (
+    EncodedTurns,
     IWriteTranscriptSegments,
     NaturalKeyState,
     SegmentRecordContent,
     SegmentSummary,
     TranscriptSlice,
     lost_turns,
+    transcript_chunk_lock,
+    transcript_lane_lock,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -283,6 +290,25 @@ def update_still_rejected_stmt(
     )
 
 
+#: The one codec an accepted record's content is stored under.
+_CODEC = "zlib"
+
+
+@adapter_model
+@dataclass(frozen=True)
+class _StoredTurns:
+    """This store's :class:`EncodedTurns`: the content an accepted write stores, and its codec."""
+
+    codec: str
+    content: bytes
+
+
+def _stored_turns(turns: EncodedTurns) -> _StoredTurns:
+    if not isinstance(turns, _StoredTurns):
+        raise TypeError("turns were not encoded by the transcript segment store")
+    return turns
+
+
 class TranscriptSegmentStore:
     """Read-write transcript-segment adapter over the hub store engine."""
 
@@ -345,13 +371,15 @@ class TranscriptSegmentStore:
             for row in rows
         ]
 
-    def high_water(self, runner_id: str) -> int:
-        with self._store.read("high_water") as conn:
+    def high_water(self, runner_id: str, *, transaction: Transaction | None = None) -> int:
+        with connection_in(self._store, transaction, "high_water") as conn:
             row = conn.execute(high_water_stmt(self._store, runner_id)).one_or_none()
             return row.seq if row is not None else 0
 
-    def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
-        with self._store.read("natural_key_state") as conn:
+    def natural_key_state(
+        self, segment_id: str, turn_range_start: int, *, transaction: Transaction | None = None
+    ) -> NaturalKeyState:
+        with connection_in(self._store, transaction, "natural_key_state") as conn:
             row = conn.execute(natural_key_state_stmt(self._store, segment_id, turn_range_start)).one_or_none()
         if row is None:
             return "absent"
@@ -360,7 +388,9 @@ class TranscriptSegmentStore:
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
         return self.epoch_owners([(chunk_id, epoch)]).get((chunk_id, epoch))
 
-    def epoch_owners(self, leases: Sequence[tuple[str, int]]) -> dict[tuple[str, int], EpochOwner]:
+    def epoch_owners(
+        self, leases: Sequence[tuple[str, int]], *, transaction: Transaction | None = None
+    ) -> dict[tuple[str, int], EpochOwner]:
         wanted = set(leases)
         if not wanted:
             return {}
@@ -368,7 +398,7 @@ class TranscriptSegmentStore:
         for chunk_id, epoch in wanted:
             epochs_by_chunk.setdefault(chunk_id, set()).add(epoch)
         owners: dict[tuple[str, int], EpochOwner] = {}
-        with self._store.read("epoch_owners") as conn:
+        with connection_in(self._store, transaction, "epoch_owners") as conn:
             # Batched by chunk id, each batch narrowed by its epochs; a pair outside
             # ``wanted`` is filtered out below.
             for batch in id_batches(sorted(epochs_by_chunk)):
@@ -380,58 +410,91 @@ class TranscriptSegmentStore:
                         owners[(row.chunk_id, row.epoch)] = owner
         return owners
 
-    def chunk_stored_bytes(self, chunk_id: str) -> int:
-        with self._store.read("chunk_stored_bytes") as conn:
+    def chunk_stored_bytes(self, chunk_id: str, *, transaction: Transaction | None = None) -> int:
+        with connection_in(self._store, transaction, "chunk_stored_bytes") as conn:
             total = conn.execute(chunk_stored_bytes_stmt(self._store, chunk_id)).scalar_one()
             return int(total)
 
-    def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int:
-        with self._store.read("runner_window_bytes") as conn:
+    def runner_window_bytes(self, runner_id: str, *, since: datetime, transaction: Transaction | None = None) -> int:
+        with connection_in(self._store, transaction, "runner_window_bytes") as conn:
             total = conn.execute(runner_window_bytes_stmt(self._store, runner_id, since)).scalar_one()
             return int(total)
 
     # --- writes -----------------------------------------------------------------
 
-    def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        with self._store.write("set_high_water") as conn:
-            existing = conn.execute(high_water_owner_stmt(self._store, runner_id)).one_or_none()
-            if existing is None:
-                conn.execute(insert_high_water_stmt(self._store, runner_id, seq=seq, at=at))
-                return
-            conn.execute(update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
+    def set_high_water(self, runner_id: str, *, seq: int, at: datetime, transaction: LockedTransaction) -> None:
+        conn = connection_for(self._store, transaction, key=transcript_lane_lock(runner_id))
+        existing = conn.execute(high_water_owner_stmt(self._store, runner_id)).one_or_none()
+        if existing is None:
+            conn.execute(insert_high_water_stmt(self._store, runner_id, seq=seq, at=at))
+            return
+        conn.execute(update_high_water_stmt(self._store, runner_id, seq=seq, at=at))
 
-    def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
-        content = self._compress(record.turns_json, codec)
-        with self._store.write("insert_accepted") as conn:
-            conn.execute(
-                insert_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
+    def encode_turns(self, record: TranscriptSlice) -> EncodedTurns:
+        return _StoredTurns(codec=_CODEC, content=self._compress(record.turns_json, _CODEC))
+
+    def insert_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        turns: EncodedTurns,
+        byte_count: int,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> None:
+        stored = _stored_turns(turns)
+        self._record_connection(transaction, record).execute(
+            insert_accepted_stmt(
+                self._store, record, byte_count=byte_count, codec=stored.codec, content=stored.content, at=at
             )
+        )
 
-    def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._store.write("insert_rejected") as conn:
-            conn.execute(insert_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
+    def insert_rejected(
+        self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime, transaction: LockedTransaction
+    ) -> None:
+        self._record_connection(transaction, record).execute(
+            insert_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at)
+        )
 
-    def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None:
-        content = self._compress(record.turns_json, codec)
-        with self._store.write("update_to_accepted") as conn:
-            conn.execute(
-                update_to_accepted_stmt(self._store, record, byte_count=byte_count, codec=codec, content=content, at=at)
+    def update_to_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        turns: EncodedTurns,
+        byte_count: int,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> None:
+        stored = _stored_turns(turns)
+        self._record_connection(transaction, record).execute(
+            update_to_accepted_stmt(
+                self._store, record, byte_count=byte_count, codec=stored.codec, content=stored.content, at=at
             )
+        )
 
-    def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._store.write("update_still_rejected") as conn:
-            conn.execute(update_still_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at))
+    def update_still_rejected(
+        self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime, transaction: LockedTransaction
+    ) -> None:
+        self._record_connection(transaction, record).execute(
+            update_still_rejected_stmt(self._store, record, byte_count=byte_count, reason=reason, at=at)
+        )
+
+    def _record_connection(self, transaction: LockedTransaction, record: TranscriptSlice) -> Connection:
+        """``transaction``'s connection, refused unless it locks ``record``'s chunk and its runner's lane —
+        the guards every cap sum and natural key it writes into are read under."""
+        connection_for(self._store, transaction, key=transcript_lane_lock(record.runner_id))
+        return connection_for(self._store, transaction, key=transcript_chunk_lock(record.chunk_id))
 
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
     def _compress(turns_json: str, codec: str) -> bytes:
-        assert codec == "zlib", codec  # the store's only codec today
+        assert codec == _CODEC, codec  # the store's only codec today
         return zlib.compress(turns_json.encode("utf-8"))
 
     @staticmethod
     def _decompress(content: bytes, codec: str | None) -> str:
-        assert codec == "zlib", codec  # the store's only codec today
+        assert codec == _CODEC, codec  # the store's only codec today
         return zlib.decompress(content).decode("utf-8")
 
     @staticmethod

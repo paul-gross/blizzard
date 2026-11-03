@@ -24,9 +24,9 @@ from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.hub_event_rows import hub_events_of
 from tests.support import (
+    SeedingTranscriptSegmentStore,
     add_tenant,
     count_queries,
     default_tenant,
@@ -80,7 +80,7 @@ def _segment(
         turns_json=json.dumps([]),
         spawn_cwd=cwd,
     )
-    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(record, byte_count=1, codec="zlib", at=_T0)
+    SeedingTranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(record, byte_count=1, at=_T0)
 
 
 def _event(chunk_id: str, turn: int, *, epoch: int = 1) -> TranscriptEvent:

@@ -24,11 +24,10 @@ from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.factory_fields import TranscriptSliceFields
-from tests.support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
+from tests.support import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -204,8 +203,8 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 def test_visible_segment_ids_excludes_a_non_final_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(final=False), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(final=False), byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset()
@@ -213,11 +212,9 @@ def test_visible_segment_ids_excludes_a_non_final_segment(tmp_path: Path) -> Non
 
 def test_visible_segment_ids_excludes_a_superseded_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
-    segments.insert_accepted(
-        _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
-    )
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset({"sg_new"})
@@ -225,8 +222,8 @@ def test_visible_segment_ids_excludes_a_superseded_segment(tmp_path: Path) -> No
 
 def test_visible_segment_ids_includes_a_final_unsuperseded_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset({"sg_1"})
@@ -235,9 +232,9 @@ def test_visible_segment_ids_includes_a_final_unsuperseded_segment(tmp_path: Pat
 def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     """The re-derive route's chunk-scoped call."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
-    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
 
@@ -250,9 +247,9 @@ def test_visible_segment_ids_excludes_a_segment_naming_no_chunk(tmp_path: Path) 
     """Sqlite enforces no foreign key, so a segment can name a chunk the table never held;
     ``hub:segment-chunk-resolves`` reports it, and the visible set leaves it out."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(
-        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, codec="zlib", at=_NOW
+        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, at=_NOW
     )
 
     store = TranscriptEventStore(hub_store_connections(engine))
@@ -266,9 +263,9 @@ def test_visible_segment_ids_excludes_a_segment_naming_no_chunk(tmp_path: Path) 
 
 def test_segment_derivation_input_decodes_turns_from_stored_content(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
-    segments.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    segments.insert_accepted(record, byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
     result = store.segment_derivation_input("sg_1")
@@ -291,17 +288,15 @@ def test_segment_derivation_input_folds_harness_version_across_windows(tmp_path:
     early window that never observed it (``None``) must not shadow a later window's real
     value once both windows' records land on the same segment."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(
         _segment_record(turn_range_start=0, turn_range_end=0, harness_version=None, final=False),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
     segments.insert_accepted(
         _segment_record(turn_range_start=1, turn_range_end=1, harness_version="claude-code-1.0"),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
 
@@ -320,7 +315,7 @@ def test_segment_derivation_input_is_none_for_an_unknown_segment(tmp_path: Path)
 
 def test_segment_derivation_input_is_incomplete_when_a_record_is_rejected(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_rejected(_segment_record(), byte_count=999, reason="record_too_large", at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
@@ -333,14 +328,14 @@ def test_segment_derivation_input_is_incomplete_when_a_record_is_rejected(tmp_pa
 
 def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
     segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
     before = store.segment_derivation_input("sg_1")
     assert before is not None
 
-    segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    segments.update_to_accepted(record, byte_count=10, at=_NOW)
     after = store.segment_derivation_input("sg_1")
 
     assert after is not None
@@ -352,8 +347,8 @@ def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tm
 
 def test_candidacy_treats_a_segment_with_no_marker_as_a_candidate(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     read = store.candidacy(_EXTRACTOR_VERSION)
@@ -364,8 +359,8 @@ def test_candidacy_treats_a_segment_with_no_marker_as_a_candidate(tmp_path: Path
 
 def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
     current = store.segment_derivation_input("sg_1")
     assert current is not None
@@ -388,7 +383,7 @@ def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(t
 def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp_path: Path) -> None:
     """A rejected record later accepted."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
     segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
@@ -404,7 +399,7 @@ def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp
         provenance=_PROVENANCE,
     )
 
-    segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    segments.update_to_accepted(record, byte_count=10, at=_NOW)
     read = store.candidacy(_EXTRACTOR_VERSION)
 
     assert read.candidate_segment_ids == ["sg_1"]
@@ -415,10 +410,8 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
     record arrives at a new ``turn_range_start`` for a segment
     id whose earlier record already made it visible and derived."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(
-        _segment_record(turn_range_start=0, turn_range_end=0), byte_count=10, codec="zlib", at=_NOW
-    )
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(turn_range_start=0, turn_range_end=0), byte_count=10, at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
     derived = store.segment_derivation_input("sg_1")
     assert derived is not None
@@ -433,9 +426,7 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
     )
     assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
 
-    segments.insert_accepted(
-        _segment_record(turn_range_start=1, turn_range_end=1), byte_count=10, codec="zlib", at=_NOW
-    )
+    segments.insert_accepted(_segment_record(turn_range_start=1, turn_range_end=1), byte_count=10, at=_NOW)
 
     read = store.candidacy(_EXTRACTOR_VERSION)
 
@@ -447,7 +438,7 @@ def test_candidacy_includes_a_still_rejected_segment_whose_harness_version_refre
     change to its content — the fingerprint must still move, or the refreshed value
     never reaches an already-derived event."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record(harness_version=None)
     segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
@@ -475,9 +466,9 @@ def test_candidacy_includes_a_still_rejected_segment_whose_harness_version_refre
 
 def test_candidacy_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
-    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     read = store.candidacy(_EXTRACTOR_VERSION, chunk_id="ch_1")
@@ -649,18 +640,16 @@ def _drop_rows(engine: Engine) -> list[Any]:
 def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     # The later turn range is stored first, so insertion order disagrees with the order the fact is read in.
     segments.insert_accepted(
         _segment_record(turn_range_start=1, turn_range_end=1, epoch=9, spawn_generation=9),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
     segments.insert_accepted(
         _segment_record(final=False, turn_range_start=0, turn_range_end=0, epoch=2, spawn_generation=3),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
     _derive(store, "sg_1")
@@ -677,8 +666,8 @@ def test_drop_segments_writes_one_drop_fact_per_segment_from_its_first_record(tm
 def test_drop_segments_appends_a_new_fact_when_a_segment_is_dropped_again(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
-        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    SeedingTranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, at=_NOW
     )
     for _ in range(2):
         _derive(store, "sg_1")
@@ -703,8 +692,8 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
 ) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
-        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    SeedingTranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, at=_NOW
     )
     _derive(store, "sg_1")
 
@@ -724,8 +713,8 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
 def test_replace_segment_events_writes_no_drop_fact(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    TranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
-        _segment_record(), byte_count=10, codec="zlib", at=_NOW
+    SeedingTranscriptSegmentStore(hub_store_connections(engine)).insert_accepted(
+        _segment_record(), byte_count=10, at=_NOW
     )
     _derive(store, "sg_1")
     _derive(store, "sg_1")
@@ -801,11 +790,9 @@ def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path
 
 def test_visible_segment_ids_narrows_to_the_given_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
-    segments.insert_accepted(
-        _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
-    )
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, at=_NOW)
 
     store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids(segment_id="sg_new") == frozenset({"sg_new"})

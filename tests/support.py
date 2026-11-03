@@ -108,7 +108,13 @@ from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.observability.transcripts import (
+    EncodedTurns,
+    TranscriptCaps,
+    TranscriptSlice,
+    transcript_chunk_lock,
+    transcript_lane_lock,
+)
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import Project, ProjectId
@@ -144,6 +150,7 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import (
@@ -206,6 +213,86 @@ def chunk_unit(store: ScopedConnections, *chunk_ids: str) -> Generator[LockedTra
     requires, for a test writing straight through a store."""
     with HubTransactions(store).begin() as transaction:
         yield transaction.lock_chunks(chunk_ids)
+
+
+class SeedingTranscriptSegmentStore(TranscriptSegmentStore):
+    """A :class:`TranscriptSegmentStore` whose ingest writes, called without a unit, each run in
+    their own unit graduated on the record's chunk and its runner's lane, and whose accepted
+    writes encode the record's turns when handed none — for a test seeding segments straight
+    through the store rather than through the ingest that decides them."""
+
+    def __init__(self, store: ScopedConnections) -> None:
+        super().__init__(store)
+        self._units = HubTransactions(store)
+
+    @contextmanager
+    def _own_unit(self, locks: list[tuple[str, str]]) -> Generator[LockedTransaction]:
+        with self._units.begin() as transaction:
+            yield transaction.lock_set(keys=locks)
+
+    def _unit(
+        self, transaction: LockedTransaction | None, runner_id: str, chunk_id: str | None = None
+    ) -> contextlib.AbstractContextManager[LockedTransaction]:
+        if transaction is not None:
+            return contextlib.nullcontext(transaction)
+        locks = [transcript_lane_lock(runner_id)]
+        return self._own_unit(locks if chunk_id is None else [*locks, transcript_chunk_lock(chunk_id)])
+
+    def set_high_water(
+        self, runner_id: str, *, seq: int, at: datetime, transaction: LockedTransaction | None = None
+    ) -> None:
+        with self._unit(transaction, runner_id) as unit:
+            super().set_high_water(runner_id, seq=seq, at=at, transaction=unit)
+
+    def insert_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        byte_count: int,
+        at: datetime,
+        turns: EncodedTurns | None = None,
+        transaction: LockedTransaction | None = None,
+    ) -> None:
+        encoded = self.encode_turns(record) if turns is None else turns
+        with self._unit(transaction, record.runner_id, record.chunk_id) as unit:
+            super().insert_accepted(record, turns=encoded, byte_count=byte_count, at=at, transaction=unit)
+
+    def insert_rejected(
+        self,
+        record: TranscriptSlice,
+        *,
+        byte_count: int,
+        reason: str,
+        at: datetime,
+        transaction: LockedTransaction | None = None,
+    ) -> None:
+        with self._unit(transaction, record.runner_id, record.chunk_id) as unit:
+            super().insert_rejected(record, byte_count=byte_count, reason=reason, at=at, transaction=unit)
+
+    def update_to_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        byte_count: int,
+        at: datetime,
+        turns: EncodedTurns | None = None,
+        transaction: LockedTransaction | None = None,
+    ) -> None:
+        encoded = self.encode_turns(record) if turns is None else turns
+        with self._unit(transaction, record.runner_id, record.chunk_id) as unit:
+            super().update_to_accepted(record, turns=encoded, byte_count=byte_count, at=at, transaction=unit)
+
+    def update_still_rejected(
+        self,
+        record: TranscriptSlice,
+        *,
+        byte_count: int,
+        reason: str,
+        at: datetime,
+        transaction: LockedTransaction | None = None,
+    ) -> None:
+        with self._unit(transaction, record.runner_id, record.chunk_id) as unit:
+            super().update_still_rejected(record, byte_count=byte_count, reason=reason, at=at, transaction=unit)
 
 
 _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyDictionary()
