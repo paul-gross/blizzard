@@ -210,6 +210,7 @@ for (const parkedFirst of [true, false]) {
 }
 
 test('test_second_parked_repository_has_its_own_review_clock', async ({ repository, issue, project, api, forge, runnerHosts }) => {
+  test.fixme(true, 'Waits a real hour for the park timeout; enable once a test can move the hub clock');
   test.setTimeout(4_500_000);
   const consumer = await repository();
   const library = await repository();
@@ -260,6 +261,7 @@ test('test_second_parked_repository_has_its_own_review_clock', async ({ reposito
 });
 
 test('test_park_timeout_then_person_merge_is_adopted_on_requeue', async ({ repository, issue, api, forge, runnerHosts }) => {
+  test.fixme(true, 'Waits a real hour for the park timeout; enable once a test can move the hub clock');
   test.setTimeout(4_500_000);
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
