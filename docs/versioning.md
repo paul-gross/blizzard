@@ -8,10 +8,10 @@ carries no promise; `0.2.0` is the first release that does.
 
 ## The train
 
-Releases are cut on a weekly train that runs on Monday, UTC. A train does two things, in order: it promotes the
-candidate cut a week before, if one is waiting, and it cuts the next candidate, if `master` moved since the last one. An
-operator may hold a train, skipping that week, but never runs two in one week; a held week is noted in the next
-candidate's notes.
+Releases ride a train with no fixed day. An operator cuts a minor's first candidate when its content is done: the cut
+freezes everything on `master` at that commit into the minor, and what lands afterwards rides the next one. A candidate
+is promoted no sooner than seven days after its minor was cut, so a cut waits while the line before it has not yet
+baked.
 
 | Thing             | Spelling          | Cut from                                              |
 | ----------------- | ----------------- | ----------------------------------------------------- |
@@ -21,16 +21,17 @@ candidate's notes.
 | Patch             | `vX.Y.P`, `P ≥ 1` | `release/X.Y`                                         |
 | Major's candidate | `vX.0.0-rc.K`     | `master` while it is open for `X`, then `release/X.0` |
 
-A candidate runs on blizzard's own fleet for the week before it is promoted. A fix the week finds is a further candidate
-on the same branch, `vX.Y.0-rc.(K+1)`, and does not restart the week. A candidate is promoted when its train day comes,
-its `release` run is green, and no open `release-blocker` issue on `paul-gross/blizzard` names its line. The stable
-release is the same commit as the candidate, rebuilt with its stable version stamped; nothing in it is new code. A
-candidate with an open blocker is set aside instead: its minor never has a stable release, its GitHub Release says so
-and names the minor that supersedes it, and version numbers skip it. A branch is never deleted, and a tag, once pushed,
-is never moved, deleted, or reused. [What a tag publishes](#what-a-tag-publishes) owns the ancestry check and the
-`pyproject.toml` version, and [`docs/ci.md`](./ci.md) owns the proof a stable tag borrows from its candidate.
+A candidate runs on blizzard's own fleet for at least the seven days before it is promoted. A fix the bake finds is a
+further candidate on the same branch, `vX.Y.0-rc.(K+1)`, and does not restart the seven days. A candidate is promoted
+once its minor's first candidate is seven days old, it was not itself tagged that day, its `release` run is green, and
+no open `release-blocker` issue on `paul-gross/blizzard` names its line. The stable release is the same commit as the
+candidate, rebuilt with its stable version stamped; nothing in it is new code. A candidate with an open blocker is set
+aside instead: its minor never has a stable release, its GitHub Release says so and names the minor that supersedes it,
+and version numbers skip it. A branch is never deleted, and a tag, once pushed, is never moved, deleted, or reused.
+[What a tag publishes](#what-a-tag-publishes) owns the ancestry check and the `pyproject.toml` version, and
+[`docs/ci.md`](./ci.md) owns the proof a stable tag borrows from its candidate.
 
-A minor counts trains, not milestones: it says when a release was cut and nothing about how much changed in it.
+A minor counts cuts, not milestones: it says when a release was cut and nothing about how much changed in it.
 
 ## Support
 
@@ -45,16 +46,16 @@ A **line** is a minor's release branch once that minor has a stable release. Onl
 A candidate is not a line, and a set-aside minor never is. The closing date of an old major's three months is written
 out here the day the next major ships; after it that line receives nothing more.
 
-A patch is for what cannot wait the week, and *critical* means the same three things on every line: a hole in security,
-data lost or corrupted, or a fleet that has stopped working. Anything else rides the next train. A patch carries the
-fix, its tests, and its change note alone: it adds no surface, turns no flag on, and carries no store revision
-(`bzh:patch-scope`), so moving onto a patch, or back off it, needs no `migrate`.
+A patch is for what cannot wait for the next minor, and *critical* means the same three things on every line: a hole in
+security, data lost or corrupted, or a fleet that has stopped working. Anything else rides the next train. A patch
+carries the fix, its tests, and its change note alone: it adds no surface, turns no flag on, and carries no store
+revision (`bzh:patch-scope`), so moving onto a patch, or back off it, needs no `migrate`.
 
 ## Schedule
 
 No major date is published yet. 1.0 is not on the six-month cadence; the cadence counts from it. From 1.0, two majors a
-year ship on dates published here, each date published no later than the day the major before it ships, and each on a
-train day. A date moves only by being republished later with its reason, and never earlier.
+year ship on dates published here, each date published no later than the day the major before it ships. A date moves
+only by being republished later with its reason, and never earlier.
 
 ## What counts as breaking
 

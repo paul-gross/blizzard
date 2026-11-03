@@ -1,9 +1,9 @@
 # Flags
 
 A **flag** is a switch a release ships beside a capability that is not yet finished, so the work can land on `master`
-and ride the weekly train dark. Each flag is declared in blizzard's registry, `foundation/flags/registry.toml`, with a
-one-line summary of the capability, and starts off. A flag's scope says whose answer counts: `hub`, `runner`, or
-`fleet`, where the hub's answer is carried to every runner.
+and ride the train dark. Each flag is declared in blizzard's registry, `foundation/flags/registry.toml`, with a one-line
+summary of the capability, and starts off. A flag's scope says whose answer counts: `hub`, `runner`, or `fleet`, where
+the hub's answer is carried to every runner.
 
 A flag is turned on by a release, not by you: the release that turns a capability on says so in its notes, under the
 flag's summary. A flag lasts about one stable release on, then is retired and its name never returns.
