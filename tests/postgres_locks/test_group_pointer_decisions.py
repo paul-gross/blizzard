@@ -18,7 +18,10 @@ from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_exclusive_store, work_item_store
-from blizzard.hub.store.internal.chunk_dependencies_store import DEPENDENCY_GRAPH_LOCK_NAMESPACE
+from blizzard.hub.store.internal.chunk_dependencies_store import (
+    DEPENDENCY_GRAPH_LOCK_KEY,
+    DEPENDENCY_GRAPH_LOCK_NAMESPACE,
+)
 from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
@@ -43,6 +46,96 @@ class _Labels:
 
 class _Rollback(Exception):
     pass
+
+
+@pytest.mark.parametrize("omit", [False, True], ids=["locked", "negative-control"])
+def test_group_waits_for_pointer_decision_key(database_url: str, omit: bool) -> None:
+    """A group must acquire the graph key before reading or moving pointer holders."""
+    options = "-c statement_timeout=8000"
+    holder = sa.create_engine(database_url, connect_args={"application_name": "pointer_key_holder", "options": options})
+    waiter = sa.create_engine(database_url, connect_args={"application_name": "group_key_waiter", "options": options})
+    observer = sa.create_engine(database_url, isolation_level="AUTOCOMMIT")
+    scope = scoped_connections(waiter, TenantId("ten_group_key"))
+    clock = FixedClock(_AT)
+    stores = build_chunk_stores(scope, clock, registry=RunnerRegistryStore(scope))
+    try:
+        with scope.founding("found", name="group key", created_at=_AT, created_by="test"):
+            pass
+        with scope.write("seed") as conn:
+            conn.execute(
+                scope.insert(s.graphs).values(
+                    graph_id="graph", name="g", entry_node_id="n", definition_yaml="", created_at=_AT
+                )
+            )
+            conn.execute(
+                scope.insert(s.projects).values(
+                    project_id=_PROJECT, slug="p", name="p", description="", revision=1, color="blue", created_at=_AT
+                )
+            )
+        for chunk_id, refs in [("survivor", []), ("target", [_POINTER])]:
+            seed_chunk_record(
+                stores, Chunk(chunk_id=chunk_id, graph_id="graph", project_id=_PROJECT, work_refs=refs, minted_at=_AT)
+            )
+        # Materialize the key before the independent holder locks its row.
+        with scope.write("key") as conn:
+            lock_keys(conn, DEPENDENCY_GRAPH_LOCK_NAMESPACE, [DEPENDENCY_GRAPH_LOCK_KEY])
+        group = GroupService(
+            work_refs=stores.work_refs,
+            dependencies=stores.dependencies,
+            exclusive=stores.exclusive,
+            clock=clock,
+            cycle_lock=Lock(),
+        )
+
+        def selective_lock(conn: sa.Connection, name: str, keys: list[str]) -> None:
+            if not (omit and name == DEPENDENCY_GRAPH_LOCK_NAMESPACE):
+                lock_keys(conn, name, keys)
+
+        with holder.begin() as conn:
+            result = conn.execute(
+                sa.text(
+                    "UPDATE keyed_locks SET key = key WHERE tenant_id = :tenant AND namespace = :namespace AND key = :key"
+                ),
+                {
+                    "tenant": "ten_group_key",
+                    "namespace": DEPENDENCY_GRAPH_LOCK_NAMESPACE,
+                    "key": DEPENDENCY_GRAPH_LOCK_KEY,
+                },
+            )
+            assert result.rowcount == 1
+            with (
+                patch.object(scope, "_lock_open_tenant"),
+                patch.object(chunk_exclusive_store, "lock_keys", selective_lock),
+                ThreadPoolExecutor(max_workers=1) as pool,
+            ):
+                future = pool.submit(group.group, "survivor", ["target"])
+                try:
+                    deadline = monotonic() + 5
+                    with observer.connect() as watch:
+                        while monotonic() < deadline:
+                            blocked = watch.execute(
+                                sa.text("""SELECT EXISTS (
+                                SELECT 1 FROM pg_stat_activity w JOIN pg_stat_activity h
+                                ON h.pid = ANY(pg_blocking_pids(w.pid))
+                                WHERE w.application_name = 'group_key_waiter'
+                                AND h.application_name = 'pointer_key_holder')""")
+                            ).scalar_one()
+                            if blocked or future.done():
+                                break
+                            Event().wait(0.02)
+                        else:
+                            pytest.fail("group neither blocked nor completed")
+                    assert blocked is not omit
+                    if omit:
+                        future.result(timeout=5)
+                finally:
+                    conn.commit()
+                future.result(timeout=10)
+        assert stores.work_refs.find_live_holder(_POINTER) == "survivor"
+    finally:
+        holder.dispose()
+        waiter.dispose()
+        observer.dispose()
 
 
 @pytest.mark.parametrize("operation", ["authored", "ingest"])
