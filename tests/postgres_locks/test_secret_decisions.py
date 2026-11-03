@@ -18,7 +18,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositorySecretUnavailable,
 )
-from blizzard.hub.domain.config.secrets import SealedValue
+from blizzard.hub.domain.config.secrets import SealedValue, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     WorkSourceEdit,
@@ -33,6 +33,91 @@ from blizzard.hub.tenancy import TenantId
 from tests.support import scoped_connections
 
 pytestmark = pytest.mark.postgres_lock
+
+
+@pytest.mark.parametrize("kind", ["source", "repository"])
+@pytest.mark.parametrize("omit_lock", [False, True])
+def test_retirement_waits_for_referrer_commit(
+    database_url: str, kind: str, omit_lock: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    options = "-c statement_timeout=8000"
+    holder = sa.create_engine(database_url, connect_args={"application_name": "referrer_holder", "options": options})
+    waiter = sa.create_engine(database_url, connect_args={"application_name": "retirement_waiter", "options": options})
+    observer = sa.create_engine(database_url, connect_args={"options": options}, isolation_level="AUTOCOMMIT")
+    tenant = TenantId("ten_retire_referrer")
+    now = datetime.now(UTC)
+    ctx = ChangeContext("test", Door.API)
+    try:
+        scoped = scoped_connections(holder, tenant)
+        with scoped.founding("found", name="retire-referrer", created_at=now, created_by="test"):
+            pass
+        forge_id = ForgeId("frg_retire_referrer")
+        forge, change = ConfiguredForge.new(
+            "github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), ctx, at=now, forge_id=forge_id
+        )
+        ForgeRecordStore(scoped).create(forge, change=change)
+        create = ConfigChange.of(ctx, RecordKind.SECRET, "gh", 1, ChangeOp.CREATE, (), now)
+        SecretStore(scoped).create(
+            "gh",
+            sealed=SealedValue(key_id="key", ciphertext=b"ciphertext", nonce=b"nonce"),
+            at=now,
+            by="test",
+            change=create,
+        )
+        retire = ConfigChange.of(ctx, RecordKind.SECRET, "gh", 1, ChangeOp.RETIRE, (), now)
+        secrets = SecretStore(scoped_connections(waiter, tenant))
+        if kind == "source":
+            record, change = ConfiguredWorkSource.new(
+                "demo", None, WorkSourceFields("github", "acme/demo", forge_id, False, "gh"), ctx, at=now
+            )
+            ref = RecordRef(RecordKind.WORK_SOURCE, record.work_source_id, "demo")
+        else:
+            record, change = ConfiguredRepository.new(
+                "demo", None, RepositoryFields(forge_id, "acme", "demo", "main", "gh"), ctx, at=now
+            )
+            ref = RecordRef(RecordKind.REPOSITORY, record.repository_id, "demo")
+
+        with ThreadPoolExecutor(max_workers=1) as actors:
+            # The real referrer create body owns the secret row but not tenant admission.
+            with scoped.read("hold_referrer") as conn:
+                if isinstance(record, ConfiguredWorkSource):
+                    work_source_record_store.insert_record(conn, record, change)
+                else:
+                    repository_record_store.insert_record(conn, record, change)
+                if omit_lock:
+                    monkeypatch.setattr(secret_module, "lock_secret_row", lambda *args: None)
+                future = actors.submit(secrets.record_lifecycle, "gh", retired=True, at=now, by="test", change=retire)
+                if omit_lock:
+                    future.result(timeout=5)
+                else:
+                    deadline = monotonic() + 5
+                    with observer.connect() as monitor:
+                        while monotonic() < deadline:
+                            blocked = monitor.execute(
+                                sa.text("""
+                                SELECT EXISTS (SELECT 1 FROM pg_stat_activity w
+                                  JOIN pg_stat_activity h ON h.pid = ANY(pg_blocking_pids(w.pid))
+                                  WHERE w.application_name = 'retirement_waiter'
+                                    AND h.application_name = 'referrer_holder')
+                            """)
+                            ).scalar_one()
+                            if blocked:
+                                break
+                            assert not future.done(), "retirement completed without waiting for the secret row"
+                            Event().wait(0.02)
+                        else:
+                            pytest.fail("retirement did not wait for the referrer")
+                conn.commit()
+            if not omit_lock:
+                with pytest.raises(SecretReferenced) as exc:
+                    future.result(timeout=10)
+                assert ref in exc.value.referrers
+        assert secrets.is_retired("gh") is omit_lock
+        assert SecretReferrersStore(scoped).referrers_of(["gh"]) == {"gh": [ref]}
+    finally:
+        holder.dispose()
+        waiter.dispose()
+        observer.dispose()
 
 
 @pytest.mark.parametrize(
