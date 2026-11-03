@@ -247,7 +247,7 @@ def _chunk_progress(graph_id: str, facts: ChunkFacts, current: str | None = None
         facts=facts,
         names=cast(Any, _Names(_DEV)),
     )
-    return [(node.name, str(node.state)) for node in view._graph_progress(current)]  # pyright: ignore[reportPrivateUsage]
+    return [(node.name, str(node.state)) for node in view._graph_progress(current)]
 
 
 def _transition(epoch: int, src: str, dst: str) -> TransitionFact:

@@ -306,7 +306,7 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
         chunks.dependencies.declare_locked(handle, chunk.chunk_id, "ch_prereq", by="author", at=_T0)
     original = items.withdraw_open
 
-    def fail_after_withdraw(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def fail_after_withdraw(*args, **kwargs):
         original(*args, **kwargs)
         raise RuntimeError("injected failure")
 

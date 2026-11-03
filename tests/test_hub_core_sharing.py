@@ -42,7 +42,7 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     assert hub_editor is not None
 
     assert isinstance(hub_editor, HubWorkSource)
-    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # pyright: ignore[reportPrivateUsage]  # the sharing under test is private wiring
+    assert hub_editor._edits is hub.services.garden_proposal_closure.items
 
 
 def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:

@@ -40,7 +40,7 @@ def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, *, name: str = "nightly") -> dict:  # type: ignore[type-arg]
+def _create_routine(hub: HubHarness, *, name: str = "nightly") -> dict:
     body: dict[str, object] = {
         "name": name,
         "graph_name": "alpha",
