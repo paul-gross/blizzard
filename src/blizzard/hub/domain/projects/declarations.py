@@ -18,14 +18,13 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     EntryOutcome,
-    LinkRecord,
     PlannedPosition,
     PlannedWrite,
-    ProjectRecord,
 )
 from blizzard.hub.domain.config.carry_over import IImportLinks, LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.records import ConfiguredLink, ConfiguredRecord
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import (
     WORK_SOURCE_KIND,
@@ -343,7 +342,9 @@ class _Entry:
         facts = whole_order(
             links, [repository_id for repository_id, _ in ordered], project=project.slug, field=LANDING_ORDER_FIELD
         )
-        if not facts:
+        before = [link.slug for link in in_landing_order(links) if link.position is not None]
+        after = [slug for _, slug in ordered]
+        if not facts or before == after:
             return
         self.positions.extend(
             PlannedPosition(
@@ -351,8 +352,6 @@ class _Entry:
             )
             for fact in facts
         )
-        before = [link.slug for link in in_landing_order(links) if link.position is not None]
-        after = [slug for _, slug in ordered]
         self.outcomes.append(
             EntryOutcome(
                 RecordKind.PROJECT, project.slug, ChangeOp.EDIT, (FieldChange(LANDING_ORDER_FIELD, before, after),)
@@ -483,13 +482,13 @@ class ImportLinks:
         )
 
 
-_project_record_conforms: type[ProjectRecord] = Project
+_project_record_conforms: type[ConfiguredRecord] = Project
 
 
-_source_link_record_conforms: type[LinkRecord] = SourceLink
+_source_link_record_conforms: type[ConfiguredLink] = SourceLink
 
 
-_repository_link_record_conforms: type[LinkRecord] = RepositoryLink
+_repository_link_record_conforms: type[ConfiguredLink] = RepositoryLink
 
 
 _import_links_conforms: type[IImportLinks] = ImportLinks

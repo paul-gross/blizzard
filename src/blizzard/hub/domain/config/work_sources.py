@@ -6,25 +6,22 @@ work source's slug, current or former: the built-in source holds that key."""
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import ClassVar, NewType, Protocol
+from typing import NewType, Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
-    FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
     ChangeContext,
     ChangeOp,
     ConfigChange,
     FieldChange,
     RecordKind,
-    RecordState,
-    Verdict,
 )
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId, NewForge
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
@@ -165,8 +162,6 @@ class ConfiguredWorkSource:
     Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
     or ``None`` when the verb changes nothing and so writes nothing."""
 
-    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
-
     work_source_id: WorkSourceId
     slug: str
     name: str
@@ -205,8 +200,7 @@ class ConfiguredWorkSource:
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        if if_match is not None and if_match != self.revision:
-            raise ConfigRevisionConflict("work source", self.work_source_id, current=self.revision)
+        lifecycle.require_revision(if_match, self.revision, kind="work source", key=self.work_source_id)
 
     def edit(
         self, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
@@ -228,18 +222,18 @@ class ConfiguredWorkSource:
 
     def slug_left_for(self, edited: ConfiguredWorkSource) -> str | None:
         """The slug this record leaves when ``edited`` replaces it — ``None`` when the slug stays."""
-        return self.slug if edited.slug != self.slug else None
+        return lifecycle.slug_left_for(self.slug, edited.slug)
 
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
         """Retire or enable; ``None`` when the record already stands there (a redundant verb writes nothing)."""
         self.require_revision(if_match)
-        op = ChangeOp.RETIRE if retired else ChangeOp.ENABLE
-        if self.TRANSITIONS[RecordState.of(self.retired)][op] is Verdict.NO_OP:
+        op = lifecycle.transition(self.retired, retired)
+        if op is None:
             return None
         moved = replace(self, revision=self.revision + 1, retired=retired)
-        flip = (FieldChange(RETIRED_FIELD, self.retired, retired),)
+        flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, moved._change(ctx, op, flip, at)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
@@ -322,32 +316,22 @@ def _merged_required[T](name: str, current: T, value: T | None | UnsetType) -> T
 def merge_labels(current: ConfiguredWorkSource, edit: WorkSourceEdit) -> tuple[str, str]:
     """The slug and name ``current`` holds once ``edit`` applies; a set one is validated whether or not it differs,
     and ``None`` is refused naming the field."""
-    return (
-        _merged_label("slug", current.slug, edit.slug, WorkSourceSlug.parse),
-        _merged_label("name", current.name, edit.name, WorkSourceName.parse),
+    return lifecycle.merge_labels(
+        current.slug,
+        current.name,
+        edit.slug,
+        edit.name,
+        parse_slug=WorkSourceSlug.parse,
+        parse_name=WorkSourceName.parse,
     )
-
-
-def _merged_label(
-    field: str, held: str, value: str | None | UnsetType, parse: Callable[[str], Slug | DisplayName]
-) -> str:
-    if value is UNSET:
-        return held
-    if value is None:
-        raise ConfigFieldError(field, "must not be null")
-    return parse(value).value
 
 
 def diff(old: ConfiguredWorkSource | None, new: ConfiguredWorkSource) -> tuple[FieldChange, ...]:
     """The fields that differ, by wire name. With no ``old`` (a create), every set field
     is listed against ``None``."""
-    changes: list[FieldChange] = []
-    for name in _DIFF_FIELDS:
-        new_value = _field(new, name)
-        old_value = None if old is None else _field(old, name)
-        if old_value != new_value:
-            changes.append(FieldChange(name, old_value, new_value))
-    return tuple(changes)
+    return lifecycle.field_changes(
+        (name, None if old is None else _field(old, name), _field(new, name)) for name in _DIFF_FIELDS
+    )
 
 
 def _field(record: ConfiguredWorkSource, name: str) -> object:

@@ -250,6 +250,22 @@ def test_an_exported_landing_order_applies_back_writing_nothing(hub: HubHarness,
     assert _facts(hub) == facts
 
 
+def test_export_after_position_move_applies_without_rewriting_positions(hub: HubHarness) -> None:
+    _link_both(hub.client)
+    _ok(hub.client.put("/api/projects/widgets/landing-order", json={"repositories": ["acme-lib", "acme-app"]}))
+    _ok(hub.client.post("/api/projects/widgets/landing-order/position", json={"repository": "acme-app"}))
+    original = _order(hub.client)
+    facts = _facts(hub)
+    document = _ok(hub.client.get("/api/config/export"))
+
+    applied = _ok(_apply(hub.client, document))
+
+    assert original == [("acme-app", 0.0), ("acme-lib", 1.0)]
+    assert _written(applied) == []
+    assert _order(hub.client) == original
+    assert _facts(hub) == facts
+
+
 def test_a_document_links_and_ranks_a_repository_together_and_reports_the_order(hub: HubHarness) -> None:
     document = {
         "version": 1,

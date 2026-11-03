@@ -91,11 +91,16 @@ def test_relinking_a_standing_link_writes_nothing() -> None:
     assert link.relink(_CTX, if_match=None, at=_AT) is None
 
 
-def test_a_stale_revision_is_refused_even_for_a_no_op() -> None:
-    link = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0]
+@pytest.mark.parametrize(
+    "link",
+    [SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0], RepositoryLink.new(_PROJECT, _REPOSITORY, _CTX, at=_AT)[0]],
+    ids=["source", "repository"],
+)
+def test_a_stale_revision_is_refused_even_for_a_no_op(link: SourceLink | RepositoryLink) -> None:
     with pytest.raises(ConfigRevisionConflict) as caught:
         link.relink(_CTX, if_match=4, at=_AT)
     assert caught.value.current == 1
+    assert str(caught.value) == f"{link.LABEL} {link.project_id}/{link.target()} is at revision 1"
 
 
 def test_links_of_one_record_from_two_projects_are_separate_records() -> None:

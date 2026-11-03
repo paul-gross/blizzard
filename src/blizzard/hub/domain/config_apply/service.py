@@ -17,7 +17,6 @@ from blizzard.hub.domain.config.apply import (
     WORK_SOURCES_SECTION,
     ApplyEntryRefused,
     ConfigDeclaration,
-    DeclarableRecord,
     DeclaredReferences,
     EntryOutcome,
     ForgeDeclaration,
@@ -42,6 +41,7 @@ from blizzard.hub.domain.config.forges import (
     IReadForgeRepository,
     PlannedForges,
 )
+from blizzard.hub.domain.config.records import NamedRetirableConfiguredRecord
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IReadRepositoryRecordRepository,
@@ -467,7 +467,7 @@ class ConfigApplication:
         declared_slugs = {d.slug for d in declaration.repositories}
         source_slugs = {d.slug for d in declaration.work_sources}
         retired = self._secrets.retired_names(list(secrets))
-        scopes: dict[tuple[str, str], DeclarableRecord] = {
+        scopes: dict[tuple[str, str], NamedRetirableConfiguredRecord] = {
             (scope.project_id, scope.slug): scope for scope in self._scopes.list_all()
         }
         graph_names: set[str] = set()
@@ -476,7 +476,7 @@ class ConfigApplication:
             assert isinstance(entry, RoutineDeclaration)
             graph_names.add(entry.graph_name)
             names.setdefault(entry.project_id, []).append(entry.name)
-        routines: dict[tuple[str, str], DeclarableRecord] = {
+        routines: dict[tuple[str, str], NamedRetirableConfiguredRecord] = {
             (project_id, name): routine
             for project_id, project_names in names.items()
             for name, routine in self._routines.get_many_by_name(project_id, project_names).items()

@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar, Protocol, Self
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -29,6 +29,11 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, ForgeKindImmutable
+from blizzard.hub.domain.config.records import (
+    ConfiguredRecord,
+    NamedRetirableConfiguredRecord,
+    SluggedRetirableConfiguredRecord,
+)
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
@@ -116,62 +121,6 @@ class ForgeDeclaration:
     forge_id: ForgeId
 
 
-class DeclarableRecord(Protocol):
-    """A configured record of a kind owned outside this package, reconciled by its own verbs. Each verb
-    returns the record to write with its change, or ``None`` when it changes nothing."""
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def revision(self) -> int: ...
-
-    @property
-    def retired(self) -> bool: ...
-
-    def set_retired(
-        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
-    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
-
-
-class ProjectRecord(Protocol):
-    """A project: created or edited, never retired, so it is no :class:`DeclarableRecord`."""
-
-    @property
-    def project_id(self) -> str: ...
-
-    @property
-    def slug(self) -> str: ...
-
-    @property
-    def revision(self) -> int: ...
-
-
-class LinkRecord(Protocol):
-    """A project's link to a work source or a repository: ``target`` is the linked record's id, and a link is unlinked
-    while ``linked`` is false."""
-
-    KIND: ClassVar[RecordKind]
-    LABEL: ClassVar[str]
-
-    @property
-    def project_id(self) -> str: ...
-
-    @property
-    def revision(self) -> int: ...
-
-    @property
-    def linked(self) -> bool: ...
-
-    def target(self) -> str: ...
-
-
-#: A record of any kind an apply writes, as :class:`PlannedWrite` carries it.
-WrittenRecord = (
-    ConfiguredForge | ConfiguredWorkSource | ConfiguredRepository | DeclarableRecord | ProjectRecord | LinkRecord
-)
-
-
 @domain_model
 @dataclass(frozen=True)
 class PlannedForge:
@@ -211,21 +160,21 @@ class RecordDeclaration(Protocol):
         """The ``(project id, name)`` that tells the entry's record apart from every other of its kind."""
         ...
 
-    def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
+    def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
         """:class:`ConfigFieldError` naming the field whose reference does not resolve."""
         ...
 
-    def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[DeclarableRecord, ConfigChange]: ...
+    def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[NamedRetirableConfiguredRecord, ConfigChange]: ...
 
     def edit_record(
-        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
-    ) -> tuple[DeclarableRecord, ConfigChange] | None:
+        self, record: NamedRetirableConfiguredRecord, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[NamedRetirableConfiguredRecord, ConfigChange] | None:
         """Apply the entry's sparse edit to the stored ``record``."""
         ...
 
     def settle(
-        self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
-    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
+        self, record: NamedRetirableConfiguredRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[NamedRetirableConfiguredRecord, ConfigChange] | None: ...
 
 
 @domain_model
@@ -236,7 +185,7 @@ class PlannedWrite:
 
     section: str
     index: int
-    record: WrittenRecord
+    record: ConfiguredRecord
     from_revision: int | None
     change: ConfigChange
 
@@ -309,9 +258,11 @@ class StoredConfig:
     #: For each declared work-source slug no work source holds, the work source that left it.
     former_work_sources: Mapping[str, ConfiguredWorkSource] = field(default_factory=dict[str, ConfiguredWorkSource])
     #: Stored scopes and routines, by their entries' ``key``.
-    scopes: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict[tuple[str, str], DeclarableRecord])
-    routines: Mapping[tuple[str, str], DeclarableRecord] = field(
-        default_factory=dict[tuple[str, str], DeclarableRecord]
+    scopes: Mapping[tuple[str, str], NamedRetirableConfiguredRecord] = field(
+        default_factory=dict[tuple[str, str], NamedRetirableConfiguredRecord]
+    )
+    routines: Mapping[tuple[str, str], NamedRetirableConfiguredRecord] = field(
+        default_factory=dict[tuple[str, str], NamedRetirableConfiguredRecord]
     )
     references: DeclaredReferences = DeclaredReferences()
 
@@ -363,7 +314,7 @@ class _Accumulator:
     outcomes: list[EntryOutcome] = field(default_factory=list[EntryOutcome])
 
 
-class _Section[K: Hashable, D, R: WrittenRecord](Protocol):
+class _Section[K: Hashable, D, R: ConfiguredRecord](Protocol):
     """One kind's part of the reconcile loop: the entries the document declares for it and the verbs that decide
     each. Every verb returns the record to write with its change, or ``None`` when it changes nothing."""
 
@@ -402,29 +353,12 @@ class _Section[K: Hashable, D, R: WrittenRecord](Protocol):
         ...
 
 
-class _SlugRecord(Protocol):
-    """A configured record handled by its slug."""
-
-    @property
-    def slug(self) -> str: ...
-
-    @property
-    def revision(self) -> int: ...
-
-    @property
-    def retired(self) -> bool: ...
-
-    def set_retired(
-        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
-    ) -> tuple[Self, ConfigChange] | None: ...
-
-
 class _SlugEntry(Protocol):
     @property
     def slug(self) -> str: ...
 
 
-class _SlugSection[D: _SlugEntry, R: _SlugRecord]:
+class _SlugSection[D: _SlugEntry, R: SluggedRetirableConfiguredRecord]:
     """What a kind keyed by slug and declared by this package shares: the entry's slug is its key, its label and
     its record's handle, a retired record is re-enabled, and nothing settles after a create or edit."""
 
@@ -532,28 +466,32 @@ class _DeclaredRecordSection:
     def label(self, entry: RecordDeclaration) -> str:
         return entry.name
 
-    def handle(self, record: DeclarableRecord) -> str:
+    def handle(self, record: NamedRetirableConfiguredRecord) -> str:
         return record.name
 
-    def guard(self, entry: RecordDeclaration, record: DeclarableRecord | None) -> None:
+    def guard(self, entry: RecordDeclaration, record: NamedRetirableConfiguredRecord | None) -> None:
         entry.check(self._stored.references, record)
 
-    def create(self, entry: RecordDeclaration) -> tuple[DeclarableRecord, ConfigChange]:
+    def create(self, entry: RecordDeclaration) -> tuple[NamedRetirableConfiguredRecord, ConfigChange]:
         return entry.create(self._ctx, at=self._at)
 
-    def enable(self, record: DeclarableRecord) -> tuple[DeclarableRecord, ConfigChange] | None:
+    def enable(
+        self, record: NamedRetirableConfiguredRecord
+    ) -> tuple[NamedRetirableConfiguredRecord, ConfigChange] | None:
         return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
 
-    def edit(self, entry: RecordDeclaration, record: DeclarableRecord) -> tuple[DeclarableRecord, ConfigChange] | None:
+    def edit(
+        self, entry: RecordDeclaration, record: NamedRetirableConfiguredRecord
+    ) -> tuple[NamedRetirableConfiguredRecord, ConfigChange] | None:
         return entry.edit_record(record, self._ctx, at=self._at)
 
     def settle(
-        self, entry: RecordDeclaration, record: DeclarableRecord
-    ) -> tuple[DeclarableRecord, ConfigChange] | None:
+        self, entry: RecordDeclaration, record: NamedRetirableConfiguredRecord
+    ) -> tuple[NamedRetirableConfiguredRecord, ConfigChange] | None:
         return entry.settle(record, self._stored.references, self._ctx, at=self._at)
 
 
-def _reconcile_section[K: Hashable, D, R: WrittenRecord](
+def _reconcile_section[K: Hashable, D, R: ConfiguredRecord](
     kind: _Section[K, D, R], stored: Mapping[K, R], plan: _Accumulator
 ) -> None:
     seen: set[K] = set()
@@ -621,7 +559,7 @@ def require_declarable_forge(
         raise ForgeKindImmutable("kind", f"forge {slug} is a {record.kind} forge; kind is immutable")
 
 
-def _settle[K: Hashable, D, R: WrittenRecord](
+def _settle[K: Hashable, D, R: ConfiguredRecord](
     kind: _Section[K, D, R], index: int, entry: D, record: R, plan: _Accumulator
 ) -> bool:
     """Plan the write that settles a record after its create or edit; ``False`` when it needs none."""
@@ -633,7 +571,7 @@ def _settle[K: Hashable, D, R: WrittenRecord](
     return True
 
 
-def _write[K: Hashable, D, R: WrittenRecord](
+def _write[K: Hashable, D, R: ConfiguredRecord](
     kind: _Section[K, D, R], index: int, record: R, from_revision: int | None, change: ConfigChange, plan: _Accumulator
 ) -> None:
     plan.writes.append(PlannedWrite(kind.section, index, record, from_revision, change))

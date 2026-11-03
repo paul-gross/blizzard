@@ -500,6 +500,24 @@ def _routine(**overrides: Unpack[_RoutineFields]) -> Routine:
     )
 
 
+def test_scope_set_diff_is_sorted_deduplicated_and_attributed_even_when_retired() -> None:
+    routine = _routine(revision=3, retired=True)
+    assert routine.with_scopes(["z", "a", "a"], ["a", "z"], _CTX, if_match=3, at=_T0) is None
+    with pytest.raises(ConfigRevisionConflict, match="routine nightly is at revision 3"):
+        routine.with_scopes(["a"], ["a"], _CTX, if_match=2, at=_T0)
+    result = routine.with_scopes(["z", "a", "a"], ["b", "a", "b"], _CTX, if_match=3, at=_T0)
+    assert result is not None
+    edited, change = result
+    assert (edited.revision, edited.retired) == (4, True)
+    assert (change.record_kind, change.record_key, change.project_id, change.op) == (
+        RecordKind.ROUTINE,
+        "nightly",
+        _PROJECT,
+        ChangeOp.EDIT,
+    )
+    assert change.diff == (FieldChange("scopes", ["a", "z"], ["a", "b"]),)
+
+
 class TestRoutineScopeMembership:
     """``RoutineScopeMembership`` (unit tier): link/unlink are routine edits of ``scopes``,
     a no-op writes nothing, and unlink refuses a routine's own default scope."""
