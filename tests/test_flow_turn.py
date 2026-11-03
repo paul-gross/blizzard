@@ -1,8 +1,8 @@
-"""A turn's task (component tier), driven through real ticks and real ``ActionLoop`` passes on a hub whose pass bound
-is short: a pass that never returns to an ``await`` is cut off and routes nothing, three in a row go to a person, a
-build that raises or hangs ends its turn, an end that fails to write is swept, a lever mid-turn waits for the turn's
-end, and ground moved under a submission supersedes it. A visit lands by the terms its first turn took, keeps the
-moment that turn started, and a pass that waits records a ``pending`` wait."""
+"""A turn's task (component tier), driven through real ticks and real ``ActionLoop`` passes: a pass that never returns
+to an ``await`` is cut off and routes nothing, three in a row go to a person, a build that raises or hangs ends its
+turn, an end that fails to write is swept, a lever mid-turn waits for the turn's end, and ground moved under a
+submission supersedes it. A visit keeps its first turn's terms and start, and a pass that waits records ``pending``.
+Hubs take a generous wall-clock pass bound; only a case whose subject is the pass deadline opts into the short one."""
 
 from __future__ import annotations
 
@@ -48,8 +48,10 @@ from tests.support import (
 
 pytestmark = pytest.mark.component
 
-#: The pass bound and grace every hub here takes: a pass is let go 0.6s after it is handed over.
-_BOUND = 0.3
+#: The pass bound a hub here takes by default: long enough that no ordinary pass, however loaded the machine, meets it.
+_BOUND = 60.0
+#: The bound a deadline-subject case opts into; with the grace, its pass is let go 0.6s after it is handed over.
+_SHORT_BOUND = 0.3
 _GRACE = timedelta(seconds=0.3)
 _REPO = "acme/widget"
 
@@ -241,7 +243,8 @@ def world(tmp_path: Path) -> _World:
 # --- a turn that cannot end -------------------------------------------------------------------------------------
 
 
-def test_a_pass_blocked_past_its_deadline_is_cut_off_routing_nothing(world: _World) -> None:
+def test_a_pass_blocked_past_its_deadline_is_cut_off_routing_nothing(tmp_path: Path) -> None:
+    world = _World(tmp_path, pass_seconds=_SHORT_BOUND)
     chunk_id = world.at_step("test.block", ' \n    with: {seconds: ["1.5"]}')
 
     world.tick()
@@ -253,7 +256,8 @@ def test_a_pass_blocked_past_its_deadline_is_cut_off_routing_nothing(world: _Wor
     assert json.loads(overran.detail)["bound_seconds"] == pytest.approx(0.6)
 
 
-def test_three_cut_offs_in_a_row_escalate_the_fourth_turn_one_epoch_up(world: _World) -> None:
+def test_three_cut_offs_in_a_row_escalate_the_fourth_turn_one_epoch_up(tmp_path: Path) -> None:
+    world = _World(tmp_path, pass_seconds=_SHORT_BOUND)
     chunk_id = world.at_step("test.block", ' \n    with: {seconds: ["0.8"]}')
 
     for _ in range(4):
@@ -267,7 +271,8 @@ def test_three_cut_offs_in_a_row_escalate_the_fourth_turn_one_epoch_up(world: _W
     assert (cause, epoch) == ("hub-action-stuck", 2)
 
 
-def test_an_interrupted_turn_neither_counts_toward_the_run_nor_resets_it(world: _World) -> None:
+def test_an_interrupted_turn_neither_counts_toward_the_run_nor_resets_it(tmp_path: Path) -> None:
+    world = _World(tmp_path, pass_seconds=_SHORT_BOUND)
     chunk_id = world.at_step("test.block", ' \n    with: {seconds: ["0.8"]}')
     world.tick()
     world.tick()
@@ -292,7 +297,8 @@ def test_an_interrupted_turn_neither_counts_toward_the_run_nor_resets_it(world: 
     assert world.outcomes(chunk_id) == ["cut-off", "cut-off", "interrupted", "cut-off", "escalated"]
 
 
-def test_an_effect_handed_over_after_the_deadline_raises_into_the_pass_and_writes_nothing(world: _World) -> None:
+def test_an_effect_handed_over_after_the_deadline_raises_into_the_pass_and_writes_nothing(tmp_path: Path) -> None:
+    world = _World(tmp_path, pass_seconds=_SHORT_BOUND)
     chunk_id = world.at_step("test.block-then-mark")
 
     world.tick()
@@ -303,8 +309,9 @@ def test_an_effect_handed_over_after_the_deadline_raises_into_the_pass_and_write
 
 
 def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
-    world: _World, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    world = _World(tmp_path, pass_seconds=_SHORT_BOUND)
     chunk_id = world.at_step("test.mark")
     write = TurnRunner.write_effect
     seen: list[bool] = []
@@ -442,10 +449,7 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
 # --- levers ---------------------------------------------------------------------------------------------------------
 
 
-def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_the_turns_end(tmp_path: Path) -> None:
-    # The hook does HTTP and store work inside the pass; the 0.3s bound the other cases share would cut a slow
-    # machine's pass off before the hook records what it saw, so this case's pass is not time-bounded in practice.
-    world = _World(tmp_path, pass_seconds=60.0)
+def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_the_turns_end(world: _World) -> None:
     chunks = {world.at_step("test.hooked"), world.at_step("test.hooked")}
     seen: dict[str, Any] = {}
 
