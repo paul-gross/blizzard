@@ -139,6 +139,14 @@ def test_baseline_participants_contend_on_the_same_key(database_url, monkeypatch
                     assert result.finding_set_id == "set_new"
             else:
                 _wait_for_key(observer, future)
+                if actor == "delivery":
+                    # A baseline waiter must not hold the chunk row: a routine run can
+                    # hold the baseline while waiting for queue's chunk roster.
+                    with observer.connect() as probe:
+                        probe.exec_driver_sql("SET lock_timeout = '1s'")
+                        probe.execute(
+                            scope.update(s.chunks).where(s.chunks.c.chunk_id == "chunk").values(chunk_id="chunk")
+                        )
             conn.commit()
             if not omit_lock:
                 result = future.result(timeout=10)

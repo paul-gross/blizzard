@@ -68,10 +68,10 @@ class GardenDeliveryStore:
 
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
-            lock_chunk_row(conn, plan.chunk_id)
             lock_finding_set_baselines(
                 conn, [(plan.run.project_id, plan.run.routine_name, d.finding_set.scope_slug) for d in plan.deltas]
             )
+            lock_chunk_row(conn, plan.chunk_id)
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED
