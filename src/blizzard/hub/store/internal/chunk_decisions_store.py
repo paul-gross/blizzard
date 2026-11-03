@@ -26,6 +26,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, is_landing_marker, next_artifact_seq
@@ -33,7 +34,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_termi
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -50,8 +51,8 @@ class ChunkDecisionsStore:
         self._store = store
         self._clock = clock
 
-    def get_decision(self, decision_id: str) -> GateDecision | None:
-        with self._store.read("get_decision") as conn:
+    def get_decision(self, decision_id: str, *, transaction: Transaction | None = None) -> GateDecision | None:
+        with connection_in(self._store, transaction, "get_decision") as conn:
             row = conn.execute(
                 self._store.select(s.decisions).where(s.decisions.c.decision_id == decision_id)
             ).one_or_none()
@@ -368,26 +369,31 @@ class ChunkDecisionsStore:
         at: datetime,
         overrode_red_checks: bool = False,
         note: str | None = None,
+        transaction: LockedTransaction,
     ) -> bool:
-        with self._store.write("record_decision_resolution") as conn:
-            existing = conn.execute(
-                self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
-                    s.decision_resolutions.c.decision_id == decision_id
-                )
-            ).one_or_none()
-            if existing is not None:
-                return False  # first-write-wins: the loser is told who won
-            conn.execute(
-                self._store.insert(s.decision_resolutions).values(
-                    decision_id=decision_id,
-                    choice=choice,
-                    resolved_by=resolved_by,
-                    resolved_at=at,
-                    overrode_red_checks=overrode_red_checks,
-                    note=note,
-                )
+        conn = connection_for(self._store, transaction)
+        chunk_id = conn.execute(
+            self._store.select(s.decisions, s.decisions.c.chunk_id).where(s.decisions.c.decision_id == decision_id)
+        ).scalar_one()
+        connection_for(self._store, transaction, chunk=chunk_id)
+        existing = conn.execute(
+            self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
+                s.decision_resolutions.c.decision_id == decision_id
             )
-            return True
+        ).one_or_none()
+        if existing is not None:
+            return False  # first-write-wins: the loser is told who won
+        conn.execute(
+            self._store.insert(s.decision_resolutions).values(
+                decision_id=decision_id,
+                choice=choice,
+                resolved_by=resolved_by,
+                resolved_at=at,
+                overrode_red_checks=overrode_red_checks,
+                note=note,
+            )
+        )
+        return True
 
     def _decision_row(self, conn: Connection, row: Row[Any]) -> GateDecision:
         resolution = conn.execute(

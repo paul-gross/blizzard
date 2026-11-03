@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -37,8 +38,9 @@ class LiveDecisionStatus:
 class IReadChunkDecisionsRepository(Protocol):
     """Read-only chunk-decisions access."""
 
-    def get_decision(self, decision_id: str) -> GateDecision | None:
-        """One gate decision in full, with derived resolution/transition state."""
+    def get_decision(self, decision_id: str, *, transaction: Transaction | None = None) -> GateDecision | None:
+        """One gate decision in full, with derived resolution/transition state — read in
+        ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> GateDecision | None:
@@ -128,8 +130,10 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         at: datetime,
         overrode_red_checks: bool = False,
         note: str | None = None,
+        transaction: LockedTransaction,
     ) -> bool:
-        """First-write-wins CAS: record the person's choice — and whether it took a
-        ``requires_checks`` choice over a red check — or return ``False`` if the
-        decision was already resolved (the loser is told who won)."""
+        """First-write-wins: record the person's choice — and whether it took a
+        ``requires_checks`` choice over a red check — in ``transaction``, a unit that locks the
+        decision's chunk, where a resolution is decided (``bzh:transaction-participation``); or
+        return ``False`` if the decision was already resolved (the loser is told who won)."""
         ...
