@@ -152,11 +152,11 @@ nodes:
 
 
 class _World:
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, *, pass_seconds: float = _BOUND) -> None:
         self.hooked = _Hooked()
         actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.hooked, _BlockThenMark(), _Mark()])
         self.hub: HubHarness = build_hub(
-            tmp_path, actions=actions, action_pass_seconds=_BOUND, action_pass_grace=_GRACE
+            tmp_path, actions=actions, action_pass_seconds=pass_seconds, action_pass_grace=_GRACE
         )
         self.minted = 0
 
@@ -442,7 +442,10 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
 # --- levers ---------------------------------------------------------------------------------------------------------
 
 
-def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_the_turns_end(world: _World) -> None:
+def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_the_turns_end(tmp_path: Path) -> None:
+    # The hook does HTTP and store work inside the pass; the 0.3s bound the other cases share would cut a slow
+    # machine's pass off before the hook records what it saw, so this case's pass is not time-bounded in practice.
+    world = _World(tmp_path, pass_seconds=60.0)
     chunks = {world.at_step("test.hooked"), world.at_step("test.hooked")}
     seen: dict[str, Any] = {}
 

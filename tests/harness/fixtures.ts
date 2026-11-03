@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { type APIRequestContext, expect, mergeTests } from '@playwright/test';
 import { loginThroughCli } from './login';
 import { type People, type Person, peopleFactory } from './people';
@@ -30,6 +31,7 @@ import { uiWorld } from './ui';
 import type { OtlpSink } from './otlp-sink';
 import { mergeHostProfile, mergeProfile } from './profiles';
 import { startCollector, type Collector } from './collector';
+import { withSecondForge } from './second-forge';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -61,6 +63,8 @@ interface Fixtures {
   fleet: (name: string, options?: RunnerOptions) => Promise<FleetClient>;
   /** The hub's mock forge, and reads of its bare repositories, which `owner/name` names. */
   forge: ForgeApi & OriginReads;
+  /** A separate, test-owned forge with its own bare origins. */
+  secondForge: ForgeApi & OriginReads & { pid: number };
   events: Events;
   hubLog: HubLog;
   /**
@@ -224,6 +228,14 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
   forge: async ({ testHub, ledger }, use, testInfo) => {
     const api = forgeApi({ context: testHub.context, testInfo, url: testHub.coordinates.forgeUrl, ledger });
     await use({ ...api, ...originReads(testHub.coordinates.originsPath, daemonEnv(), TESTS_ROOT) });
+  },
+
+  secondForge: async ({ testHub, ledger }, use, testInfo) => {
+    const dir = testInfo.outputPath('second-forge');
+    await withSecondForge(dir, async (daemon) => {
+      const api = forgeApi({ context: testHub.context, testInfo, url: daemon.url, ledger });
+      await use({ ...api, ...originReads(path.join(dir, 'origins'), daemonEnv(), TESTS_ROOT), pid: daemon.pid });
+    });
   },
 
   openedSubscriptions: async ({}, use) => {

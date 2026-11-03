@@ -90,3 +90,19 @@ def test_count_landed_since_is_zero_with_no_landings(tmp_path: Path) -> None:
     delivery = _delivery(tmp_path)
 
     assert delivery.count_landed_since("blizzard", _NOW) == 0
+
+
+def test_landing_history_pages_in_write_order_not_repo_or_timestamp(tmp_path: Path) -> None:
+    delivery = _delivery(tmp_path)
+    for chunk, repo, at in [("ch_1", "z", _NOW), ("ch_2", "other", _NOW), ("ch_1", "a", _NOW - timedelta(days=1))]:
+        delivery.record_delivery_repo_landed(
+            chunk, repo=repo, commit_hash=repo + "-sha", repository_id=None, at=at, close_decision=_NO_REFS
+        )
+    first = delivery.landing_facts("ch_1", after=0, limit=1)
+    second = delivery.landing_facts("ch_1", after=first[0].sequence, limit=1)
+    assert [(f.repo, f.commit_hash, f.landed_at) for f in first + second] == [
+        ("z", "z-sha", _NOW),
+        ("a", "a-sha", _NOW - timedelta(days=1)),
+    ]
+    assert second[0].sequence > first[0].sequence
+    assert delivery.landing_facts("ch_1", after=second[0].sequence, limit=1) == []

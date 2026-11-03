@@ -1007,7 +1007,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.",
+        "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp;\n``produced_at`` is the stored production time, including the time used for park expiry.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -1077,6 +1077,17 @@
             "title": "Node Name",
             "type": "string"
           },
+          "produced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Produced At"
+          },
           "recorded_at": {
             "anyOf": [
               {
@@ -1108,6 +1119,7 @@
           "node_name",
           "epoch",
           "recorded_at",
+          "produced_at",
           "content",
           "repo",
           "branch_name",
@@ -1508,6 +1520,49 @@
           "rework"
         ],
         "title": "BounceView",
+        "type": "object"
+      },
+      "CapturedLandingTermsView": {
+        "description": "Repository terms captured by the submission's first turn.",
+        "properties": {
+          "landing_policy": {
+            "title": "Landing Policy",
+            "type": "string"
+          },
+          "landing_position": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Position"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "landing_policy",
+          "park_timeout_hours",
+          "landing_position"
+        ],
+        "title": "CapturedLandingTermsView",
         "type": "object"
       },
       "CheckResult": {
@@ -3734,6 +3789,192 @@
           "token"
         ],
         "title": "CliTokenResponse",
+        "type": "object"
+      },
+      "CloseAttemptView": {
+        "properties": {
+          "attempted_at": {
+            "format": "date-time",
+            "title": "Attempted At",
+            "type": "string"
+          },
+          "intent_id": {
+            "title": "Intent Id",
+            "type": "integer"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "intent_id",
+          "attempted_at",
+          "outcome",
+          "resume_at"
+        ],
+        "title": "CloseAttemptView",
+        "type": "object"
+      },
+      "CloseClosureView": {
+        "properties": {
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "source",
+          "ref",
+          "outcome",
+          "recorded_at"
+        ],
+        "title": "CloseClosureView",
+        "type": "object"
+      },
+      "CloseDiagnostic": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/CloseAttemptView"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "closures": {
+            "items": {
+              "$ref": "#/components/schemas/CloseClosureView"
+            },
+            "title": "Closures",
+            "type": "array"
+          },
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/CloseIntentView"
+            },
+            "title": "Intents",
+            "type": "array"
+          },
+          "next_attempt_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt Cursor"
+          },
+          "next_closure_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Closure Cursor"
+          },
+          "next_intent_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Intent Cursor"
+          }
+        },
+        "required": [
+          "intents",
+          "next_intent_cursor",
+          "closures",
+          "next_closure_cursor",
+          "attempts",
+          "next_attempt_cursor"
+        ],
+        "title": "CloseDiagnostic",
+        "type": "object"
+      },
+      "CloseIntentView": {
+        "properties": {
+          "enqueued_at": {
+            "format": "date-time",
+            "title": "Enqueued At",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "source",
+          "ref",
+          "enqueued_at",
+          "retired_at"
+        ],
+        "title": "CloseIntentView",
         "type": "object"
       },
       "CompletionSubmission": {
@@ -6732,6 +6973,13 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flow Ids",
+            "type": "array"
+          },
           "generation": {
             "title": "Generation",
             "type": "integer"
@@ -6747,6 +6995,13 @@
           "submitted_at": {
             "title": "Submitted At",
             "type": "string"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/CapturedLandingTermsView"
+            },
+            "title": "Terms",
+            "type": "array"
           }
         },
         "required": [
@@ -6756,7 +7011,9 @@
           "generation",
           "arrival",
           "submitted_at",
-          "closure"
+          "closure",
+          "flow_ids",
+          "terms"
         ],
         "title": "FlowSubmissionView",
         "type": "object"
@@ -10062,6 +10319,63 @@
           "url"
         ],
         "title": "LandedRepoView",
+        "type": "object"
+      },
+      "LandingFactView": {
+        "properties": {
+          "commit_hash": {
+            "title": "Commit Hash",
+            "type": "string"
+          },
+          "landed_at": {
+            "format": "date-time",
+            "title": "Landed At",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "repo",
+          "commit_hash",
+          "landed_at"
+        ],
+        "title": "LandingFactView",
+        "type": "object"
+      },
+      "LandingFactsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LandingFactView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "LandingFactsPage",
         "type": "object"
       },
       "LandingOrderRequest": {
@@ -16117,6 +16431,78 @@
           "source_links"
         ],
         "title": "SourceLinksView",
+        "type": "object"
+      },
+      "SubmissionTurnView": {
+        "description": "A turn, open while its end and outcome are null.",
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "started_at",
+          "ended_at",
+          "outcome"
+        ],
+        "title": "SubmissionTurnView",
+        "type": "object"
+      },
+      "SubmissionTurnsPage": {
+        "description": "A submission's turns in descending turn ID order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionTurnView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "SubmissionTurnsPage",
         "type": "object"
       },
       "SubmittedArtifact": {
@@ -23260,6 +23646,111 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/close-diagnostic": {
+      "get": {
+        "description": "Page close evidence independently in durable write order; never return failure details.",
+        "operationId": "close_diagnostic_api_chunks__chunk_id__close_diagnostic_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "intent_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Intent Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "closure_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Closure Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt_cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Attempt Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt_intent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt Intent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloseDiagnostic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Diagnostic",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/complete": {
       "post": {
         "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,\ncloses its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
@@ -23565,6 +24056,86 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns": {
+      "get": {
+        "description": "Turns of one submission, newest ID first; includes turns holding no flows.",
+        "operationId": "list_submission_turns_api_chunks__chunk_id__flow_submissions__submission_id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "title": "Submission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionTurnsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Submission Turns",
+        "tags": [
+          "flows"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
         "deprecated": true,
@@ -23757,6 +24328,72 @@
           }
         },
         "summary": "Record Hub Marker",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/landing-facts": {
+      "get": {
+        "description": "Page durable repository landings in write order.",
+        "operationId": "landing_facts_api_chunks__chunk_id__landing_facts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandingFactsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Landing Facts",
         "tags": [
           "chunks"
         ]

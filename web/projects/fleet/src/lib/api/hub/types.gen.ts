@@ -660,7 +660,8 @@ export type ArtifactKind = typeof ArtifactKind[keyof typeof ArtifactKind];
  * One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
  * append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
  * verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
- * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.
+ * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp;
+ * ``produced_at`` is the stored production time, including the time used for park expiry.
  */
 export type ArtifactView = {
     /**
@@ -700,6 +701,10 @@ export type ArtifactView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Produced At
+     */
+    produced_at: string | null;
     /**
      * Recorded At
      */
@@ -970,6 +975,30 @@ export type BounceView = {
      * Withdrawn
      */
     withdrawn: boolean;
+};
+
+/**
+ * CapturedLandingTermsView
+ *
+ * Repository terms captured by the submission's first turn.
+ */
+export type CapturedLandingTermsView = {
+    /**
+     * Landing Policy
+     */
+    landing_policy: string;
+    /**
+     * Landing Position
+     */
+    landing_position: number | null;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours: number | null;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
 };
 
 /**
@@ -2188,6 +2217,114 @@ export type CliTokenResponse = {
      * Token
      */
     token: string;
+};
+
+/**
+ * CloseAttemptView
+ */
+export type CloseAttemptView = {
+    /**
+     * Attempted At
+     */
+    attempted_at: string;
+    /**
+     * Intent Id
+     */
+    intent_id: number;
+    /**
+     * Outcome
+     */
+    outcome: string;
+    /**
+     * Resume At
+     */
+    resume_at: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+};
+
+/**
+ * CloseClosureView
+ */
+export type CloseClosureView = {
+    /**
+     * Outcome
+     */
+    outcome: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
+ * CloseDiagnostic
+ */
+export type CloseDiagnostic = {
+    /**
+     * Attempts
+     */
+    attempts: Array<CloseAttemptView>;
+    /**
+     * Closures
+     */
+    closures: Array<CloseClosureView>;
+    /**
+     * Intents
+     */
+    intents: Array<CloseIntentView>;
+    /**
+     * Next Attempt Cursor
+     */
+    next_attempt_cursor: number | null;
+    /**
+     * Next Closure Cursor
+     */
+    next_closure_cursor: number | null;
+    /**
+     * Next Intent Cursor
+     */
+    next_intent_cursor: number | null;
+};
+
+/**
+ * CloseIntentView
+ */
+export type CloseIntentView = {
+    /**
+     * Enqueued At
+     */
+    enqueued_at: string;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Retired At
+     */
+    retired_at: string | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Source
+     */
+    source: string;
 };
 
 /**
@@ -3994,6 +4131,10 @@ export type FlowSubmissionView = {
      */
     epoch: number;
     /**
+     * Flow Ids
+     */
+    flow_ids: Array<string>;
+    /**
      * Generation
      */
     generation: number;
@@ -4009,6 +4150,10 @@ export type FlowSubmissionView = {
      * Submitted At
      */
     submitted_at: string;
+    /**
+     * Terms
+     */
+    terms: Array<CapturedLandingTermsView>;
 };
 
 /**
@@ -6102,6 +6247,42 @@ export type LandedRepoView = {
      * Url
      */
     url: string | null;
+};
+
+/**
+ * LandingFactView
+ */
+export type LandingFactView = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Landed At
+     */
+    landed_at: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Sequence
+     */
+    sequence: number;
+};
+
+/**
+ * LandingFactsPage
+ */
+export type LandingFactsPage = {
+    /**
+     * Items
+     */
+    items: Array<LandingFactView>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: number | null;
 };
 
 /**
@@ -9834,6 +10015,46 @@ export type SourceLinksView = {
 };
 
 /**
+ * SubmissionTurnView
+ *
+ * A turn, open while its end and outcome are null.
+ */
+export type SubmissionTurnView = {
+    /**
+     * Ended At
+     */
+    ended_at: string | null;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * SubmissionTurnsPage
+ *
+ * A submission's turns in descending turn ID order.
+ */
+export type SubmissionTurnsPage = {
+    /**
+     * Items
+     */
+    items: Array<SubmissionTurnView>;
+    /**
+     * Next Before
+     */
+    next_before: string | null;
+};
+
+/**
  * SubmittedArtifact
  *
  * An artifact committed atomically with the completion.
@@ -13354,6 +13575,57 @@ export type PatchChunkApiChunksChunkIdPatchResponses = {
 
 export type PatchChunkApiChunksChunkIdPatchResponse = PatchChunkApiChunksChunkIdPatchResponses[keyof PatchChunkApiChunksChunkIdPatchResponses];
 
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        /**
+         * Intent Cursor
+         */
+        intent_cursor?: number;
+        /**
+         * Closure Cursor
+         */
+        closure_cursor?: number;
+        /**
+         * Attempt Cursor
+         */
+        attempt_cursor?: number;
+        /**
+         * Attempt Intent Id
+         */
+        attempt_intent_id?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/close-diagnostic';
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetError = CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors[keyof CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors];
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CloseDiagnostic;
+};
+
+export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponse = CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses[keyof CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetResponses];
+
 export type CompleteChunkApiChunksChunkIdCompletePostData = {
     body: ChunkCompleteRequest;
     path: {
@@ -13537,6 +13809,49 @@ export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses = {
 
 export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponse = ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses[keyof ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses];
 
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Submission Id
+         */
+        submission_id: string;
+    };
+    query?: {
+        /**
+         * Before
+         */
+        before?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns';
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetError = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors];
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SubmissionTurnsPage;
+};
+
+export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponse = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses];
+
 export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData = {
     body: GardenDeliveryRequest;
     path: {
@@ -13644,6 +13959,45 @@ export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
 };
 
 export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/chunks/{chunk_id}/landing-facts';
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetError = LandingFactsApiChunksChunkIdLandingFactsGetErrors[keyof LandingFactsApiChunksChunkIdLandingFactsGetErrors];
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LandingFactsPage;
+};
+
+export type LandingFactsApiChunksChunkIdLandingFactsGetResponse = LandingFactsApiChunksChunkIdLandingFactsGetResponses[keyof LandingFactsApiChunksChunkIdLandingFactsGetResponses];
 
 export type PauseChunkApiChunksChunkIdPausePostData = {
     body: ChunkPauseRequest;

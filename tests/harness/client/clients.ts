@@ -15,7 +15,21 @@ export type TenantSweep = (typeof TENANT_SWEEPS)[number];
 export const ALL_SWEEPS = [...TENANT_SWEEPS, 'tenant_teardown', 'trace_export', 'egress'] as const;
 export type SweepName = (typeof ALL_SWEEPS)[number];
 
+export interface FlowStep {
+  now: string;
+  reconciled: number;
+  skipped: number;
+  failed: number;
+  submitted: number;
+  closed: number;
+  interrupted: number;
+  started: number;
+  noticed: number;
+}
+
 export interface HubApi extends Verbs {
+  flowStep(): Promise<FlowStep>;
+  flowAdvance(seconds: number): Promise<{ now: string }>;
   /**
    * Runs one pass of a sweep over the test's tenant and returns once it has finished, so a test acts on the sweep's
    * outcome rather than a timer. Every answer but a `completed` pass fails the test, naming the sweep, the status, and
@@ -59,6 +73,18 @@ export function hubApi(options: {
   };
   return {
     ...verbs(engine, options.narrow),
+    async flowStep(): Promise<FlowStep> {
+      requireFreshHub(options.level, 'flowStep()');
+      const answer = await send(engine, 'POST', '/api/admin/test-flow/step', {}, false);
+      if (!answer.ok) throw new Error(`flow step answered ${answer.status}: ${JSON.stringify(answer.body)}`);
+      return answer.body as unknown as FlowStep;
+    },
+    async flowAdvance(seconds: number): Promise<{ now: string }> {
+      requireFreshHub(options.level, 'flowAdvance()');
+      const answer = await send(engine, 'POST', '/api/admin/test-flow/advance', { data: { seconds } }, false);
+      if (!answer.ok) throw new Error(`flow advance answered ${answer.status}: ${JSON.stringify(answer.body)}`);
+      return answer.body as { now: string };
+    },
     async sweep(name: SweepName, sweepOptions?: { allTenants: true }): Promise<SweepPassResponse> {
       const allTenants = sweepOptions?.allTenants === true;
       if (allTenants) requireFreshHub(options.level, 'sweep(…, { allTenants: true })');

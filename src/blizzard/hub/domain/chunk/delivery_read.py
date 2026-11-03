@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from urllib.parse import quote, urlsplit
 
 from blizzard.foundation.roles import domain_model
@@ -11,6 +12,15 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, no_commit_link
+
+
+@domain_model
+@dataclass(frozen=True)
+class LandingFact:
+    sequence: int
+    repo: str
+    commit_hash: str
+    landed_at: datetime
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
