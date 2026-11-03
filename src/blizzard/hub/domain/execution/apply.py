@@ -49,6 +49,7 @@ from blizzard.hub.domain.execution.envelope import Arrival, Envelope
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.execution.submissions import Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 # The cross-graph migration crash window (``bzh:crash-point-registry``): the whole
@@ -192,6 +193,7 @@ class ApplyService:
         decisions: IWriteChunkDecisionsRepository,
         escalations: IWriteChunkEscalationsRepository,
         exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         route: IReadChunkRouteRepository,
         artifacts: IReadChunkArtifactsRepository,
         retired: RetiredRunnerGuard,
@@ -206,6 +208,7 @@ class ApplyService:
         self._escalations = escalations
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
+        self._transactions = transactions
         self._route = route
         self._artifacts = artifacts
         self._retired = retired
@@ -308,9 +311,9 @@ class ApplyService:
         resolving = submission.decision_id is not None
         artifacts = () if resolving else submission.artifacts
         if plan.escalates:
-            return self._escalate_choice(chunk, facts, from_node, submission, plan.edge, targets)
+            return self._escalate_choice(chunk, graph, from_node, submission, plan.edge, targets)
         if plan.migrates:
-            return self._migrate_across(chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts)
+            return self._migrate_across(chunk, graph, from_node, submission, plan.edge, targets, artifacts)
         assert plan.to_node_id is not None
         # The transition-time consult — after every rejection and before `record_transition`,
         # so a firing intent or follow-latest drift writes no transition row of its own.
@@ -389,7 +392,6 @@ class ApplyService:
         self,
         chunk: Chunk,
         graph: Graph,
-        facts: ChunkFacts,
         from_node: Node,
         submission: Completion,
         edge: Edge,
@@ -398,32 +400,24 @@ class ApplyService:
     ) -> ApplyResult:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch
         (:meth:`ApplyResult.escalated`)."""
-        if re_escalates(facts, edge, targets, epoch=submission.epoch):
-            return ApplyResult.unresolved_target(edge.target_graph)
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
-        draft = UnresolvableTarget.of(edge)
-        # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
-        escalated = self._escalations.record_escalation(
-            chunk.chunk_id,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
-            takeover_command=draft.takeover_command,
-            at=self._clock.now(),
-            decision_id=submission.decision_id,
-            cause=draft.cause,
-            detail=draft.detail,
+        return self._escalate(
+            chunk,
+            graph,
+            from_node,
+            submission,
+            edge,
+            targets,
+            UnresolvableTarget.of(edge),
+            answer=ApplyResult.unresolved_target(edge.target_graph),
         )
-        if isinstance(escalated, FenceRefusal):
-            return ApplyResult.failure(escalated.detail)
-        return ApplyResult.unresolved_target(edge.target_graph)
 
     def _escalate_choice(
         self,
         chunk: Chunk,
-        facts: ChunkFacts,
+        graph: Graph,
         from_node: Node,
         submission: Completion,
         edge: Edge,
@@ -431,23 +425,73 @@ class ApplyService:
     ) -> ApplyResult:
         """Take the ``escalate`` choice — write an escalation instead of a transition, once per
         epoch. The worker's reasoning stays in the artifacts it produced."""
-        draft = EscalateChoice.of(from_node, submission.choice)
-        if re_escalates(facts, edge, targets, epoch=submission.epoch, taken=draft):
-            return ApplyResult.escalate_choice(from_node, submission.choice)
-        escalated = self._escalations.record_escalation(
-            chunk.chunk_id,
-            epoch=submission.epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
-            takeover_command=draft.takeover_command,
-            at=self._clock.now(),
-            decision_id=submission.decision_id,
-            cause=draft.cause,
-            detail=draft.detail,
+        return self._escalate(
+            chunk,
+            graph,
+            from_node,
+            submission,
+            edge,
+            targets,
+            EscalateChoice.of(from_node, submission.choice),
+            answer=ApplyResult.escalate_choice(from_node, submission.choice),
         )
-        if isinstance(escalated, FenceRefusal):
-            return ApplyResult.failure(escalated.detail)
-        return ApplyResult.escalate_choice(from_node, submission.choice)
+
+    def _escalate(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        from_node: Node,
+        submission: Completion,
+        edge: Edge,
+        targets: MigrationTargets,
+        draft: EscalateChoice | UnresolvableTarget,
+        *,
+        answer: ApplyResult,
+    ) -> ApplyResult:
+        """Write the hub's own escalation ``draft`` for this completion, deciding from facts re-read
+        under the chunk's lock in the unit that writes it (``bzh:write-reestablishes-read``): a
+        movement a racing submission recorded at this ``(node, epoch)`` answers as its replay, the
+        escalation already written answers ``answer`` and writes nothing, and any other refusal
+        :func:`refuse_incoherent_attempt` raises is answered as a failure."""
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
+            if facts is None:
+                return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
+            raced = self._landed_under_lock(facts, submission)
+            if raced is None:
+                re_escalating = re_escalates(
+                    facts,
+                    edge,
+                    targets,
+                    epoch=submission.epoch,
+                    taken=draft if isinstance(draft, EscalateChoice) else None,
+                )
+                try:
+                    refuse_incoherent_attempt(
+                        facts, graph, from_node=from_node, epoch=submission.epoch, re_escalating=re_escalating
+                    )
+                except CompletionRefused as refused:
+                    return ApplyResult.failure(refused.detail)
+                if not re_escalating:
+                    # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
+                    escalated = self._escalations.record_escalation(
+                        chunk.chunk_id,
+                        epoch=submission.epoch,
+                        admission=EpochAdmission.CURRENT,
+                        claimant=self._exit_claimant(facts, chunk.chunk_id, submission, transaction=locked),
+                        takeover_command=draft.takeover_command,
+                        at=self._clock.now(),
+                        decision_id=submission.decision_id,
+                        cause=draft.cause,
+                        detail=draft.detail,
+                        transaction=locked,
+                    )
+                    if isinstance(escalated, FenceRefusal):
+                        return ApplyResult.failure(escalated.detail)
+        if raced is not None:
+            return self._answer_raced(chunk, graph, from_node, submission, raced)
+        return answer
 
     def _land_migration(
         self,
@@ -529,16 +573,19 @@ class ApplyService:
             )
         return None
 
-    def _exit_claimant(self, facts: ChunkFacts, chunk_id: str, submission: Completion) -> Claimant | None:
+    def _exit_claimant(
+        self, facts: ChunkFacts, chunk_id: str, submission: Completion, *, transaction: Transaction | None = None
+    ) -> Claimant | None:
         """A restart's gate resolution is carried at its hub-owned epoch, without a new lease.
 
         The holding route's runner may carry only that visit's resolved decision. Ordinary
         completions still owe a runner-owned epoch and lease; a later restart fences this out.
+        The route is read in ``transaction`` when given, beside the facts read there.
         """
         if submission.decision_id is not None and any(
             r.epoch == submission.epoch and r.to_node_id == submission.from_node_id for r in facts.restarts
         ):
-            route = self._route.route_of(chunk_id)
+            route = self._route.route_of(chunk_id, transaction=transaction)
             if route is not None and route.runner_id == submission.runner_id:
                 return None
         return Claimant(submission.runner_id, submission.lease_id)

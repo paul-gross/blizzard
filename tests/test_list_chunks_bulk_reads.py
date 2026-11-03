@@ -262,9 +262,9 @@ class _CountingRouteStore(ChunkRouteStore):
         self.routes_for_calls += 1
         return super().routes_for(chunk_ids)
 
-    def route_of(self, chunk_id: str) -> Route | None:
+    def route_of(self, chunk_id: str, *, transaction: Transaction | None = None) -> Route | None:
         self.route_of_calls += 1
-        return super().route_of(chunk_id)
+        return super().route_of(chunk_id, transaction=transaction)
 
 
 def test_list_chunks_reads_its_page_in_batches_and_never_the_whole_tenant(tmp_path: Path) -> None:

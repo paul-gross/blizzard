@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -50,12 +51,15 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         wrapped_takeover_command: str = "",
         cause: str | None,
         detail: str | None,
+        transaction: Transaction | None = None,
     ) -> int | FenceRefusal:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
         until something supersedes it — behind the write fence (``bzh:epoch-fencing``); a
         refusal writes nothing and is returned in place of the row id. The takeover command rides along so the
         parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
-        when set, closes a gate decision no transition or migration will."""
+        when set, closes a gate decision no transition or migration will. Joins ``transaction`` when given —
+        a unit that locks ``chunk_id`` — and otherwise locks the chunk in a write of its own
+        (``bzh:transaction-participation``)."""
         ...
 
     def record_bounce_locked(
