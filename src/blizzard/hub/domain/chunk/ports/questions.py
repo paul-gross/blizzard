@@ -8,14 +8,16 @@ from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadChunkQuestionsRepository(Protocol):
     """Read-only chunk-questions access."""
 
-    def get_question(self, question_id: str) -> NodeQuestion | None:
-        """One question row with its derived answer state, or None."""
+    def get_question(self, question_id: str, *, transaction: Transaction | None = None) -> NodeQuestion | None:
+        """One question row with its derived answer state, or None — read in ``transaction`` when
+        given (``bzh:transaction-participation``)."""
         ...
 
     def list_open_questions(self, *, project: ProjectId | None = None) -> list[NodeQuestion]:
@@ -54,8 +56,11 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         ``question_id`` (a store-and-forward replay re-lands the same id harmlessly)."""
         ...
 
-    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
-        """First-write-wins CAS on the answer row.
+    def answer_question(
+        self, question_id: str, *, answer: str, answered_by: str, at: datetime, transaction: LockedTransaction
+    ) -> AnswerOutcome:
+        """First-write-wins CAS on the answer row, written in ``transaction`` — a unit that locks
+        the question's chunk, where an answer is decided (``bzh:transaction-participation``).
 
         Exactly one answer row ever exists: the first write wins (``won=True``); a
         racing second write loses (``won=False``) and is handed the winning row. This

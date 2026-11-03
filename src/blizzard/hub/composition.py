@@ -1260,7 +1260,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graph_mint=graph_mint,
         graph_yaml=parts.graph_yaml,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
-        questions=QuestionService(questions=chunk_questions, clock=clock),
+        questions=QuestionService(
+            questions=chunk_questions, facts=chunk_facts, transactions=stores.transactions, clock=clock
+        ),
         queue=QueueService(
             queue=chunk_queue, record=chunk_record, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),

@@ -256,6 +256,7 @@ from tests.support import (
     added_runner,
     build_hub,
     chunk_stores,
+    chunk_unit,
     default_project,
     default_tenant,
     hub_level_connections,
@@ -1846,7 +1847,10 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         asked_at=_ht(52),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
-    write.questions.answer_question(question_1, answer="yes", answered_by=user_1.user_id, at=_ht(53))
+    with chunk_unit(store_connections, chunk_question) as unit:
+        write.questions.answer_question(
+            question_1, answer="yes", answered_by=user_1.user_id, at=_ht(53), transaction=unit
+        )
     write.questions.record_answer_delivered(question_id=question_1, chunk_id=chunk_question, at=_ht(54))
 
     # --- usage ---------------------------------------------------------------------------------
