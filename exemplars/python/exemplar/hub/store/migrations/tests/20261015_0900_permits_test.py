@@ -1,8 +1,8 @@
 """The permits revision: two tenant-keyed tables, permits keyed to their project, are created as the schema declares
 them, a re-run changes nothing, and the downgrade restores the store exactly."""
 
-# exemplar: bzh:manual-migrations. The revision sits outside the hub's chain, so ``_apply`` drives it on a store the
-# real chain migrated to its parent; a production test calls ``runner.upgrade``/``runner.downgrade``.
+# exemplar: bzh:manual-migrations. The revision sits outside the hub's chain, so ``_apply`` drives it (and ``_HEAD``)
+# over the real chain at its parent; a production test calls ``runner.upgrade``/``runner.downgrade``.
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from tests.support import migrate_to
 pytestmark = pytest.mark.component
 
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
+_HEAD = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")
 _PARENT = _PERMITS.down_revision
 _NEW_TABLES = {"permits", "permit_facts"}
 
@@ -80,6 +81,7 @@ def test_the_upgrade_creates_the_project_keyed_tables(tmp_path: Path) -> None:
 def test_the_new_tables_match_the_declared_schema(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, _PARENT)
     _apply(engine, _PERMITS.upgrade)
+    _apply(engine, _HEAD.upgrade)
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)

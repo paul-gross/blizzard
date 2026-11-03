@@ -1,11 +1,10 @@
-"""Permit use cases — request a permit, then move it through its verbs under the permit's row lock."""
+"""Permit use cases — request a permit, then move it through its verbs by compare-and-set on its revision."""
 
-# exemplar: bzh:domain-orchestration-split, bzh:narrow-seams, bzh:store-exclusive-write, bzh:domain-takes-objects.
+# exemplar: bzh:domain-orchestration-split, bzh:narrow-seams, bzh:write-reestablishes-read, bzh:domain-takes-objects.
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
@@ -20,7 +19,10 @@ _log = get_logger("blizzard.hub.permits")
 
 
 class PermitService:
-    """Request permits and record the facts their verbs decide."""
+    """Request permits and record the facts their verbs decide, each conditioned on the revision this call read.
+
+    A write landing between that read and this one raises :class:`~exemplar.hub.domain.permits.model.PermitChanged`,
+    refused ``409`` rather than retried, so the client refetches and the operator decides on the current state."""
 
     def __init__(self, *, permits: IWritePermitRepository, clock: IClock) -> None:
         self._permits = permits
@@ -61,9 +63,7 @@ class PermitService:
         return self._decide(permit, lambda current, at: current.revoke(note=note, by=by, at=at))
 
     def _decide(self, permit: Permit, verb: Callable[[Permit, datetime], PermitFact]) -> Permit:
-        with self._permits.locked(permit.permit_id) as held:
-            current = held.permit()
-            fact = verb(current, self._clock.now())
-            self._permits.record_fact_locked(held, fact)
+        fact = verb(permit, self._clock.now())
+        self._permits.record_fact(fact, expected=permit.revision)
         _log.info("permit fact recorded", permit_id=fact.permit_id, kind=fact.kind, by=fact.by)
-        return replace(current, latest=fact)
+        return permit.recorded(fact)

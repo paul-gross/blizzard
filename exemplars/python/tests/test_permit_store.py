@@ -1,7 +1,7 @@
 """``PermitStore`` over a migrated sqlite-on-disk store (component tier)."""
 
-# exemplar: bzh:tenant-scoped-store, bzh:bulk-reconstitution. The revision sits outside the hub's chain, so
-# ``_migrated`` applies it over a store the real chain migrated to its parent; a production test migrates to ``head``.
+# exemplar: bzh:tenant-scoped-store, bzh:bulk-reconstitution, bzh:store-refuses-stale. The revisions sit outside the
+# hub's chain, so ``_migrated`` applies them over the real chain at their parent; production migrates to ``head``.
 
 from __future__ import annotations
 
@@ -10,15 +10,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import Engine
 
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from exemplar.foundation.permits import PermitState
-from exemplar.hub.domain.permits.model import Permit, PermitAlreadyRequested
+from exemplar.hub.domain.permits.model import Permit, PermitAlreadyRequested, PermitChanged
 from exemplar.hub.store.internal.permit_store import PermitStore
+from exemplar.hub.store.schema import permit_facts
 from tests.support import (
     add_tenant,
     count_queries,
@@ -32,6 +35,7 @@ from tests.support import (
 pytestmark = pytest.mark.component
 
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
+_PERMIT_REVISION = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")
 _T0 = datetime(2026, 3, 1, tzinfo=UTC)
 
 
@@ -39,6 +43,7 @@ def _migrated(tmp_path: Path) -> Engine:
     _, engine = migrate_to(tmp_path, _PERMITS.down_revision)
     with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
+        _PERMIT_REVISION.upgrade()
     return engine
 
 
@@ -66,6 +71,15 @@ def _drain(store: PermitStore, *, project: ProjectId, holder: str, limit: int) -
         if page.next_cursor is None:
             return seen
         cursor = page.next_cursor
+
+
+class _Abandoned(Exception):
+    """Raised inside a unit to roll it back."""
+
+
+def _fact_count(engine: Engine) -> int:
+    with engine.connect() as conn:
+        return conn.execute(sa.select(sa.func.count()).select_from(permit_facts)).scalar_one()
 
 
 def _store(engine: Engine, tenant: TenantId) -> PermitStore:
@@ -99,18 +113,54 @@ def test_a_duplicate_request_raises_already_requested(tmp_path: Path) -> None:
     assert store.get("pm_dup") is None
 
 
-def test_a_locked_write_lands_as_the_newest_fact(tmp_path: Path) -> None:
+def test_a_fact_at_the_revision_read_lands_as_the_newest_and_moves_the_revision(tmp_path: Path) -> None:
     engine = _migrated(tmp_path)
     tenant = default_tenant(engine)
     store = _store(engine, tenant)
     store.create(_permit(1, _project_of(engine, tenant)))
+    read = store.get("pm_001")
+    assert read is not None
+    fact = read.grant(by="op", at=_T0 + timedelta(days=1))
 
-    with store.locked("pm_001") as held:
-        store.record_fact_locked(held, held.permit().grant(by="op", at=_T0 + timedelta(days=1)))
+    store.record_fact(fact, expected=read.revision)
 
-    granted = store.get("pm_001")
-    assert granted is not None
-    assert granted.state() is PermitState.GRANTED
+    assert store.get("pm_001") == read.recorded(fact)
+
+
+def test_a_fact_written_in_a_unit_rolls_back_with_it(tmp_path: Path) -> None:
+    engine = _migrated(tmp_path)
+    tenant = default_tenant(engine)
+    connections = scoped_connections(engine, tenant)
+    store = PermitStore(connections)
+    store.create(_permit(1, _project_of(engine, tenant)))
+    read = store.get("pm_001")
+    assert read is not None
+
+    with pytest.raises(_Abandoned), HubTransactions(connections).begin() as transaction:
+        store.record_fact(read.grant(by="op", at=_T0), expected=read.revision, transaction=transaction)
+        raise _Abandoned
+
+    assert store.get("pm_001") == read
+    assert _fact_count(engine) == 0
+
+
+def test_a_fact_decided_on_a_read_another_fact_moved_raises_permit_changed_and_lands_nothing(tmp_path: Path) -> None:
+    """Two operators read the requested permit; one grants it, and the other's revoke from that same read is refused."""
+    engine = _migrated(tmp_path)
+    tenant = default_tenant(engine)
+    store = _store(engine, tenant)
+    store.create(_permit(1, _project_of(engine, tenant)))
+    read = store.get("pm_001")
+    assert read is not None
+    store.record_fact(read.grant(by="op", at=_T0 + timedelta(days=1)), expected=read.revision)
+
+    with pytest.raises(PermitChanged):
+        store.record_fact(read.revoke(note="left", by="other", at=_T0 + timedelta(days=2)), expected=read.revision)
+
+    after = store.get("pm_001")
+    assert after is not None
+    assert (after.state(), after.revision) == (PermitState.GRANTED, read.revision + 1)
+    assert _fact_count(engine) == 1
 
 
 def test_list_page_walks_one_holder_in_one_project_newest_first_ties_by_id_descending(tmp_path: Path) -> None:

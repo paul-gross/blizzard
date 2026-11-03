@@ -15,12 +15,14 @@ from alembic.operations import Operations
 
 from blizzard.hub.api import deps as hub_deps
 from exemplar.hub.api import deps, permits
+from exemplar.hub.api.permit_params import path_permit
 from exemplar.hub.composition import build_tenant_services, build_tenant_stores
 from tests.support import HubHarness, build_hub, default_project, default_tenant, scoped_connections, seed_runner
 
 pytestmark = pytest.mark.component
 
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
+_PERMIT_REVISION = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")
 
 
 def _hub(tmp_path: Path) -> HubHarness:
@@ -28,6 +30,7 @@ def _hub(tmp_path: Path) -> HubHarness:
     assert hub.app is not None
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
+        _PERMIT_REVISION.upgrade()
     stores = build_tenant_stores(scoped_connections(hub.engine, default_tenant(hub.engine)), clock=hub.clock)
     hub.app.state.tenant_services = build_tenant_services(stores, hub.services)
     hub.app.dependency_overrides[hub_deps.tenant_services] = deps.tenant_services
@@ -90,6 +93,22 @@ def test_a_verb_the_state_refuses_answers_409(tmp_path: Path) -> None:
     permit_id = _request(hub)["permit_id"]
 
     assert hub.client.post(f"/api/permits/{permit_id}/resume").status_code == 409
+
+
+def test_a_verb_decided_on_a_copy_another_write_moved_answers_409_and_lands_nothing(tmp_path: Path) -> None:
+    """One operator grants the requested permit; the other's revoke, resolved before that grant landed, is refused."""
+    hub = _hub(tmp_path)
+    assert hub.app is not None
+    permit_id = _request(hub)["permit_id"]
+    read_before = hub.app.state.tenant_services.permits.get(permit_id)
+    assert hub.client.post(f"/api/permits/{permit_id}/grant").status_code == 200
+    hub.app.dependency_overrides[path_permit] = lambda: read_before
+
+    resp = hub.client.post(f"/api/permits/{permit_id}/revoke", json={"note": "left the team"})
+
+    del hub.app.dependency_overrides[path_permit]
+    assert resp.status_code == 409
+    assert hub.client.get(f"/api/permits/{permit_id}").json()["state"] == "granted"
 
 
 def test_a_blank_revocation_note_answers_422_and_records_nothing(tmp_path: Path) -> None:
