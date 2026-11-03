@@ -44,6 +44,7 @@ from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.envelope import Arrival
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from tests.test_completion_rules import (
     AT_BUILD,
@@ -184,6 +185,7 @@ def _apply_service_with_lock(
         decisions=cast(IWriteChunkDecisionsRepository, ports),
         escalations=cast(IWriteChunkEscalationsRepository, ports),
         exclusive=cast(IChunkExclusiveWrites, exclusive),
+        transactions=cast(IHubTransactions, ports),
         route=cast(IReadChunkRouteRepository, ports),
         artifacts=cast(IReadChunkArtifactsRepository, ports),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),

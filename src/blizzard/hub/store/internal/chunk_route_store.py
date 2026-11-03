@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -30,7 +31,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_in
 
 _ROUTE_PREFIX = "route"
 
@@ -42,9 +43,9 @@ class ChunkRouteStore:
         self._store = store
         self._clock = clock
 
-    def route_of(self, chunk_id: str) -> Route | None:
+    def route_of(self, chunk_id: str, *, transaction: Transaction | None = None) -> Route | None:
         """The chunk's live route, or ``None`` if its newest release has caught up to it."""
-        with self._store.read("route_of") as conn:
+        with connection_in(self._store, transaction, "route_of") as conn:
             return route_of_conn(conn, chunk_id)
 
     def load_all_routes(self) -> dict[str, Route]:
