@@ -33,6 +33,7 @@ permits = Table(
     Column("capability", String, nullable=False),
     Column("requested_at", UtcDateTime, nullable=False),
     Column("requested_by", String, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_permits_tenant_id"), nullable=False),
     Column("project_id", String, ForeignKey("projects.project_id", name="fk_permits_projects"), nullable=False),
     PrimaryKeyConstraint("permit_id", name="pk_permits"),

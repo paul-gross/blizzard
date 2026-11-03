@@ -6,14 +6,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from exemplar.foundation.permits import PermitState, PermitVerb
 
@@ -74,6 +74,8 @@ class Permit:
     capability: str
     requested_at: datetime
     requested_by: str
+    #: Moves by one with every fact; a fact lands only on the revision it was decided from.
+    revision: int
     latest: PermitFact | None = None
 
     @classmethod
@@ -88,6 +90,7 @@ class Permit:
             capability=capability,
             requested_at=at,
             requested_by=by,
+            revision=1,
         )
 
     def state(self) -> PermitState:
@@ -103,6 +106,10 @@ class Permit:
     def legal_verbs(self) -> tuple[PermitVerb, ...]:
         """Every verb :meth:`permits`, in declaration order."""
         return tuple(verb for verb in PermitVerb if self.permits(verb))
+
+    def recorded(self, fact: PermitFact) -> Permit:
+        """This permit once ``fact`` lands on it: ``fact`` its newest, one revision on."""
+        return replace(self, latest=fact, revision=self.revision + 1)
 
     def grant(self, *, by: str, at: datetime) -> PermitFact:
         """The grant fact to append."""
@@ -158,14 +165,6 @@ class IReadPermitRepository(Protocol):
         ...
 
 
-class ILockedPermitRead(Protocol):
-    """The guard read of a locked writer, on the one transaction its row lock was taken on."""
-
-    def permit(self) -> Permit:
-        """The locked permit as it stands under the lock."""
-        ...
-
-
 class IWritePermitRepository(IReadPermitRepository, Protocol):
     """Adds the permit writes."""
 
@@ -174,13 +173,9 @@ class IWritePermitRepository(IReadPermitRepository, Protocol):
         raises :class:`PermitAlreadyRequested`."""
         ...
 
-    def locked(self, permit_id: str) -> AbstractContextManager[ILockedPermitRead]:
-        """Lock the row of ``permit_id``, which exists, before any read, and yield the read handle on that
-        transaction."""
-        ...
-
-    def record_fact_locked(self, held: ILockedPermitRead, fact: PermitFact) -> None:
-        """Append ``fact`` on the transaction ``held`` was opened on."""
+    def record_fact(self, fact: PermitFact, *, expected: int, transaction: Transaction | None = None) -> None:
+        """Append ``fact`` and move its permit one revision on, only while the permit stands at ``expected``; a
+        permit another write has moved past it raises :class:`PermitChanged`."""
         ...
 
 
@@ -192,6 +187,15 @@ class PermitVerbRefused(Exception):
         self.permit_id = permit_id
         self.verb = verb
         self.state = state
+
+
+class PermitChanged(Exception):
+    """A fact was decided on a revision of the permit another write has since moved past."""
+
+    def __init__(self, permit_id: str, *, expected: int) -> None:
+        super().__init__(f"permit {permit_id} changed after revision {expected} was read — decide again")
+        self.permit_id = permit_id
+        self.expected = expected
 
 
 class RevocationNoteRequired(Exception):
