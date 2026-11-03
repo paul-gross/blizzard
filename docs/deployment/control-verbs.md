@@ -253,7 +253,11 @@ and its local worktrees stay held until the process stops.
 
 `blizzard hub runner reinstate <runner_id>` records the reversal. The runner stays unenrolled — its token was revoked at
 retire — so run `enroll` next; `enroll` on a retired runner refuses with a `409`. `reinstate` on a runner that is not
-retired is a `409`. All three verbs need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
+retired is a `409`, and so is `reinstate` on a runner still under a retired host: release it from that host first
+(`blizzard hub runner-host release <host_id> <runner_id>`, [runner-auth.md](./runner-auth.md#hosts)), and it is
+reinstated standing alone. When another retire or reinstate of the runner lands while a first `retire` or a `reinstate`
+is deciding, the verb writes nothing and answers `409`; running it again decides it on the current state. All three
+verbs need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
 
 ## Runner gates
 

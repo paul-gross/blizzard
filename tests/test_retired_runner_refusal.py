@@ -36,7 +36,7 @@ def _retired_hub(tmp_path: Path) -> HubHarness:
     seed_runner(hub, _RUNNER, register=False)
     hub.services.fleet.register(_registration(hub), "ws-a", capabilities=(RunnerCapability("claude", default=True),))
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
-    writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op")
+    writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     return hub
 
 
@@ -130,7 +130,7 @@ class _Routed:
         assert claim.status_code == 201, claim.text
         report_lease(self.hub, self.chunk_id, epoch=1, seq=1, runner_id=_RUNNER)
         writer = cast(IWriteRunnerRegistry, self.hub.services.registry)
-        writer.record_lifecycle(_RUNNER, retired=True, at=self.hub.clock.now(), by="op")
+        writer.record_lifecycle(_RUNNER, retired=True, at=self.hub.clock.now(), by="op", expected_lifecycle=0)
         self.hub.clock.advance(timedelta(seconds=5))
 
     @property

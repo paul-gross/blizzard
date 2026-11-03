@@ -14,6 +14,8 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, held_routes
+from blizzard.hub.domain.runners.host import Host, HostLifecycleConflict, HostRetired, IReadHostRegistry
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
     DeclaredSubscription,
@@ -82,6 +84,7 @@ class FleetService:
         self,
         *,
         registry: IWriteRunnerRegistry,
+        hosts: IReadHostRegistry,
         routes: IReadChunkRouteRepository,
         records: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
@@ -93,6 +96,8 @@ class FleetService:
         stale_after: timedelta = STALE_AFTER,
     ) -> None:
         self._registry = registry
+        # The host a runner stands under, whose retirement a reinstate is decided against.
+        self._hosts = hosts
         # The tenant's projects, which a served declaration resolves against.
         self._served_projects = served_projects
         # Retirement's holdings read and release pass — the hub's existing detach path.
@@ -230,15 +235,23 @@ class FleetService:
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
         then release every held route through ``DetachService`` — a terminal chunk holds none.
-        The registration decides the fact (:meth:`RunnerRegistration.retire`); a re-run writes
-        none and re-runs the release pass, which also catches a claim that slipped past the
-        pre-lock holdings read."""
+        The registration decides the fact (:meth:`RunnerRegistration.retire`), which lands only on
+        the lifecycle version it was decided on — :class:`RunnerLifecycleConflict` otherwise, before
+        anything else is written. A re-run writes no fact and re-runs the revocation and the release
+        pass, which also catches a claim that slipped past the pre-lock holdings read; neither of
+        those is conditioned on the version the re-run read."""
         runner_id = registration.runner_id
         now = self._clock.now()
         fact = registration.retire(self.holdings(runner_id), force=force, by=by, at=now)
         fact_id = None
         if fact is not None:
-            fact_id = self._registry.record_lifecycle(runner_id, retired=fact.retired, at=fact.at, by=fact.by)
+            fact_id = self._registry.record_lifecycle(
+                runner_id,
+                retired=fact.retired,
+                at=fact.at,
+                by=fact.by,
+                expected_lifecycle=registration.lifecycle_version,
+            )
         revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
         routes = self._routes.live_routes_of_runner(runner_id)
         records = self._records.get_many([route.chunk_id for route in routes])
@@ -272,11 +285,36 @@ class FleetService:
 
     def reinstate(self, registration: RunnerRegistration, *, by: str) -> int:
         """Record a ``retired=False`` fact, returning its id. The runner stays unenrolled —
-        its token was revoked at retire — so the operator enrolls it afresh."""
+        its token was revoked at retire — so the operator enrolls it afresh. A runner under a
+        retired host stays retired (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and
+        so does one whose host retires before the fact lands. The fact lands only on the
+        runner's lifecycle version as read — :class:`RunnerLifecycleConflict` otherwise."""
         fact = registration.reinstate(by=by, at=self._clock.now())
-        fact_id = self._registry.record_lifecycle(fact.runner_id, retired=fact.retired, at=fact.at, by=fact.by)
+        host = self._host_of(registration)
+        if host is not None:
+            host.refuse_reinstating_runner()
+        try:
+            fact_id = self._registry.record_lifecycle(
+                fact.runner_id,
+                retired=fact.retired,
+                at=fact.at,
+                by=fact.by,
+                expected_lifecycle=registration.lifecycle_version,
+                expected_host=None if host is None else HostLifecycleVersion(host.host_id, host.lifecycle_version),
+            )
+        except HostLifecycleConflict as exc:
+            raise HostRetired(exc.host_id, action="reinstating a runner under it") from exc
         _log.info("runner reinstated", runner_id=registration.runner_id, by=by)
         return fact_id
+
+    def _host_of(self, registration: RunnerRegistration) -> Host | None:
+        """The host ``registration`` stands under, ``None`` for a runner standing alone."""
+        if registration.host_id is None:
+            return None
+        host = self._hosts.get_host(registration.host_id)
+        if host is None:  # pragma: no cover - a runner's host_id references a host row
+            raise LookupError(f"runner {registration.runner_id} stands under unknown host {registration.host_id}")
+        return host
 
     def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
         """Revoke the runner's current token, leaving it added; returns the revocation id.

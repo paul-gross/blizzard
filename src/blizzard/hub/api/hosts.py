@@ -25,15 +25,22 @@ from blizzard.hub.domain.execution.host_retirement import HostRetirementInterrup
 from blizzard.hub.domain.runners.host import (
     Host,
     HostHoldsRoutes,
+    HostLifecycleConflict,
     HostNameTaken,
     HostNotEnrolled,
     HostRetired,
+    HostRetirementUnfinished,
     HostUsage,
     RunnerAlreadyHosted,
     RunnerNotUnderHost,
     UnknownRunner,
 )
-from blizzard.hub.domain.runners.registration import PerSubscriptionUsageView, RunnerRegistration, RunnerRetired
+from blizzard.hub.domain.runners.registration import (
+    PerSubscriptionUsageView,
+    RunnerLifecycleConflict,
+    RunnerRegistration,
+    RunnerRetired,
+)
 from blizzard.wire.host import (
     HostAddRequest,
     HostAddResponse,
@@ -132,10 +139,12 @@ def _publish_host_retirement(
     by: str,
     changes: dict[str, chunk_events.ChunkChanged],
 ) -> None:
-    """The frames for what a host retire committed — each runner it retired, and the host's own fact."""
-    for registration in under:
-        if registration.runner_id in outcome.runners:
-            publish_retirement(services, registration, outcome.runners[registration.runner_id], by=by, changes=changes)
+    """The frames for what a host retire committed — each runner it retired, and the host's own fact. A runner the
+    retire found under the host that ``under``, read before it, did not hold is read here."""
+    registrations = {registration.runner_id: registration for registration in under}
+    registrations.update(services.registry.get_runners(outcome.runners.keys() - registrations.keys()))
+    for runner_id, retired in outcome.runners.items():
+        publish_retirement(services, registrations[runner_id], retired, by=by, changes=changes)
     if outcome.fact_id is not None:
         services.events.publish_host_changed(
             host.host_id, kind="retired", host_name=host.name, by=by, key=f"host_lifecycle_facts:{outcome.fact_id}"
@@ -154,15 +163,15 @@ def add_host(
 ) -> HostAddResponse:
     """Add a host under ``name`` — the hub mints its id and bearer token together, and the plaintext token is returned
     once. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as
-    unknown (404), one already under a host or a retired one 409, and nothing is added. A name a live host holds is
-    refused 409."""
+    unknown (404), one already under a host or a retired one 409, and so is one retired or reinstated while the add
+    was decided; nothing is added. A name a live host holds is refused 409."""
     try:
         added = services.host_enrollment.add(request.name, by=identity.username, adopt=request.adopt)
     except HostNameTaken as exc:
         raise _conflict(exc) from exc
     except UnknownRunner as exc:
         raise _unknown_runner(exc) from exc
-    except (RunnerAlreadyHosted, RunnerRetired) as exc:
+    except (RunnerAlreadyHosted, RunnerRetired, RunnerLifecycleConflict) as exc:
         raise _conflict(exc) from exc
     services.events.publish_host_changed(added.host_id, kind="added", host_name=added.name, by=identity.username)
     return HostAddResponse(host_id=added.host_id, host_name=added.name, token=added.token, adopted=list(added.adopted))
@@ -190,13 +199,14 @@ def get_host(host_id: str, services: Services) -> HostRegistryView:
 )
 def adopt_runners(host_id: str, request: HostRunnersRequest, services: Services) -> HostRegistryView:
     """Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one
-    already under a host or a retired one 409, and so is a retired host."""
+    already under a host or a retired one 409, and so is a retired host — one retired while the adoption was decided
+    included — and a runner retired or reinstated meanwhile."""
     host = _host(services, host_id)
     try:
         services.host_enrollment.adopt(host, request.runner_ids, by=request.by)
     except UnknownRunner as exc:
         raise _unknown_runner(exc) from exc
-    except (RunnerAlreadyHosted, RunnerRetired, HostRetired) as exc:
+    except (RunnerAlreadyHosted, RunnerRetired, HostRetired, RunnerLifecycleConflict) as exc:
         raise _conflict(exc) from exc
     services.events.publish_host_changed(host_id, kind="adopted", host_name=host.name, by=request.by)
     return _reread(services, host_id)
@@ -209,12 +219,16 @@ def adopt_runners(host_id: str, request: HostRunnersRequest, services: Services)
 )
 def release_runners(host_id: str, request: HostRunnersRequest, services: Services) -> HostRegistryView:
     """Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under
-    the host is refused as unknown (404)."""
+    the host is refused as unknown (404). A retired host releases only retired runners: an unretired one is refused 409
+    until the host's retire is re-run. A host or runner whose lifecycle moved while the release was decided is refused
+    409; run it again."""
     host = _host(services, host_id)
     try:
         services.host_enrollment.release(host, request.runner_ids, by=request.by)
     except (UnknownRunner, RunnerNotUnderHost) as exc:
         raise _unknown_runner(exc) from exc
+    except (HostRetirementUnfinished, HostLifecycleConflict, RunnerLifecycleConflict) as exc:
+        raise _conflict(exc) from exc
     services.events.publish_host_changed(host_id, kind="released", host_name=host.name, by=request.by)
     return _reread(services, host_id)
 
@@ -267,14 +281,15 @@ def revoke_host_token(host_id: str, request: HostLifecycleRequest, services: Ser
 )
 def retire_host(host_id: str, request: HostRetireRequest, services: Services) -> HostRetireResponse:
     """Retire a host — its token is revoked and every runner under it retired; 409 naming each runner's held chunks
-    unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass."""
+    unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host
+    retired by another retire while this one was decided is refused 409; run it again."""
     host = _host(services, host_id)
     under = services.registry.list_runners(include_retired=True, host_id=host_id)
     held = [route for r in under for route in services.chunks.route.live_routes_of_runner(r.runner_id)]
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
     try:
         outcome = services.host_retirement.retire(host, by=request.by, force=request.force)
-    except HostHoldsRoutes as exc:
+    except (HostHoldsRoutes, HostLifecycleConflict) as exc:
         raise _conflict(exc) from exc
     except HostRetirementInterrupted as exc:
         _publish_host_retirement(services, host, under, exc.committed, by=request.by, changes=changes)

@@ -19,10 +19,13 @@ from blizzard.hub.domain.runners.enrollment import ROTATION_ACTOR, AddedRunner, 
 from blizzard.hub.domain.runners.host import (
     Host,
     HostAddition,
+    HostLifecycleConflict,
     HostNotEnrolled,
+    HostRetired,
     IWriteHostRegistry,
     UnknownRunner,
 )
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerRegistration
 
 _log = get_logger("blizzard.hub.host_enrollment")
@@ -65,15 +68,21 @@ class HostEnrollmentService:
         """Mint a host's ``hs_`` id and bearer token together and record it as a never-connected host under ``name``,
         placing the ``adopt`` runners under it in the same write. Names are unique among live hosts: a name a live
         host holds raises :class:`~blizzard.hub.domain.runners.host.HostNameTaken`. A runner the tenant does not
-        hold, one under a host, or a retired one refuses the whole add before anything is written."""
+        hold, one under a host, or a retired one refuses the whole add before anything is written, and so does one whose
+        lifecycle moved after it was read
+        (:class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`)."""
         adopting = tuple(dict.fromkeys(adopt))
         host_id = Id.mint(IdPrefix.HOST, self._clock).value
         token = secrets.token_urlsafe(_TOKEN_BYTES)
         now = self._clock.now()
         candidate = Host(host_id=host_id, name=name, added_at=now)
-        for runner in self._runners_named(adopting):
+        runners = self._runners_named(adopting)
+        for runner in runners:
             candidate.adopt(runner)
-        self._hosts.add(HostAddition(host_id, name, TokenHash(token).hex, at=now, by=by, adopt=adopting))
+        self._hosts.add(
+            HostAddition(host_id, name, TokenHash(token).hex, at=now, by=by, adopt=adopting),
+            expected_runners=_versions(runners),
+        )
         _log.info("host added", host_id=host_id, name=name, by=by, adopted=list(adopting))
         return AddedHost(host_id=host_id, name=name, token=token, adopted=adopting)
 
@@ -98,29 +107,46 @@ class HostEnrollmentService:
 
     def adopt(self, host: Host, runner_ids: Sequence[str], *, by: str) -> tuple[str, ...]:
         """Place existing runners under ``host``, all or none. Refuses a runner the tenant does not hold
-        (:class:`~blizzard.hub.domain.runners.host.UnknownRunner`), one under a host, and a retired one."""
+        (:class:`~blizzard.hub.domain.runners.host.UnknownRunner`), one under a host, and a retired one. The write
+        lands only on the host and runners as read: a host retired since raises
+        :class:`~blizzard.hub.domain.runners.host.HostRetired`, retirement being its one lifecycle transition, and a
+        runner whose lifecycle moved raises
+        :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`."""
         adopting = tuple(dict.fromkeys(runner_ids))
-        for runner in self._runners_named(adopting):
+        runners = self._runners_named(adopting)
+        for runner in runners:
             host.adopt(runner)
-        self._hosts.adopt(host.host_id, adopting)
+        try:
+            self._hosts.adopt(_lifecycle(host), adopting, expected_runners=_versions(runners))
+        except HostLifecycleConflict as exc:
+            raise HostRetired(host.host_id, action="adoption") from exc
         _log.info("runners adopted", host_id=host.host_id, runners=list(adopting), by=by)
         return adopting
 
     def release(self, host: Host, runner_ids: Sequence[str], *, by: str) -> tuple[str, ...]:
         """Return runners under ``host`` to standing alone, keeping their ids and tokens, all or none. Refuses a
-        runner that does not stand under ``host``."""
+        runner that does not stand under ``host``, and an unretired one under a retired host
+        (:class:`~blizzard.hub.domain.runners.host.HostRetirementUnfinished`). The write lands only on the host and
+        runners as read, raising :class:`~blizzard.hub.domain.runners.host.HostLifecycleConflict` or
+        :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict` otherwise, and
+        :class:`~blizzard.hub.domain.runners.host.RunnerNotUnderHost` for a runner that left the host meanwhile."""
         releasing = tuple(dict.fromkeys(runner_ids))
-        for runner in self._runners_named(releasing):
+        runners = self._runners_named(releasing)
+        for runner in runners:
             host.release(runner)
-        self._hosts.release(host.host_id, releasing)
+        self._hosts.release(_lifecycle(host), releasing, expected_runners=_versions(runners))
         _log.info("runners released", host_id=host.host_id, runners=list(releasing), by=by)
         return releasing
 
     def add_runner(self, host: Host, name: str, *, by: str, projects: Sequence[str] | None = None) -> AddedRunner:
         """Add a runner under ``host`` in its tenant, exactly as an operator's add would, with ``host_id`` set. A
-        retired host raises :class:`~blizzard.hub.domain.runners.host.HostRetired`."""
+        retired host raises :class:`~blizzard.hub.domain.runners.host.HostRetired`, and so does one retired before
+        the add lands."""
         host.refuse_adding_runner()
-        return self._runner_enrollment.add(name, by=by, projects=projects, host_id=host.host_id)
+        try:
+            return self._runner_enrollment.add(name, by=by, projects=projects, host=_lifecycle(host))
+        except HostLifecycleConflict as exc:
+            raise HostRetired(host.host_id, action="adding a runner") from exc
 
     def _runners_named(self, runner_ids: Sequence[str]) -> list[RunnerRegistration]:
         found = self._runners.get_runners(runner_ids)
@@ -128,3 +154,13 @@ class HostEnrollmentService:
             if runner_id not in found:
                 raise UnknownRunner(runner_id)
         return [found[runner_id] for runner_id in runner_ids]
+
+
+def _lifecycle(host: Host) -> HostLifecycleVersion:
+    """The host's lifecycle version as read, which the write it decided is conditioned on."""
+    return HostLifecycleVersion(host.host_id, host.lifecycle_version)
+
+
+def _versions(runners: Sequence[RunnerRegistration]) -> dict[str, int]:
+    """Each runner's lifecycle version as read, which the write it decided is conditioned on."""
+    return {runner.runner_id: runner.lifecycle_version for runner in runners}

@@ -26,6 +26,7 @@ from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.config_inputs import VERSION_WINDOW
@@ -60,6 +61,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     retired = RetiredRunnerGuard(registry=RunnerRegistryStore(store))
     fleet = FleetService(
         registry=RunnerRegistryStore(store),
+        hosts=HostRegistryStore(store),
         routes=chunks.route,
         records=chunks.record,
         facts=chunks.facts,

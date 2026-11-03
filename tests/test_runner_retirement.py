@@ -153,7 +153,7 @@ def test_a_retire_rerun_finishes_a_partial_release(tmp_path: Path) -> None:
     _register(hub)
     chunk_id = _held_chunk(hub)
     writer = cast(IWriteRunnerRegistry, hub.services.registry)  # the one store instance behind both seams
-    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
+    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is not None
 
     hub.clock.advance(timedelta(seconds=1))
@@ -290,7 +290,7 @@ def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_f
     report_lease(hub, held, epoch=1, seq=1, runner_id="runner-a")
     # Retired with its route still live, so the routes that act on a held chunk have one to refuse on.
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
-    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
+    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
     hub.clock.advance(timedelta(seconds=5))
     before = _store_rows(hub)
 
@@ -355,7 +355,7 @@ def test_the_retired_claim_refusal_parses_as_the_paused_denial_older_runners_rea
     # Retired with its token still current — as when an enroll races the retire — so the claim
     # reaches the domain's refusal rather than the gate's 401 for a revoked token.
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
-    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
+    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     resp = hub.client.post(
         "/api/fleet/routes",

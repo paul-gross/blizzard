@@ -20,6 +20,8 @@ from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRef
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.runners.version import VersionJudgement
 
@@ -206,6 +208,9 @@ class RunnerRegistration:
     retired: bool = False
     retired_at: datetime | None = None
     retired_by: str | None = None
+    #: The id of the newest lifecycle fact, ``0`` for a runner with none — the version a lifecycle or roster write
+    #: decided on this registration is conditioned on.
+    lifecycle_version: int = 0
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
     #: The served declaration: every entry the runner declared, each with the project it resolved to. Empty serves
@@ -762,9 +767,17 @@ class IReadRunnerRegistry(Protocol):
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     """Adds the registry writes."""
 
-    def add(self, addition: RunnerAddition) -> None:
+    def add(
+        self,
+        addition: RunnerAddition,
+        *,
+        expected_host: HostLifecycleVersion | None = None,
+        transaction: Transaction | None = None,
+    ) -> None:
         """Insert ``addition`` as a never-connected registration — its id, name, and token hash, with
-        ``added_at``/``added_by`` from its ``at``/``by`` and no workspace, registration, or contact."""
+        ``added_at``/``added_by`` from its ``at``/``by`` and no workspace, registration, or contact. An addition under
+        a host carries ``expected_host``, that host's lifecycle version the add was decided on; a host that has moved
+        past it raises :class:`~blizzard.hub.domain.runners.host.HostLifecycleConflict`, inserting nothing."""
         ...
 
     def record_registration(
@@ -825,9 +838,22 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         the freshly-written ``runner_local_pause_facts.id``."""
         ...
 
-    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
-        """Append a retire/reinstate fact; ``retired`` derives from the newest. Returns the
-        freshly-written ``runner_lifecycle_facts.id`` — always writes, never a no-op."""
+    def record_lifecycle(
+        self,
+        runner_id: str,
+        *,
+        retired: bool,
+        at: datetime,
+        by: str,
+        expected_lifecycle: int,
+        expected_host: HostLifecycleVersion | None = None,
+        transaction: Transaction | None = None,
+    ) -> int:
+        """Append a retire/reinstate fact; ``retired`` derives from the newest. Returns the freshly-written
+        ``runner_lifecycle_facts.id``, the runner's new lifecycle version. Lands only while the runner stands at
+        ``expected_lifecycle`` and, when given, the host at ``expected_host``; otherwise raises
+        :class:`RunnerLifecycleConflict` or :class:`~blizzard.hub.domain.runners.host.HostLifecycleConflict`,
+        appending nothing."""
         ...
 
     def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
@@ -865,6 +891,15 @@ class RunnerRetired(Exception):
     def __init__(self, runner_id: str, *, action: str) -> None:
         super().__init__(f"runner {runner_id} is retired — {action} refused; `reinstate` it first")
         self.runner_id = runner_id
+
+
+class RunnerLifecycleConflict(Exception):
+    """A write was decided on a lifecycle version of the runner a newer lifecycle fact has since moved past."""
+
+    def __init__(self, runner_id: str, *, expected: int) -> None:
+        super().__init__(f"runner {runner_id} changed after it was read — run it again")
+        self.runner_id = runner_id
+        self.expected = expected
 
 
 class RunnerHoldsRoutes(Exception):

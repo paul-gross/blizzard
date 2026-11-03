@@ -16,6 +16,7 @@ from blizzard.hub.domain.runners.host import (
     HostNotEnrolled,
     HostReport,
     HostRetired,
+    HostRetirementUnfinished,
     HostState,
     HostTokenRevocation,
     HostTokenRotation,
@@ -125,11 +126,22 @@ def test_adopt_refuses_a_retired_runner_and_a_retired_host() -> None:
 
 def test_release_admits_only_a_runner_under_this_host_even_from_a_retired_host() -> None:
     _NEW.release(replace(_RUNNER, host_id="hs_a"))
-    _RETIRED.release(replace(_RUNNER, host_id="hs_a"))
+    _RETIRED.release(replace(_RUNNER, host_id="hs_a", retired=True))
     with pytest.raises(RunnerNotUnderHost):
         _NEW.release(_RUNNER)
     with pytest.raises(RunnerNotUnderHost):
         _NEW.release(replace(_RUNNER, host_id="hs_other"))
+
+
+def test_a_retired_host_refuses_releasing_a_runner_its_retire_has_not_reached() -> None:
+    with pytest.raises(HostRetirementUnfinished, match="re-run the host's retire"):
+        _RETIRED.release(replace(_RUNNER, host_id="hs_a"))
+
+
+def test_a_retired_host_refuses_reinstating_a_runner_under_it() -> None:
+    with pytest.raises(HostRetired):
+        _RETIRED.refuse_reinstating_runner()
+    _NEW.refuse_reinstating_runner()
 
 
 def test_the_first_report_is_a_change_and_an_identical_one_after_it_is_not() -> None:

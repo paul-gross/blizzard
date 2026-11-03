@@ -177,11 +177,14 @@ flagged subscription.
 
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
 new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash
-stays dead, as for a runner. `runner-host retire
-<host_id>` revokes the token and retires the host, then retires each of
-its runners; it refuses while a runner still holds routes unless `--force` is given, and `--by` records who retired it.
-Between the host's retirement and its last runner's, a runner is still held but its host is gone. `enroll` on a retired
-host refuses with a `409`.
+stays dead, as for a runner. `runner-host retire <host_id>` revokes the token and retires the host, then retires each
+runner under the host when its retirement lands; a runner moved to another host before then is left alone. It refuses
+while a runner still holds routes unless `--force` is given, and `--by` records who retired it. Between the host's
+retirement and its last runner's, a runner is still held but its host is gone: `release` of a runner the retire has not
+retired yet refuses with a `409` naming the host, and running `runner-host retire` again finishes the retire, after
+which the runner can be released. `enroll` on a retired host refuses with a `409`. When another verb changes a host's or
+runner's lifecycle while `adopt`, `release`, `retire`, or `add --adopt` is deciding, the verb writes nothing and answers
+`409`; running it again decides it on the current state.
 
 The writes require the `runner:retire` permission and the reads `fleet:view`.
 

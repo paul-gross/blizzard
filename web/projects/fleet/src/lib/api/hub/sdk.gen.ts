@@ -1303,7 +1303,7 @@ export const ingestHostFactsApiFleetHostEventsPost = <ThrowOnError extends boole
  *
  * Add a runner under the calling host, in the host's tenant, as an operator's add would — its id and bearer token
  * are minted together and the plaintext token is returned once. An entry of ``projects`` naming no project of the
- * tenant is refused 422, and nothing is added.
+ * tenant is refused 422, and a host retired before the add lands 403; nothing is added.
  */
 export const addHostRunnerApiFleetHostRunnersPost = <ThrowOnError extends boolean = false>(options: Options<AddHostRunnerApiFleetHostRunnersPostData, ThrowOnError>): RequestResult<AddHostRunnerApiFleetHostRunnersPostResponses, AddHostRunnerApiFleetHostRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<AddHostRunnerApiFleetHostRunnersPostResponses, AddHostRunnerApiFleetHostRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/host/runners',
@@ -1318,7 +1318,9 @@ export const addHostRunnerApiFleetHostRunnersPost = <ThrowOnError extends boolea
  * Retire Host Runner
  *
  * Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does — 409 naming each held
- * chunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404).
+ * chunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a
+ * first retire whose runner gained a newer retirement or reinstatement after it was read records no fact and is
+ * refused 409.
  */
 export const retireHostRunnerApiFleetHostRunnersRunnerIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostData, ThrowOnError>): RequestResult<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses, RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses, RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors, ThrowOnError>({
     url: '/api/fleet/host/runners/{runner_id}/retire',
@@ -1800,8 +1802,8 @@ export const listHostsApiHostsGet = <ThrowOnError extends boolean = false>(optio
  *
  * Add a host under ``name`` — the hub mints its id and bearer token together, and the plaintext token is returned
  * once. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as
- * unknown (404), one already under a host or a retired one 409, and nothing is added. A name a live host holds is
- * refused 409.
+ * unknown (404), one already under a host or a retired one 409, and so is one retired or reinstated while the add
+ * was decided; nothing is added. A name a live host holds is refused 409.
  */
 export const addHostApiHostsPost = <ThrowOnError extends boolean = false>(options: Options<AddHostApiHostsPostData, ThrowOnError>): RequestResult<AddHostApiHostsPostResponses, AddHostApiHostsPostErrors, ThrowOnError> => (options.client ?? client).post<AddHostApiHostsPostResponses, AddHostApiHostsPostErrors, ThrowOnError>({
     url: '/api/hosts',
@@ -1823,7 +1825,8 @@ export const getHostApiHostsHostIdGet = <ThrowOnError extends boolean = false>(o
  * Adopt Runners
  *
  * Place existing runners under the host, all or none. A runner of another tenant is refused as unknown (404), one
- * already under a host or a retired one 409, and so is a retired host.
+ * already under a host or a retired one 409, and so is a retired host — one retired while the adoption was decided
+ * included — and a runner retired or reinstated meanwhile.
  */
 export const adoptRunnersApiHostsHostIdAdoptionsPost = <ThrowOnError extends boolean = false>(options: Options<AdoptRunnersApiHostsHostIdAdoptionsPostData, ThrowOnError>): RequestResult<AdoptRunnersApiHostsHostIdAdoptionsPostResponses, AdoptRunnersApiHostsHostIdAdoptionsPostErrors, ThrowOnError> => (options.client ?? client).post<AdoptRunnersApiHostsHostIdAdoptionsPostResponses, AdoptRunnersApiHostsHostIdAdoptionsPostErrors, ThrowOnError>({
     url: '/api/hosts/{host_id}/adoptions',
@@ -1846,7 +1849,9 @@ export const enrollHostApiHostsHostIdEnrollmentsPost = <ThrowOnError extends boo
  * Release Runners
  *
  * Return runners under the host to standing alone, keeping their ids and tokens, all or none. A runner not under
- * the host is refused as unknown (404).
+ * the host is refused as unknown (404). A retired host releases only retired runners: an unretired one is refused 409
+ * until the host's retire is re-run. A host or runner whose lifecycle moved while the release was decided is refused
+ * 409; run it again.
  */
 export const releaseRunnersApiHostsHostIdReleasesPost = <ThrowOnError extends boolean = false>(options: Options<ReleaseRunnersApiHostsHostIdReleasesPostData, ThrowOnError>): RequestResult<ReleaseRunnersApiHostsHostIdReleasesPostResponses, ReleaseRunnersApiHostsHostIdReleasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReleaseRunnersApiHostsHostIdReleasesPostResponses, ReleaseRunnersApiHostsHostIdReleasesPostErrors, ThrowOnError>({
     url: '/api/hosts/{host_id}/releases',
@@ -1861,7 +1866,8 @@ export const releaseRunnersApiHostsHostIdReleasesPost = <ThrowOnError extends bo
  * Retire Host
  *
  * Retire a host — its token is revoked and every runner under it retired; 409 naming each runner's held chunks
- * unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass.
+ * unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host
+ * retired by another retire while this one was decided is refused 409; run it again.
  */
 export const retireHostApiHostsHostIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireHostApiHostsHostIdRetirePostData, ThrowOnError>): RequestResult<RetireHostApiHostsHostIdRetirePostResponses, RetireHostApiHostsHostIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireHostApiHostsHostIdRetirePostResponses, RetireHostApiHostsHostIdRetirePostErrors, ThrowOnError>({
     url: '/api/hosts/{host_id}/retire',
@@ -2648,7 +2654,8 @@ export const pauseRunnerApiRunnersRunnerIdPausePost = <ThrowOnError extends bool
 /**
  * Reinstate Runner
  *
- * Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired.
+ * Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
+ * under a retired host, and when its lifecycle moved while the reinstate was decided.
  */
 export const reinstateRunnerApiRunnersRunnerIdReinstatePost = <ThrowOnError extends boolean = false>(options: Options<ReinstateRunnerApiRunnersRunnerIdReinstatePostData, ThrowOnError>): RequestResult<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError> => (options.client ?? client).post<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/reinstate',
@@ -2678,7 +2685,9 @@ export const resumeRunnerApiRunnersRunnerIdResumePost = <ThrowOnError extends bo
  *
  * Retire a runner — its token is revoked and its claims and registrations refused;
  * 409 naming each held chunk unless ``force``, which releases them. Re-running on a
- * retired runner re-runs the release pass.
+ * retired runner re-runs the release pass. A first retire whose runner gained a newer
+ * retirement or reinstatement after it was read records no fact and is refused 409; run it
+ * again.
  */
 export const retireRunnerApiRunnersRunnerIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireRunnerApiRunnersRunnerIdRetirePostData, ThrowOnError>): RequestResult<RetireRunnerApiRunnersRunnerIdRetirePostResponses, RetireRunnerApiRunnersRunnerIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireRunnerApiRunnersRunnerIdRetirePostResponses, RetireRunnerApiRunnersRunnerIdRetirePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/retire',

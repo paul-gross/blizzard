@@ -113,7 +113,16 @@ def _reads(engine: Engine) -> dict[str, Callable[[], object]]:
         "queue_positions": lambda: ChunkQueueStore(store, FixedClock(_T0)).queue_positions(_KEYS),
         "paused": registry(RunnerRegistryStore.paused_many),
         "local_pause": registry(RunnerRegistryStore.local_pause_detail_many),
-        "lifecycle": registry(RunnerRegistryStore.lifecycle_many),
+        "lifecycle": registry(_lifecycle_state),
+    }
+
+
+def _lifecycle_state(conn: Connection, runner_ids: Sequence[str]) -> object:
+    """Each runner's derived lifecycle without its version — the newest fact's id, which grows with history by
+    construction."""
+    return {
+        runner_id: lifecycle[:3]
+        for runner_id, lifecycle in RunnerRegistryStore.lifecycle_many(conn, runner_ids).items()
     }
 
 

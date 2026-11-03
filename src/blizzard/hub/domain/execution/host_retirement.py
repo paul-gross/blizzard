@@ -9,7 +9,8 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.execution.fleet import FleetService, RetireOutcome
 from blizzard.hub.domain.runners.host import Host, IWriteHostRegistry
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerHoldsRoutes
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerHoldsRoutes, RunnerLifecycleConflict
 
 _log = get_logger("blizzard.hub.host_retirement")
 
@@ -26,11 +27,11 @@ class HostRetireOutcome:
 
 
 class HostRetirementInterrupted(Exception):
-    """A runner under the host gained a live route after the host's refusal check, so its non-forced retire refused
-    after the host's own retirement committed. ``committed`` is what did land: the host's fact and revocation, and
-    each runner retired before the refusal."""
+    """A runner's retire refused after the host's own retirement committed: it gained a live route after the host's
+    refusal check, so its non-forced retire refused, or its lifecycle moved after the roster was read. ``committed`` is
+    what did land: the host's fact and revocation, and each runner retired before the refusal."""
 
-    def __init__(self, committed: HostRetireOutcome, refusal: RunnerHoldsRoutes) -> None:
+    def __init__(self, committed: HostRetireOutcome, refusal: RunnerHoldsRoutes | RunnerLifecycleConflict) -> None:
         super().__init__(str(refusal))
         self.committed = committed
 
@@ -48,20 +49,28 @@ class HostRetirementService:
 
     def retire(self, host: Host, *, by: str, force: bool) -> HostRetireOutcome:
         """The host decides the refusal (:meth:`Host.retire`) over every live runner's holdings before any write.
-        The host's fact and token revocation then land together, so the host can add no runner from that instant, and
-        each runner under it is retired with the same ``force``. A crash between the two leaves runners under a
-        retired host unretired; a re-run writes no second host fact and re-runs each runner's retire, which finishes
-        it."""
+        The host's fact and token revocation then land together, on the lifecycle version the host was read at —
+        :class:`~blizzard.hub.domain.runners.host.HostLifecycleConflict` otherwise — so the host can add no runner
+        from that instant. Each runner under it as that write left it is then retired with the same ``force``: from
+        that instant no write adds a live runner under the host or releases an unretired one, so the roster read after
+        it holds every runner the retire still has to retire, and none moved to another host before the fact landed.
+        The roster is read once: a runner it holds already retired is re-run over as :meth:`FleetService.retire`
+        re-runs, revoking and releasing whatever that runner holds when its turn comes. A crash between the two leaves
+        runners under a retired host unretired; a re-run writes no second host fact and re-runs each runner's retire,
+        which finishes it."""
         now = self._clock.now()
         under = self._runners.list_runners(include_retired=True, host_id=host.host_id)
         holdings = {r.runner_id: self._fleet.holdings(r.runner_id) for r in under if not r.retired}
         fact = host.retire(holdings, force=force, by=by, at=now)
-        fact_id, revocation_id = self._hosts.record_retirement(host.host_id, fact=fact, at=now, by=by)
+        fact_id, revocation_id = self._hosts.record_retirement(
+            HostLifecycleVersion(host.host_id, host.lifecycle_version), fact=fact, at=now, by=by
+        )
+        roster = self._runners.list_runners(include_retired=True, host_id=host.host_id)
         outcomes: dict[str, RetireOutcome] = {}
-        for runner in under:
+        for runner in roster:
             try:
                 outcomes[runner.runner_id] = self._fleet.retire(runner, by=by, force=force)
-            except RunnerHoldsRoutes as exc:
+            except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
                 committed = HostRetireOutcome(fact_id=fact_id, revocation_id=revocation_id, runners=outcomes)
                 raise HostRetirementInterrupted(committed, exc) from exc
         _log.info(

@@ -17,6 +17,8 @@ from sqlalchemy import Connection, Row
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     IWriteRunnerRegistry,
@@ -33,8 +35,13 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.host_usage import read_host_rosters, read_host_usage, stored_usage_windows
+from blizzard.hub.store.internal.lifecycle_versions import require_host_lifecycle, require_runner_lifecycles
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
+
+#: ``(retired, retired_at, retired_by, lifecycle_version)`` off a runner's newest lifecycle fact.
+_Lifecycle = tuple[bool, datetime | None, str | None, int]
 
 
 def locked_token_hash(conn: Connection, runner_id: str) -> str | None:
@@ -239,8 +246,18 @@ class RunnerRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def add(self, addition: RunnerAddition) -> None:
-        with self._store.write("add") as conn:
+    def add(
+        self,
+        addition: RunnerAddition,
+        *,
+        expected_host: HostLifecycleVersion | None = None,
+        transaction: Transaction | None = None,
+    ) -> None:
+        if addition.host_id is not None and (expected_host is None or expected_host.host_id != addition.host_id):
+            raise ValueError(f"an addition under host {addition.host_id} carries that host's lifecycle version")
+        with connection_in(self._store, transaction, "add", write=True) as conn:
+            if expected_host is not None:
+                require_host_lifecycle(conn, expected_host.host_id, expected_host.version)
             conn.execute(
                 self._store.insert(s.runner_registrations).values(
                     runner_id=addition.runner_id,
@@ -446,8 +463,21 @@ class RunnerRegistryStore:
                 .values(name=name, missed_at=missed_at, reason=reason, updated_at=at)
             )
 
-    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
-        with self._store.write("record_lifecycle") as conn:
+    def record_lifecycle(
+        self,
+        runner_id: str,
+        *,
+        retired: bool,
+        at: datetime,
+        by: str,
+        expected_lifecycle: int,
+        expected_host: HostLifecycleVersion | None = None,
+        transaction: Transaction | None = None,
+    ) -> int:
+        with connection_in(self._store, transaction, "record_lifecycle", write=True) as conn:
+            require_runner_lifecycles(conn, {runner_id: expected_lifecycle})
+            if expected_host is not None:
+                require_host_lifecycle(conn, expected_host.host_id, expected_host.version)
             result = conn.execute(
                 self._store.insert(s.runner_lifecycle_facts).values(
                     runner_id=runner_id, retired=retired, set_at=at, set_by=by
@@ -533,18 +563,16 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _lifecycle(conn: Connection, runner_id: str) -> tuple[bool, datetime | None, str | None]:
+    def _lifecycle(conn: Connection, runner_id: str) -> _Lifecycle:
         """The runner's retirement, off its newest lifecycle fact."""
         return RunnerRegistryStore.lifecycle_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def lifecycle_many(
-        conn: Connection, runner_ids: Sequence[str]
-    ) -> dict[str, tuple[bool, datetime | None, str | None]]:
-        """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
-        its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None)``,
+    def lifecycle_many(conn: Connection, runner_ids: Sequence[str]) -> dict[str, _Lifecycle]:
+        """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by, version)`` off
+        its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None, 0)``,
         and a reinstated runner's newest fact nulls ``at``/``by``."""
-        result: dict[str, tuple[bool, datetime | None, str | None]] = dict.fromkeys(runner_ids, (False, None, None))
+        result: dict[str, _Lifecycle] = dict.fromkeys(runner_ids, (False, None, None, 0))
         if not runner_ids:
             return result
         for batch in id_batches(runner_ids):
@@ -558,10 +586,13 @@ class RunnerRegistryStore:
                     s.runner_lifecycle_facts.c.retired,
                     s.runner_lifecycle_facts.c.set_at,
                     s.runner_lifecycle_facts.c.set_by,
+                    s.runner_lifecycle_facts.c.id,
                 )
             ).all()
             for row in rows:
-                result[row.runner_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
+                result[row.runner_id] = (
+                    (True, row.set_at, row.set_by, row.id) if row.retired else (False, None, None, row.id)
+                )
         return result
 
     @staticmethod
@@ -679,9 +710,9 @@ class RunnerRegistryStore:
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],
         external_usage_misses: list[tuple[str, str, datetime, str]],
-        lifecycle: tuple[bool, datetime | None, str | None],
+        lifecycle: _Lifecycle,
     ) -> RunnerRegistration:
-        retired, retired_at, retired_by = lifecycle
+        retired, retired_at, retired_by, lifecycle_version = lifecycle
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         subscription_usage = tuple(
             SubscriptionUsageSample(
@@ -748,6 +779,7 @@ class RunnerRegistryStore:
             retired=retired,
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
+            lifecycle_version=lifecycle_version,
             gates=tuple(gates),
             host_id=row.host_id,
             bindings=(

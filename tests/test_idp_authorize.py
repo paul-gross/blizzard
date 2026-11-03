@@ -18,6 +18,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from tests.support import (
     HubHarness,
@@ -235,7 +236,7 @@ def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_ma
 
     assert authorize("runner-a")[0] not in (400, 403)
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
-    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
+    retired = writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     status_code, body = authorize("runner-a")
     assert status_code == 403
@@ -244,7 +245,7 @@ def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_ma
     assert unknown[0] == 400
     assert authorize("runner-a", "https://elsewhere.example/cb") == unknown
 
-    writer.record_lifecycle("runner-a", retired=False, at=hub.clock.now(), by="op")
+    writer.record_lifecycle("runner-a", retired=False, at=hub.clock.now(), by="op", expected_lifecycle=retired)
     assert authorize("runner-a")[0] not in (400, 403)
 
 
@@ -333,7 +334,7 @@ def test_a_retired_runner_is_told_apart_only_to_a_member_of_its_tenant(tmp_path:
     seed_membership(hub.engine, bravo.tenant, member.user_id, Role.GUEST)
     stranger = seed_user(hub, username="stranger", role=Role.ADMIN, email="stranger@example.com")
     writer = cast(IWriteRunnerRegistry, bravo.services.registry)
-    writer.record_lifecycle(_BRAVO_RUNNER, retired=True, at=hub.clock.now(), by="op")
+    writer.record_lifecycle(_BRAVO_RUNNER, retired=True, at=hub.clock.now(), by="op", expected_lifecycle=0)
 
     assert _sign_in(hub, member, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 403
     assert _sign_in(hub, stranger, _BRAVO_RUNNER, _BRAVO_REDIRECT).status_code == 400
@@ -382,7 +383,10 @@ def test_a_host_sign_in_is_refused_as_a_runners_is(tmp_path: Path) -> None:
     assert {(r.status_code, r.text) for r in (unknown, unreported, not_a_member)} == {(400, unknown.text)}
 
     hosts.record_retirement(
-        _HOST_ID, fact=HostLifecycleFact(_HOST_ID, True, hub.clock.now(), "op"), at=hub.clock.now(), by="op"
+        HostLifecycleVersion(_HOST_ID, 0),
+        fact=HostLifecycleFact(_HOST_ID, True, hub.clock.now(), "op"),
+        at=hub.clock.now(),
+        by="op",
     )
 
     retired = _sign_in(hub, member, _HOST_ID, _HOST_REDIRECT)

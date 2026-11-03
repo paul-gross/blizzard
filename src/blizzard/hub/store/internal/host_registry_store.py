@@ -2,12 +2,14 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only, status derived
 (``bzh:facts-not-status``): retirement derives from the newest row of ``host_lifecycle_facts``; ``name``,
-``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns."""
+``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns. A host's lifecycle version is its newest
+lifecycle fact's id, and every write that moves a runner onto or off a host, or retires it, lands only on the versions
+it was decided on."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -15,6 +17,7 @@ from sqlalchemy import Connection, CursorResult, Row
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.host import (
     Host,
     HostAddition,
@@ -26,14 +29,19 @@ from blizzard.hub.domain.runners.host import (
     HostWorkspace,
     IWriteHostRegistry,
     RunnerAlreadyHosted,
+    RunnerNotUnderHost,
 )
+from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import DeclaredSubscription
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.host_usage import read_host_usage
+from blizzard.hub.store.internal.lifecycle_versions import require_host_lifecycle, require_runner_lifecycles
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
 
-_Lifecycle = tuple[bool, datetime | None, str | None]
+#: ``(retired, retired_at, retired_by, lifecycle_version)`` off a host's newest lifecycle fact.
+_Lifecycle = tuple[bool, datetime | None, str | None, int]
 
 
 def _locked_token_hash(conn: Connection, host_id: str) -> str | None:
@@ -159,8 +167,15 @@ class HostRegistryStore:
                 .values(name=name, missed_at=missed_at, reason=reason, updated_at=at)
             )
 
-    def add(self, addition: HostAddition) -> None:
-        with self._store.write("add_host") as conn:
+    def add(
+        self,
+        addition: HostAddition,
+        *,
+        expected_runners: Mapping[str, int] | None = None,
+        transaction: Transaction | None = None,
+    ) -> None:
+        with connection_in(self._store, transaction, "add_host", write=True) as conn:
+            require_runner_lifecycles(conn, _expected(addition.adopt, expected_runners or {}))
             # The tenant-row lock the scoped write takes serializes two adds of one name.
             if addition.name in self._live_names(conn, None):
                 raise HostNameTaken(addition.name)
@@ -203,24 +218,54 @@ class HostRegistryStore:
             )
             return bool(first.rowcount)
 
-    def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
-        with self._store.write("adopt_runners") as conn:
-            self._place(conn, host_id, runner_ids)
+    def adopt(
+        self,
+        host: HostLifecycleVersion,
+        runner_ids: Sequence[str],
+        *,
+        expected_runners: Mapping[str, int],
+        transaction: Transaction | None = None,
+    ) -> None:
+        with connection_in(self._store, transaction, "adopt_runners", write=True) as conn:
+            require_host_lifecycle(conn, host.host_id, host.version)
+            require_runner_lifecycles(conn, _expected(runner_ids, expected_runners))
+            self._place(conn, host.host_id, runner_ids)
 
-    def release(self, host_id: str, runner_ids: Sequence[str]) -> None:
+    def release(
+        self,
+        host: HostLifecycleVersion,
+        runner_ids: Sequence[str],
+        *,
+        expected_runners: Mapping[str, int],
+        transaction: Transaction | None = None,
+    ) -> None:
         runners = s.runner_registrations
-        with self._store.write("release_runners") as conn:
-            for batch in id_batches(list(runner_ids)):
-                conn.execute(
+        with connection_in(self._store, transaction, "release_runners", write=True) as conn:
+            require_host_lifecycle(conn, host.host_id, host.version)
+            require_runner_lifecycles(conn, _expected(runner_ids, expected_runners))
+            for runner_id in runner_ids:
+                # A runner moved to another host since the release was decided appends no lifecycle fact, so its row
+                # matching nothing here rolls the whole release back.
+                released = conn.execute(
                     self._store.update(runners)
-                    .where(runners.c.host_id == host_id, runners.c.runner_id.in_(batch))
+                    .where(runners.c.host_id == host.host_id, runners.c.runner_id == runner_id)
                     .values(host_id=None)
                 )
+                if not released.rowcount:
+                    raise RunnerNotUnderHost(runner_id, host_id=host.host_id)
 
     def record_retirement(
-        self, host_id: str, *, fact: HostLifecycleFact | None, at: datetime, by: str
+        self,
+        host: HostLifecycleVersion,
+        *,
+        fact: HostLifecycleFact | None,
+        at: datetime,
+        by: str,
+        transaction: Transaction | None = None,
     ) -> tuple[int | None, int | None]:
-        with self._store.write("record_host_retirement") as conn:
+        host_id = host.host_id
+        with connection_in(self._store, transaction, "record_host_retirement", write=True) as conn:
+            require_host_lifecycle(conn, host_id, host.version)
             fact_id = None
             if fact is not None:
                 result = conn.execute(
@@ -299,8 +344,9 @@ class HostRegistryStore:
 
     @staticmethod
     def _lifecycle_many(conn: Connection, host_ids: Sequence[str]) -> dict[str, _Lifecycle]:
-        """Every listed host's ``(retired, at, by)`` off its newest lifecycle fact, one query per id batch."""
-        result: dict[str, _Lifecycle] = dict.fromkeys(host_ids, (False, None, None))
+        """Every listed host's ``(retired, at, by, version)`` off its newest lifecycle fact, one query per id
+        batch."""
+        result: dict[str, _Lifecycle] = dict.fromkeys(host_ids, (False, None, None, 0))
         for batch in id_batches(list(host_ids)):
             rows = conn.execute(
                 newest_fact_select(
@@ -312,15 +358,18 @@ class HostRegistryStore:
                     s.host_lifecycle_facts.c.retired,
                     s.host_lifecycle_facts.c.set_at,
                     s.host_lifecycle_facts.c.set_by,
+                    s.host_lifecycle_facts.c.id,
                 )
             ).all()
             for row in rows:
-                result[row.host_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
+                result[row.host_id] = (
+                    (True, row.set_at, row.set_by, row.id) if row.retired else (False, None, None, row.id)
+                )
         return result
 
     @staticmethod
     def _host(row: Row[Any], lifecycle: _Lifecycle) -> Host:
-        retired, retired_at, retired_by = lifecycle
+        retired, retired_at, retired_by, lifecycle_version = lifecycle
         redirect_uris: list[str] = json.loads(row.redirect_uris) if row.redirect_uris else []
         workspaces: list[dict[str, Any]] = json.loads(row.workspaces) if row.workspaces else []
         subscriptions: list[dict[str, Any]] = json.loads(row.subscriptions) if row.subscriptions else []
@@ -343,7 +392,16 @@ class HostRegistryStore:
             retired=retired,
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
+            lifecycle_version=lifecycle_version,
         )
+
+
+def _expected(runner_ids: Sequence[str], expected: Mapping[str, int]) -> dict[str, int]:
+    """The lifecycle version each of ``runner_ids`` was decided on; :class:`ValueError` for one that carries none."""
+    missing = [runner_id for runner_id in runner_ids if runner_id not in expected]
+    if missing:
+        raise ValueError(f"runners {', '.join(missing)} carry no lifecycle version the write was decided on")
+    return {runner_id: expected[runner_id] for runner_id in runner_ids}
 
 
 def _inserted_id(result: CursorResult[Any]) -> int:
