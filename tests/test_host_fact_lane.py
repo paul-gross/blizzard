@@ -4,7 +4,10 @@ misses against a mark of the host's own (component tier)."""
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -80,6 +83,71 @@ def test_a_batch_is_applied_once_and_a_replay_is_reacknowledged(tmp_path: Path) 
     }
     assert (replay["high_water"], replay["applied"], replay["already_applied"]) == (2, [], [1, 2])
     assert "route_ended" not in first
+
+
+@pytest.mark.parametrize("bypass_lock", [False, True], ids=["locked", "negative-control"])
+def test_concurrent_same_host_pushes_decide_under_the_same_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bypass_lock: bool
+) -> None:
+    from blizzard.hub.domain.execution.facts import PushedFact
+
+    hub = build_hub(tmp_path)
+    host = _host(hub)
+    held = hub.services.hosts.get_host(host["host_id"])
+    assert held is not None
+    store = hub.services.hosts
+    service = hub.services.host_facts
+    start = Barrier(2)
+    if bypass_lock:
+        # Force both unlocked requests to read the old mark before either writes it.
+        original_read = store.high_water
+
+        def racing_read(host_id: str) -> int:
+            mark = original_read(host_id)
+            start.wait(timeout=10)
+            return mark
+
+        monkeypatch.setattr(store, "high_water", racing_read)
+        monkeypatch.setattr(store, "locked_host_facts", lambda host_id: nullcontext(store))
+
+    fact = PushedFact(1, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, _sample(1)["payload"])
+
+    def push() -> Any:
+        if not bypass_lock:
+            start.wait(timeout=10)
+        return service.ingest(held, [fact])
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: push(), range(2)))
+
+    assert sum(len(r.applied) for r in results) == (2 if bypass_lock else 1)
+    assert sum(len(r.already_applied) for r in results) == (0 if bypass_lock else 1)
+
+
+def test_a_failed_batch_rolls_back_its_usage_and_high_water(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from blizzard.hub.domain.execution.facts import PushedFact
+
+    hub = build_hub(tmp_path)
+    host = _host(hub)
+    held = hub.services.hosts.get_host(host["host_id"])
+    assert held is not None
+    service = hub.services.host_facts
+    original_apply = service._apply
+
+    def fail_second(*args: Any, **kwargs: Any) -> str | None:
+        if args[2] == EXTERNAL_SUBSCRIPTION_USAGE_MISSED:
+            raise RuntimeError("failed batch")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_apply", fail_second)
+    facts = [PushedFact(f["seq"], f["kind"], f["payload"]) for f in (_sample(1), _miss(2))]
+    with pytest.raises(RuntimeError, match="failed batch"):
+        service.ingest(held, facts)
+
+    assert hub.services.hosts.high_water(host["host_id"]) == 0
+    usage = hub.client.get(f"/api/hosts/{host['host_id']}").json()["subscription_usage"]
+    assert usage[0]["sampled_at"] is None
+    assert usage[0]["windows"] == []
 
 
 def test_a_retired_hosts_push_is_refused_and_its_mark_stays_put(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeltaMaterialization,
     NewFindingSet,
 )
+from blizzard.hub.domain.garden.findings.model import FindingSet
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import routine_run_participants
 from blizzard.hub.store import schema as s
@@ -134,6 +135,7 @@ def test_baseline_participants_contend_on_the_same_key(database_url, monkeypatch
                 elif actor == "delivery":
                     assert result is DeliveryOutcome.RECORDED
                 else:
+                    assert isinstance(result, FindingSet)
                     assert result.finding_set_id == "set_new"
             else:
                 _wait_for_key(observer, future)
@@ -143,8 +145,11 @@ def test_baseline_participants_contend_on_the_same_key(database_url, monkeypatch
                 if actor == "delivery":
                     assert result is DeliveryOutcome.RECORDED
                 else:
+                    assert isinstance(result, FindingSet)
                     assert result.finding_set_id == "set_new"
-        assert FindingSetStore(scope).newest_for_routine_scope(*_KEY).finding_set_id == "set_new"
+        newest = FindingSetStore(scope).newest_for_routine_scope(*_KEY)
+        assert newest is not None
+        assert newest.finding_set_id == "set_new"
     finally:
         holder.dispose()
         waiter.dispose()

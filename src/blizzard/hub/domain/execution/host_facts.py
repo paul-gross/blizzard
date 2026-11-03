@@ -19,7 +19,7 @@ from blizzard.hub.domain.execution.usage_facts import (
     subscription_identity,
     usage_miss_reason,
 )
-from blizzard.hub.domain.runners.host import Host, IWriteHostRegistry
+from blizzard.hub.domain.runners.host import Host, ILockedHostFacts, IWriteHostRegistry
 
 _log = get_logger("blizzard.hub.host_facts")
 
@@ -49,7 +49,11 @@ class HostFactIngestService:
         """Apply one push of ``host``'s facts. A retired host raises
         :class:`~blizzard.hub.domain.runners.host.HostRetired` before its high-water mark is read, so nothing lands."""
         host.refuse_if_retired(action="fact ingest")
-        mark = self._hosts.high_water(host.host_id)
+        with self._hosts.locked_host_facts(host.host_id) as facts:
+            return self._ingest_locked(host, pushed, facts)
+
+    def _ingest_locked(self, host: Host, pushed: Sequence[PushedFact], facts: ILockedHostFacts) -> HostFactIngestResult:
+        mark = facts.high_water(host.host_id)
         applied: list[int] = []
         already: list[int] = []
         rejected: list[int] = []
@@ -59,7 +63,7 @@ class HostFactIngestService:
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            slug = self._apply(host.host_id, fact.kind, fact.payload)
+            slug = self._apply(facts, host.host_id, fact.kind, fact.payload)
             if slug is None:
                 # A contract mismatch, not an idempotency skip: do not advance the mark past it.
                 rejected.append(fact.seq)
@@ -67,9 +71,7 @@ class HostFactIngestService:
             mark = fact.seq
             applied.append(fact.seq)
             slugs.add(slug)
-            # Persisted per applied fact, not once after the loop — bounds a crash mid-batch to the one in-flight
-            # fact's re-apply, which the in-place upserts absorb (blizzard-context crash-correctness/hub.md).
-            self._hosts.set_high_water(host.host_id, seq=mark, at=self._clock.now())
+            facts.set_high_water(host.host_id, seq=mark, at=self._clock.now())
 
         _log.info(
             "host facts ingested",
@@ -83,7 +85,7 @@ class HostFactIngestService:
             high_water=mark, applied=applied, already_applied=already, rejected=rejected, slugs=frozenset(slugs)
         )
 
-    def _apply(self, host_id: str, kind: str, payload: dict[str, object]) -> str | None:
+    def _apply(self, facts: ILockedHostFacts, host_id: str, kind: str, payload: dict[str, object]) -> str | None:
         """Apply one fact; the slug whose usage it wrote, or ``None`` for an unknown kind or a malformed payload."""
         now = self._clock.now()
         fact = Payload(payload)
@@ -92,7 +94,7 @@ class HostFactIngestService:
             if identity is None:
                 return None
             slug, name = identity
-            self._hosts.record_external_usage(
+            facts.record_external_usage(
                 host_id,
                 slug=slug,
                 name=name,
@@ -107,7 +109,7 @@ class HostFactIngestService:
             if identity is None or reason is None:
                 return None
             slug, name = identity
-            self._hosts.record_external_usage_miss(
+            facts.record_external_usage_miss(
                 host_id, slug=slug, name=name, missed_at=fact.instant("missed_at", now), reason=reason, at=now
             )
             return slug

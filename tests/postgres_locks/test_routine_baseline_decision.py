@@ -12,6 +12,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import RoutineAuthoring
+from blizzard.hub.domain.garden.runs.run import RunResult
 from blizzard.hub.domain.garden.scopes import ScopeRegistry, ScopeSlug
 from blizzard.hub.store import routine_run_participants
 from blizzard.hub.store import schema as s
@@ -129,6 +130,7 @@ def test_run_baseline_against_direct_creation(database_url, monkeypatch, winner,
                     return result
 
             future = pool.submit(compete)
+            second_result = None
             if omit_lock:
                 second_result = future.result(timeout=5)
             else:
@@ -138,15 +140,15 @@ def test_run_baseline_against_direct_creation(database_url, monkeypatch, winner,
                 second_result = future.result(timeout=10)
 
         result = second_result if winner == "create" else first_result
+        assert isinstance(result, RunResult)
         has_baseline = winner == "create" and not omit_lock
         assert (result.baseline.finding_set_id if result.baseline else None) == ("set_new" if has_baseline else None)
         assert result.effective_mode is (RunMode.DELTA if has_baseline else RunMode.FULL)
         assert result.downgraded is not has_baseline
         assert ("baseline set_new" in result.item.body) is has_baseline
-        assert (
-            FindingSetStore(scope).newest_for_routine_scope(project.project_id, "nightly", "fresh").finding_set_id
-            == "set_new"
-        )
+        newest = FindingSetStore(scope).newest_for_routine_scope(project.project_id, "nightly", "fresh")
+        assert newest is not None
+        assert newest.finding_set_id == "set_new"
     finally:
         holder.dispose()
         waiter.dispose()

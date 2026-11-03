@@ -7,7 +7,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
+from contextlib import contextmanager, nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -60,6 +61,34 @@ def locked_host_token_hash(conn: Connection, host_id: str) -> str | None:
     return conn.execute(stmts.select(hosts, hosts.c.token_hash).where(hosts.c.host_id == host_id)).scalar_one_or_none()
 
 
+class _LockedHostFacts:
+    """Host fact operations bound to the transaction that owns the decision lock."""
+
+    def __init__(self, store: HostRegistryStore, conn: Connection) -> None:
+        self._store = store
+        self._conn = conn
+
+    def high_water(self, host_id: str) -> int:
+        return self._store.high_water(host_id, _conn=self._conn)
+
+    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
+        self._store.set_high_water(host_id, seq=seq, at=at, _conn=self._conn)
+
+    def record_external_usage(
+        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+    ) -> None:
+        self._store.record_external_usage(
+            host_id, slug=slug, name=name, sampled_at=sampled_at, windows_json=windows_json, at=at, _conn=self._conn
+        )
+
+    def record_external_usage_miss(
+        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None:
+        self._store.record_external_usage_miss(
+            host_id, slug=slug, name=name, missed_at=missed_at, reason=reason, at=at, _conn=self._conn
+        )
+
+
 class HostRegistryStore:
     """Read-write host-registry adapter over the hub store engine."""
 
@@ -103,8 +132,8 @@ class HostRegistryStore:
         with self._store.read("live_names") as conn:
             return frozenset(self._live_names(conn, excluding))
 
-    def high_water(self, host_id: str) -> int:
-        with self._store.read("host_high_water") as conn:
+    def high_water(self, host_id: str, *, _conn: Connection | None = None) -> int:
+        with nullcontext(_conn) if _conn is not None else self._store.read("host_high_water") as conn:
             seq = conn.execute(
                 self._store.select(s.host_high_water, s.host_high_water.c.seq).where(
                     s.host_high_water.c.host_id == host_id
@@ -118,9 +147,18 @@ class HostRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
+    @contextmanager
+    def locked_host_facts(self, host_id: str) -> Generator[_LockedHostFacts]:
+        with self._store.write("host_fact_ingest") as conn:
+            # The registry precedes the mark and usage locks everywhere this path takes them.
+            lock_host_registry(conn)
+            refuse_retired_host(conn, host_id, action="fact ingest")
+            lock_keys(conn, "host-high-water", [host_id])
+            yield _LockedHostFacts(self, conn)
+
+    def set_high_water(self, host_id: str, *, seq: int, at: datetime, _conn: Connection | None = None) -> None:
         mark = s.host_high_water
-        with self._store.write("set_host_high_water") as conn:
+        with nullcontext(_conn) if _conn is not None else self._store.write("set_host_high_water") as conn:
             lock_keys(conn, "host-high-water", [host_id])
             existing = conn.execute(self._store.select(mark, mark.c.seq).where(mark.c.host_id == host_id)).one_or_none()
             if existing is None:
@@ -130,12 +168,20 @@ class HostRegistryStore:
                 conn.execute(self._store.update(mark).where(mark.c.host_id == host_id).values(seq=seq, updated_at=at))
 
     def record_external_usage(
-        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        _conn: Connection | None = None,
     ) -> None:
         # Refresh-in-place per (host_id, slug): a replay re-writes the row, it never double-counts.
         usage = s.host_external_usage
         match = (usage.c.host_id == host_id, usage.c.slug == slug)
-        with self._store.write("record_host_external_usage") as conn:
+        with nullcontext(_conn) if _conn is not None else self._store.write("record_host_external_usage") as conn:
             lock_host_registry(conn)
             refuse_retired_host(conn, host_id, action="fact ingest")
             lock_keys(conn, "host-external-usage", [json.dumps([host_id, slug])])
@@ -158,12 +204,20 @@ class HostRegistryStore:
             )
 
     def record_external_usage_miss(
-        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        _conn: Connection | None = None,
     ) -> None:
         # Sibling to `record_external_usage`: its own table, never overwriting the sample row it joins at read.
         missed = s.host_external_usage_misses
         match = (missed.c.host_id == host_id, missed.c.slug == slug)
-        with self._store.write("record_host_external_usage_miss") as conn:
+        with nullcontext(_conn) if _conn is not None else self._store.write("record_host_external_usage_miss") as conn:
             lock_host_registry(conn)
             refuse_retired_host(conn, host_id, action="fact ingest")
             lock_keys(conn, "host-external-usage-miss", [json.dumps([host_id, slug])])

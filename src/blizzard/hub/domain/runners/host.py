@@ -8,6 +8,7 @@ mutable exception; a revoked hash is kept as a fact."""
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -317,8 +318,25 @@ class IReadHostRegistry(Protocol):
         ...
 
 
+class ILockedHostFacts(Protocol):
+    """Fact operations on the connection holding the host lane's decision lock."""
+
+    def high_water(self, host_id: str) -> int: ...
+    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None: ...
+    def record_external_usage(
+        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+    ) -> None: ...
+    def record_external_usage_miss(
+        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None: ...
+
+
 class IWriteHostRegistry(IReadHostRegistry, Protocol):
     """Adds the host registry writes."""
+
+    def locked_host_facts(self, host_id: str) -> AbstractContextManager[ILockedHostFacts]:
+        """Serialize a whole host fact decision, including its mark read and writes."""
+        ...
 
     def add(self, addition: HostAddition) -> None:
         """Insert ``addition`` as a never-connected host and place its ``adopt`` runners under it, in one
