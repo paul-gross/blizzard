@@ -8,13 +8,15 @@ leaves out a row naming no tenant too. A probe that gates a pass
 (``bzh:probe-gated-pass``) is read hub-wide in one statement and answers per tenant
 (``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. The group reads and never
 writes. The statements live in ``corpus_rows`` (which owns the id-minting rule for tenant
-matching) and run on the marked connection this group opens."""
+matching) and run on the marked connection this group opens. The step reads run inside a read transaction, so a
+step's facts committed together are read together or not at all; every read :meth:`SweepCorpusReads.snapshot`
+yields shares one."""
 
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Generator, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -66,6 +68,10 @@ from blizzard.hub.tenancy import TenantId
 #: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
+#: Opens one read transaction, named by its operation, and yields a :data:`MarkedRead` every read of which is that
+#: transaction's one connection (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
+MarkedSnapshot = Callable[[str], AbstractContextManager[MarkedRead]]
+
 _EPHEMERAL_TABLES = ephemeral_tables()
 
 
@@ -94,10 +100,26 @@ def _visible_segments() -> Select[Any]:
 
 
 class SweepCorpusReads:
-    """Cross-tenant corpus reads, each row answered with its tenant, and per-tenant change probes."""
+    """Cross-tenant corpus reads, each row answered with its tenant, and per-tenant change probes. ``read`` opens a
+    marked read and ``snapshot`` a marked read transaction; the step reads run in a transaction of their own, and
+    the reads :meth:`snapshot` yields share one."""
 
-    def __init__(self, read: MarkedRead) -> None:
+    def __init__(self, read: MarkedRead, snapshot: MarkedSnapshot) -> None:
         self._read = read
+        self._snapshot = snapshot
+
+    @contextmanager
+    def snapshot(self) -> Generator[SweepCorpusReads, None, None]:
+        """These reads over one read transaction, so every read of them sees the store as of one moment; a snapshot
+        of them is the same transaction."""
+        with self._snapshot("corpus snapshot") as read:
+            yield SweepCorpusReads(read, lambda _operation: nullcontext(read))
+
+    @contextmanager
+    def _consistent_read(self, operation: str) -> Generator[Connection, None, None]:
+        """A read whose statements all see the store as of one moment."""
+        with self._snapshot(operation) as read, read(operation) as conn:
+            yield conn
 
     # --- forge-status annotation ------------------------------------------------------
 
@@ -313,7 +335,7 @@ class SweepCorpusReads:
     # --- trace and egress exports -----------------------------------------------------
 
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
-        with self._read("corpus closing candidates") as conn:
+        with self._consistent_read("corpus closing candidates") as conn:
             return corpus_rows.closing_candidates(conn, since, until, limit)
 
     def step_facts_for(
@@ -322,7 +344,7 @@ class SweepCorpusReads:
         """Each chunk's facts, its work refs rendered by its own tenant's ``label`` once the read is done."""
         if not chunk_ids:
             return {}
-        with self._read("corpus step facts") as conn:
+        with self._consistent_read("corpus step facts") as conn:
             read = corpus_rows.step_facts_for(conn, chunk_ids)
         return {
             chunk_id: corpus_rows.with_work_refs(facts, refs, label(tenant))

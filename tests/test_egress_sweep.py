@@ -7,9 +7,10 @@ import gzip
 import itertools
 import json
 import threading
-from collections.abc import Sequence
-from dataclasses import fields
-from datetime import timedelta
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field, fields, replace
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -28,6 +29,9 @@ from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.observability.hub_events import HubEventKind
+from blizzard.hub.domain.observability.tracing.facts import StepFacts
+from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps, TraceCheckpoint
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
@@ -44,6 +48,7 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
 )
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
@@ -102,11 +107,12 @@ def egress_sweep(
     *,
     store: EgressStore | None = None,
     pass_lock: threading.Lock | None = None,
+    steps: IReadTraceSteps | None = None,
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
     corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     return EgressSweep(
-        steps=trace_store(hub),
+        steps=steps or trace_store(hub),
         egress=store or EgressStore(connections, hub_events=hub_events_of(hub.engine), usage=corpus),
         event_reads=corpus,
         paths=_PATHS,
@@ -401,6 +407,95 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
     assert newest["cost_billed_usd"] == Decimal("0.750000000")
     # The rewrite is partitioned by the step's own end, not by when the usage landed.
     assert {str(b.partition) for b in writer.batches if b.schema.name == "steps"} == {"2026-07-13"}
+
+
+def test_late_usage_committed_while_a_steps_pass_reads_its_window_reaches_the_steps_rewrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A late usage row committed after the window's snapshot opens is not consumed by that pass: the usage the pass
+    moves past is all in the facts it rewrites the step from, so the next pass rewrites the step with it."""
+    hub, graph = egress_hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    _anchored(hub, writer)
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer).sweep()
+    hub.clock.advance(timedelta(hours=3))
+    read_candidates = corpus_rows.closing_candidates
+    pushed: list[str] = []
+
+    def pushing_after_the_candidates_read(
+        conn: sa.Connection, since: datetime, until: datetime, limit: int
+    ) -> ClosingCandidates:
+        candidates = read_candidates(conn, since, until, limit)
+        if not pushed:
+            _push_usage(hub, chunk_id, graph_node_id(graph), cost=0.25, late=True)
+            pushed.append(chunk_id)
+        return candidates
+
+    monkeypatch.setattr(corpus_rows, "closing_candidates", pushing_after_the_candidates_read)
+    egress_sweep(hub, writer).sweep()
+    egress_sweep(hub, writer).sweep()
+
+    assert pushed == [chunk_id]
+    copies = [r for r in egress_rows(writer, "steps") if r["chunk_id"] == chunk_id]
+    newest = max(copies, key=lambda c: str(c["exported_at"]))
+    assert newest["invocations"] == 2
+    assert [newest[c] for c in ("input_tokens", "output_tokens")] == [111, 57]
+
+
+class _SnapshotDepths:
+    """Trace step reads over ``store`` that log, for every candidates and facts read, how many snapshots deep it
+    ran, and count the outermost snapshots opened."""
+
+    def __init__(self, store: IReadTraceSteps, depth: int = 0, log: _DepthLog | None = None) -> None:
+        self._store = store
+        self._depth = depth
+        self.log = log or _DepthLog()
+
+    @contextmanager
+    def snapshot(self) -> Iterator[_SnapshotDepths]:
+        if self._depth == 0:
+            self.log.outermost += 1
+        with self._store.snapshot() as pinned:
+            yield _SnapshotDepths(pinned, self._depth + 1, self.log)
+
+    def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
+        self.log.reads.append(("candidates", self._depth))
+        return self._store.closing_candidates(since, until, limit)
+
+    def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+        self.log.reads.append(("facts", self._depth))
+        return self._store.step_facts_for(chunk_ids)
+
+    def newest_cursor(self) -> TraceCheckpoint | None:
+        return self._store.newest_cursor()
+
+    def newest_export_latch(self) -> HubEventKind | None:
+        return self._store.newest_export_latch()
+
+
+@dataclass
+class _DepthLog:
+    outermost: int = 0
+    reads: list[tuple[str, int]] = field(default_factory=lambda: [])
+
+
+def test_a_steps_pass_reads_its_window_and_its_late_facts_inside_one_snapshot(tmp_path: Path) -> None:
+    hub, graph = egress_hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    steps_only = replace(SETTLED, datasets=(STEPS_SCHEMA.name,))
+    _anchored(hub, writer, steps_only)
+    chunk_id = closed_step(hub, graph, 1)
+    egress_sweep(hub, writer, steps_only).sweep()
+    hub.clock.advance(timedelta(hours=3))
+    _push_usage(hub, chunk_id, graph_node_id(graph), cost=0.25, late=True)
+    steps = _SnapshotDepths(trace_store(hub))
+
+    egress_sweep(hub, writer, steps_only, steps=steps).sweep()
+
+    assert steps.log.outermost == 1
+    assert steps.log.reads == [("candidates", 2), ("facts", 2), ("facts", 1)]
+    assert [r["invocations"] for r in egress_rows(writer, "steps") if r["chunk_id"] == chunk_id][-1] == 2
 
 
 def test_rows_name_their_runner_as_it_last_registered_and_a_later_copy_follows_a_rename(tmp_path: Path) -> None:

@@ -9,7 +9,6 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -53,7 +52,7 @@ from blizzard.hub.domain.work_items.closure import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
-from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
@@ -429,7 +428,7 @@ _FAKE_TENANT = TenantId("ten_close_drain")
 
 
 def _corpus(hub: HubHarness) -> SweepCorpusReads:
-    return SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine)))
+    return build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
 
 
 def _sweep_over(corpus: IReadCloseIntentCorpus, drainer: CloseIntentDrainer, clock: IClock) -> CloseDrainSweep:

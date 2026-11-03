@@ -7,8 +7,8 @@ tenant, a sweep's corpus read, and tenant administration. A group reads over the
 :class:`HubStoreConnections` and never writes; every statement it issues runs on a connection
 :func:`hub_scoped_read` marks with :data:`HUB_SCOPED_OPTION`, which exempts it from the tenant
 statement guard. A group lives in a module of its own beside this one, named ``hub_scoped_<kind>``,
-and the aggregate names it once; such a group takes :func:`hub_scoped_read` already bound to the
-connections, so it never holds an unmarked one."""
+and the aggregate names it once; such a group takes :func:`hub_scoped_read`, and the corpus group
+:func:`hub_scoped_snapshot` beside it, already bound to the connections, so it never holds an unmarked one."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from functools import partial
 from sqlalchemy import Connection
 
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+from blizzard.hub.store.internal.hub_scoped_corpus import MarkedRead, SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.open_tenants import ALL_TENANTS
@@ -33,6 +33,14 @@ def hub_scoped_read(connections: HubStoreConnections, operation: str) -> Generat
     """A read over ``connections`` whose every statement is marked hub-scoped."""
     with connections.read(operation) as conn:
         yield conn.execution_options(**{HUB_SCOPED_OPTION: True})
+
+
+@contextmanager
+def hub_scoped_snapshot(connections: HubStoreConnections, operation: str) -> Generator[MarkedRead, None, None]:
+    """One read transaction over ``connections``, yielding an opener of hub-scoped reads: every read it opens is the
+    transaction's one connection, so every statement on it sees the store as of one moment."""
+    with connections.read_transaction(operation) as borrowed:
+        yield partial(hub_scoped_read, borrowed)
 
 
 class TenantStateReads:
@@ -82,5 +90,5 @@ def build_hub_scoped_reads(connections: HubStoreConnections) -> HubScopedReads:
         tenants=TenantStateReads(connections),
         credentials=CredentialReads(partial(hub_scoped_read, connections)),
         invitations=InvitationReads(partial(hub_scoped_read, connections)),
-        corpus=SweepCorpusReads(partial(hub_scoped_read, connections)),
+        corpus=SweepCorpusReads(partial(hub_scoped_read, connections), partial(hub_scoped_snapshot, connections)),
     )

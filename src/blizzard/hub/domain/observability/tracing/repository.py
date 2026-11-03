@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -90,6 +91,10 @@ class TraceExportFailure:
 class IReadStepCorpus(Protocol):
     """A window of closed steps across every open tenant."""
 
+    def snapshot(self) -> AbstractContextManager[IReadStepCorpus]:
+        """As :meth:`IReadTraceSteps.snapshot`, over the corpus."""
+        ...
+
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         """As :meth:`IReadTraceSteps.closing_candidates`, over every open tenant's closing facts."""
         ...
@@ -104,6 +109,13 @@ class IReadStepCorpus(Protocol):
 
 
 class IReadTraceSteps(Protocol):
+    def snapshot(self) -> AbstractContextManager[IReadTraceSteps]:
+        """These reads with their closing candidates and the corpus's fact rows all read as of one moment, so facts
+        that committed together are read together or not at all and the candidates agree with the facts; a snapshot
+        of them is the same moment. The hydration that completes the facts — graphs, runner names, project and
+        work-source labels, the tenant's name — is read outside it, each tenant's on its own connections."""
+        ...
+
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         """The chunks with a closing fact recorded in ``[since, until]``, read from every closing-fact
         table in time order, ``limit`` rows a table — paging further only past a dense instant at ``since``."""

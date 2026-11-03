@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +26,7 @@ from blizzard.hub.domain.observability.egress.repository import (
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.fact_families import Projection, tables
-from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
-from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from tests.hub_event_rows import hub_events_of
 from tests.support import (
@@ -57,7 +55,7 @@ class _World:
         migrated_hub_at(db_url)
         self.engine = create_engine_from_url(db_url)
         self.carried = default_tenant(self.engine)
-        self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))
+        self.corpus = build_hub_scoped_reads(hub_level_connections(self.engine)).corpus
         for tenant in (_OPEN, _CLOSED):
             self.insert(s.tenants, tenant_id=tenant, name=tenant, created_at=_AT, created_by="test")
             self.insert(

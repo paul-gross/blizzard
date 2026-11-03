@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 
 import pytest
@@ -20,8 +19,7 @@ from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
-from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
-from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from tests.config_inputs import build_hosted_hub_app, init_hub
@@ -150,7 +148,7 @@ def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> Annotation
         clock=hub.clock,
     )
     return AnnotationReconciler(
-        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         tenants=lambda: [default_tenant(hub.engine)],
         tenant=lambda _tenant: tenant,
         clock=hub.clock,
@@ -442,7 +440,7 @@ def test_a_change_to_the_annotating_set_runs_a_full_pass(tmp_path: Path) -> None
 @pytest.mark.component
 def test_work_source_config_probe_tracks_edits_without_tenant_scoped_listing(tmp_path: Path) -> None:
     hub, _annotator, reconciler = _gated(tmp_path)
-    corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine)))
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
     tenant = default_tenant(hub.engine)
     before = corpus.work_source_changes_signature()
     assert count_queries(hub.engine, corpus.work_source_changes_signature) == 1
@@ -474,7 +472,7 @@ def test_unchanged_annotation_pass_has_two_hub_reads_and_no_tenant_opens_as_tena
         )
 
     reconciler = AnnotationReconciler(
-        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         tenants=lambda: tenants,
         tenant=open_tenant,
         clock=hub.clock,
@@ -655,7 +653,7 @@ def test_a_skip_is_recorded_in_its_own_tenants_event_log_only(tmp_path: Path) ->
         ),
     }
     reconciler = AnnotationReconciler(
-        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        corpus=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
         tenants=lambda: list(halves),
         tenant=halves.__getitem__,
         clock=hub.clock,
