@@ -83,7 +83,7 @@ def test_a_migrate_that_moved_the_revision_records_one_hub_migrated_at_the_clock
     config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     head = runner.script_head()
-    runner.downgrade("20261008_1500_scope_surrogate")
+    runner.downgrade("20261018_1200_project_color")
     opener = _FakeOpener()
 
     _runtime(tmp_path, opener).migrate()
@@ -92,7 +92,7 @@ def test_a_migrate_that_moved_the_revision_records_one_hub_migrated_at_the_clock
     assert (row.kind, row.at, row.detail) == (
         "hub-migrated",
         _AT,
-        {"from": "20261008_1500_scope_surrogate", "to": head},
+        {"from": "20261018_1200_project_color", "to": head},
     )
     assert (opener.opened, opener.closed) == (1, 1)
 
@@ -112,10 +112,10 @@ def test_a_downgrade_records_one_hub_migrated_into_the_target_revisions_log(tmp_
     head = hub_runtime.migration_runner(config).script_head()
     opener = _FakeOpener()
 
-    _runtime(tmp_path, opener).migrate(down="20261008_1600_hub_event_log_move")
+    _runtime(tmp_path, opener).migrate(down="20261018_1200_project_color")
 
     [row] = opener.events.rows
-    assert (row.kind, row.detail) == ("hub-migrated", {"from": head, "to": "20261008_1600_hub_event_log_move"})
+    assert (row.kind, row.detail) == ("hub-migrated", {"from": head, "to": "20261018_1200_project_color"})
     assert (opener.opened, opener.closed) == (1, 1)
 
 
@@ -123,7 +123,7 @@ def test_a_downgrade_below_the_hub_log_never_opens_it(tmp_path: Path) -> None:
     init_hub(tmp_path)
     opener = _FakeOpener()
 
-    _runtime(tmp_path, opener).migrate(down="20261008_1000_drop_work_item_proposals")
+    _runtime(tmp_path, opener).migrate(down="base")
     _runtime(tmp_path, opener).migrate(down="base")
 
     assert opener.events.rows == []

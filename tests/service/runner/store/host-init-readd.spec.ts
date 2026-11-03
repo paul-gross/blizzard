@@ -14,7 +14,7 @@ test.use({ coldInit: true });
 // added at the mock hub, its id lands in the host file and its token under its own variable, and a host then starts over
 // the directory and finds its identity matched at the hub. The store is read only while no host runs.
 
-const PARENT = '20261011_1000_runner_scope';
+const PARENT = '20261015_1000_host_ingests';
 const PRE_HOST_RUNNER_ID = 'rn_01JX000000000000000000LEFT';
 const PRE_HOST_TOKEN = 'tok_pre_host';
 

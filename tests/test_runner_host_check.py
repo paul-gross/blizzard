@@ -94,7 +94,7 @@ def test_a_store_not_at_the_expected_revision_is_an_error_naming_the_migrate_com
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _joined(tmp_path, fake_init_hub)
-    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261015_1000_host_ingests")
 
     result = _check(fake_init_hub, root)
 
@@ -111,7 +111,7 @@ def test_every_runner_error_and_the_store_revision_are_reported_together(
     layout.config_path.write_text(
         layout.config_path.read_text().replace('subscription = "anthropic"', 'subscription = "nope"')
     )
-    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261015_1000_host_ingests")
 
     result = _check(fake_init_hub, root)
 

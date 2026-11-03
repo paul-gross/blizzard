@@ -10,7 +10,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
-from tests.support import MIGRATION_CLOCK, upgrade_runner_store_as_registered
+from tests.support import MIGRATION_CLOCK
 
 
 def _compared_name(table_name: str, name: str | None, name_exemptions: dict[tuple[str, str], str]) -> str | None:
@@ -100,31 +100,3 @@ def assert_frozen_table_lacks_a_later_revisions_columns(
         for column in columns:
             assert column in before
             assert column not in after
-
-
-def spawn_cwd_round_trip(
-    db_url: str, runner: MigrationRunner, parent: str, row: dict[str, object], *, registered: bool = False
-) -> list[object]:
-    """Downgrade the store at ``db_url`` to ``parent``, seed one segment row there, upgrade — the column's value on
-    that row. A runner store
-    upgrades with a runner registered (``registered``)."""
-    runner.downgrade(parent)
-    engine = create_engine_from_url(db_url)
-    try:
-        with engine.begin() as conn:
-            assert "spawn_cwd" not in {c["name"] for c in sa.inspect(conn).get_columns("transcript_segments")}
-            columns = ", ".join(row)
-            params = ", ".join(f":{k}" for k in row)
-            conn.execute(sa.text(f"INSERT INTO transcript_segments ({columns}) VALUES ({params})"), row)
-    finally:
-        engine.dispose()
-    if registered:
-        upgrade_runner_store_as_registered(runner, db_url)
-    else:
-        runner.upgrade("head")
-    engine = create_engine_from_url(db_url)
-    try:
-        with engine.connect() as conn:
-            return [r.spawn_cwd for r in conn.execute(sa.text("SELECT spawn_cwd FROM transcript_segments"))]
-    finally:
-        engine.dispose()

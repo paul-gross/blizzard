@@ -27,7 +27,7 @@ from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_PARENT = "20261011_1000_runner_scope"
+_PARENT = "20261015_1000_host_ingests"
 _RUNNER = JoinedRunner(runner_id="rn_01JX0000000000000000000GRAD", runner_name="runner-local", token="tok_graduating")
 _PRE_HOST_TOKEN_ENV = "BZ_HUB_TOKEN"
 #: The facts the hub applied before the runner stopped, and the backlog it left undelivered above them.
@@ -36,8 +36,8 @@ _BACKLOG = 3
 
 
 def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
-    """Leave ``root`` as a pre-host runner left it: its store at ``data/runner.db`` at the revision before the
-    tightening, its flat ``blizzard-runner.toml``, and its token under the unsuffixed variable."""
+    """Leave ``root`` as a pre-host runner left it: its store at ``data/runner.db`` at the oldest supported revision,
+    its flat ``blizzard-runner.toml``, and its token under the unsuffixed variable."""
     config = init_host(root)
     migration_runner(config).downgrade(_PARENT)
     _seed_store(HostLayout(root).store_path)
@@ -72,7 +72,7 @@ def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
 def _seed_store(store: Path) -> None:
     """The identity row, a held lease bound to an environment, a lease parked on a question, an escalated lease, and
     an outbound lane whose first ``_ACKED`` facts were delivered and whose next ``_BACKLOG`` wait — written in SQL
-    tied to the shapes at ``_PARENT``, before any table carries a ``runner_id``."""
+    tied to the shapes at ``_PARENT``, every row naming the runner."""
     now = utc_text()
     conn = sqlite3.connect(store)
     try:
@@ -88,33 +88,46 @@ def _seed_store(store: Path) -> None:
             ("lease_escalated", "ch_esc"),
         ):
             conn.execute(
-                "INSERT INTO leases (lease_id, chunk_id, epoch, created_at) VALUES (?, ?, 1, ?)",
-                (lease_id, chunk_id, now),
+                "INSERT INTO leases (lease_id, chunk_id, epoch, created_at, runner_id) VALUES (?, ?, 1, ?, ?)",
+                (lease_id, chunk_id, now, _RUNNER.runner_id),
             )
             conn.execute(
-                "INSERT INTO lease_context (lease_id, chunk_id, graph_id, node_id, node_name, retries_max, recorded_at)"
-                " VALUES (?, ?, 'gr_1', 'nd_build', 'build', 1, ?)",
-                (lease_id, chunk_id, now),
+                "INSERT INTO lease_context"
+                " (lease_id, chunk_id, graph_id, node_id, node_name, retries_max, recorded_at, runner_id)"
+                " VALUES (?, ?, 'gr_1', 'nd_build', 'build', 1, ?, ?)",
+                (lease_id, chunk_id, now, _RUNNER.runner_id),
             )
         conn.execute(
-            "INSERT INTO env_bindings (chunk_id, environment_id, workdir, bound_at) VALUES ('ch_held', 'env_1', '/w', ?)",
-            (now,),
+            "INSERT INTO env_bindings (chunk_id, environment_id, workdir, bound_at, runner_id)"
+            " VALUES ('ch_held', 'env_1', '/w', ?, ?)",
+            (now, _RUNNER.runner_id),
         )
         conn.execute(
-            "INSERT INTO park_facts (lease_id, chunk_id, question_id, parked_at)"
-            " VALUES ('lease_parked', 'ch_parked', 'qn_1', ?)",
-            (now,),
+            "INSERT INTO park_facts (lease_id, chunk_id, question_id, parked_at, runner_id)"
+            " VALUES ('lease_parked', 'ch_parked', 'qn_1', ?, ?)",
+            (now, _RUNNER.runner_id),
         )
         conn.execute(
-            "INSERT INTO lease_closures (lease_id, chunk_id, node_id, reason, closed_at, escalation_cause)"
-            " VALUES ('lease_escalated', 'ch_esc', 'nd_build', 'escalated', ?, 'retries_exhausted')",
-            (now,),
+            "INSERT INTO lease_closures (lease_id, chunk_id, node_id, reason, closed_at, escalation_cause, runner_id)"
+            " VALUES ('lease_escalated', 'ch_esc', 'nd_build', 'escalated', ?, 'retries_exhausted', ?)",
+            (now, _RUNNER.runner_id),
         )
         for index in range(_ACKED + _BACKLOG):
             conn.execute(
-                "INSERT INTO outbound_buffer (kind, payload, created_at, acked_at) VALUES ('event.recorded', ?, ?, ?)",
-                (json.dumps({"event": f"graduation-{index}"}), now, now if index < _ACKED else None),
+                "INSERT INTO outbound_buffer (seq, kind, payload, created_at, acked_at, runner_id)"
+                " VALUES (?, 'event.recorded', ?, ?, ?, ?)",
+                (
+                    index + 1,
+                    json.dumps({"event": f"graduation-{index}"}),
+                    now,
+                    now if index < _ACKED else None,
+                    _RUNNER.runner_id,
+                ),
             )
+        conn.execute(
+            "INSERT INTO outbox_counters (runner_id, lane, last_seq) VALUES (?, 'outbound', ?)",
+            (_RUNNER.runner_id, _ACKED + _BACKLOG),
+        )
         conn.commit()
     finally:
         conn.close()

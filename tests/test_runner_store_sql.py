@@ -42,7 +42,7 @@ def test_an_unpinned_identifier_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_store_off_the_contract_head_is_refused(tmp_path: Path) -> None:
-    store = _store(tmp_path / "runner.db", revision="20261011_1000_runner_scope")
+    store = _store(tmp_path / "runner.db", revision="20261015_1000_host_ingests")
     with pytest.raises(ValueError, match="contract head"):
         select(store, "outbound_buffer", ["seq"])
 

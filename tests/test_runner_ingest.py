@@ -39,6 +39,7 @@ from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.ingest import RunnerIngest
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
 from tests.config_inputs import STRICT, init_host, load_host_config
 from tests.runner_ingest_support import (
     HERE_HOST,
@@ -523,17 +524,15 @@ def test_a_rerun_after_the_source_ran_is_refused_naming_both_stores(
     assert there in result.output and here in result.output
 
 
-#: The revision a runner before hosts left its store at.
-_PRE_HOST_REVISION = "20261011_1000_runner_scope"
+#: The oldest revision a supported runner leaves its store at.
+_PRE_HOST_REVISION = "20261015_1000_host_ingests"
 _PRE_HOST_TOKEN = "tok_pre_host"
-#: The revision before the one that scopes every runner table by runner.
-_BEFORE_RUNNER_SCOPE = "20261009_1000_runner_lease_closures_lease_id_index"
 
 
 def _pre_host_directory(root: Path) -> None:
-    """``root`` as a runner before hosts left it, running ``r2``: ``data/runner.db`` at the revision before the
-    tightening, holding the runner's identity, a lease, and an outbound backlog; its flat ``blizzard-runner.toml``;
-    and its token under the unsuffixed variable."""
+    """``root`` as a runner before hosts left it, running ``r2``: ``data/runner.db`` at the oldest supported revision,
+    holding the runner's identity, a lease, and an outbound backlog; its flat ``blizzard-runner.toml``; and its token
+    under the unsuffixed variable."""
     config = init_host(root)
     migration_runner(config).downgrade(_PRE_HOST_REVISION)
     engine = create_engine_from_url(config.db_url)
@@ -544,13 +543,18 @@ def _pre_host_directory(root: Path) -> None:
         )
         conn.execute(
             sa.insert(tables["leases"]).values(
-                lease_id="lease_pre_host", chunk_id="ch_pre_host", epoch=1, created_at=T0
+                lease_id="lease_pre_host", chunk_id="ch_pre_host", epoch=1, created_at=T0, runner_id=MOVING_ID
             )
         )
-        for _ in (1, 2):
+        for seq in (1, 2):
             conn.execute(
-                sa.insert(tables["outbound_buffer"]).values(kind="event.recorded", payload="{}", created_at=T0)
+                sa.insert(tables["outbound_buffer"]).values(
+                    seq=seq, kind="event.recorded", payload="{}", created_at=T0, runner_id=MOVING_ID
+                )
             )
+        conn.execute(
+            sa.insert(tables["outbox_counters"]).values(runner_id=MOVING_ID, lane=OUTBOX_LANE_OUTBOUND, last_seq=2)
+        )
     engine.dispose()
     layout = HostLayout(root)
     layout.store_path.rename(layout.legacy_store_path)
@@ -712,15 +716,6 @@ def test_ingest_removes_a_runner_from_a_source_store_behind_head(tmp_path: Path,
     assert len(rows(here, "runner_identity", runner_id=MOVING_ID)) == 1
     here.dispose()
     assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
-
-
-def test_ingest_is_refused_for_a_source_store_behind_the_revision_that_scopes_its_tables_by_runner(
-    tmp_path: Path, fake_init_hub: FakeInitHub
-) -> None:
-    hosts = two_hosts(tmp_path, fake_init_hub)
-    _downgraded(hosts.there, _BEFORE_RUNNER_SCOPE)
-
-    _refuse(fake_init_hub, hosts, "predates the revision", "--workspace-id", _NEW_WORKSPACE)
 
 
 def test_ingest_is_refused_when_the_hub_cannot_be_reached_for_this_hosts_record(

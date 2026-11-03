@@ -76,6 +76,12 @@ older hub then runs each node's untouched `run:` again. A chunk escalated meanwh
 
 ## Upgrading to the next release
 
+### Store baseline at 0.2.0
+
+Both stores' migration histories up to 0.2.0 are folded into one baseline revision each: this release migrates a hub or
+runner store at 0.2.0 or later, and refuses an older one as below its baseline. Migrate an older store with 0.2.0 first,
+as [Before you pull](#before-you-pull) says.
+
 ### Hub steps take turns on their flows
 
 The hub now takes every hub step as a turn on the flows the step holds, one per repository branch, where it ran one hub
