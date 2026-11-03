@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type Wire } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type Wire } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -46,7 +46,7 @@ test('test_fast_forward_stands_when_second_forge_refuses_merge_method', async ({
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph([first, second]) } })).status).toBe(201);
   const { chunk } = await issue('CROSS-FORGE.md', { repository: first });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.status === 'needs_human', 80);
+  const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect(done.escalation?.cause).toBe('merge-method-refused');
   expect(done.landed_repos.map((row) => row.repo)).toEqual([fullName(first)]);
   expect(await pulls(forge, first)).toEqual([]);
@@ -64,12 +64,12 @@ test('test_candidate_without_checks_exhausts_pending_timeout_without_advancing',
   const original = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
   let arrived = false;
   void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
-  await stepUntil(host, async () => arrived, Boolean, 80);
+  await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
   const candidate = await host.originHead(repo.name, 'feature/diverged');
   expect(candidate).toBeTruthy();
   expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
   workerCheckpoint.release('pushed');
-  await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending?.kind === 'pending', 80);
+  await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending?.kind === 'pending', { stallPasses: 80, progress: chunkProgress });
   await expect.poll(async () => (await detail(api, chunk.chunk_id)).history.some((row) => row.from_node_name === 'deliver' && row.choice_name === 'failure'), { timeout: 30_000 }).toBe(true);
   const result = await detail(api, chunk.chunk_id);
   expect(result.landed_repos).toEqual([]);
@@ -100,7 +100,7 @@ for (const protectedBase of [false, true]) {
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo]) } })).status).toBe(201);
     const { chunk } = await issue('FAST-FORWARD.md', { repository: repo });
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-    const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
     expect(done.status).toBe(protectedBase ? 'needs_human' : 'done');
     expect(await pulls(forge, repo)).toEqual([]);
   });
@@ -125,7 +125,7 @@ for (const scenario of ['diverged', 'stale-candidate', 'protected-landing'] as c
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], extra) } })).status).toBe(201);
     const { chunk } = await issue('DIVERGED.md', { repository: repo });
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-    const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    const done = await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
     if (scenario === 'protected-landing') {
       expect(done.status).toBe('needs_human');
       expect(done.escalation?.cause).toBe('branch-protected');

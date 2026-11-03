@@ -1,4 +1,4 @@
-import { assertChunkTrace, assertConforms, assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
+import { assertChunkTrace, assertConforms, assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 const harnesses = [
@@ -34,7 +34,7 @@ async function cycle({ api, forge, issue, repository, runnerHosts }: World, harn
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name, harness) } })).status).toBe(201);
   const { chunk } = await issue('review cycle', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const status = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (value) => ['done', 'needs_human', 'stopped'].includes(value));
+  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value));
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   return { host, repo, chunk, status, detail, pulls };

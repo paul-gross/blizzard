@@ -1,4 +1,4 @@
-import { assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
+import { assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const harnesses = [
   { name: 'claude-code', id: 'claude_code', model: 'claude-opus-4-8', sessionFlag: '--resume' },
@@ -25,7 +25,7 @@ async function escalated({ api, issue, repository, runnerHosts }: World, harness
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness) } })).status).toBe(201);
   const { chunk } = await issue('escalation', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const status = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (value) => ['needs_human', 'done', 'stopped'].includes(value));
+  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['needs_human', 'done', 'stopped'].includes(value));
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   return { host, chunk, status, detail };
 }

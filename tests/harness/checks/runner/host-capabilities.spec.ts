@@ -1,10 +1,7 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
-import { expect, runnerTest as test } from '../../fixtures';
-import type { RunnerHost } from '../../fixtures';
-
-const MAX_STEPS = 40;
+import { expect, runnerTest as test, stepUntil } from '../../fixtures';
 
 /** A one-node chunk whose worker runs `script` and judges by `judgement`, then a hub node that ends it. */
 function workerChunk(script: string, judgement = "verdict('pass', 'done')\n"): object {
@@ -24,16 +21,6 @@ function workerChunk(script: string, judgement = "verdict('pass', 'done')\n"): o
   };
 }
 
-/** Steps the host until `read` answers something other than `undefined`, failing after `MAX_STEPS` passes. */
-async function stepUntil<T>(host: RunnerHost, read: () => Promise<T | undefined>): Promise<T> {
-  for (let pass = 0; pass < MAX_STEPS; pass++) {
-    const state = await read();
-    if (state !== undefined) return state;
-    await host.step();
-  }
-  throw new Error(`not reached within ${MAX_STEPS} passes\n${host.logTail()}`);
-}
-
 function filesUnder(dir: string): string[] {
   return fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name) : [];
 }
@@ -41,7 +28,7 @@ function filesUnder(dir: string): string[] {
 test('a worker’s transcript lands under the host’s transcripts root, the lease transcript reads it, and rotation removes it', async ({ mockHub, runnerHost }) => {
   const runner = runnerHost.runners['runner-local']!;
   const chunkId = (await mockHub.seed.chunk(workerChunk("print('worked')\n") as never)).body.chunk_id;
-  const lease = await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'closed'));
+  const lease = (await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'closed'), (found) => found !== undefined))!;
 
   expect(filesUnder(runnerHost.transcriptsRoot).length).toBeGreaterThan(0);
   const transcript = await runner.leaseTranscript(lease.lease_id);
@@ -57,7 +44,7 @@ test('a recorded worker credential authorizes a lease call, and none is refused'
   // The spawn turn is held at a checkpoint, so the lease stays running; the mock records its spawn credential before it
   // runs its prompt, so the record is current once the worker is at the checkpoint.
   const chunkId = (await mockHub.seed.chunk({ ...workerChunk(workerCheckpoint.snippet('spawn')), graph_artifacts: [{ name: 'brief', content: 'hello' }] } as never)).body.chunk_id;
-  const lease = await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'));
+  const lease = (await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'), (found) => found !== undefined))!;
   await workerCheckpoint.reached('spawn');
   const headers = runnerHost.workerHeaders(lease.lease_id);
 

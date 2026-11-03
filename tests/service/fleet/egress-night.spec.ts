@@ -1,4 +1,4 @@
-import { type EgressCopy, expect, stepUntil, test } from '../../harness/fixtures';
+import { type EgressCopy, chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 // A night of chunks, exported end to end. One forge, one hub and one runner carry six shapes: a plain build, a review
 // bounce, a human gate, an ask answered by a person, a delivery conflict and an escalation, across two graphs that share
@@ -149,7 +149,7 @@ test.describe('the night, held on one stack', () => {
       const planted: Record<string, string[]> = {};
       const detail = async (chunkId: string): Promise<ChunkDetail> => (await api.get(`/api/chunks/${chunkId}`)).body as unknown as ChunkDetail;
       const stepTo = (chunkId: string, reached: (detail: ChunkDetail) => boolean = (d) => TERMINAL.includes(d.status)) =>
-        stepUntil(runnerHost, () => detail(chunkId), reached, 400);
+        stepUntil(runnerHost, () => detail(chunkId), reached, { stallPasses: 400, progress: chunkProgress });
       const blizzard = async (args: string[]): Promise<string> => {
         const done = await cli(args);
         expect(done.code, `blizzard ${args.join(' ')} failed:\n${done.stderr}`).toBe(0);

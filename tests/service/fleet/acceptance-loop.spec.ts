@@ -1,4 +1,4 @@
-import { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, collectorTest, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
+import { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, collectorTest, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, stepUntil, test, traced, tracesOf } from '../../harness/fixtures';
 
 type Harness = { name: string; id: string; responseModel: string; requestModel?: string };
 const harnesses: Harness[] = [
@@ -44,7 +44,7 @@ for (const harness of harnesses) {
       expect((await api.get(`/api/chunks/${chunkId}`)).body.status).toBe('not_ready');
       expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
       expect((await api.get(`/api/chunks/${chunkId}`)).body.status).toBe('ready');
-      expect(await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body.status, (status) => status === 'done')).toBe('done');
+      expect(await stepChunkUntil(runnerHost, api, chunkId, (status) => status === 'done')).toBe('done');
       const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean; body: string }[];
       const merged = pulls.find((pull) => pull.merged);
       expect(merged).toBeDefined();
@@ -66,7 +66,7 @@ test.describe('landing without a closer', () => {
     const filed = await issue('land without closing', { repository: repo });
     const id = filed.chunk.chunk_id;
     expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
-    expect(await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body.status, (status) => status === 'done')).toBe('done');
+    expect(await stepChunkUntil(host, api, id, (status) => status === 'done')).toBe('done');
     expect(await host.originTree(repo.name, 'main')).toContain('LANDED.md');
     await api.sweep('close_drain');
     await api.sweep('close_drain');
@@ -95,7 +95,7 @@ test.describe('work item pass-through', () => {
     expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
     const item = (await api.get(`/api/chunks/${chunkId}/work-items`)).body.items as { body: string; comments: string[] }[];
     expect(item[0]).toMatchObject({ body, comments: [comment] });
-    expect(await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body.status, (status) => status === 'done')).toBe('done');
+    expect(await stepChunkUntil(runnerHost, api, chunkId, (status) => status === 'done')).toBe('done');
     const landed = await runnerHost.originFile(repo.name, 'main', 'LANDED.md');
     expect(landed).toContain(body);
     expect(landed).toContain(comment);
@@ -119,7 +119,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole-chunk', wait: 
       const traceId = collector.received.spans().find((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id && span.scope.name === 'blizzard.cli')!.traceId;
       if (setting.name === 'short') await expect.poll(() => collector.decision(traceId), { timeout: 30000 }).toBe('dropped');
       workerCheckpoint.release('before-commit');
-      await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
+      await stepChunkUntil(host, api, chunk.chunk_id, (status) => status === 'done');
       await expect.poll(async () => {
         await host.step();
         const spans = collector.received.spans().filter((span) => span.traceId === traceId);
@@ -154,7 +154,7 @@ traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, r
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harness, repo.name, { probed: true }) } })).status).toBe(201);
   const { chunk } = await issue('trace acceptance', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
+  await stepChunkUntil(runnerHost, api, chunk.chunk_id, (status) => status === 'done');
   await expect.poll(() => {
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
     return [spans.filter(isFleet).filter((span) => roleOf(span) === 'step').length, spans.filter(isFleet).filter((span) => roleOf(span) === 'runner/invocation').length, spans.some((span) => span.scope.name === 'blizzard.cli')];

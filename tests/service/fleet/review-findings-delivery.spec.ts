@@ -1,5 +1,5 @@
 import { parse } from 'yaml';
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 const SCOPE = 'e2e-review-findings';
 
@@ -90,7 +90,7 @@ test('test_review_finding_delta_mints_exactly_its_deferred_entry_at_landing', as
   const id = chunk.chunk_id;
   expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
-    (value) => value.status === 'done' || value.status === 'needs_human', 80);
+    (value) => value.status === 'done' || value.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect([detail.status, detail.landed]).toEqual(['done', true]);
   expect((detail.history as { choice_name: string; from_node_name: string }[])).toContainEqual(
     expect.objectContaining({ from_node_name: 'record-findings', choice_name: 'recorded' }),

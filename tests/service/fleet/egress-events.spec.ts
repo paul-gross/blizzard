@@ -90,7 +90,7 @@ test.describe('at fresh-hub', () => {
       chunkIds.push(chunk.chunk_id);
       return chunk.chunk_id;
     };
-    const stepTo = (chunkId: string, targets: string[]): Promise<string> => stepUntil(runnerHost, () => status(chunkId), (s) => targets.includes(s), 400);
+    const stepTo = (chunkId: string, targets: string[]): Promise<string> => stepUntil(runnerHost, () => status(chunkId), (s) => targets.includes(s), { stallPasses: 400 });
     const blizzard = async (args: string[]): Promise<string> => {
       const done = await cli(args);
       expect(done.code, `blizzard ${args.join(' ')} failed:\n${done.stdout}\n${done.stderr}`).toBe(0);

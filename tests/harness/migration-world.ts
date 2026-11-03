@@ -1,7 +1,7 @@
 import type { HubApi } from './client/clients';
 import type { FiledIssue, Repository } from './factories';
 import type { RunnerHosts } from './runner-world';
-import { stepUntil } from './runner-steps';
+import { stepChunkUntil } from './runner-steps';
 
 const branch = 'feature/scripted-build';
 
@@ -29,6 +29,6 @@ export async function migratedChunk(world: {
   const { chunk } = await issue('migration', { repository: repo });
   const promoted = await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
   if (promoted.status !== 202) throw new Error(`promotion answered ${promoted.status}`);
-  const status = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (value) => ['done', 'needs_human', 'stopped'].includes(value));
+  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value));
   return { repo, host, chunk, status, targetGraphId: target.body.graph_id as string, sourceGraphId: source.body.graph_id as string };
 }

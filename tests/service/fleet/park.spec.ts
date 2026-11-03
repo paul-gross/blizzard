@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
 
 function graph(repos: Repository[], pollTimeout = 600) {
   const prompt = [
@@ -86,7 +86,7 @@ async function landedSubmission(api: HubApi, id: string) {
 }
 
 async function parked(host: RunnerHost, api: HubApi, id: string) {
-  return stepUntil(host, () => read(api, id), (detail) => detail.pending?.kind === 'awaiting-merge', 80);
+  return stepUntil(host, () => read(api, id), (detail) => detail.pending?.kind === 'awaiting-merge', { stallPasses: 80, progress: chunkProgress });
 }
 
 async function waitFor(api: HubApi, id: string, predicate: (detail: Wire.ChunkDetail) => boolean) {
@@ -146,7 +146,7 @@ for (const requeue of [false, true]) {
     if (requeue) {
       const previousTurns = new Set((await turns(api, id)).map((turn) => turn.turn_id));
       expect((await api.post(`/api/chunks/${id}/requeues`)).status).toBe(202);
-      await stepUntil(host, () => pulls(forge, repo), (rows) => rows.length === 1, 80);
+      await stepUntil(host, () => pulls(forge, repo), (rows) => rows.length === 1, { stallPasses: 80 });
       await expect.poll(async () => (await turns(api, id)).some((turn) => !previousTurns.has(turn.turn_id) && turn.ended_at !== null)).toBe(true);
       const replacement = await pulls(forge, repo);
       expect(replacement).toHaveLength(1);
@@ -282,7 +282,7 @@ test('test_park_timeout_then_person_merge_is_adopted_on_requeue', async ({ repos
   expect(Date.now() - producedAt).toBeGreaterThanOrEqual(3_600_000);
   const sha = await merge(forge, repo, opened[0]!.number, 'squash');
   expect((await api.post(`/api/chunks/${id}/requeues`)).status).toBe(202);
-  const done = await stepUntil(host, () => read(api, id), (detail) => detail.status === 'done', 80);
+  const done = await stepUntil(host, () => read(api, id), (detail) => detail.status === 'done', { stallPasses: 80, progress: chunkProgress });
   expect([done.status, done.landed]).toEqual(['done', true]);
   expect(done.landed_repos).toHaveLength(1);
   expect(done.landed_repos[0]!.commit_hash).toBe(sha);

@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type Wire } from '../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type Wire } from '../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -35,7 +35,7 @@ test('test_the_board_shows_each_place_on_a_branch_and_clears_it_live_once_it_lan
     ids.push(id);
     expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
     const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-      (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+      (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
     expect(detail.pending, JSON.stringify(detail)).not.toBeNull();
   }
   const response = await api.get<{ flows: { flow_id: string; repository_name: string | null; repository_slug: string; branch: string; line: { chunk_id: string; arrival: number }[] }[] }>('/api/flows?active=true');

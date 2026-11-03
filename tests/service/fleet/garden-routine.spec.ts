@@ -1,5 +1,5 @@
 import { parse } from 'yaml';
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 const ROUTINE = 'garden-e2e';
 const FOUND = 'garden-found';
@@ -164,7 +164,7 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repos
     const id = response.body.chunk_id;
     expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
     const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
-      (body) => body.status === 'done' || body.status === 'needs_human', 200);
+      (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 200, progress: chunkProgress });
     expect(detail.status).toBe('done');
     expect((detail.history as { from_node_name: string; choice_name: string }[])
       .map((edge) => [edge.from_node_name, edge.choice_name])).toEqual(expected);

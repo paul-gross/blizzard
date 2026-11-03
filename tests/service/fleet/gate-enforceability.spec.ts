@@ -1,4 +1,4 @@
-import { expect, stepUntil, test, type RunnerHost } from '../../harness/fixtures';
+import { expect, type RunnerHost, stepChunkUntil, test } from '../../harness/fixtures';
 
 // A runner's configured gate set covers only nodes the runner executes. The hub reports a gate it can never see a runner
 // reach as not enforceable, and the runner lists the gate decisions it imposed through its own routes.
@@ -42,7 +42,7 @@ test.describe('gate enforceability', () => {
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
     const { chunk } = await issue('gate', { repository: repo });
     await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-    const parked = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
+    const parked = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
     expect(parked).toBe('waiting_on_human');
     const id = host.runners[RUNNER]!.id;
     const token = host.hubTokens().runners[RUNNER]!;

@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test } from '../../harness/fixtures';
 
 const LANDED = 'HELD.md';
 const build = (repoName: string): string => [
@@ -57,14 +57,14 @@ test('test_a_held_chunk_is_submitted_and_its_landing_supersedes_it', async ({ ap
   expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
 
   const held = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body,
-    (body) => body.pending !== null, 80);
+    (body) => body.pending !== null, { stallPasses: 80, progress: chunkProgress });
   expect(held.pending).not.toBeNull();
   await expect.poll(submissions).toEqual([expect.objectContaining({ submission_id: expect.any(String), closure: null })]);
   const [open] = await submissions();
 
   expect((await forge.call('DELETE', `/_levers/checks_pending?repo=${encodeURIComponent(repo)}`)).status).toBe(200);
   const done = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body,
-    (body) => body.status === 'done' || body.status === 'needs_human', 80);
+    (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
   expect([done.status, done.landed]).toEqual(['done', true]);
   await expect.poll(submissions).toEqual([expect.objectContaining({
     submission_id: open!.submission_id, closure: expect.objectContaining({ outcome: 'landed' }),

@@ -6,7 +6,7 @@ import type { MockHub } from '../../harness/fixtures';
 // and render that estimate as the one `~`-led figure: the runner ceiling's local-pause reason, read off the runner's
 // status, and the chunk cap's spend-cap escalation, read off the mock hub.
 
-const MAX_STEPS = 600;
+const STALL_PASSES = 600;
 const pricedChunk = pricedChunkOf();
 
 test.setTimeout(90_000);
@@ -26,7 +26,7 @@ test('test_runner_ceiling_pauses_on_an_estimated_spend_with_a_tilde_led_reason',
   const runner = host.runners['runner-local']!;
 
   // Billed-zero steps carry only an estimate; the ceiling, set under it, still engages the local pause.
-  const pause = await stepUntil(host, async () => (await runner.status()).body.pause, (state) => state.local, MAX_STEPS);
+  const pause = await stepUntil(host, async () => (await runner.status()).body.pause, (state) => state.local, { stallPasses: STALL_PASSES });
   expect(pause.local_reason).toContain('spend ceiling');
   expect(pause.local_reason, 'the estimate-carrying spend did not render as the one ~-led figure').toContain('~$');
 });
@@ -41,7 +41,7 @@ test('test_chunk_cap_escalates_on_an_estimated_chunk_cost_with_a_tilde_marked_de
   const seeded = await mockHub.seed.chunk({ ...pricedChunk, cost: { cost_usd: 0, estimated_cost_usd: 5 } });
   const escalation = await chunkEscalation(mockHub, seeded.body.chunk_id);
 
-  const raised = await stepUntil(host, escalation, (state) => state !== null && state !== undefined, MAX_STEPS);
+  const raised = await stepUntil(host, escalation, (state) => state !== null && state !== undefined, { stallPasses: STALL_PASSES });
   expect(raised!.cause).toBe('spend-cap');
   expect(raised!.detail).toContain('~$5.00');
 });

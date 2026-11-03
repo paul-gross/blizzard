@@ -1,4 +1,4 @@
-import { expect, stepUntil, test } from '../harness/fixtures';
+import { expect, stepChunkUntil, test } from '../harness/fixtures';
 
 // The mobile glance board at the narrow viewport, where `/board` routes to the glance shell: while the chunks read is in
 // flight the list shows loading, never empty, and a chunk with no billed cost shows its estimate, never a plain billed
@@ -28,7 +28,7 @@ test('test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_popul
   const { chunk } = await issue('glance board');
   const chunkId = chunk.chunk_id;
   expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
-  await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body.status, (status) => status === 'needs_human');
+  await stepChunkUntil(runnerHost, api, chunkId, (status) => status === 'needs_human');
 
   // Hold the chunks read open by capturing its route, so the loading state is observable rather than raced.
   const held: (() => Promise<void>)[] = [];

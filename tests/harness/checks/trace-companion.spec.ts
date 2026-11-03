@@ -1,4 +1,4 @@
-import { assertIdentity, assertRunnerNesting, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf } from '../fixtures';
+import { assertIdentity, assertRunnerNesting, expect, isFleet, roleOf, stepChunkUntil, test, traced, tracesOf } from '../fixtures';
 
 const graph = JSON.stringify({
   name: 'default-delivery', entry: 'build', nodes: {
@@ -23,7 +23,7 @@ traced('a stepped runner completes a chunk', async ({ api, issue, repository, ru
   const repo = await repository('toy-api');
   const { chunk } = await issue('trace companion', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
+  await stepChunkUntil(runnerHost, api, chunk.chunk_id, (status) => status === 'done');
   await expect.poll(() => {
     const spans = traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
     return [spans.some((span) => roleOf(span) === 'step'), spans.some((span) => roleOf(span) === 'runner/invocation')];

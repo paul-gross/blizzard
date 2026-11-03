@@ -1,5 +1,5 @@
 import { parse } from 'yaml';
-import { expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
+import { chunkProgress, expect, stepUntil, test, type ForgeApi, type HubApi, type Repository, type RunnerHost, type Wire } from '../../harness/fixtures';
 
 test.use({ isolation: 'fresh-tenant' });
 
@@ -62,13 +62,13 @@ async function turns(api: HubApi, id: string) {
 
 async function pending(api: HubApi, host: RunnerHost, id: string) {
   const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-    (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
   expect(detail.pending).not.toBeNull();
 }
 
 async function landed(api: HubApi, host: RunnerHost, id: string) {
   const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-    (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
   expect([detail.status, detail.landed]).toEqual(['done', true]);
   await expect.poll(async () => {
     const rows = await turns(api, id);
@@ -165,7 +165,7 @@ test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repo
     const detail = await stepUntil(host, async () => {
       await api.flowStep();
       return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
-    }, (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    }, (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
     expect(detail.pending, JSON.stringify(detail.escalation)).not.toBeNull();
   }
   const [slow, brisk] = ids as [string, string];
@@ -193,7 +193,7 @@ test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repo
       await api.flowAdvance(60);
       await api.flowStep();
       return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
-    }, (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    }, (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });
     expect([detail.status, detail.landed]).toEqual(['done', true]);
     expect((await landingFacts(api, id)).map((fact) => fact.repo)).toEqual([fullName(repo)]);
   }
@@ -268,12 +268,12 @@ test('test_a_chunk_paused_at_a_hub_node_takes_no_turn_until_resumed', async ({ r
   expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
   const runner = host.runners['runner-local']!;
   const facts = await stepUntil(host, async () => (await runner.facts({ limit: 200 })).body.items,
-    (rows) => rows.some((row) => row.kind === 'completion.submitted' && row.chunk_id === id && row.acked_at === null), 80);
+    (rows) => rows.some((row) => row.kind === 'completion.submitted' && row.chunk_id === id && row.acked_at === null), { stallPasses: 80, progress: (rows) => rows.filter((row) => row.chunk_id === id).map((row) => [row.seq, row.acked_at !== null]) });
   const completion = facts.find((row) => row.kind === 'completion.submitted' && row.chunk_id === id && row.acked_at === null)!;
   expect(completion.lease_id).not.toBeNull();
   expect((await api.post(`/api/chunks/${id}/pause`, { data: { by: 'e2e' } })).status).toBe(202);
   const paused = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body,
-    (row) => row.history.some((entry) => entry.to_node_name === 'deliver'), 80);
+    (row) => row.history.some((entry) => entry.to_node_name === 'deliver'), { stallPasses: 80, progress: chunkProgress });
   expect(paused.status).toBe('paused');
   const acknowledged = (await runner.facts({ limit: 200 })).body.items.find((row) => row.seq === completion.seq);
   expect(acknowledged).toBeDefined();
@@ -323,7 +323,7 @@ test('test_a_garden_delivery_lands_while_a_chunk_is_held_on_a_branch', async ({ 
   const garden = run.body.chunk_id;
   expect((await api.post(`/api/chunks/${garden}/promote`)).status).toBe(202);
   const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${garden}`)).body,
-    (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 100);
+    (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 100, progress: chunkProgress });
   expect(detail.status).toBe('done');
   expect(detail.history.map((row) => [row.from_node_name, row.choice_name])).toEqual([['survey', 'clean'], ['deliver', 'recorded']]);
   const gardenSubmissions = await submissions(api, garden);
