@@ -33,6 +33,7 @@ from blizzard.hub.domain.garden.findings.model import (
     summarize_facts,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.store.internal.finding_set_lock import lock_finding_set_baselines
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
@@ -550,6 +551,7 @@ class FindingSetStore:
         measurement: str | None,
     ) -> FindingSet:
         with self._store.write("create") as conn:
+            lock_finding_set_baselines(conn, [(project_id, routine_name, scope_slug)])
             conn.execute(
                 self._store.insert(finding_sets).values(
                     finding_set_id=finding_set_id,

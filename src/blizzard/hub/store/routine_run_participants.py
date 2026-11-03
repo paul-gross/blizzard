@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.garden.findings.model import FindingSet
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.store import schema as s
@@ -16,6 +17,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_rows import insert_chunk_rows
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.config_authoring_lock import lock_config_authoring
+from blizzard.hub.store.internal.finding_set_lock import lock_finding_set_baselines
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.queue_lock import lock_queue_positions
@@ -100,6 +102,16 @@ class _AdmittedItems(WorkItemStore):
         )
 
 
+class _AdmittedFindingSets(FindingSetStore):
+    def __init__(self, scoped: ScopedConnections, conn: Connection) -> None:
+        super().__init__(scoped)
+        self._conn = conn
+
+    def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
+        lock_finding_set_baselines(self._conn, [(project_id, routine_name, scope_slug)])
+        return super().newest_for_routine_scope(project_id, routine_name, scope_slug)
+
+
 class RoutineRunParticipants:
     def __init__(self, connections: ScopedConnections, clock: IClock) -> None:
         self._connections = connections
@@ -115,7 +127,7 @@ class RoutineRunParticipants:
                 scopes=ScopeStore(scoped),
                 routine_scopes=RoutineScopeStore(scoped),
                 graphs=GraphStore(scoped),
-                finding_sets=FindingSetStore(scoped),
+                finding_sets=_AdmittedFindingSets(scoped, conn),
                 items=_AdmittedItems(scoped, conn),
                 work_refs=ChunkWorkRefsStore(scoped, self._clock, facts=ChunkFactsStore(scoped)),
                 clock=self._clock,

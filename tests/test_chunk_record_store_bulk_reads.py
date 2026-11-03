@@ -7,6 +7,7 @@ given ``statuses`` map costs no more than ``list_all`` alone — no facts collab
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support import chunk_stores, count_queries, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
@@ -34,6 +36,24 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
 
 def _mint(store: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0))
+
+
+def test_standalone_mint_rejects_pointers_but_preserves_pointerless_mint(tmp_path: Path) -> None:
+    stores, engine = _store(tmp_path)
+    pointer = WorkRef(source="default", ref="1")
+    _mint(stores, "ch_holder", work_refs=[pointer])
+    holder = stores.record.get("ch_holder")
+    assert holder is not None
+    record = ChunkRecordStore(hub_store_connections(engine), FixedClock(_T0))
+
+    with pytest.raises(ValueError, match="empty work_refs"):
+        record.mint(replace(holder, chunk_id="ch_bypass"))
+    assert record.get("ch_bypass") is None
+    assert record.get("ch_holder") == holder
+
+    pointerless = replace(holder, chunk_id="ch_empty", work_refs=[])
+    record.mint(pointerless)
+    assert record.get("ch_empty") == pointerless
 
 
 def test_get_many_matches_get_across_a_normal_ephemeral_and_unknown_id(tmp_path: Path) -> None:

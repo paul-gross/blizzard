@@ -293,7 +293,9 @@ class ChunkRecordStore:
         return list(self.get_many([chunk_id for chunk_id, derived in statuses.items() if derived is status]).values())
 
     def mint(self, chunk: Chunk) -> None:
-        """Insert a chunk's rows with no pointer lock held."""
+        """Insert a pointerless chunk with no pointer lock held."""
+        if chunk.work_refs:
+            raise ValueError("mint requires empty work_refs; use mint_locked for pointers")
         with self._store.write("mint") as conn:
             lock_queue_positions(conn)
             insert_chunk_rows(conn, chunk)
