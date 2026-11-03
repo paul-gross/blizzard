@@ -10,7 +10,7 @@ from __future__ import annotations
 # The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -33,13 +33,20 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import (
+    BACKLOG_RANKING_LOCK,
+    READY_RANKING_LOCK,
+    IReadChunkQueueRepository,
+    IWriteChunkQueueRepository,
+)
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel import float_slots
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RunnerCapability
 
 _log = get_logger("blizzard.hub.queue")
@@ -201,6 +208,15 @@ class QueuePage:
     next_cursor: str | None
 
 
+@domain_model
+@dataclass(frozen=True)
+class RankedOrder:
+    """The order a ranking write left a list in, and the live statuses its unit decided on."""
+
+    ordered: list[Chunk]
+    statuses: Mapping[str, ChunkStatus]
+
+
 def entries_of(ordered: Sequence[Chunk], projects: Collection[str] | None = None) -> list[QueueEntry]:
     """``ordered`` as entries at their whole-order positions, narrowed to the chunks of
     ``projects`` — every chunk when ``None``. Narrowing selects from the ranked order and
@@ -217,6 +233,27 @@ _REORDER_VERB: Mapping[QueueList, ChunkVerb] = {
     QueueList.READY: ChunkVerb.REORDER_READY,
     QueueList.NOT_READY: ChunkVerb.REORDER_BACKLOG,
 }
+
+
+#: The keyed lock each list's ranking decisions serialize on (``bzh:ranking-is-per-list``).
+_RANKING_LOCK: Mapping[QueueList, tuple[str, str]] = {
+    QueueList.READY: READY_RANKING_LOCK,
+    QueueList.NOT_READY: BACKLOG_RANKING_LOCK,
+}
+
+
+#: Both lists, for a decision moving a chunk from one into the other: it changes the membership
+#: each list's ranking decisions read, so it serializes against both.
+BOTH_LISTS: tuple[QueueList, ...] = (QueueList.READY, QueueList.NOT_READY)
+
+
+def ranking_lock_set(
+    transaction: Transaction, lists: Iterable[QueueList], chunks: Iterable[str | None]
+) -> LockedTransaction:
+    """Graduate ``transaction`` once (``bzh:transaction-graduation``) over the ranking lock of each of
+    ``lists`` and the named ``chunks`` (``None`` entries skipped) — every lock the decision takes."""
+    named = [chunk_id for chunk_id in chunks if chunk_id is not None]
+    return transaction.lock_set(chunks=named, keys=[_RANKING_LOCK[list_] for list_ in lists])
 
 
 def _other_list(list_: QueueList) -> QueueList:
@@ -444,31 +481,55 @@ def resolve_landing(
     return ranking.land_after(ranking.ordered(candidates), after)
 
 
-def write_positions_fn(queue: IWriteChunkQueueRepository, list_: QueueList) -> Callable[..., None]:
-    """The one place that picks which store write routes a batch of positions for ``list_`` —
-    ``not_ready`` through the promoted-guarded
+def write_positions(
+    queue: IWriteChunkQueueRepository,
+    list_: QueueList,
+    positions: Sequence[tuple[str, float]],
+    *,
+    at: datetime,
+    transaction: LockedTransaction,
+) -> None:
+    """Write ``positions`` for ``list_`` in ``transaction`` — the one place that picks which store
+    write routes a batch: ``not_ready`` through the promoted-guarded
     :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_backlog_positions`,
     ``ready`` through
     :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_queue_positions`."""
     if list_ is QueueList.NOT_READY:
-        return queue.record_backlog_positions
-    return queue.record_queue_positions
+        queue.record_backlog_positions(positions, at=at, transaction=transaction)
+    else:
+        queue.record_queue_positions(positions, at=at, transaction=transaction)
 
 
-def read_ranking(queue: IReadChunkQueueRepository, candidates: Sequence[Chunk]) -> QueueRanking:
+def read_ranking(
+    queue: IReadChunkQueueRepository, candidates: Sequence[Chunk], *, transaction: Transaction | None = None
+) -> QueueRanking:
     """The explicit positions and promotion instants of ``candidates`` alone — the
-    ranking inputs, read bounded by the candidate set (``bzh:live-set-read``)."""
+    ranking inputs, read bounded by the candidate set (``bzh:live-set-read``), in
+    ``transaction`` when one is given."""
     chunk_ids = [c.chunk_id for c in candidates]
-    return QueueRanking(positions=queue.queue_positions(chunk_ids), promoted_ats=queue.promoted_ats(chunk_ids))
+    return QueueRanking(
+        positions=queue.queue_positions(chunk_ids, transaction=transaction),
+        promoted_ats=queue.promoted_ats(chunk_ids, transaction=transaction),
+    )
 
 
 class QueueService:
     """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
     hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
 
-    def __init__(self, *, queue: IWriteChunkQueueRepository, record: IReadChunkRecordRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        queue: IWriteChunkQueueRepository,
+        record: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._queue = queue
         self._record = record
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
@@ -503,59 +564,67 @@ class QueueService:
         """``not_ready`` chunks in backlog order — ascending by effective position."""
         return self.ordered(QueueList.NOT_READY, statuses=statuses)
 
-    def reorder(self, list_: QueueList, chunks: Sequence[Chunk], *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
-        """Replace ``list_``'s whole order with the named ``chunks`` first (:func:`replacement_order`
-        decides it, checking each against the list itself) and return the order written."""
-        ordered = replacement_order(list_, self.ordered(list_, statuses=statuses), chunks, statuses)
-        self.replace_order(list_, ordered)
-        return ordered
-
-    def move(self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]) -> None:
-        """Move ``chunk`` right after ``after`` (top when ``None``) within ``list_``, each
-        checked against the list itself (:func:`resolve_move`)."""
-        moving, anchor = resolve_move(list_, self.ordered(list_, statuses=statuses), chunk, after, statuses)
-        self.reposition(list_, moving, anchor, statuses=statuses)
-
-    def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
-        """Idempotent whole-order replacement: one ascending explicit position fact per
-        chunk in ``ordered``, front to back, in one write transaction. Takes
-        already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``), and
-        trusts the order it is handed — :meth:`reorder` resolves it against the list."""
-        write = write_positions_fn(self._queue, list_)
-        write([(chunk.chunk_id, float(position)) for position, chunk in enumerate(ordered)], at=self._clock.now())
+    def reorder(self, list_: QueueList, chunks: Sequence[Chunk]) -> RankedOrder:
+        """Replace ``list_``'s whole order with the named ``chunks`` first, then every unnamed member
+        in its current order, and return the order written with the statuses it was decided on: one
+        ascending explicit position per member, front to back. One unit locks the named chunks and
+        the list's ranking, re-reads the list in it, decides with :func:`replacement_order`, and
+        writes with the same token (``bzh:write-reestablishes-read``)."""
+        with self._transactions.begin() as transaction:
+            locked = ranking_lock_set(transaction, [list_], [chunk.chunk_id for chunk in chunks])
+            statuses, candidates = self._locked_candidates(list_, locked)
+            current = read_ranking(self._queue, candidates, transaction=locked).ordered(candidates)
+            ordered = replacement_order(list_, current, chunks, statuses)
+            positions = [(chunk.chunk_id, float(position)) for position, chunk in enumerate(ordered)]
+            write_positions(self._queue, list_, positions, at=self._clock.now(), transaction=locked)
         _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
+        return RankedOrder(ordered, statuses)
 
-    def reposition(
-        self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]
-    ) -> None:
+    def reposition(self, list_: QueueList, chunk: Chunk, after: Chunk | None) -> RankedOrder:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new explicit position
-        immediately after ``after`` (top when ``after is None``) without restamping every other chunk.
-        An ``after`` outside ``list_`` is refused (:class:`NotInList`). Bisection exhausting the
-        representable doubles renormalizes the list first (:meth:`QueueRanking.land_after`)."""
-        write = write_positions_fn(self._queue, list_)
-        candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
-        anchor = require_anchor_among(list_, candidates, after.chunk_id if after is not None else None, statuses)
-        ranking = read_ranking(self._queue, candidates)
-        landing = ranking.land_after(ranking.ordered(candidates), anchor)
-        if landing.renormalized:
-            write(list(landing.renormalized), at=self._clock.now())
-        new_position = landing.position
-        write([(chunk.chunk_id, new_position)], at=self._clock.now())
+        immediately after ``after`` (top when ``after is None``) without restamping every other chunk,
+        and return the order that leaves with the statuses it was decided on. Each is checked against the list itself
+        (:func:`resolve_move`). Bisection exhausting the representable doubles renormalizes the list
+        first (:meth:`QueueRanking.land_after`). One unit locks both chunks and the list's ranking,
+        re-reads the list in it, decides, and writes with the same token
+        (``bzh:write-reestablishes-read``)."""
+        with self._transactions.begin() as transaction:
+            anchor_id = after.chunk_id if after is not None else None
+            locked = ranking_lock_set(transaction, [list_], [chunk.chunk_id, anchor_id])
+            statuses, candidates = self._locked_candidates(list_, locked)
+            ranking = read_ranking(self._queue, candidates, transaction=locked)
+            moving, anchor = resolve_move(list_, candidates, chunk, after, statuses)
+            others = ranking.ordered(c for c in candidates if c.chunk_id != moving.chunk_id)
+            landing = ranking.land_after(others, anchor)
+            at = self._clock.now()
+            positions = [*landing.renormalized, (moving.chunk_id, landing.position)]
+            write_positions(self._queue, list_, positions, at=at, transaction=locked)
         _log.info(
             "queue chunk repositioned",
             list=list_.value,
             chunk_id=chunk.chunk_id,
             after_chunk_id=after.chunk_id if after is not None else None,
-            position=new_position,
+            position=landing.position,
         )
+        index = 0 if anchor is None else next(i for i, c in enumerate(others) if c.chunk_id == anchor.chunk_id) + 1
+        return RankedOrder([*others[:index], moving, *others[index:]], statuses)
 
-    def _candidates(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+    def _locked_candidates(
+        self, list_: QueueList, transaction: LockedTransaction
+    ) -> tuple[dict[str, ChunkStatus], list[Chunk]]:
+        """The live statuses and ``list_``'s members, both read in ``transaction``."""
+        statuses = self._facts.load_live_statuses(transaction=transaction)
+        return statuses, self._candidates(list_, statuses=statuses, transaction=transaction)
+
+    def _candidates(
+        self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None
+    ) -> list[Chunk]:
         """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`
         pick which of the two independently-ranked lists (``bzh:ranking-is-per-list``)
         they read candidates from."""
         if list_ is QueueList.READY:
-            return self._record.list_ready(statuses=statuses)
-        return self._record.list_not_ready(statuses=statuses)
+            return self._record.list_ready(statuses=statuses, transaction=transaction)
+        return self._record.list_not_ready(statuses=statuses, transaction=transaction)
 
 
 @domain_model

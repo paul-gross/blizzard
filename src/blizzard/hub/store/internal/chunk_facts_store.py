@@ -166,14 +166,16 @@ class ChunkFactsStore:
         with self._store.read("movement_facts_for") as conn:
             return self._load(conn, chunk_ids, families=MOVEMENT_FAMILIES)
 
-    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
         by chunk id, reading only the families ``TICK_STATUS_FAMILIES`` names rather than
         every family :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as :meth:`load_facts_for`."""
         if not chunk_ids:
             return {}
-        with self._store.read("status_facts_for") as conn:
+        with connection_in(self._store, transaction, "status_facts_for") as conn:
             return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
     def status_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
@@ -182,14 +184,14 @@ class ChunkFactsStore:
             return {}
         return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
-    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self, *, transaction: Transaction | None = None) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
         chunk id. The chunks a terminal fact already settles are excluded in the store
         query (:func:`maybe_live`), so the facts read and the per-chunk derivation track the
         live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
         itself stays in ``src/blizzard/hub/domain/chunk/model.py``; this only narrows which rows get read."""
-        with self._store.read("load_live_statuses") as conn:
+        with connection_in(self._store, transaction, "load_live_statuses") as conn:
             statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 

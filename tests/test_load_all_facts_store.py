@@ -453,9 +453,9 @@ def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_
             self.load_live_statuses_calls = 0
             self.load_facts_calls = 0
 
-        def load_live_statuses(self):
+        def load_live_statuses(self, *, transaction: Transaction | None = None):
             self.load_live_statuses_calls += 1
-            return super().load_live_statuses()
+            return super().load_live_statuses(transaction=transaction)
 
         def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None):
             self.load_facts_calls += 1

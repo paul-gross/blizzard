@@ -14,9 +14,10 @@ from sqlalchemy import Engine, insert
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph, stamp
+from tests.support import chunk_stores, migrate_to, ranking_unit, seed_chunk_record, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -107,6 +108,7 @@ def test_a_backlog_position_stamp_on_a_demoted_chunk_is_kept(tmp_path: Path) -> 
     stores.queue.record_promote("ch_a", at=_at(1))
     _demote(engine, "ch_a", at=_at(2))
 
-    stores.queue.record_backlog_positions([("ch_a", 7.0)], at=_at(3))
+    with ranking_unit(engine, lock=BACKLOG_RANKING_LOCK) as unit:
+        stores.queue.record_backlog_positions([("ch_a", 7.0)], at=_at(3), transaction=unit)
 
     assert stores.queue.queue_positions(["ch_a"]) == {"ch_a": 7.0}

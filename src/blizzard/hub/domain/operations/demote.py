@@ -6,23 +6,23 @@ only while its newest promotion is later than its newest demotion. Facts append,
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.operations.queue import (
+    BOTH_LISTS,
     TAIL_PLACEMENT,
     Placement,
     QueueList,
+    ranking_lock_set,
     read_ranking,
     resolve_landing,
-    write_positions_fn,
+    write_positions,
 )
 
 
@@ -58,53 +58,46 @@ class DemoteService:
         record: IReadChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
         facts: IReadChunkFactsRepository,
-        exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._record = record
         self._queue = queue
         self._facts = facts
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
         self._clock = clock
 
-    def demote(
-        self,
-        chunk: Chunk,
-        *,
-        statuses: Mapping[str, ChunkStatus],
-        placement: Placement = TAIL_PLACEMENT,
-    ) -> int | None:
-        """Append the ``chunk.demoted`` fact and stamp an explicit backlog position, in one
-        transaction, as :func:`demotion_writes` decides over facts read under the row lock:
-        ``None`` for a replay on a chunk not currently promoted, :class:`ChunkNotDemotable` for one
-        outside the window, :class:`ChunkNotFound` for a chunk gone under the lock; otherwise stamps the
-        landing :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the tail, the
-        top, or right after ``placement``'s anchor — and returns the fresh ``chunk_demoted.id``.
+    def demote(self, chunk: Chunk, *, placement: Placement = TAIL_PLACEMENT) -> int | None:
+        """Append the ``chunk.demoted`` fact and stamp an explicit backlog position, in one unit, as
+        :func:`demotion_writes` decides over the chunk's facts read in it: ``None`` for a replay on a
+        chunk not currently promoted, :class:`ChunkNotDemotable` for one outside the window,
+        :class:`ChunkNotFound` for a chunk gone; otherwise stamps the landing
+        :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the tail, the top, or
+        right after ``placement``'s anchor — and returns the fresh ``chunk_demoted.id``.
 
-        The landing ranks other chunks — a different aggregate — so it is resolved before the lock
-        from ``statuses``; the chunk's own demotability is not."""
-        pre_lock = self._facts.load_facts(chunk.chunk_id)
-        if pre_lock is not None and not pre_lock.promoted:
-            return None  # a replay needs no lock
-        now = self._clock.now()
-        candidates = self._record.list_not_ready(statuses=statuses)
-        landing = resolve_landing(
-            read_ranking(self._queue, candidates),
-            QueueList.NOT_READY,
-            candidates,
-            chunk_id=chunk.chunk_id,
-            placement=placement,
-            statuses=statuses,
-        )
-        if landing.renormalized:
-            write_positions_fn(self._queue, QueueList.NOT_READY)(list(landing.renormalized), at=now)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        The unit locks the chunk, the anchor, and both lists' rankings — the chunk leaves one and joins
+        the other — before any read, so the landing ranks the backlog as it stands when the demote
+        commits (``bzh:write-reestablishes-read``); a refusal commits nothing."""
+        with self._transactions.begin() as transaction:
+            locked = ranking_lock_set(transaction, BOTH_LISTS, [chunk.chunk_id, placement.after_chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not demotion_writes(chunk.chunk_id, facts):
                 return None
-            return self._queue.record_demote_with_position_locked(
-                handle, chunk.chunk_id, position=landing.position, at=now
+            statuses = self._facts.load_live_statuses(transaction=locked)
+            candidates = self._record.list_not_ready(statuses=statuses, transaction=locked)
+            landing = resolve_landing(
+                read_ranking(self._queue, candidates, transaction=locked),
+                QueueList.NOT_READY,
+                candidates,
+                chunk_id=chunk.chunk_id,
+                placement=placement,
+                statuses=statuses,
+            )
+            now = self._clock.now()
+            if landing.renormalized:
+                write_positions(self._queue, QueueList.NOT_READY, landing.renormalized, at=now, transaction=locked)
+            return self._queue.record_demote_with_position(
+                chunk.chunk_id, position=landing.position, at=now, transaction=locked
             )
