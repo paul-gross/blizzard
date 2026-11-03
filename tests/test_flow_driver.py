@@ -33,7 +33,7 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission, Withdrawal
 from blizzard.hub.domain.delivery.reconcile import (
     FlowLineReconciler,
-    _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched seam's parameter type is module-private
+    _Standing,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.events.broker import EventBroker

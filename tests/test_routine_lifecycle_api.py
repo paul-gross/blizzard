@@ -61,7 +61,7 @@ class _RoutineBodyFields(TypedDict, total=False):
     default_harnesses: list[str]
 
 
-def _create(hub: HubHarness, **overrides: Unpack[_RoutineBodyFields]) -> dict:  # type: ignore[type-arg]
+def _create(hub: HubHarness, **overrides: Unpack[_RoutineBodyFields]) -> dict:
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",
