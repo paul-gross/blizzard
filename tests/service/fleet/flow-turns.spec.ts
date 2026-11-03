@@ -56,7 +56,8 @@ async function turns(api: HubApi, id: string) {
       before = page.body.next_before;
     } while (before !== null);
   }
-  return all.sort((a, b) => a.started_at.localeCompare(b.started_at) || a.turn_id.localeCompare(b.turn_id));
+  const timestamp = (value: string) => value.replace(/(?:\.(\d+))?(\+00:00|Z)$/, (_, fraction: string | undefined) => `.${(fraction ?? '').padEnd(6, '0')}Z`);
+  return all.sort((a, b) => timestamp(a.started_at).localeCompare(timestamp(b.started_at)) || a.turn_id.localeCompare(b.turn_id));
 }
 
 async function pending(api: HubApi, host: RunnerHost, id: string) {
