@@ -194,7 +194,8 @@ class PlannedWrite:
 @dataclass(frozen=True)
 class PlannedPosition:
     """One landing-order fact the apply will commit for a project's repository link, after every record write: the
-    link's new ``position`` — ``None`` for unranked — set at ``at`` by ``by``. A position is no revision of the link,
+    link's new ``position`` — ``None`` for unranked — set at ``at`` by ``by``, landing only while the project's
+    landing-order sequence stands at ``from_seq``, the one it was planned on. A position is no revision of the link,
     so it carries no change row."""
 
     section: str
@@ -202,6 +203,7 @@ class PlannedPosition:
     project_id: str
     repository_id: str
     position: float | None
+    from_seq: int
     at: datetime
     by: str
 
@@ -274,7 +276,7 @@ class IConfigApplyWriter(Protocol):
         self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
     ) -> None:
         """Run each write through the same in-transaction checks its per-record verb runs, in order, then append each
-        of ``positions``.
+        of ``positions`` while its project's landing-order sequence stands at its ``from_seq``.
         With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
         the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
         ...

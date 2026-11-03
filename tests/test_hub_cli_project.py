@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
+from blizzard.hub.domain.projects.order import LandingOrderConflict
 from tests.support import HubHarness, build_hub, default_project, seed_project
 from tests.worker_http import Bound, bind_stubs
 
@@ -337,6 +338,27 @@ def test_position_moves_one_repository_first_after_another_or_out_of_the_ranking
     assert first == ["  acme-lib  0", "  acme-repo  1"]
     assert after == ["  acme-repo  1", "  acme-lib  2"]
     assert unranked == ["  acme-repo  1", "  acme-lib  unranked"]
+
+
+@pytest.mark.usefixtures("sent")
+@pytest.mark.parametrize("argv", [("order", "widgets", "acme-lib"), ("position", "widgets", "acme-lib", "--first")])
+def test_a_landing_order_write_that_keeps_losing_its_read_shows_the_hubs_refusal(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch, argv: tuple[str, ...]
+) -> None:
+    _seed_second_repository(hub.client)
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-lib")
+
+    def stale(project_id: str, *_args: Any, from_seq: int, **_kwargs: Any) -> None:
+        raise LandingOrderConflict(project_id, expected=from_seq)
+
+    monkeypatch.setattr(hub.services.project_positions, "record_positions", stale)
+
+    result = _cli(*argv)
+
+    assert result.exit_code != 0
+    assert "landing order of project" in result.output
+    assert "changed after it was read; run it again" in result.output
 
 
 @pytest.mark.usefixtures("sent")

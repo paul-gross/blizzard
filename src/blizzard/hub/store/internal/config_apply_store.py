@@ -31,7 +31,8 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSo
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
-from blizzard.hub.domain.projects.model import Project, ProjectSlugTaken
+from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
+from blizzard.hub.domain.projects.order import LandingOrderConflict
 
 # Shares forge resolution and insertion on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -60,6 +61,7 @@ from blizzard.hub.store.internal import scope_store as scope_writes
 # Shares the work_source_record_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+from blizzard.hub.store.internal.landing_seqs import require_landing_seq
 from blizzard.hub.store.schema import project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -76,6 +78,7 @@ _REFUSALS = (
     RoutineNameTakenError,
     ScopeSlugTakenError,
     ProjectSlugTaken,
+    LandingOrderConflict,
 )
 
 
@@ -118,7 +121,12 @@ class ConfigApplyStore:
                         raise ApplyEntryRefused(write.section, write.index, cause) from exc
                     except _REFUSALS as exc:
                         raise ApplyEntryRefused(write.section, write.index, exc) from exc
-                _append_positions(conn, positions)
+                for project_positions in _by_project(positions):
+                    try:
+                        _append_positions(conn, project_positions)
+                    except _REFUSALS as exc:
+                        entry = project_positions[0]
+                        raise ApplyEntryRefused(entry.section, entry.index, exc) from exc
                 if dry_run:
                     raise _DryRunRollback
         except _DryRunRollback:
@@ -198,10 +206,19 @@ class ConfigApplyStore:
             repository_writes.update_record(conn, record, from_revision, None, change)
 
 
+def _by_project(positions: Sequence[PlannedPosition]) -> list[list[PlannedPosition]]:
+    """``positions`` grouped by project, each group and the positions within it in plan order."""
+    grouped: dict[str, list[PlannedPosition]] = {}
+    for planned in positions:
+        grouped.setdefault(planned.project_id, []).append(planned)
+    return list(grouped.values())
+
+
 def _append_positions(conn: Connection, positions: Sequence[PlannedPosition]) -> None:
-    """One landing-order fact per planned position, in order — the facts the position store's own write appends."""
-    if not positions:
-        return
+    """One landing-order fact per planned position of one project, in order, while the project's landing-order
+    sequence stands where they were planned — the facts the position store's own write appends."""
+    first = positions[0]
+    require_landing_seq(conn, ProjectId(first.project_id), first.from_seq)
     conn.execute(
         statements_of(conn).insert_rows(
             project_repository_positions,

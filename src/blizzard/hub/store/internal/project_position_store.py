@@ -2,7 +2,8 @@
 
 A repository link's place in its project's landing order is its newest fact in ``project_repository_positions``
 (``bzh:facts-not-status``). A fact names a link, so an unlinked link's facts stay in place, ignored, and a relink reads
-them again. A position write is not a revision of the link and appends no change row."""
+them again. A position write is not a revision of the link and appends no change row; it lands only on the landing-order
+sequence it was planned on."""
 
 from __future__ import annotations
 
@@ -16,7 +17,15 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.projects.order import IWriteProjectPositions, PositionFact, RankedLink, in_landing_order
+from blizzard.hub.domain.projects.order import (
+    IWriteProjectPositions,
+    LandingOrder,
+    LandingOrderConflict,
+    PositionFact,
+    RankedLink,
+    in_landing_order,
+)
+from blizzard.hub.store.internal.landing_seqs import landing_seqs, require_landing_seq
 from blizzard.hub.store.schema import project_repository_positions, repositories
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -65,23 +74,31 @@ class ProjectPositionStore:
         self._store = store
         self._links = links
 
-    def landing_links(self, project_id: ProjectId) -> list[RankedLink]:
+    def landing_links(self, project_id: ProjectId) -> LandingOrder:
+        """The sequence is read before the links: a fact landing between the two leaves it stale, so a write planned on
+        the links is refused rather than landing on positions it never read."""
+        seq = self.landing_seqs([project_id])[project_id]
         standing = self._links.repositories_of(project_id)
         if not standing:
-            return []
+            return LandingOrder((), seq)
         with self._store.read("landing_links") as conn:
             slugs = _slugs(conn, [link.repository_id for link in standing])
-        return in_landing_order(
-            [
-                RankedLink(RepositoryId(link.repository_id), slugs[link.repository_id], link.position)
-                for link in standing
-            ]
-        )
+        ranked = [
+            RankedLink(RepositoryId(link.repository_id), slugs[link.repository_id], link.position) for link in standing
+        ]
+        return LandingOrder(tuple(in_landing_order(ranked)), seq)
 
-    def record_positions(self, project_id: ProjectId, facts: Sequence[PositionFact], *, at: datetime, by: str) -> None:
+    def landing_seqs(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, int]:
+        with self._store.read("landing_seqs") as conn:
+            return landing_seqs(conn, project_ids)
+
+    def record_positions(
+        self, project_id: ProjectId, facts: Sequence[PositionFact], *, from_seq: int, at: datetime, by: str
+    ) -> None:
         if not facts:
             return
-        with self._store.write("record_positions") as conn:
+        with self._store.write("record_positions", expect=(LandingOrderConflict,)) as conn:
+            require_landing_seq(conn, project_id, from_seq)
             conn.execute(
                 statements_of(conn).insert_rows(
                     project_repository_positions,

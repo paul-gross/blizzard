@@ -86,8 +86,9 @@ class ProjectDeclaration:
 class StoredProjects:
     """What the edge loaded: every project of the tenant; the project that left each slug the document names that no
     project holds; every stored link of a declared project, unlinked ones included, by ``(project id, target id)``;
-    and the work sources and repositories stored or declared — retired ones included — each kind with the record that
-    left each referenced slug no record of it holds."""
+    the work sources and repositories stored or declared — retired ones included — each kind with the record that
+    left each referenced slug no record of it holds; and the landing-order sequence of each stored project an entry
+    orders, read before its links."""
 
     projects: tuple[Project, ...]
     former: Mapping[str, Project] = field(default_factory=dict[str, Project])
@@ -99,6 +100,7 @@ class StoredProjects:
     former_sources: Mapping[str, WorkSourceRef] = field(default_factory=dict[str, WorkSourceRef])
     repositories: tuple[RepositoryRef, ...] = ()
     former_repositories: Mapping[str, RepositoryRef] = field(default_factory=dict[str, RepositoryRef])
+    landing_seqs: Mapping[ProjectId, int] = field(default_factory=dict[ProjectId, int])
 
 
 @domain_model
@@ -241,6 +243,7 @@ def plan_projects(
                     record,
                     _ordered(entry.landing_order, repositories),
                     _landing_links(record, repository_targets, stored.repository_links, repositories),
+                    stored.landing_seqs.get(record.project_id, 0),
                     ctx,
                     at,
                 )
@@ -334,11 +337,13 @@ class _Entry:
         project: Project,
         ordered: Sequence[tuple[RepositoryId, str]],
         links: Sequence[RankedLink],
+        seq: int,
         ctx: ChangeContext,
         at: datetime,
     ) -> None:
         """Rank ``ordered`` — each repository's id and slug — and leave every other of ``links`` unranked, planning a
-        fact only for a link whose position changes; its outcome row shows the ranked repositories before and after."""
+        fact only for a link whose position changes, each landing only on ``seq``, the landing-order sequence
+        ``links`` were read on; its outcome row shows the ranked repositories before and after."""
         facts = whole_order(
             links, [repository_id for repository_id, _ in ordered], project=project.slug, field=LANDING_ORDER_FIELD
         )
@@ -348,7 +353,14 @@ class _Entry:
             return
         self.positions.extend(
             PlannedPosition(
-                PROJECTS_SECTION, self.index, project.project_id, fact.repository_id, fact.position, at, ctx.actor
+                PROJECTS_SECTION,
+                self.index,
+                project.project_id,
+                fact.repository_id,
+                fact.position,
+                seq,
+                at,
+                ctx.actor,
             )
             for fact in facts
         )

@@ -53,6 +53,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         forges=services.forge_records,
         projects=services.projects,
         links=services.project_links,
+        positions=services.project_positions,
         scopes=services.scopes,
         routines=services.routines,
         routine_scopes=services.routine_scopes,

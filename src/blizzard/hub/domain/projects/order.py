@@ -5,12 +5,15 @@ newest fact is null, is unranked. A position is a float, so a move writes one fa
 neighbours — after renumbering the ranked links ``1.0``, ``2.0``, … when that gap is spent; a whole-order write
 ranks the links it names ``1.0``, ``2.0``, … in its order and leaves every other link unranked. Either writes a fact
 only for a link whose position changes, so writing an order the project already has writes nothing. A position write
-is not a revision of the link: it carries who set it, and writes no change row."""
+is not a revision of the link: it carries who set it, and writes no change row.
+
+Those facts are a diff against the order they were planned on, so a write lands only while the project's landing-order
+sequence — its newest fact — still stands where the plan read it (``bzh:write-reestablishes-read``)."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
@@ -23,6 +26,10 @@ from blizzard.hub.domain.projects.model import ProjectId
 
 #: Where the first ranked repository of a project sits, and where a renumbering starts.
 FIRST_POSITION = 1.0
+
+#: How many times a landing-order write re-reads and re-plans after a competitor's write lands between its read and
+#: its own.
+LANDING_ORDER_ATTEMPTS = 3
 
 
 class RepositoryNotLinked(ConfigFieldError):
@@ -45,6 +52,17 @@ class RankedLink:
     position: float | None
 
 
+class LandingOrderConflict(Exception):
+    """A landing-order write was planned on a sequence a competitor's write has since moved past."""
+
+    code = "landing_order_conflict"
+
+    def __init__(self, project_id: str, *, expected: int) -> None:
+        super().__init__(f"the landing order of project {project_id} changed after it was read")
+        self.project_id = project_id
+        self.expected = expected
+
+
 @domain_model
 @dataclass(frozen=True)
 class PositionFact:
@@ -57,6 +75,27 @@ class PositionFact:
 def in_landing_order(links: Sequence[RankedLink]) -> list[RankedLink]:
     """``links`` in the order their repositories land in."""
     return sorted(links, key=lambda link: landing_sort_key(link.position, link.slug))
+
+
+@domain_model
+@dataclass(frozen=True)
+class LandingOrder:
+    """A project's standing repository links in landing order, and its sequence: the id of the newest position fact
+    the project holds, ``0`` when it holds none. Every change to the order appends a fact, so the sequence moves with
+    each one, and a write planned on this order is conditioned on it."""
+
+    links: tuple[RankedLink, ...]
+    seq: int
+
+    def after(self, facts: Sequence[PositionFact]) -> list[RankedLink]:
+        """The links in landing order once ``facts`` land on them."""
+        moved = {fact.repository_id: fact.position for fact in facts}
+        return in_landing_order(
+            [
+                replace(link, position=moved[link.repository_id]) if link.repository_id in moved else link
+                for link in self.links
+            ]
+        )
 
 
 def whole_order(
@@ -128,15 +167,23 @@ def _changed(
 class IReadProjectPositions(Protocol):
     """Read-only landing-order operations, within one tenant."""
 
-    def landing_links(self, project_id: ProjectId) -> list[RankedLink]:
+    def landing_links(self, project_id: ProjectId) -> LandingOrder:
         """The project's standing repository links, each with its repository's current slug and its newest
-        position, in landing order. A link unlinked and linked again has the position it had."""
+        position, in landing order, with the project's landing-order sequence read before them. A link unlinked and
+        linked again has the position it had."""
+        ...
+
+    def landing_seqs(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, int]:
+        """The landing-order sequence of each of ``project_ids`` — ``0`` for one holding no position fact."""
         ...
 
 
 class IWriteProjectPositions(IReadProjectPositions, Protocol):
     """Adds the position write."""
 
-    def record_positions(self, project_id: ProjectId, facts: Sequence[PositionFact], *, at: datetime, by: str) -> None:
-        """Append one position fact per entry of ``facts``, in order, in one transaction."""
+    def record_positions(
+        self, project_id: ProjectId, facts: Sequence[PositionFact], *, from_seq: int, at: datetime, by: str
+    ) -> None:
+        """Append one position fact per entry of ``facts``, in order, in one transaction, only while the project's
+        landing-order sequence stands at ``from_seq``; :class:`LandingOrderConflict` otherwise, appending nothing."""
         ...

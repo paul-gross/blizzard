@@ -1314,6 +1314,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             forges=stores.forge_records,
             projects=stores.projects,
             links=stores.project_links,
+            positions=stores.project_positions,
             scopes=scope_store,
             routines=routine_store,
             routine_scopes=routine_scope_store,
