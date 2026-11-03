@@ -3257,8 +3257,8 @@ def test_parked_delivery_turns_keep_flow_invariants(tmp_path: Path, outcome: str
                         hub.hub_turns,
                         turn_id=f"htn_{n}",
                         submission_id="fsub_1",
-                        started_at=_NOW,
-                        ended_at=_NOW,
+                        started_at=NOW,
+                        ended_at=NOW,
                         outcome="pending",
                     )
                 )
@@ -3269,12 +3269,12 @@ def test_parked_delivery_turns_keep_flow_invariants(tmp_path: Path, outcome: str
     with engine.begin() as conn:
         conn.execute(
             hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_3")).values(
-                ended_at=_NOW, outcome=outcome
+                ended_at=NOW, outcome=outcome
             )
         )
         conn.execute(
             insert(hub.flow_submission_closures).values(
-                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome=outcome, closed_at=_NOW)
+                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome=outcome, closed_at=NOW)
             )
         )
     assert _flow_line_breaches(engine) == []
@@ -3307,7 +3307,7 @@ def test_branch_and_zero_flow_garden_turns_can_overlap(tmp_path: Path) -> None:
                     epoch=1,
                     generation=0,
                     arrival=2,
-                    submitted_at=_NOW,
+                    submitted_at=NOW,
                 )
             )
         )
@@ -3318,12 +3318,12 @@ def test_branch_and_zero_flow_garden_turns_can_overlap(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(
             hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_garden")).values(
-                ended_at=_NOW, outcome="recorded"
+                ended_at=NOW, outcome="recorded"
             )
         )
         conn.execute(
             insert(hub.flow_submission_closures).values(
-                stamp(hub.flow_submission_closures, submission_id="fsub_garden", outcome="recorded", closed_at=_NOW)
+                stamp(hub.flow_submission_closures, submission_id="fsub_garden", outcome="recorded", closed_at=NOW)
             )
         )
     assert _flow_line_breaches(engine) == []

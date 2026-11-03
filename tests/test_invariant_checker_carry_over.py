@@ -6,7 +6,7 @@ import pytest
 
 from blizzard.hub.store import schema as hub
 from blizzard.tools.invariants import hub_invariants
-from tests.migration_support_invariant_checker import _NOW, insert
+from tests.migration_support_invariant_checker import NOW, insert
 from tests.support import default_project, default_tenant, hub_scoped, stamp
 from tests.test_invariant_checker import (
     _flow,
@@ -46,8 +46,8 @@ def test_carried_over_delivery_and_later_delivery_hold_landing_invariants(tmp_pa
                         hub.hub_turns,
                         turn_id=f"htn_{n}",
                         submission_id=f"fsub_{n}",
-                        started_at=_NOW,
-                        ended_at=_NOW,
+                        started_at=NOW,
+                        ended_at=NOW,
                         outcome=outcome,
                     )
                 )
@@ -58,7 +58,7 @@ def test_carried_over_delivery_and_later_delivery_hold_landing_invariants(tmp_pa
                     hub.flow_submission_closures,
                     submission_id="fsub_1",
                     outcome="landed",
-                    closed_at=_NOW,
+                    closed_at=NOW,
                 )
             )
         )
@@ -75,7 +75,7 @@ def test_carried_over_delivery_and_later_delivery_hold_landing_invariants(tmp_pa
     with engine.begin() as conn:
         conn.execute(
             hub_scoped(hub.hub_turns.update().where(hub.hub_turns.c.turn_id == "htn_3")).values(
-                ended_at=_NOW, outcome="landed"
+                ended_at=NOW, outcome="landed"
             )
         )
         conn.execute(
@@ -84,7 +84,7 @@ def test_carried_over_delivery_and_later_delivery_hold_landing_invariants(tmp_pa
                     hub.flow_submission_closures,
                     submission_id="fsub_2",
                     outcome="landed",
-                    closed_at=_NOW,
+                    closed_at=NOW,
                 )
             )
         )

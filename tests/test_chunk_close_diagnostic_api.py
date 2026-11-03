@@ -18,14 +18,14 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_transcript_segments_api import _bearer, _cookie, _enrolled_runner_token, _ingest_chunk
+from tests.test_transcript_segments_api import bearer, cookie, enrolled_runner_token, ingest_chunk
 
 pytestmark = pytest.mark.component
 
 
 def test_close_diagnostic_pages_and_hides_failure_details(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _ingest_chunk(hub)
+    chunk = ingest_chunk(hub)
     delivery = chunk_stores(hub.engine, hub.clock).delivery
     ref = WorkRef(source="default", ref="1")
     decision = CloseEnqueueDecision(closable=frozenset({ref}), skipped=frozenset())
@@ -67,18 +67,18 @@ def test_close_diagnostic_isolation_and_auth(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     assert hub.client.get("/api/chunks/ch_x/close-diagnostic").status_code == 401
     contributor = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
-    chunk = _ingest_chunk(hub, headers=_cookie(contributor))
+    chunk = ingest_chunk(hub, headers=cookie(contributor))
     guest = seed_session(hub, seed_user(hub, username="grace", role=Role.GUEST))
-    assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=_cookie(guest)).status_code == 200
+    assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=cookie(guest)).status_code == 200
     other = add_tenant(hub.engine, "bravo")
     hub.hub_services.tenants.open_tenants.refresh()
-    headers = {**_cookie(guest), TENANT_HEADER: other}
+    headers = {**cookie(guest), TENANT_HEADER: other}
     assert hub.client.get(f"/api/chunks/{chunk}/close-diagnostic", headers=headers).status_code in (403, 404)
 
 
 def test_foreign_chunk_and_unknown_chunk_are_indistinguishable(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _ingest_chunk(hub)
+    chunk = ingest_chunk(hub)
     other = add_tenant(hub.engine, "bravo")
     hub.hub_services.tenants.open_tenants.refresh()
     headers = {TENANT_HEADER: other}
@@ -93,6 +93,6 @@ def test_foreign_chunk_and_unknown_chunk_are_indistinguishable(tmp_path: Path) -
 
 
 def test_close_diagnostic_refuses_runner(tmp_path: Path) -> None:
-    token = _enrolled_runner_token(tmp_path)
+    token = enrolled_runner_token(tmp_path)
     hub = build_hub(tmp_path, auth_mode="oauth")
-    assert hub.client.get("/api/chunks/ch_x/close-diagnostic", headers=_bearer(token)).status_code == 403
+    assert hub.client.get("/api/chunks/ch_x/close-diagnostic", headers=bearer(token)).status_code == 403

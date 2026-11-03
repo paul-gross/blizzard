@@ -8,10 +8,10 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from blizzard.auth_core import Permission
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
+from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.delivery.flow_driver import FlowDriver
 
 

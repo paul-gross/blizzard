@@ -443,6 +443,12 @@ class _Flows:
     def submissions_of_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[SubmissionRecord]]:
         raise NotImplementedError
 
+    def turns_page(self, submission_id: str, *, before: str | None, limit: int) -> list[Turn]:
+        raise NotImplementedError
+
+    def submission_belongs_to(self, submission_id: str, chunk_id: str) -> bool:
+        raise NotImplementedError
+
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         raise NotImplementedError
 

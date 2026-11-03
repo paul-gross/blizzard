@@ -19,14 +19,14 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_transcript_segments_api import _bearer, _cookie, _enrolled_runner_token, _ingest_chunk
+from tests.test_transcript_segments_api import bearer, cookie, enrolled_runner_token, ingest_chunk
 
 pytestmark = pytest.mark.component
 
 
 def test_page_cost_stays_flat_as_chunk_history_grows(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _ingest_chunk(hub)
+    chunk = ingest_chunk(hub)
     delivery = chunk_stores(hub.engine, hub.clock).delivery
     decision = CloseEnqueueDecision(closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset())
 
@@ -57,7 +57,7 @@ def test_page_cost_stays_flat_as_chunk_history_grows(tmp_path: Path) -> None:
 
 def test_foreign_and_unknown_chunks_are_indistinguishable(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk = _ingest_chunk(hub)
+    chunk = ingest_chunk(hub)
     other = add_tenant(hub.engine, "bravo")
     hub.hub_services.tenants.open_tenants.refresh()
     headers = {TENANT_HEADER: other}
@@ -75,14 +75,14 @@ def test_landing_history_authentication_and_guest_permission(tmp_path: Path) -> 
     hub = build_hub(tmp_path, auth_mode="oauth")
     assert hub.client.get("/api/chunks/ch_x/landing-facts").status_code == 401
     contributor = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
-    chunk = _ingest_chunk(hub, headers=_cookie(contributor))
+    chunk = ingest_chunk(hub, headers=cookie(contributor))
     guest = seed_session(hub, seed_user(hub, username="grace", role=Role.GUEST))
-    response = hub.client.get(f"/api/chunks/{chunk}/landing-facts", headers=_cookie(guest))
+    response = hub.client.get(f"/api/chunks/{chunk}/landing-facts", headers=cookie(guest))
     assert response.status_code == 200
     assert response.json() == {"items": [], "next_cursor": None}
 
 
 def test_landing_history_refuses_runner_principal(tmp_path: Path) -> None:
-    token = _enrolled_runner_token(tmp_path)
+    token = enrolled_runner_token(tmp_path)
     hub = build_hub(tmp_path, auth_mode="oauth")
-    assert hub.client.get("/api/chunks/ch_x/landing-facts", headers=_bearer(token)).status_code == 403
+    assert hub.client.get("/api/chunks/ch_x/landing-facts", headers=bearer(token)).status_code == 403
