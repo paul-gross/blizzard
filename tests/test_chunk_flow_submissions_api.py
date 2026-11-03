@@ -3,6 +3,7 @@ their closures, the operator-plane auth triad, the runner principal refused, and
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, TurnEvent
+from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import (
@@ -19,6 +20,7 @@ from tests.support import (
     add_tenant,
     build_hub,
     capture_statements,
+    chunk_unit,
     count_queries,
     count_rows_read,
     explain_query_plan,
@@ -38,15 +40,29 @@ def _flows(hub: HubHarness) -> FlowStore:
     return FlowStore(hub_store_connections(hub.engine), FixedClock(_AT))
 
 
+def _submit(
+    hub: HubHarness,
+    chunk_id: str,
+    *,
+    node_id: str = "nd_deliver",
+    generation: int = 0,
+    resources: Sequence[FlowResource] = (_MAIN,),
+    at: datetime = _AT,
+) -> Submission | None:
+    """Submit ``chunk_id``'s visit to ``node_id`` at epoch 1 in a unit locking the chunk, as the reconcile does."""
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        return _flows(hub).submit(
+            chunk_id, node_id=node_id, epoch=1, generation=generation, resources=resources, at=at, transaction=unit
+        )
+
+
 def test_the_read_serves_every_submission_in_arrival_order_with_its_closure(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, other_chunk = ingest_chunk(hub), ingest_chunk(hub, pointer_token="default:2")
     flows = _flows(hub)
-    first = flows.submit(chunk_id, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-    flows.submit(other_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-    second = flows.submit(
-        chunk_id, node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN], at=_AT + timedelta(seconds=1)
-    )
+    first = _submit(hub, chunk_id)
+    _submit(hub, other_chunk)
+    second = _submit(hub, chunk_id, generation=1, at=_AT + timedelta(seconds=1))
     assert first is not None and second is not None
     assert flows.close(first.submission_id, outcome="superseded", at=_AT + timedelta(seconds=2))
 
@@ -103,7 +119,7 @@ def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
 def test_another_tenants_chunk_is_404_as_if_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest_chunk(hub)
-    _flows(hub).submit(chunk_id, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    _submit(hub, chunk_id)
     other = add_tenant(hub.engine, "bravo")
     hub.hub_services.tenants.open_tenants.refresh()
 
@@ -150,8 +166,7 @@ def test_turn_read_requires_guest_session_and_refuses_runner(tmp_path: Path) -> 
 def test_turn_page_cost_and_index_are_bounded_as_history_grows(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk = ingest_chunk(hub)
-    flows = _flows(hub)
-    submission = flows.submit(chunk, node_id="nd_garden", epoch=1, generation=0, resources=[], at=_AT)
+    submission = _submit(hub, chunk, node_id="nd_garden", resources=[])
     assert submission is not None
     scoped = hub_store_connections(hub.engine)
 
@@ -199,8 +214,8 @@ def test_captured_terms_and_paged_turns_include_zero_flow_submissions(tmp_path: 
     hub = build_hub(tmp_path)
     chunk = ingest_chunk(hub)
     flows = _flows(hub)
-    submission = flows.submit(chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-    garden = flows.submit(chunk, node_id="nd_garden", epoch=1, generation=0, resources=[], at=_AT)
+    submission = _submit(hub, chunk)
+    garden = _submit(hub, chunk, node_id="nd_garden", resources=[])
     assert submission is not None and garden is not None
     terms = [LandingTerms("repo_a", "park", 2, 1.5)]
     first = flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=terms, at=_AT)

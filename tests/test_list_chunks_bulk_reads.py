@@ -37,6 +37,7 @@ from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    chunk_unit,
     count_queries,
     count_rows_read,
     hub_store_connections,
@@ -86,14 +87,16 @@ def _seed_in_line(hub: HubHarness, n: int) -> None:
     _seed(hub, n)
     flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
     for row in hub.client.get("/api/chunks").json()["chunks"]:
-        flows.submit(
-            row["chunk_id"],
-            node_id="nd_deliver",
-            epoch=1,
-            generation=0,
-            resources=[FlowResource("repo_a", "main"), FlowResource("repo_b", "main")],
-            at=_T0,
-        )
+        with chunk_unit(hub_store_connections(hub.engine), row["chunk_id"]) as unit:
+            flows.submit(
+                row["chunk_id"],
+                node_id="nd_deliver",
+                epoch=1,
+                generation=0,
+                resources=[FlowResource("repo_a", "main"), FlowResource("repo_b", "main")],
+                at=_T0,
+                transaction=unit,
+            )
 
 
 def test_list_chunks_query_count_is_independent_of_fleet_size_with_its_chunks_in_line(tmp_path: Path) -> None:

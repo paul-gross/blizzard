@@ -1,5 +1,5 @@
 """``FlowStore`` (component tier). A submission takes the tenant's newest arrival plus one and is written once per
-generation of a visit; a closure is written once, with its ``withdrawn`` facts, and never while a turn is open; the
+generation of a visit, only in a unit locking its chunk; a closure is written once, with its ``withdrawn`` facts, and never while a turn is open; the
 open walk from a floor returns only open submissions at or above it; and ending a turn ``interrupted`` writes its
 ``turn-ended`` facts and, when asked, the closure, once. A turn gives its submission landing terms for each repository
 it holds and has none for — an earlier generation's, else the candidate — so a retried turn and a resubmission keep
@@ -7,6 +7,7 @@ what the visit's first turn took."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,10 +16,11 @@ import pytest
 from sqlalchemy import Engine, Table, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, TurnEvent
+from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
+from tests.support import build_hub, chunk_unit, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -32,6 +34,21 @@ _INTERRUPTED = TurnEvent(kind="turn-interrupted", chunk_id="ch_1", node_name="de
 class _World:
     engine: Engine
     flows: FlowStore
+
+    def submit(
+        self, chunk_id: str, *, generation: int = 0, resources: Sequence[FlowResource] = (_MAIN,)
+    ) -> Submission | None:
+        """Submit ``chunk_id``'s ``nd_deliver`` visit at epoch 1 in a unit locking the chunk, as the reconcile does."""
+        with chunk_unit(hub_store_connections(self.engine), chunk_id) as unit:
+            return self.flows.submit(
+                chunk_id,
+                node_id="nd_deliver",
+                epoch=1,
+                generation=generation,
+                resources=resources,
+                at=_AT,
+                transaction=unit,
+            )
 
 
 @pytest.fixture
@@ -59,10 +76,10 @@ def _plant_turn(engine: Engine, submission_id: str, *, turn_id: str = "htn_1") -
         )
 
 
-def test_each_submission_arrives_at_the_tenants_newest_plus_one(flows: FlowStore) -> None:
-    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-    second = flows.submit("ch_2", node_id="nd_deliver", epoch=1, generation=0, resources=[_OTHER], at=_AT)
-    third = flows.submit("ch_3", node_id="nd_deliver", epoch=1, generation=0, resources=[], at=_AT)
+def test_each_submission_arrives_at_the_tenants_newest_plus_one(world: _World, flows: FlowStore) -> None:
+    first = world.submit("ch_1")
+    second = world.submit("ch_2", resources=[_OTHER])
+    third = world.submit("ch_3", resources=[])
 
     assert first is not None and second is not None and third is not None
     assert (first.arrival, second.arrival, third.arrival) == (1, 2, 3)
@@ -70,8 +87,8 @@ def test_each_submission_arrives_at_the_tenants_newest_plus_one(flows: FlowStore
 
 
 def test_a_submission_makes_its_flow_once_and_writes_a_submitted_fact_per_flow(world: _World, flows: FlowStore) -> None:
-    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
-    second = flows.submit("ch_2", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    first = world.submit("ch_1", resources=[_MAIN, _OTHER])
+    second = world.submit("ch_2")
 
     assert first is not None and second is not None
     assert {f.resource for f in first.flows} == {"repo:repo_a/main", "repo:repo_b/master"}
@@ -83,19 +100,26 @@ def test_a_submission_makes_its_flow_once_and_writes_a_submitted_fact_per_flow(w
 
 
 def test_a_second_submit_of_the_same_visit_generation_writes_nothing(world: _World, flows: FlowStore) -> None:
-    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    first = world.submit("ch_1")
 
-    again = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    again = world.submit("ch_1")
 
     assert first is not None and again is None
     assert _count(world.engine, s.flow_submissions) == 1
     assert _count(world.engine, s.flow_facts) == 1
-    resubmitted = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN], at=_AT)
+    resubmitted = world.submit("ch_1", generation=1)
     assert resubmitted is not None and resubmitted.arrival == 2
 
 
+def test_a_submission_refuses_a_unit_that_does_not_lock_its_chunk(world: _World, flows: FlowStore) -> None:
+    with pytest.raises(TransactionMisuse), chunk_unit(hub_store_connections(world.engine), "ch_2") as unit:
+        flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT, transaction=unit)
+
+    assert _count(world.engine, s.flow_submissions) == 0
+
+
 def test_a_submission_is_closed_once_with_one_withdrawn_fact_per_flow(world: _World, flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
+    submission = world.submit("ch_1", resources=[_MAIN, _OTHER])
     assert submission is not None
 
     assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is not None
@@ -111,7 +135,7 @@ def test_a_submission_is_closed_once_with_one_withdrawn_fact_per_flow(world: _Wo
 
 
 def test_a_submission_with_an_open_turn_is_not_closed(world: _World, flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    submission = world.submit("ch_1")
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
@@ -119,11 +143,8 @@ def test_a_submission_with_an_open_turn_is_not_closed(world: _World, flows: Flow
     assert _count(world.engine, s.flow_submission_closures) == 0
 
 
-def test_the_floor_walk_returns_only_open_submissions_at_or_above_the_floor(flows: FlowStore) -> None:
-    submitted = [
-        flows.submit(f"ch_{n}", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-        for n in range(1, 5)
-    ]
+def test_the_floor_walk_returns_only_open_submissions_at_or_above_the_floor(world: _World, flows: FlowStore) -> None:
+    submitted = [world.submit(f"ch_{n}") for n in range(1, 5)]
     assert all(submitted)
     ids = [sub.submission_id for sub in submitted if sub is not None]
     flows.close(ids[2], outcome="completed", at=_AT)
@@ -135,10 +156,10 @@ def test_the_floor_walk_returns_only_open_submissions_at_or_above_the_floor(flow
     assert all(sub.closed is None and len(sub.flows) == 1 for sub in walked)
 
 
-def test_the_per_visit_lookup_answers_the_newest_generation(flows: FlowStore) -> None:
+def test_the_per_visit_lookup_answers_the_newest_generation(world: _World, flows: FlowStore) -> None:
     assert flows.submission_for_visit("ch_1", node_id="nd_deliver", epoch=1) is None
-    flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
-    newer = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN], at=_AT)
+    world.submit("ch_1")
+    newer = world.submit("ch_1", generation=1)
 
     visit = flows.submission_for_visit("ch_1", node_id="nd_deliver", epoch=1)
 
@@ -147,7 +168,7 @@ def test_the_per_visit_lookup_answers_the_newest_generation(flows: FlowStore) ->
 
 
 def test_ending_a_turn_interrupted_writes_its_facts_and_closure_once(world: _World, flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    submission = world.submit("ch_1")
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
     assert [t.turn_id for t in flows.open_turns()] == ["htn_1"]
@@ -166,7 +187,7 @@ def test_ending_a_turn_interrupted_writes_its_facts_and_closure_once(world: _Wor
 
 
 def test_ending_a_turn_without_a_withdrawal_leaves_the_submission_open(world: _World, flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    submission = world.submit("ch_1")
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
@@ -186,8 +207,8 @@ def _turn(flows: FlowStore, submission_id: str, terms: tuple[LandingTerms, ...],
     return turn.turn_id
 
 
-def test_a_first_turn_takes_terms_for_every_repository_it_holds(flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
+def test_a_first_turn_takes_terms_for_every_repository_it_holds(world: _World, flows: FlowStore) -> None:
+    submission = world.submit("ch_1", resources=[_MAIN, _OTHER])
     assert submission is not None
     assert flows.terms_of(submission.submission_id) == {}
 
@@ -197,7 +218,7 @@ def test_a_first_turn_takes_terms_for_every_repository_it_holds(flows: FlowStore
 
 
 def test_a_retried_turn_keeps_the_terms_its_first_attempt_took(world: _World, flows: FlowStore) -> None:
-    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    submission = world.submit("ch_1")
     assert submission is not None
     first = _turn(flows, submission.submission_id, (_TERMS_A,))
     flows.end_turn_interrupted(first, withdrawal=None, event=_INTERRUPTED, at=_AT)
@@ -209,13 +230,14 @@ def test_a_retried_turn_keeps_the_terms_its_first_attempt_took(world: _World, fl
 
 
 def test_a_resubmission_copies_the_visits_terms_and_takes_fresh_ones_only_for_a_new_repository(
+    world: _World,
     flows: FlowStore,
 ) -> None:
-    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
+    first = world.submit("ch_1", resources=[_MAIN, _OTHER])
     assert first is not None
     turn = _turn(flows, first.submission_id, (_TERMS_A, _TERMS_B))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
-    second = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN, _THIRD], at=_AT)
+    second = world.submit("ch_1", generation=1, resources=[_MAIN, _THIRD])
     assert second is not None
     fresh_c = LandingTerms("repo_c", "merge-on-checks", None, None)
 
@@ -224,13 +246,13 @@ def test_a_resubmission_copies_the_visits_terms_and_takes_fresh_ones_only_for_a_
     assert flows.terms_of(second.submission_id) == {"repo_a": _TERMS_A, "repo_c": fresh_c}
 
 
-def test_the_first_turn_of_a_visit_is_kept_across_its_resubmissions(flows: FlowStore) -> None:
+def test_the_first_turn_of_a_visit_is_kept_across_its_resubmissions(world: _World, flows: FlowStore) -> None:
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) is None
-    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    first = world.submit("ch_1")
     assert first is not None
     turn = _turn(flows, first.submission_id, (_TERMS_A,))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
-    second = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN], at=_AT)
+    second = world.submit("ch_1", generation=1)
     assert second is not None
 
     _turn(flows, second.submission_id, (_TERMS_A,), at=_AT + timedelta(hours=1))

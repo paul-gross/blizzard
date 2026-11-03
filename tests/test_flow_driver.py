@@ -45,6 +45,7 @@ from tests.support import (
     build_hub,
     capture_statements,
     chunk_stores,
+    chunk_unit,
     default_tenant,
     hub_scoped,
     hub_store_connections,
@@ -527,9 +528,16 @@ def test_an_unchanged_signature_skips_the_rescan_until_the_floor(world: World) -
     assert world.tick().reconciled == (world.tenant,)
     world.tick()  # the wake its turn's end sent
     # A submission no chunk stands behind, written where the probe does not look: only a full rescan closes it.
-    ghost = FlowStore(hub_store_connections(world.hub.engine), world.hub.clock).submit(
-        "ch_ghost", node_id="nd_gone", epoch=1, generation=0, resources=[], at=world.hub.clock.now()
-    )
+    with chunk_unit(hub_store_connections(world.hub.engine), "ch_ghost") as unit:
+        ghost = FlowStore(hub_store_connections(world.hub.engine), world.hub.clock).submit(
+            "ch_ghost",
+            node_id="nd_gone",
+            epoch=1,
+            generation=0,
+            resources=[],
+            at=world.hub.clock.now(),
+            transaction=unit,
+        )
     assert ghost is not None
 
     world.hub.clock.advance(RECONCILE_FLOOR - timedelta(seconds=1))

@@ -2174,22 +2174,25 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     flow_closed_chunk = "ch_hub_flow_closed"
     _mint(flow_chunk, "1040", at=_ht(111))
     _mint(flow_closed_chunk, "1041", at=_ht(112))
-    flow_submission = flow_store.submit(
-        flow_chunk,
-        node_id=deliver_node.node_id,
-        epoch=1,
-        generation=0,
-        resources=[FlowResource("repo_census", "main"), FlowResource("repo_census_2", "main")],
-        at=_ht(113),
-    )
-    closed_submission = flow_store.submit(
-        flow_closed_chunk,
-        node_id=deliver_node.node_id,
-        epoch=1,
-        generation=0,
-        resources=[FlowResource("repo_census", "main")],
-        at=_ht(114),
-    )
+    with chunk_unit(store_connections, flow_chunk, flow_closed_chunk) as unit:
+        flow_submission = flow_store.submit(
+            flow_chunk,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("repo_census", "main"), FlowResource("repo_census_2", "main")],
+            at=_ht(113),
+            transaction=unit,
+        )
+        closed_submission = flow_store.submit(
+            flow_closed_chunk,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("repo_census", "main")],
+            at=_ht(114),
+            transaction=unit,
+        )
     assert flow_submission is not None and closed_submission is not None
     flow_store.close(closed_submission.submission_id, outcome="superseded", at=_ht(115))
     # No production write starts a turn yet, so the census plants the one open turn it reads.

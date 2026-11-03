@@ -40,6 +40,7 @@ from blizzard.hub.domain.delivery.flows import (
     Withdrawal,
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import write_landing_rows
 from blizzard.hub.store.internal.flow_rows import (
@@ -56,7 +57,7 @@ from blizzard.hub.store.internal.flow_rows import (
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
 
 _sub = s.flow_submissions
 _held = s.flow_submission_flows
@@ -103,8 +104,10 @@ class FlowStore:
                 for r in rows
             ]
 
-    def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
-        with self._store.read("submission_for_visit") as conn:
+    def submission_for_visit(
+        self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
+    ) -> Submission | None:
+        with connection_in(self._store, transaction, "submission_for_visit") as conn:
             row = conn.execute(
                 self._store.select(_sub)
                 .where(_sub.c.chunk_id == chunk_id, _sub.c.node_id == node_id, _sub.c.epoch == epoch)
@@ -327,37 +330,24 @@ class FlowStore:
         generation: int,
         resources: Sequence[FlowResource],
         at: datetime,
+        transaction: LockedTransaction,
     ) -> Submission | None:
-        with self._store.write("submit_flow_visit") as conn:
-            already = conn.execute(
-                self._store.select(_sub, _sub.c.submission_id).where(
-                    _sub.c.chunk_id == chunk_id,
-                    _sub.c.node_id == node_id,
-                    _sub.c.epoch == epoch,
-                    _sub.c.generation == generation,
-                )
-            ).first()
-            if already is not None:
-                return None
-            # The tenant's newest plus one, read under the tenant row lock the write opened on.
-            arrival = (conn.execute(self._store.select(_sub, func.max(_sub.c.arrival))).scalar() or 0) + 1
-            submission_id = Id.mint(IdPrefix.FLOW_SUBMISSION, self._clock).value
-            conn.execute(
-                self._store.insert(_sub).values(
-                    submission_id=submission_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    epoch=epoch,
-                    generation=generation,
-                    arrival=arrival,
-                    submitted_at=at,
-                )
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        already = conn.execute(
+            self._store.select(_sub, _sub.c.submission_id).where(
+                _sub.c.chunk_id == chunk_id,
+                _sub.c.node_id == node_id,
+                _sub.c.epoch == epoch,
+                _sub.c.generation == generation,
             )
-            flows = tuple(self._flow_for(conn, resource, at=at) for resource in dict.fromkeys(resources))
-            for flow in flows:
-                conn.execute(self._store.insert(_held).values(submission_id=submission_id, flow_id=flow.flow_id))
-            write_facts(conn, flows, submission_id, chunk_id, kind=FlowChangeKind.SUBMITTED, outcome=None, at=at)
-            return Submission(
+        ).first()
+        if already is not None:
+            return None
+        # The tenant's newest plus one, read under the tenant row lock the unit opened on.
+        arrival = (conn.execute(self._store.select(_sub, func.max(_sub.c.arrival))).scalar() or 0) + 1
+        submission_id = Id.mint(IdPrefix.FLOW_SUBMISSION, self._clock).value
+        conn.execute(
+            self._store.insert(_sub).values(
                 submission_id=submission_id,
                 chunk_id=chunk_id,
                 node_id=node_id,
@@ -365,8 +355,22 @@ class FlowStore:
                 generation=generation,
                 arrival=arrival,
                 submitted_at=at,
-                flows=flows,
             )
+        )
+        flows = tuple(self._flow_for(conn, resource, at=at) for resource in dict.fromkeys(resources))
+        for flow in flows:
+            conn.execute(self._store.insert(_held).values(submission_id=submission_id, flow_id=flow.flow_id))
+        write_facts(conn, flows, submission_id, chunk_id, kind=FlowChangeKind.SUBMITTED, outcome=None, at=at)
+        return Submission(
+            submission_id=submission_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            generation=generation,
+            arrival=arrival,
+            submitted_at=at,
+            flows=flows,
+        )
 
     def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("close_flow_submission") as conn:

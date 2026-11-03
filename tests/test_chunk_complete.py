@@ -19,6 +19,7 @@ from tests.support import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,
+    chunk_unit,
     emitted_events,
     hub_store_connections,
     ingest,
@@ -196,12 +197,25 @@ def test_complete_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_it
     turning_chunk = ingest(hub, [{"source": "default", "ref": "13"}])
     flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
     now = hub.clock.now()
-    waiting = flows.submit(
-        waiting_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[FlowResource("re_a", "main")], at=now
-    )
-    turning = flows.submit(
-        turning_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[FlowResource("re_b", "main")], at=now
-    )
+    with chunk_unit(hub_store_connections(hub.engine), waiting_chunk, turning_chunk) as unit:
+        waiting = flows.submit(
+            waiting_chunk,
+            node_id="nd_deliver",
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("re_a", "main")],
+            at=now,
+            transaction=unit,
+        )
+        turning = flows.submit(
+            turning_chunk,
+            node_id="nd_deliver",
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("re_b", "main")],
+            at=now,
+            transaction=unit,
+        )
     assert waiting is not None and turning is not None
     assert flows.take_turn(turning.submission_id, passed_over=frozenset(), terms=(), at=now) is not None
 

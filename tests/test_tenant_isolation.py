@@ -53,6 +53,7 @@ from tests.support import (
     TenantHarness,
     build_hub,
     capture_statements,
+    chunk_unit,
     close_tenant,
     default_project,
     drain_stream,
@@ -660,14 +661,16 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     created_repository = _ok(c.post("/api/repositories", json=repository), 201)
     t.keep("repository", created_repository["repository_id"])
     t.keep("forge", created_repository["forge_id"])
-    flow = FlowStore(scoped_connections(hub.engine, harness.tenant), hub.clock).submit(
-        chunk,
-        node_id=node,
-        epoch=1,
-        generation=0,
-        resources=[FlowResource(created_repository["repository_id"], "main")],
-        at=hub.clock.now(),
-    )
+    with chunk_unit(scoped_connections(hub.engine, harness.tenant), chunk) as unit:
+        flow = FlowStore(scoped_connections(hub.engine, harness.tenant), hub.clock).submit(
+            chunk,
+            node_id=node,
+            epoch=1,
+            generation=0,
+            resources=[FlowResource(created_repository["repository_id"], "main")],
+            at=hub.clock.now(),
+            transaction=unit,
+        )
     assert flow is not None
     t.keep("flow_id", flow.flows[0].flow_id)
     t.keep("submission_id", flow.submission_id)
