@@ -4,6 +4,7 @@ sweep's assembly, with the live cursor untouched."""
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -73,6 +74,9 @@ class _ClosingSteps:
             for chunk_id, when in closings
         }
         self._at = dict(closings)
+
+    def snapshot(self) -> nullcontext[_ClosingSteps]:
+        return nullcontext(self)
 
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         inside = sorted((w, c) for c, w in self._at.items() if since <= w <= until)

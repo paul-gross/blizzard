@@ -1057,6 +1057,18 @@ def _label(ref: WorkRef) -> str | None:
     return f"{ref.source}#{ref.ref}"
 
 
+def _window_in_one_snapshot(reads: IReadTraceSteps) -> None:
+    """A window's candidates and their step facts, read inside one snapshot."""
+    with reads.snapshot() as snapshot:
+        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids)
+
+
+def _corpus_window_in_one_snapshot(corpus: IReadStepCorpus) -> None:
+    """The corpus's candidates and their step facts, read inside one snapshot."""
+    with corpus.snapshot() as snapshot:
+        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids, lambda _: _label)
+
+
 def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
     return TraceStore(
         connections,
@@ -2890,6 +2902,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
         [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
     ),
+    (IReadTraceSteps, "snapshot"): lambda w: _window_in_one_snapshot(_trace_store_of(w.store_connections, w.hub)),
+    (IReadStepCorpus, "snapshot"): lambda w: _corpus_window_in_one_snapshot(w.hub.hub_services.hub_scoped_reads.corpus),
     (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
     ),

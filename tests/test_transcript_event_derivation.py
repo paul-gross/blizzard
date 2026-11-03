@@ -9,7 +9,6 @@ import json
 import zlib
 from collections.abc import Buffer, Sequence
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any, Unpack
 
@@ -33,8 +32,7 @@ from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
-from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
+from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -109,7 +107,7 @@ class _Fixture:
         self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
         self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
-        self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))
+        self.corpus = build_hub_scoped_reads(hub_level_connections(self.engine)).corpus
         seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id="tr_1",

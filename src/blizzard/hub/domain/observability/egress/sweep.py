@@ -157,9 +157,12 @@ class EgressSweep:
 
     def _steps_pass(self, cursor: EgressCheckpoint, egress_pass: EgressPass, until: datetime) -> bool | EgressFailure:
         assert cursor.step is not None  # a steps cursor always carries its step position
-        window = read_window(self._steps, cursor.step, until, self._batch_limit)
+        # Usage is read before the snapshot opens, so every usage row the pass moves past is in the facts it plans
+        # with; the window and the late chunks' facts come from that one snapshot.
         usage = self._egress.usage_after(cursor.usage, until, self._batch_limit)
-        late = self._steps.step_facts_for(late_chunks(window, usage))
+        with self._steps.snapshot() as steps:
+            window = read_window(steps, cursor.step, until, self._batch_limit)
+            late = steps.step_facts_for(late_chunks(window, usage))
         plan = plan_steps_pass(cursor, window, usage, late, egress_pass.started_at)
         if plan.rows:
             return self._write(STEPS_SCHEMA, plan.rows, egress_pass, plan.advanced)

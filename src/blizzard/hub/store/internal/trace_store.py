@@ -8,7 +8,8 @@ name beside them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
 
@@ -61,6 +62,19 @@ class TraceStore:
         self._tenant_name = tenant_name
 
     # --- candidates and hydration ---------------------------------------------------
+
+    @contextmanager
+    def snapshot(self) -> Generator[TraceStore, None, None]:
+        """This store over one snapshot of the corpus: its candidates and the corpus's fact rows are read as of one
+        moment; the hydration that completes the facts is read outside it, through each tenant's own reads."""
+        with self._corpus.snapshot() as corpus:
+            yield TraceStore(
+                self._store,
+                hub_events=self._hub_events,
+                corpus=corpus,
+                hydration=self._hydration,
+                tenant_name=self._tenant_name,
+            )
 
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         return self._corpus.closing_candidates(since, until, limit)

@@ -4,11 +4,17 @@ hydrated to ``StepFacts`` and selected through the window the sweep and replay s
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
+from sqlalchemy import Connection
 
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
@@ -23,9 +29,12 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedTransition,
 )
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, StepHydration, TraceCheckpoint
-from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
+from blizzard.hub.domain.observability.tracing.steps import StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
-from blizzard.hub.domain.observability.tracing.window import oldest_unsent, read_window
+from blizzard.hub.domain.observability.tracing.window import TraceWindow, oldest_unsent, read_window
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import corpus_rows
+from blizzard.hub.store.internal.fact_families import FactTable
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import TenantId
 from tests.hub_event_rows import hub_event_log_of
@@ -33,6 +42,7 @@ from tests.support import (
     SEEDED_CAPABILITIES,
     HubHarness,
     added_runner,
+    chunk_stores,
     count_queries,
     default_tenant,
     seed_runner,
@@ -194,6 +204,102 @@ def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
     assert window.closed_steps() == ()
 
 
+class _HubStepToDone:
+    """Routes ``chunk_id``'s hub step from ``review`` to the terminal once, as the hub does: its transition and its
+    route release in one commit, five seconds after the chunk's last fact."""
+
+    def __init__(self, hub: HubHarness, graph: Graph, chunk_id: str) -> None:
+        self._hub = hub
+        self._stores = chunk_stores(hub.engine, hub.clock)
+        self._from = next(n for n in graph.nodes if n.name == "review").node_id
+        self._chunk_id = chunk_id
+        self.committed = False
+
+    def commit_once(self) -> None:
+        if self.committed:
+            return
+        self._hub.clock.advance(timedelta(seconds=5))
+        with self._stores.exclusive.locked([self._chunk_id]) as handle:
+            assert self._stores.hub_exec.record_hub_step_transition_locked(
+                handle,
+                self._chunk_id,
+                from_node_id=self._from,
+                to_node_id=RESERVED_TERMINAL,
+                choice_name="pass",
+                epoch=2,
+                admission=EpochAdmission.ABOVE,
+                runner_id="hub",
+                transition_id="tr_hub_done",
+                at=self._hub.clock.now(),
+                artifacts=[],
+                release_route=True,
+                close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _source: False),
+            )
+        self.committed = True
+
+
+def _hub_closes(window: TraceWindow) -> list[tuple[StepOutcome, str | None]]:
+    """Each hub step the window tells closed: its outcome and the node its closing fact moved the chunk to."""
+    return [
+        (c.step.close.outcome, getattr(c.step.close.fact, "to_node_id", None))
+        for c in window.closed_steps()
+        if c.step.kind is StepKind.HUB and c.step.close is not None
+    ]
+
+
+def test_a_hub_step_committed_mid_hydration_is_read_whole_or_not_at_all(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hub step routing to the terminal commits its transition and its route release together. A window whose
+    hydration straddles that commit — its ``transitions`` read before it, its ``route_released`` read after — sees
+    both rows or neither, so the step never closes ``released``."""
+    hub, graph = trace_hub(tmp_path)
+    moved, _ = transitioned_and_stopped(hub, graph, 1)
+    since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
+    until = hub.clock.now() + timedelta(hours=1)
+    to_done = _HubStepToDone(hub, graph, moved)
+    field, read_released = corpus_rows.TRACE_READERS[s.route_released]
+
+    def committing_before_the_release_read(conn: Connection, entry: FactTable, ids: Sequence[str]) -> dict[str, Any]:
+        to_done.commit_once()
+        return read_released(conn, entry, ids)
+
+    monkeypatch.setitem(corpus_rows.TRACE_READERS, s.route_released, (field, committing_before_the_release_read))
+    straddled = read_window(trace_store(hub), since, until, 50)
+    after = read_window(trace_store(hub), since, until, 50)
+
+    assert to_done.committed
+    assert _hub_closes(straddled) in ([], [(StepOutcome.TRANSITIONED, RESERVED_TERMINAL)])
+    assert _hub_closes(after) == [(StepOutcome.TRANSITIONED, RESERVED_TERMINAL)]
+
+
+def test_a_hub_step_committed_between_the_candidates_and_their_facts_is_told_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The candidates and their facts are read as of one moment: a step committed after the candidates read is
+    left to the next window, which the cursor still reaches, rather than told past a position that tells it again."""
+    hub, graph = trace_hub(tmp_path)
+    moved, _ = transitioned_and_stopped(hub, graph, 1)
+    since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
+    until = hub.clock.now() + timedelta(hours=1)
+    to_done = _HubStepToDone(hub, graph, moved)
+    read_facts = corpus_rows.step_facts_for
+
+    def committing_before_the_facts_read(
+        conn: Connection, chunk_ids: Sequence[str]
+    ) -> dict[str, tuple[TenantId, StepFacts, list[WorkRef]]]:
+        to_done.commit_once()
+        return read_facts(conn, chunk_ids)
+
+    monkeypatch.setattr(corpus_rows, "step_facts_for", committing_before_the_facts_read)
+    store = trace_store(hub)
+    first = read_window(store, since, until, 50)
+    second = read_window(store, first.position, until, 50)
+
+    assert to_done.committed
+    assert _hub_closes(first) + _hub_closes(second) == [(StepOutcome.TRANSITIONED, RESERVED_TERMINAL)]
+
+
 _OTHER = "ten_other"
 _OTHER_CHUNK = "ch_other"
 
@@ -252,6 +358,9 @@ class _CountingReads:
         self._store = store
         self.candidate_reads: list[int] = []
 
+    def snapshot(self) -> nullcontext[_CountingReads]:
+        return nullcontext(self)
+
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         self.candidate_reads.append(limit)
         return self._store.closing_candidates(since, until, limit)
@@ -289,6 +398,9 @@ class _NonClosingBacklog:
         self._ids = [f"ch_{i:04d}" for i in range(depth)]
         self.limits: list[int] = []
         self.hydrated = 0
+
+    def snapshot(self) -> nullcontext[_NonClosingBacklog]:
+        return nullcontext(self)
 
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         self.limits.append(limit)

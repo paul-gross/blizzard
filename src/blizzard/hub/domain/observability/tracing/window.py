@@ -118,9 +118,11 @@ def select_window(
 
 
 def read_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit: int) -> TraceWindow:
-    """:func:`select_window` over the chunks holding a closing fact in ``[since.at, until]``."""
-    candidates = reads.closing_candidates(since.at, until, limit)
-    facts = reads.step_facts_for(candidates.chunk_ids)
+    """:func:`select_window` over the chunks holding a closing fact in ``[since.at, until]``, the candidates and
+    their facts read from one snapshot."""
+    with reads.snapshot() as snapshot:
+        candidates = snapshot.closing_candidates(since.at, until, limit)
+        facts = snapshot.step_facts_for(candidates.chunk_ids)
     return select_window(facts.values(), since, until, candidates.frontier, limit, candidates.newest)
 
 
