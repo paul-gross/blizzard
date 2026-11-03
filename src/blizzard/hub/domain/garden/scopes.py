@@ -19,18 +19,15 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
-    FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
     ChangeContext,
     ChangeOp,
     ConfigChange,
     FieldChange,
     RecordKind,
-    RecordState,
-    Verdict,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.lifecycle import change_row, field_changes, next_revision, require_revision, transition
+from blizzard.hub.domain.config.lifecycle import field_changes, require_revision, transition
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project
@@ -102,8 +99,6 @@ class Scope:
     revision: int = 1
     retired: bool = False
 
-    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
-
     #: Which verbs are legal from which brake state; retiring withdraws a scope from selection only.
     LEGAL_FROM: ClassVar[Mapping[ScopeVerb, frozenset[BrakeState]]] = {
         ScopeVerb.CREATE: ANY_STATE,
@@ -147,7 +142,7 @@ class Scope:
         self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
     ) -> ConfigChange:
         """The change row a verb on this scope writes, in the scope's project."""
-        return change_row(ctx, RecordKind.SCOPE, self.slug, revision, op, changes, at, project_id=self.project_id)
+        return ConfigChange.of(ctx, RecordKind.SCOPE, self.slug, revision, op, changes, at, project_id=self.project_id)
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
@@ -166,7 +161,7 @@ class Scope:
         changes = field_changes(((_DESCRIPTION, self.description, edit.description),))
         if not changes:
             return None
-        edited = replace(self, description=edit.description, revision=next_revision(self.revision))
+        edited = replace(self, description=edit.description, revision=self.revision + 1)
         return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
@@ -177,7 +172,7 @@ class Scope:
         op = transition(self.retired, retired)
         if op is None:
             return None
-        moved = replace(self, revision=next_revision(self.revision), retired=retired)
+        moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, self._change(ctx, moved.revision, op, flip, at)
 

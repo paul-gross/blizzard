@@ -1,15 +1,11 @@
 """Pure mechanics shared by configured records, with meaning supplied by each kind."""
 
 from collections.abc import Callable, Iterable
-from datetime import datetime
 
 from blizzard.hub.domain.config.changes import (
     FIELDED_RECORD_TRANSITIONS,
-    ChangeContext,
     ChangeOp,
-    ConfigChange,
     FieldChange,
-    RecordKind,
     RecordState,
     Verdict,
 )
@@ -30,27 +26,9 @@ def transition(retired: bool, desired: bool) -> ChangeOp | None:
     return None if FIELDED_RECORD_TRANSITIONS[RecordState.of(retired)][op] is Verdict.NO_OP else op
 
 
-def next_revision(revision: int) -> int:
-    return revision + 1
-
-
 def field_changes(fields: Iterable[tuple[str, object, object]]) -> tuple[FieldChange, ...]:
     """Compare the caller's ordered, already projected field values."""
     return tuple(FieldChange(name, old, new) for name, old, new in fields if old != new)
-
-
-def change_row(
-    ctx: ChangeContext,
-    kind: RecordKind,
-    key: str,
-    revision: int,
-    op: ChangeOp,
-    changes: tuple[FieldChange, ...],
-    at: datetime,
-    *,
-    project_id: str | None = None,
-) -> ConfigChange:
-    return ConfigChange.of(ctx, kind, key, revision, op, changes, at, project_id=project_id)
 
 
 def slug_left_for(current: str, edited: str) -> str | None:

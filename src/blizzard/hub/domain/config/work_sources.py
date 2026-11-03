@@ -6,24 +6,20 @@ work source's slug, current or former: the built-in source holds that key."""
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import ClassVar, NewType, Protocol
+from typing import NewType, Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
-    FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
     ChangeContext,
     ChangeOp,
     ConfigChange,
     FieldChange,
     RecordKind,
-    RecordState,
-    Verdict,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId, NewForge
@@ -166,8 +162,6 @@ class ConfiguredWorkSource:
     Each verb returns the record to write with the :class:`ConfigChange` committed beside it,
     or ``None`` when the verb changes nothing and so writes nothing."""
 
-    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
-
     work_source_id: WorkSourceId
     slug: str
     name: str
@@ -220,7 +214,7 @@ class ConfiguredWorkSource:
         if not changes:
             return None
         validate_fields(edited.fields)
-        edited = replace(edited, revision=lifecycle.next_revision(self.revision))
+        edited = replace(edited, revision=self.revision + 1)
         return edited, edited._change(ctx, ChangeOp.EDIT, changes, at)
 
     def ref(self) -> WorkSourceRef:
@@ -238,12 +232,12 @@ class ConfiguredWorkSource:
         op = lifecycle.transition(self.retired, retired)
         if op is None:
             return None
-        moved = replace(self, revision=lifecycle.next_revision(self.revision), retired=retired)
+        moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, moved._change(ctx, op, flip, at)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
-        return lifecycle.change_row(ctx, RecordKind.WORK_SOURCE, self.work_source_id, self.revision, op, changes, at)
+        return ConfigChange.of(ctx, RecordKind.WORK_SOURCE, self.work_source_id, self.revision, op, changes, at)
 
 
 @domain_model

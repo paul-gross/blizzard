@@ -4,14 +4,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeName, ForgeSlug
 from blizzard.hub.domain.config.lifecycle import (
-    change_row,
     field_changes,
     merge_labels,
-    next_revision,
     require_revision,
     slug_left_for,
     transition,
@@ -25,7 +23,6 @@ def test_revision_and_transition() -> None:
     require_revision(None, 2, kind="link", key="p/t")
     with pytest.raises(ConfigRevisionConflict, match="link p/t is at revision 2"):
         require_revision(1, 2, kind="link", key="p/t")
-    assert next_revision(2) == 3
     assert transition(False, False) is None
     assert transition(True, True) is None
     assert transition(False, True) == ChangeOp.RETIRE
@@ -36,7 +33,7 @@ def test_projection_and_change_row() -> None:
     changes = field_changes([("b", None, 2), ("same", None, None), ("a", 1, None)])
     assert changes == (FieldChange("b", None, 2), FieldChange("a", 1, None))
     at = datetime(2025, 1, 1, tzinfo=UTC)
-    row = change_row(
+    row = ConfigChange.of(
         ChangeContext("actor", Door.APPLY, "apply"),
         RecordKind.PROJECT_SOURCE_LINK,
         "target",

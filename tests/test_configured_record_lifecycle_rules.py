@@ -113,8 +113,6 @@ def test_a_fielded_record_is_editable_from_either_state_and_a_redundant_brake_is
             ChangeOp.ENABLE: Verdict.LEGAL,
         },
     }
-    assert ConfiguredWorkSource.TRANSITIONS is FIELDED_RECORD_TRANSITIONS
-    assert ConfiguredRepository.TRANSITIONS is FIELDED_RECORD_TRANSITIONS
 
 
 def test_a_retired_secret_refuses_a_replacement_and_a_redundant_brake_is_a_no_op() -> None:

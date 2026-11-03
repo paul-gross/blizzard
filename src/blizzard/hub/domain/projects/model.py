@@ -16,9 +16,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.lifecycle import (
-    change_row,
     field_changes,
-    next_revision,
     require_revision,
     slug_left_for,
 )
@@ -154,7 +152,7 @@ class Project:
         changes = _diff(self, edited)
         if not changes:
             return None
-        edited = replace(edited, revision=next_revision(self.revision))
+        edited = replace(edited, revision=self.revision + 1)
         return edited, edited._change(ctx, ChangeOp.EDIT, changes, at)
 
     def slug_left_for(self, edited: Project) -> str | None:
@@ -162,7 +160,7 @@ class Project:
         return slug_left_for(self.slug, edited.slug)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
-        return change_row(
+        return ConfigChange.of(
             ctx, RecordKind.PROJECT, self.project_id, self.revision, op, changes, at, project_id=self.project_id
         )
 

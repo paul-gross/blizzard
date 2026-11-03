@@ -63,12 +63,12 @@ class _Link:
         op = lifecycle.transition(not self.linked, not linked)
         if op is None:
             return None
-        moved = replace(self, revision=lifecycle.next_revision(self.revision), linked=linked)
+        moved = replace(self, revision=self.revision + 1, linked=linked)
         changes = lifecycle.field_changes(((LINKED_FIELD, self.linked, linked),))
         return moved, moved._change(ctx, op, changes, at)
 
     def _change(self, ctx: ChangeContext, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime) -> ConfigChange:
-        return lifecycle.change_row(
+        return ConfigChange.of(
             ctx, self.KIND, self.target(), self.revision, op, changes, at, project_id=self.project_id
         )
 

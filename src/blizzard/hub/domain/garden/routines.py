@@ -18,15 +18,12 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
-    FIELDED_RECORD_TRANSITIONS,
     RETIRED_FIELD,
     ChangeContext,
     ChangeOp,
     ConfigChange,
     FieldChange,
     RecordKind,
-    RecordState,
-    Verdict,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
@@ -158,8 +155,6 @@ class Routine:
     revision: int = 1
     retired: bool = False
 
-    TRANSITIONS: ClassVar[Mapping[RecordState, Mapping[ChangeOp, Verdict]]] = FIELDED_RECORD_TRANSITIONS
-
     #: Which verbs are legal from which brake state; a retired routine refuses only a run.
     LEGAL_FROM: ClassVar[Mapping[RoutineVerb, frozenset[BrakeState]]] = {
         RoutineVerb.CREATE: frozenset(),
@@ -211,7 +206,7 @@ class Routine:
         self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
     ) -> ConfigChange:
         """The change row a verb on this routine writes, in the routine's project."""
-        return lifecycle.change_row(
+        return ConfigChange.of(
             ctx, RecordKind.ROUTINE, self.name, revision, op, changes, at, project_id=self.project_id
         )
 
@@ -232,7 +227,7 @@ class Routine:
         changes = merged._diff(self)
         if not changes:
             return None
-        edited = replace(merged, revision=lifecycle.next_revision(self.revision))
+        edited = replace(merged, revision=self.revision + 1)
         return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
 
     def set_retired(
@@ -243,7 +238,7 @@ class Routine:
         op = lifecycle.transition(self.retired, retired)
         if op is None:
             return None
-        moved = replace(self, revision=lifecycle.next_revision(self.revision), retired=retired)
+        moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, self._change(ctx, moved.revision, op, flip, at)
 
@@ -257,7 +252,7 @@ class Routine:
         changes = lifecycle.field_changes(((SCOPES_FIELD, old, new),))
         if not changes:
             return None
-        moved = replace(self, revision=lifecycle.next_revision(self.revision))
+        moved = replace(self, revision=self.revision + 1)
         return moved, self._change(ctx, moved.revision, ChangeOp.EDIT, changes, at)
 
     def require_own_scope(self, scope: Scope) -> None:
