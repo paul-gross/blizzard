@@ -374,20 +374,41 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
         when a runner did; nothing is written."""
         ...
 
-    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
-        """Record ``seq`` as the greatest per-host fact seq applied."""
+    def set_high_water(self, host_id: str, *, seq: int, expected: int, at: datetime, transaction: Transaction) -> None:
+        """Advance a host's applied-seq high-water mark from ``expected``, the seq its push last read or set, to
+        ``seq``, in the unit that lands the fact ``seq`` covers. Raises
+        :class:`~blizzard.hub.domain.kernel.high_water.HighWaterConflict` when the mark no longer stands at
+        ``expected``, moving nothing (``bzh:write-reestablishes-read``)."""
         ...
 
     def record_external_usage(
-        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
-        """Upsert the host's newest sample for ``slug``; no row for ``host_id`` is required."""
+        """Upsert the host's newest sample for ``slug``; no row for ``host_id`` is required. Written in
+        ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def record_external_usage_miss(
-        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
-        """Upsert the host's newest miss for ``slug``, in its own table; no row for ``host_id`` is required."""
+        """Upsert the host's newest miss for ``slug``, in its own table; no row for ``host_id`` is required. Written
+        in ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def release(

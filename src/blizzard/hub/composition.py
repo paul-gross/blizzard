@@ -1279,7 +1279,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         enrollment=enrollment,
         registry=registry_store,
         hosts=host_store,
-        host_facts=HostFactIngestService(hosts=host_store, clock=clock),
+        host_facts=HostFactIngestService(hosts=host_store, transactions=stores.transactions, clock=clock),
         host_enrollment=host_enrollment,
         host_report=host_report,
         host_retirement=host_retirement,
