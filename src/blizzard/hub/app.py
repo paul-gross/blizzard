@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import httpx2
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -25,6 +25,8 @@ from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard import __version__
+from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
@@ -96,6 +98,7 @@ from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
 from blizzard.hub.api.sweeps import router as sweeps_router
+from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
@@ -111,6 +114,7 @@ from blizzard.hub.composition import (
     TenantStores,
     build_config_authoring,
     build_flow_driver,
+    build_hub_core,
     build_hub_flags,
     build_process_core,
     build_services,
@@ -446,6 +450,7 @@ def create_app(
     services: HubServices | None = None,
     platform_tracing: IPlatformTracing | None = None,
     flags: Flags,
+    test_flow_router: APIRouter | None = None,
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
@@ -525,6 +530,8 @@ def create_app(
     app.include_router(admin_invariants_router)
     app.include_router(sweeps_router)
     app.include_router(admin_sweeps_router)
+    if test_flow_router is not None:
+        app.include_router(test_flow_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(forges_router)
@@ -587,7 +594,9 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    core = build_process_core(engine)
+    stepped = os.environ.get("BLIZZARD_TEST_FLOW_STEP") == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
+    test_clock = FixedClock(SystemClock().now()) if stepped else None
+    core = build_hub_core(engine, clock=test_clock) if test_clock is not None else build_process_core(engine)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
 
@@ -697,11 +706,12 @@ def build_hosted_app(
         services=services,
         platform_tracing=platform_tracing,
         flags=build_hub_flags(config),
+        test_flow_router=(flow_control_router(flow_driver, test_clock) if flow_driver and test_clock else None),
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
-    app.state.flow_driver = flow_driver
+    app.state.flow_driver = None if stepped else flow_driver
     return app
 
 

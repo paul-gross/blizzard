@@ -148,37 +148,57 @@ test('test_two_chunks_each_landing_both_repositories_both_land', async ({ reposi
   }
 });
 
+test.describe('stepped flow fairness', () => {
+test.use({ isolation: 'fresh-hub', flowStepped: true });
 test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repository, issue, api, forge, runnerHosts }) => {
   test.setTimeout(240_000);
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   await lever(forge, repo, true);
   const ids: string[] = [];
-  for (const [file, interval] of [['SLOW.md', 3], ['BRISK.md', 1]] as const) {
+  for (const [file, interval] of [['SLOW.md', 60], ['BRISK.md', 1]] as const) {
+    await api.flowAdvance(1);
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], file, interval) } })).status).toBe(201);
     const id = (await issue(file, { repository: repo })).chunk.chunk_id;
     ids.push(id);
     expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
-    await pending(api, host, id);
+    const detail = await stepUntil(host, async () => {
+      await api.flowStep();
+      return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
+    }, (row) => row.pending !== null || ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    expect(detail.pending, JSON.stringify(detail.escalation)).not.toBeNull();
   }
   const [slow, brisk] = ids as [string, string];
   expect((await submissions(api, slow))[0]!.flow_ids).toEqual((await submissions(api, brisk))[0]!.flow_ids);
-  const mark = (await turns(api, slow)).length;
-  await expect.poll(async () => (await turns(api, slow)).length, { timeout: 60_000 }).toBeGreaterThanOrEqual(mark + 3);
-  const slowTurns = (await turns(api, slow)).slice(mark - 1);
-  const briskStarts = (await turns(api, brisk)).map((turn) => Date.parse(turn.started_at));
-  for (let i = 0; i + 1 < slowTurns.length; i++) {
-    const current = slowTurns[i]!;
-    const next = slowTurns[i + 1]!;
-    expect(current.outcome).toBe('pending');
-    expect(current.ended_at).not.toBeNull();
-    const end = Date.parse(current.ended_at!);
-    const following = Date.parse(next.started_at);
-    expect(briskStarts.some((start) => end <= start && start < following)).toBe(true);
+  const slowTurns = await turns(api, slow);
+  const briskTurns = await turns(api, brisk);
+  const slowDue = (await api.get<Wire.ChunkDetail>(`/api/chunks/${slow}`)).body.pending!.next_poll_at;
+  expect((await submissions(api, slow))[0]!.arrival).toBeLessThan((await submissions(api, brisk))[0]!.arrival);
+  expect(slowTurns).toHaveLength(1);
+  expect(slowTurns[0]!.outcome).toBe('pending');
+  expect(slowTurns[0]!.ended_at).not.toBeNull();
+  expect(briskTurns).toHaveLength(1);
+  for (let i = 1; i <= 3; i++) {
+    const clock = await api.flowAdvance(1);
+    expect(Date.parse(clock.now)).toBeLessThan(Date.parse(slowDue));
+    await api.flowStep();
+    expect(await turns(api, slow)).toEqual(slowTurns);
+    const current = await turns(api, brisk);
+    expect(current, JSON.stringify((await api.get<Wire.ChunkDetail>(`/api/chunks/${brisk}`)).body.pending)).toHaveLength(briskTurns.length + i);
+    expect(current.at(-1)!.outcome).toBe('pending');
   }
   await lever(forge, repo, false);
-  await landed(api, host, slow);
-  await landed(api, host, brisk);
+  for (const id of [slow, brisk]) {
+    const detail = await stepUntil(host, async () => {
+      await api.flowAdvance(60);
+      await api.flowStep();
+      return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
+    }, (row) => ['done', 'needs_human', 'stopped'].includes(row.status), 80);
+    expect([detail.status, detail.landed]).toEqual(['done', true]);
+    expect((await landingFacts(api, id)).map((fact) => fact.repo)).toEqual([fullName(repo)]);
+  }
+  expect((await turns(api, slow)).length).toBeGreaterThan(slowTurns.length);
+});
 });
 
 test('test_a_chunk_whose_runner_is_gone_lands_and_records_its_findings', async ({ repository, issue, api, forge, runnerHosts }) => {

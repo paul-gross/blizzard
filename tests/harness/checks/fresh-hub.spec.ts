@@ -59,6 +59,43 @@ test.describe('hubConfig at fresh-tenant', () => {
   });
 });
 
+test.describe('flow stepping below fresh-hub', () => {
+  test.use({ isolation: 'fresh-tenant' });
+  test('refuses hub-wide controls before sending a request', async ({ api, level }) => {
+    if (level.served === 'fresh-hub') return;
+    await expect(api.flowStep()).rejects.toThrow(/fresh-hub/);
+    await expect(api.flowAdvance(1)).rejects.toThrow(/fresh-hub/);
+  });
+});
+
+test.describe('flowStepped at fresh-tenant', () => {
+  test.use({ isolation: 'fresh-tenant', flowStepped: true });
+  test.fail(!raised, 'flowStepped requires fresh-hub');
+  test('is refused before the hub starts', async ({ level }) => {
+    expect(level.served).toBe('fresh-hub');
+  });
+});
+
+test.describe('a stepped fresh hub', () => {
+  test.use({ isolation: 'fresh-hub', flowStepped: true });
+  test('steps on a frozen clock and advances it explicitly', async ({ api }) => {
+    const first = await api.flowStep();
+    const second = await api.flowStep();
+    expect([first.reconciled, first.skipped, first.failed]).toEqual([1, 0, 0]);
+    expect([second.reconciled, second.skipped, second.failed]).toEqual([0, 1, 0]);
+    expect(second.now).toBe(first.now);
+    const advanced = await api.flowAdvance(7);
+    expect(Date.parse(advanced.now) - Date.parse(first.now)).toBe(7000);
+    expect((await api.flowStep()).now).toBe(advanced.now);
+  });
+
+  test('refuses to restart with a lost virtual clock', async ({ api, freshHub }) => {
+    await api.flowAdvance(86400);
+    await freshHub.stop();
+    await expect(freshHub.start()).rejects.toThrow(/flow-stepped.*virtual clock/);
+  });
+});
+
 test.describe('hubConfig at fresh-hub', () => {
   test.use({ isolation: 'fresh-hub', hubConfig: { tracing: { platform: true, platform_sample_ratio: 1.0 } } });
 
