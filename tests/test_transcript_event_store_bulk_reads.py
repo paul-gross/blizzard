@@ -22,11 +22,10 @@ from blizzard.hub.domain.observability.analytics.events import SegmentProvenance
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, segment_contexts_stmt
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.factory_fields import TranscriptSliceFields
-from tests.support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
+from tests.support import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -122,9 +121,9 @@ def test_derivation_markers_of_no_segments_is_empty(tmp_path: Path) -> None:
 
 def test_segment_derivation_inputs_matches_the_singular_across_a_normal_and_an_unknown_id(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_T0)
-    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_T0)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, at=_T0)
+    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_T0)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     result = store.segment_derivation_inputs(["sg_1", "sg_2", "sg_missing"])
@@ -146,12 +145,10 @@ def test_segment_derivation_inputs_matches_across_a_batch_boundary(
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     chunk_ids = tuple(f"ch_{i}" for i in range(7))
     engine = _migrated_engine(tmp_path, chunk_ids=chunk_ids)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     segment_ids = [f"sg_{i}" for i in range(7)]
     for segment_id, chunk_id in zip(segment_ids, chunk_ids, strict=True):
-        segments.insert_accepted(
-            _segment_record(segment_id=segment_id, chunk_id=chunk_id), byte_count=10, codec="zlib", at=_T0
-        )
+        segments.insert_accepted(_segment_record(segment_id=segment_id, chunk_id=chunk_id), byte_count=10, at=_T0)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     result = store.segment_derivation_inputs(segment_ids)
@@ -165,13 +162,9 @@ def test_segment_derivation_inputs_drops_a_segment_whose_content_fails_to_decode
     tmp_path: Path,
 ) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(
-        _segment_record(segment_id="sg_good", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_T0
-    )
-    segments.insert_accepted(
-        _segment_record(segment_id="sg_corrupt", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_T0
-    )
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_good", chunk_id="ch_1"), byte_count=10, at=_T0)
+    segments.insert_accepted(_segment_record(segment_id="sg_corrupt", chunk_id="ch_2"), byte_count=10, at=_T0)
     with engine.begin() as conn:
         conn.execute(
             hub_store_connections(engine)
@@ -196,8 +189,8 @@ def test_segment_derivation_inputs_drops_a_segment_whose_content_fails_to_decode
 
 def test_segment_contexts_agrees_with_the_matching_fields_of_segment_derivation_inputs(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
-    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_T0)
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, at=_T0)
     segments.insert_rejected(
         _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=999, reason="record_too_large", at=_T0
     )
@@ -229,12 +222,10 @@ def test_segment_contexts_matches_across_a_batch_boundary(tmp_path: Path, monkey
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     chunk_ids = tuple(f"ch_{i}" for i in range(7))
     engine = _migrated_engine(tmp_path, chunk_ids=chunk_ids)
-    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments = SeedingTranscriptSegmentStore(hub_store_connections(engine))
     segment_ids = [f"sg_{i}" for i in range(7)]
     for segment_id, chunk_id in zip(segment_ids, chunk_ids, strict=True):
-        segments.insert_accepted(
-            _segment_record(segment_id=segment_id, chunk_id=chunk_id), byte_count=10, codec="zlib", at=_T0
-        )
+        segments.insert_accepted(_segment_record(segment_id=segment_id, chunk_id=chunk_id), byte_count=10, at=_T0)
     store = TranscriptEventStore(hub_store_connections(engine))
 
     result = store.segment_contexts(segment_ids)

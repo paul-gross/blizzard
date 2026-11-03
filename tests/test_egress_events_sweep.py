@@ -26,10 +26,9 @@ from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
 from tests.repo_files import repo_root
-from tests.support import HubHarness, hub_level_connections, hub_store_connections
+from tests.support import HubHarness, SeedingTranscriptSegmentStore, hub_level_connections, hub_store_connections
 from tests.test_egress_sweep import closed_step, graph_node_id, kinds
 from tests.trace_hub import trace_hub
 
@@ -90,8 +89,8 @@ class Events:
             turns_json=json.dumps([{"index": 0, "kind": "user", "text": _PLANTED}]),
             spawn_cwd="/work",
         )
-        TranscriptSegmentStore(hub_store_connections(self.hub.engine)).insert_accepted(
-            record, byte_count=1, codec="zlib", at=self.hub.clock.now()
+        SeedingTranscriptSegmentStore(hub_store_connections(self.hub.engine)).insert_accepted(
+            record, byte_count=1, at=self.hub.clock.now()
         )
 
     def derive(

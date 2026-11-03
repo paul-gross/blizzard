@@ -34,10 +34,10 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.factory_fields import TranscriptSliceFields
 from tests.support import (
+    SeedingTranscriptSegmentStore,
     chunk_stores,
     count_queries,
     count_rows_read,
@@ -104,7 +104,7 @@ class _Fixture:
         migrated_hub_at(db_url)
         self.engine = create_engine_from_url(db_url)
         self.chunks = chunk_stores(self.engine, FixedClock(_NOW))
-        self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
+        self.segments = SeedingTranscriptSegmentStore(hub_store_connections(self.engine))
         self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
         self.corpus = build_hub_scoped_reads(hub_level_connections(self.engine)).corpus
@@ -170,7 +170,7 @@ def fixture(tmp_path: Path) -> _Fixture:
 
 
 def test_a_finalized_segments_events_appear_with_no_manual_step(fixture: _Fixture) -> None:
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
 
     fixture.reconciler.sweep()
 
@@ -188,7 +188,6 @@ def test_a_derived_events_provenance_matches_its_segments_own(fixture: _Fixture)
     fixture.segments.insert_accepted(
         _segment_record(harness_id="claude_code", model="claude-sonnet-5", effort="high"),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
 
@@ -202,7 +201,7 @@ def test_a_derived_events_provenance_matches_its_segments_own(fixture: _Fixture)
 
 
 def test_the_derived_events_graph_id_resolves_from_the_matching_transition(fixture: _Fixture) -> None:
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
 
     fixture.reconciler.sweep()
 
@@ -218,7 +217,7 @@ def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching
     no transition recorded at all."""
     seed_chunk_record(fixture.chunks, Chunk(chunk_id="ch_unmoved", graph_id="gr_unmoved", work_refs=[], minted_at=_NOW))
     fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_unmoved", chunk_id="ch_unmoved"), byte_count=10, codec="zlib", at=_NOW
+        _segment_record(segment_id="sg_unmoved", chunk_id="ch_unmoved"), byte_count=10, at=_NOW
     )
 
     fixture.reconciler.sweep()
@@ -271,10 +270,10 @@ def test_sweep_resolves_graph_pins_with_one_movement_facts_for_and_one_graph_id_
     for i in range(3):
         fixture.mint_chunk(f"ch_multi_{i}")
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_multi_{i}", chunk_id=f"ch_multi_{i}"), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_multi_{i}", chunk_id=f"ch_multi_{i}"), byte_count=10, at=_NOW
         )
     fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_multi_0b", chunk_id="ch_multi_0"), byte_count=10, codec="zlib", at=_NOW
+        _segment_record(segment_id="sg_multi_0b", chunk_id="ch_multi_0"), byte_count=10, at=_NOW
     )
 
     counting_facts = _CountingFactsStore(hub_store_connections(fixture.engine), fixture.clock)
@@ -297,12 +296,8 @@ def test_sweep_resolves_graph_pins_with_one_movement_facts_for_and_one_graph_id_
 def test_candidate_segment_ids_narrows_to_the_given_chunk(fixture: _Fixture) -> None:
     """The re-derive route's chunk-scoped call."""
     fixture.mint_chunk("ch_2")
-    fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW
-    )
-    fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
-    )
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
 
     assert fixture.service.candidate_segment_ids(chunk_id="ch_1") == ["sg_1"]
     assert fixture.service.candidate_segment_ids(chunk_id="ch_2") == ["sg_2"]
@@ -310,7 +305,7 @@ def test_candidate_segment_ids_narrows_to_the_given_chunk(fixture: _Fixture) -> 
 
 
 def test_a_second_sweep_pass_writes_nothing_new(fixture: _Fixture) -> None:
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
     first_pass = fixture.stored_events()
 
@@ -323,7 +318,7 @@ _NEXT_EXTRACTOR_VERSION = f"{EXTRACTOR_VERSION}-next"  # a version distinct from
 
 
 def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixture: _Fixture) -> None:
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
     marker_v1 = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
     assert marker_v1 is not None
@@ -356,7 +351,6 @@ def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: 
     fixture.segments.insert_accepted(
         _segment_record(harness_id="claude_code", model="claude-sonnet-5", effort="high"),
         byte_count=10,
-        codec="zlib",
         at=_NOW,
     )
     prior_service = EventDerivationService(
@@ -395,13 +389,11 @@ def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: 
 
 
 def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
-    fixture.segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
     assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is not None
 
-    fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
-    )
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
 
     assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is None
@@ -417,7 +409,7 @@ def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
 def test_derive_segment_reports_true_for_a_segment_with_derivation_input(fixture: _Fixture) -> None:
     """The re-derive route's segment-scoped branch consults this bit —
     a derivable segment reports it actually derived."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
 
     pins = fixture.service.graph_pins_for(["sg_1"])
     assert fixture.service.derive_segment("sg_1", pins) is True
@@ -444,7 +436,7 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
 
     # A later instant than the rejected insert's, not `_NOW` again: the change probe reads
     # `received_at` moving forward as its signal a record was rewritten.
-    fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW + timedelta(seconds=1))
+    fixture.segments.update_to_accepted(record, byte_count=10, at=_NOW + timedelta(seconds=1))
     fixture.reconciler.sweep()
 
     marker_after = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
@@ -460,7 +452,7 @@ def test_a_segment_whose_chunk_was_never_minted_is_not_a_candidate(fixture: _Fix
     """A segment can outlive — or never have had — its chunk row, and the sweep must
     converge over it rather than re-reaching an underivable segment every tick."""
     fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, codec="zlib", at=_NOW
+        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, at=_NOW
     )
 
     fixture.reconciler.sweep()
@@ -473,7 +465,7 @@ def test_a_segment_whose_chunk_was_never_minted_is_not_a_candidate(fixture: _Fix
 def test_a_segment_that_outlives_its_chunk_row_has_its_derived_rows_dropped(fixture: _Fixture) -> None:
     """Rows derived before the breach do not survive it: the sweep's own drop path
     reclaims a segment the visible set no longer holds."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
     assert len(fixture.stored_events()) == 1
 
@@ -488,7 +480,7 @@ def test_a_segment_that_outlives_its_chunk_row_has_its_derived_rows_dropped(fixt
 def test_a_dropped_segment_leaves_one_drop_fact_stamped_by_the_clock_with_no_egress_configured(
     fixture: _Fixture,
 ) -> None:
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
     fixture.drop_chunk_row("ch_1")
     fixture.clock.advance(timedelta(minutes=5))
@@ -506,7 +498,7 @@ def test_a_dropped_segment_leaves_one_drop_fact_stamped_by_the_clock_with_no_egr
 def test_forcing_a_segment_whose_chunk_does_not_resolve_is_a_no_op_rather_than_a_crash(fixture: _Fixture) -> None:
     """The segment-scoped re-derive route forces a segment regardless of candidacy, so it
     reaches one the visible set excludes and must decline it rather than raise."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.drop_chunk_row("ch_1")
 
     pins = fixture.service.graph_pins_for(["sg_1"])
@@ -536,10 +528,8 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
     """A segment that raises is stepped over, not fatal — every later candidate still
     derives."""
     fixture.mint_chunk("ch_2")
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
-    fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
-    )
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
     poisoned = _PoisonedService(
         poison="sg_1",
         events=fixture.events,
@@ -563,7 +553,7 @@ class _PoisonedGraphPinsService(EventDerivationService):
 def test_a_pin_resolution_fault_skips_the_whole_pass_without_raising(fixture: _Fixture) -> None:
     """``graph_pins_for`` raising costs the entire tick, not one segment: no candidate
     derives, and the sweep itself does not raise."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     poisoned = _PoisonedGraphPinsService(
         events=fixture.events,
         facts=fixture.chunks.facts,
@@ -587,7 +577,7 @@ def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_
     for i in range(5):
         fixture.mint_chunk(f"ch_small_{i}")
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_small_{i}", chunk_id=f"ch_small_{i}"), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_small_{i}", chunk_id=f"ch_small_{i}"), byte_count=10, at=_NOW
         )
     fixture.reconciler.sweep()  # builds every marker — not the steady-state pass under test
 
@@ -606,7 +596,7 @@ def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_
     for i in range(5, 55):
         fixture.mint_chunk(f"ch_large_{i}")
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_large_{i}", chunk_id=f"ch_large_{i}"), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_large_{i}", chunk_id=f"ch_large_{i}"), byte_count=10, at=_NOW
         )
     fixture.reconciler.sweep()  # builds the 50 new markers too — still not the timed pass
 
@@ -623,7 +613,7 @@ def test_the_drop_pass_never_calls_visible_segment_ids_a_second_time(
     """Acceptance criterion 4 — ``visible_segment_ids`` is evaluated once per pass: the
     candidacy read's own bulk statement is the pass's only visibility evaluation, and the
     drop pass reuses its result rather than calling ``visible_segment_ids`` again."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
 
     def _boom(*_: object, **__: object) -> frozenset[str]:
@@ -640,7 +630,7 @@ def test_stale_segments_drop_in_one_batched_pass_not_one_per_segment(fixture: _F
     for i in range(3):
         fixture.mint_chunk(f"ch_drop_{i}")
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, at=_NOW
         )
     fixture.reconciler.sweep()
     for i in range(3):
@@ -651,7 +641,7 @@ def test_stale_segments_drop_in_one_batched_pass_not_one_per_segment(fixture: _F
     for i in range(3, 33):
         fixture.mint_chunk(f"ch_drop_{i}")
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, at=_NOW
         )
     fixture.reconciler.sweep()
     for i in range(3, 33):
@@ -667,7 +657,7 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
 ) -> None:
     """Acceptance criterion 3 — the candidate pass never decodes, so the only decode a
     version bump's full-corpus re-derive pays is `derive_segment`'s own, once per segment."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
 
     decompress_calls = 0
@@ -698,7 +688,7 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
 def test_an_unchanged_signature_skips_the_pass_entirely(fixture: _Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """Acceptance criterion 6 — a second pass over an unchanged store does not evaluate
     candidacy at all, not merely find nothing to derive."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()  # the first-ever pass always runs full and records the signature
 
     def _boom(*_: object, **__: object) -> Any:
@@ -712,13 +702,11 @@ def test_an_unchanged_signature_skips_the_pass_entirely(fixture: _Fixture, monke
 def test_a_changed_signature_triggers_a_full_pass(fixture: _Fixture) -> None:
     """A new segment landing moves the signature's row count and max id — the probe must
     catch it rather than treat it as steady state."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
 
     fixture.mint_chunk("ch_2")
-    fixture.segments.insert_accepted(
-        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
-    )
+    fixture.segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()
 
     assert fixture.events.derivation_marker("sg_2", EXTRACTOR_VERSION) is not None
@@ -728,7 +716,7 @@ def test_a_fresh_reconcilers_first_sweep_always_runs_full(fixture: _Fixture) -> 
     """A fresh process start holds no prior signature — it must never mistake that absence
     for 'nothing changed' and skip its very first pass (this is also what covers an
     ``EXTRACTOR_VERSION`` bump, which changes derivation markers, not this signature)."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
 
     fresh_reconciler = fixture.reconciler_over(fixture.service)
     fresh_reconciler.sweep()
@@ -741,7 +729,7 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
 ) -> None:
     """The probe is an optimization only — correctness rests on this floor, so a
     same-instant rewrite the signature misses is still picked up within one floor period."""
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     fixture.reconciler.sweep()  # the first-ever pass — records the signature and the floor instant
 
     calls = 0
@@ -808,7 +796,7 @@ def _spied_reconciler(
 
 def _seed_ids(fixture: _Fixture, ids: Sequence[str]) -> None:
     for segment_id in ids:
-        fixture.segments.insert_accepted(_segment_record(segment_id=segment_id), byte_count=10, codec="zlib", at=_NOW)
+        fixture.segments.insert_accepted(_segment_record(segment_id=segment_id), byte_count=10, at=_NOW)
 
 
 def test_convergence_reads_inputs_one_bounded_sub_batch_at_a_time(
@@ -819,7 +807,7 @@ def test_convergence_reads_inputs_one_bounded_sub_batch_at_a_time(
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
     ids = [f"sg_{i}" for i in range(1, 6)]
     _seed_ids(fixture, ids[1:])
-    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     reconciler, log = _spied_reconciler(fixture)
 
     reconciler.sweep()
@@ -876,7 +864,7 @@ def _deep_fixture(tmp_path: Path, depth: int) -> _Fixture:
     fixture.mint_chunk("ch_2", node_id="nd_other")
     for chunk_id in ("ch_1", "ch_2"):
         fixture.segments.insert_accepted(
-            _segment_record(segment_id=f"sg_{chunk_id}", chunk_id=chunk_id), byte_count=10, codec="zlib", at=_NOW
+            _segment_record(segment_id=f"sg_{chunk_id}", chunk_id=chunk_id), byte_count=10, at=_NOW
         )
         for epoch in range(2, 2 + depth):
             seed_lease(fixture.engine, chunk_id, epoch=epoch, runner_id="r1", at=_NOW)

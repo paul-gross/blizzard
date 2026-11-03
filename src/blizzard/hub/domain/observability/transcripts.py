@@ -3,7 +3,7 @@ its store Protocol pair.
 
 :class:`TranscriptIngestService` is the batched store-and-forward push, idempotent
 against the lane's own high-water mark plus the natural-key dedupe, and
-adjudicating three independent caps."""
+adjudicating three independent caps, each batch decided inside one write unit."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.transcripts import TurnKind
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.transcripts")
@@ -43,6 +44,29 @@ REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 
 #: The window the per-runner rate cap sums over.
 RUNNER_RATE_WINDOW = timedelta(hours=24)
+
+#: The keyed-lock namespace (``bzh:transaction-graduation``) of a runner's transcript lane — its
+#: high-water mark and its rolling rate window.
+TRANSCRIPT_LANE_LOCK_NAMESPACE = "transcript_lane"
+
+#: The keyed-lock namespace of one chunk's transcript — its budget and the natural keys of its records.
+TRANSCRIPT_CHUNK_LOCK_NAMESPACE = "transcript_chunk"
+
+
+def transcript_lane_lock(runner_id: str) -> tuple[str, str]:
+    """The keyed lock over ``runner_id``'s transcript lane."""
+    return (TRANSCRIPT_LANE_LOCK_NAMESPACE, runner_id)
+
+
+def transcript_chunk_lock(chunk_id: str) -> tuple[str, str]:
+    """The keyed lock over ``chunk_id``'s transcript."""
+    return (TRANSCRIPT_CHUNK_LOCK_NAMESPACE, chunk_id)
+
+
+def ingest_locks(runner_id: str, records: Iterable[TranscriptSlice]) -> list[tuple[str, str]]:
+    """Every lock one ingest declares: the calling runner's lane and each chunk ``records`` name."""
+    chunk_ids = sorted({record.chunk_id for record in records})
+    return [transcript_lane_lock(runner_id), *(transcript_chunk_lock(chunk_id) for chunk_id in chunk_ids)]
 
 
 @domain_model
@@ -180,35 +204,74 @@ class IReadTranscriptSegments(Protocol):
         ...
 
 
+class EncodedTurns(Protocol):
+    """A record's turns encoded as the store keeps them (:meth:`IWriteTranscriptSegments.encode_turns`) —
+    opaque here, and prepared before a unit opens so no write holds its locks for the encoding."""
+
+
 class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
-    """Adds the writes."""
+    """Adds the ingest's guard reads and its writes. Each read joins a supplied unit or runs alone;
+    each write is correct only in the unit that decided it, which locks the record's chunk
+    (:func:`transcript_chunk_lock`) and its runner's lane (:func:`transcript_lane_lock`)."""
 
-    def high_water(self, runner_id: str) -> int: ...
+    def high_water(self, runner_id: str, *, transaction: Transaction | None = None) -> int: ...
 
-    def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None: ...
+    def set_high_water(self, runner_id: str, *, seq: int, at: datetime, transaction: LockedTransaction) -> None:
+        """Write ``seq`` as the mark, as given: the caller decided it never moves the mark back."""
+        ...
 
-    def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState: ...
+    def natural_key_state(
+        self, segment_id: str, turn_range_start: int, *, transaction: Transaction | None = None
+    ) -> NaturalKeyState: ...
 
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
         """The owner recorded for the record's lease epoch, or ``None`` while none is recorded."""
         ...
 
-    def epoch_owners(self, leases: Sequence[tuple[str, int]]) -> dict[tuple[str, int], EpochOwner]:
+    def epoch_owners(
+        self, leases: Sequence[tuple[str, int]], *, transaction: Transaction | None = None
+    ) -> dict[tuple[str, int], EpochOwner]:
         """`epoch_owner`'s batched sibling (`bzh:bulk-reconstitution`), keyed by ``(chunk_id, epoch)``
         — an epoch with no recorded owner is dropped."""
         ...
 
-    def chunk_stored_bytes(self, chunk_id: str) -> int: ...
+    def chunk_stored_bytes(self, chunk_id: str, *, transaction: Transaction | None = None) -> int: ...
 
-    def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int: ...
+    def runner_window_bytes(
+        self, runner_id: str, *, since: datetime, transaction: Transaction | None = None
+    ) -> int: ...
 
-    def insert_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None: ...
+    def encode_turns(self, record: TranscriptSlice) -> EncodedTurns:
+        """``record``'s turns as an accepted write stores them; runs on no connection."""
+        ...
 
-    def insert_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None: ...
+    def insert_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        turns: EncodedTurns,
+        byte_count: int,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> None: ...
 
-    def update_to_accepted(self, record: TranscriptSlice, *, byte_count: int, codec: str, at: datetime) -> None: ...
+    def insert_rejected(
+        self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime, transaction: LockedTransaction
+    ) -> None: ...
 
-    def update_still_rejected(self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime) -> None: ...
+    def update_to_accepted(
+        self,
+        record: TranscriptSlice,
+        *,
+        turns: EncodedTurns,
+        byte_count: int,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> None: ...
+
+    def update_still_rejected(
+        self, record: TranscriptSlice, *, byte_count: int, reason: str, at: datetime, transaction: LockedTransaction
+    ) -> None: ...
 
 
 class SegmentWrite(StrEnum):
@@ -318,17 +381,23 @@ class TranscriptIngestResult:
 class TranscriptIngestService:
     """Apply a runner's batched transcript records idempotently against the transcript
     lane's own high-water mark. Caps are derived by summing stored rows, never
-    a maintained counter."""
+    a maintained counter.
+
+    Every guard a record's decision reads is a sum or a key no one version covers, so each batch
+    is decided inside one unit (``bzh:write-reestablishes-read``): graduated once on
+    :func:`ingest_locks`, every guard re-read and every write made with its token."""
 
     def __init__(
         self,
         *,
         store: IWriteTranscriptSegments,
+        transactions: IHubTransactions,
         retired: RetiredRunnerGuard,
         clock: IClock,
         caps: TranscriptCaps | None = None,
     ) -> None:
         self._store = store
+        self._transactions = transactions
         self._retired = retired
         self._clock = clock
         self._caps = caps if caps is not None else TranscriptCaps()
@@ -337,94 +406,159 @@ class TranscriptIngestService:
         """``records`` pairs each record with its lane ``seq``, kept out of :class:`TranscriptSlice`
         since ``seq`` is a lane concept, not a record's stored identity. A retired runner is refused with
         :class:`RunnerRetired` before anything lands. A record whose lease another holder owns
-        (:func:`ships_from_lease_holder`) is refused unstored, on replay too, and the mark advances past it."""
+        (:func:`ships_from_lease_holder`) is refused unstored, on replay too, and the mark advances past it.
+        The batch and its mark commit together or not at all, and are logged only once committed."""
         self._retired.refuse_if_retired(runner_id, action="transcript ingest")
-        mark = self._store.high_water(runner_id)
+        now = self._clock.now()
+        breaches: list[tuple[TranscriptSlice, CapBreach]] = []
+        ahead: list[tuple[int, TranscriptSlice]] = []
+        prepared = self._prepare(records)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=ingest_locks(runner_id, [record for _, record, _ in prepared]))
+            result = self._decide(runner_id, prepared, at=now, transaction=locked, breaches=breaches, ahead=ahead)
+        for seq, record in ahead:
+            _log.warning(
+                "transcript high-water is ahead of the stored record — applying it anyway",
+                runner_id=runner_id,
+                seq=seq,
+                segment_id=record.segment_id,
+            )
+        for record, breach in breaches:
+            self._log_rejection(record, breach)
+        _log.info(
+            "transcript segments ingested",
+            runner_id=runner_id,
+            high_water=result.high_water,
+            applied=len(result.applied),
+            already=len(result.already_applied),
+            capped=len(result.capped),
+            refused=len(result.refused),
+        )
+        return result
+
+    def _prepare(
+        self, records: list[tuple[int, TranscriptSlice]]
+    ) -> list[tuple[int, TranscriptSlice, EncodedTurns | None]]:
+        """``records`` in seq order, each beside its encoded turns — ``None`` for a record over the
+        record cap, which no decision stores."""
+        return [
+            (
+                seq,
+                record,
+                self._store.encode_turns(record) if self._caps.record_breach(record.byte_count) is None else None,
+            )
+            for seq, record in sorted(records, key=lambda pair: pair[0])
+        ]
+
+    def _decide(
+        self,
+        runner_id: str,
+        records: list[tuple[int, TranscriptSlice, EncodedTurns | None]],
+        *,
+        at: datetime,
+        transaction: LockedTransaction,
+        breaches: list[tuple[TranscriptSlice, CapBreach]],
+        ahead: list[tuple[int, TranscriptSlice]],
+    ) -> TranscriptIngestResult:
+        """Decide and write every record and the mark in ``transaction``, from guards read in it.
+        The mark written is the larger of the one read here and the batch's highest decided seq."""
+        mark = self._store.high_water(runner_id, transaction=transaction)
         applied: list[int] = []
         already: list[int] = []
         capped: list[int] = []
         refused: list[int] = []
-        now = self._clock.now()
-        owners = self._store.epoch_owners([(record.chunk_id, record.epoch) for _, record in records])
+        owners = self._store.epoch_owners(
+            [(record.chunk_id, record.epoch) for _, record, _ in records], transaction=transaction
+        )
 
-        for seq, record in sorted(records, key=lambda pair: pair[0]):
+        for seq, record, turns in records:
             if not ships_from_lease_holder(owners.get((record.chunk_id, record.epoch)), runner_id):
                 refused.append(seq)
                 mark = max(mark, seq)
                 continue
             if seq <= mark:
-                outcome = replay_outcome(self._store.natural_key_state(record.segment_id, record.turn_range_start))
+                state = self._store.natural_key_state(
+                    record.segment_id, record.turn_range_start, transaction=transaction
+                )
+                outcome = replay_outcome(state)
                 if outcome == "capped":
                     capped.append(seq)
                     continue
                 if outcome == "already_applied":
                     already.append(seq)
                     continue
-                _log.warning(
-                    "transcript high-water is ahead of the stored record — applying it anyway",
-                    runner_id=runner_id,
-                    seq=seq,
-                    segment_id=record.segment_id,
-                )
-                if self._apply(record, at=now):
+                ahead.append((seq, record))
+                if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches):
                     applied.append(seq)
                 else:
                     capped.append(seq)
                 continue
             # Every reachable outcome advances the mark; every field is wire-validated.
             mark = seq
-            if self._apply(record, at=now):
+            if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches):
                 applied.append(seq)
             else:
                 capped.append(seq)
 
         if applied or capped or refused:
-            self._store.set_high_water(runner_id, seq=mark, at=now)
-        _log.info(
-            "transcript segments ingested",
-            runner_id=runner_id,
-            high_water=mark,
-            applied=len(applied),
-            already=len(already),
-            capped=len(capped),
-            refused=len(refused),
-        )
+            self._store.set_high_water(runner_id, seq=mark, at=at, transaction=transaction)
         return TranscriptIngestResult(
             high_water=mark, applied=applied, already_applied=already, capped=capped, refused=refused
         )
 
-    def _apply(self, record: TranscriptSlice, *, at: datetime) -> bool:
-        """``True`` stored, ``False`` cap-rejected — both advance the high-water."""
-        state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
+    def _apply(
+        self,
+        record: TranscriptSlice,
+        turns: EncodedTurns | None,
+        *,
+        at: datetime,
+        transaction: LockedTransaction,
+        breaches: list[tuple[TranscriptSlice, CapBreach]],
+    ) -> bool:
+        """``True`` stored, ``False`` cap-rejected — both advance the high-water. A breach the
+        ladder finds is appended to ``breaches``; ``turns`` is ``None`` only for a record the
+        record cap rejects."""
+        store = self._store
+        state = store.natural_key_state(record.segment_id, record.turn_range_start, transaction=transaction)
         byte_count = record.byte_count
-        reason = self._reject_reason(record, byte_count=byte_count, at=at) if adjudicates(state) else None
+        breach = (
+            self._breach(record, byte_count=byte_count, at=at, transaction=transaction) if adjudicates(state) else None
+        )
+        if breach is not None:
+            breaches.append((record, breach))
+        reason = None if breach is None else breach.reason
         write = segment_write(state, reason)
         if write is SegmentWrite.UPDATE_STILL_REJECTED and reason is not None:
-            self._store.update_still_rejected(record, byte_count=byte_count, reason=reason, at=at)
-        elif write is SegmentWrite.UPDATE_TO_ACCEPTED:
-            self._store.update_to_accepted(record, byte_count=byte_count, codec="zlib", at=at)
+            store.update_still_rejected(record, byte_count=byte_count, reason=reason, at=at, transaction=transaction)
+        elif write is SegmentWrite.UPDATE_TO_ACCEPTED and turns is not None:
+            store.update_to_accepted(record, turns=turns, byte_count=byte_count, at=at, transaction=transaction)
         elif write is SegmentWrite.INSERT_REJECTED and reason is not None:
-            self._store.insert_rejected(record, byte_count=byte_count, reason=reason, at=at)
-        elif write is SegmentWrite.INSERT_ACCEPTED:
-            self._store.insert_accepted(record, byte_count=byte_count, codec="zlib", at=at)
+            store.insert_rejected(record, byte_count=byte_count, reason=reason, at=at, transaction=transaction)
+        elif write is SegmentWrite.INSERT_ACCEPTED and turns is not None:
+            store.insert_accepted(record, turns=turns, byte_count=byte_count, at=at, transaction=transaction)
         return write.stored
 
-    def _reject_reason(self, record: TranscriptSlice, *, byte_count: int, at: datetime) -> str | None:
+    def _breach(
+        self, record: TranscriptSlice, *, byte_count: int, at: datetime, transaction: LockedTransaction
+    ) -> CapBreach | None:
         """Walk the cap ladder, reading each stored sum only once the earlier steps pass."""
         caps = self._caps
         breach = caps.record_breach(byte_count)
         if breach is None:
-            breach = caps.chunk_breach(byte_count, chunk_stored=self._store.chunk_stored_bytes(record.chunk_id))
+            stored = self._store.chunk_stored_bytes(record.chunk_id, transaction=transaction)
+            breach = caps.chunk_breach(byte_count, chunk_stored=stored)
         if breach is None:
-            window = self._store.runner_window_bytes(record.runner_id, since=caps.window_start(at))
+            window = self._store.runner_window_bytes(
+                record.runner_id, since=caps.window_start(at), transaction=transaction
+            )
             breach = caps.runner_breach(byte_count, runner_window=window)
-        return None if breach is None else self._rejected(record, breach)
+        return breach
 
     @staticmethod
-    def _rejected(record: TranscriptSlice, breach: CapBreach) -> str:
+    def _log_rejection(record: TranscriptSlice, breach: CapBreach) -> None:
         """Log the CONFIGURED limit alongside the reason: a rejection reads as a bug when the
         operator cannot tell which ceiling bound it, and the ceilings are configured, not
-        constants. Returns ``reason`` so the caller stays a single expression."""
+        constants."""
         _log.warning(
             "transcript record rejected",
             segment_id=record.segment_id,
@@ -435,7 +569,6 @@ class TranscriptIngestService:
             observed_bytes=breach.observed,
             limit_bytes=breach.limit,
         )
-        return breach.reason
 
 
 @domain_model

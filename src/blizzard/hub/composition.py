@@ -1259,7 +1259,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         transcript_ingest=TranscriptIngestService(
-            store=transcript_store, retired=retired, clock=clock, caps=transcript_caps
+            store=transcript_store,
+            transactions=stores.transactions,
+            retired=retired,
+            clock=clock,
+            caps=transcript_caps,
         ),
         graph_mint=graph_mint,
         graph_yaml=parts.graph_yaml,
