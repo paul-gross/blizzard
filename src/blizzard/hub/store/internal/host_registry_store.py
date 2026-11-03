@@ -34,11 +34,12 @@ from blizzard.hub.domain.runners.host import (
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import DeclaredSubscription
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.high_water import advance_high_water
 from blizzard.hub.store.internal.host_usage import read_host_usage
 from blizzard.hub.store.internal.lifecycle_versions import require_host_lifecycle, require_runner_lifecycles
 from blizzard.hub.store.internal.newest_fact import newest_fact_select, newest_retired_select
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 #: ``(retired, retired_at, retired_by, lifecycle_version)`` off a host's newest lifecycle fact.
 _Lifecycle = tuple[bool, datetime | None, str | None, int]
@@ -111,24 +112,32 @@ class HostRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def set_high_water(self, host_id: str, *, seq: int, at: datetime) -> None:
-        mark = s.host_high_water
-        with self._store.write("set_host_high_water") as conn:
-            existing = conn.execute(
-                self._store.select(mark, mark.c.host_id).where(mark.c.host_id == host_id)
-            ).one_or_none()
-            if existing is None:
-                conn.execute(self._store.insert(mark).values(host_id=host_id, seq=seq, updated_at=at))
-                return
-            conn.execute(self._store.update(mark).where(mark.c.host_id == host_id).values(seq=seq, updated_at=at))
+    def set_high_water(self, host_id: str, *, seq: int, expected: int, at: datetime, transaction: Transaction) -> None:
+        advance_high_water(
+            connection_for(self._store, transaction),
+            s.host_high_water,
+            s.host_high_water.c.host_id,
+            host_id,
+            seq=seq,
+            expected=expected,
+            at=at,
+        )
 
     def record_external_usage(
-        self, host_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         # Refresh-in-place per (host_id, slug): a replay re-writes the row, it never double-counts.
         usage = s.host_external_usage
         match = (usage.c.host_id == host_id, usage.c.slug == slug)
-        with self._store.write("record_host_external_usage") as conn:
+        with connection_in(self._store, transaction, "record_host_external_usage", write=True) as conn:
             if conn.execute(self._store.select(usage, usage.c.host_id).where(*match)).one_or_none() is None:
                 conn.execute(
                     self._store.insert(usage).values(
@@ -148,12 +157,20 @@ class HostRegistryStore:
             )
 
     def record_external_usage_miss(
-        self, host_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        host_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         # Sibling to `record_external_usage`: its own table, never overwriting the sample row it joins at read.
         missed = s.host_external_usage_misses
         match = (missed.c.host_id == host_id, missed.c.slug == slug)
-        with self._store.write("record_host_external_usage_miss") as conn:
+        with connection_in(self._store, transaction, "record_host_external_usage_miss", write=True) as conn:
             if conn.execute(self._store.select(missed, missed.c.host_id).where(*match)).one_or_none() is None:
                 conn.execute(
                     self._store.insert(missed).values(

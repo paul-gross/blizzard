@@ -1,16 +1,27 @@
 """The host's fact lane at the hub: ``POST /api/fleet/host/events`` lands a host's own subscription usage samples and
-misses against a mark of the host's own (component tier)."""
+misses against a mark of the host's own (component tier). Two overlapping pushes of one host's facts apply each seq once
+and never lower its mark."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 import pytest
 
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
-from tests.support import HubHarness, build_hub, count_queries, emitted_events, seed_runner
+from blizzard.hub.domain.execution.facts import PushedFact
+from blizzard.hub.domain.execution.host_facts import HostFactIngestResult
+from blizzard.hub.domain.kernel.high_water import HighWaterConflict
+from blizzard.hub.domain.runners.host import Host
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from blizzard.hub.store.transactions import HubTransactions
+from tests.support import HubHarness, build_hub, count_queries, emitted_events, hub_store_connections, seed_runner
 from tests.test_fleet_auth import bearer
 
 pytestmark = pytest.mark.component
@@ -80,6 +91,228 @@ def test_a_batch_is_applied_once_and_a_replay_is_reacknowledged(tmp_path: Path) 
     }
     assert (replay["high_water"], replay["applied"], replay["already_applied"]) == (2, [], [1, 2])
     assert "route_ended" not in first
+
+
+# --- overlapping pushes of one host's facts -------------------------------------
+
+
+def _held(hub: HubHarness, host: dict[str, Any]) -> Host:
+    held = hub.services.hosts.get_host(host["host_id"])
+    assert held is not None
+    return held
+
+
+def _samples(seqs: range, *, marker: float = 0.0) -> list[PushedFact]:
+    """One sample per seq at ``seq * 10 + marker`` percent, so the stored row names the seq and push it landed for."""
+    return [
+        PushedFact(seq, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, _sample(seq, pct=seq * 10 + marker)["payload"])
+        for seq in seqs
+    ]
+
+
+def _stored_pcts(hub: HubHarness, host_id: str) -> list[float]:
+    usage = hub.services.hosts.usage_of([host_id])[host_id]
+    return [window.utilization_pct for sample in usage.samples for window in sample.windows]
+
+
+def _after_first_mark_read(monkeypatch: pytest.MonkeyPatch, competitor: Callable[[], None]) -> None:
+    """Patch the host high-water read so its first call reads, then runs ``competitor`` to completion on a second
+    thread before answering the mark it read; every later call, the competitor's own included, reads as it would."""
+    original = HostRegistryStore.high_water
+    armed = [True]
+
+    def compete_after_read(self: HostRegistryStore, host_id: str) -> int:
+        mark = original(self, host_id)
+        if armed:
+            armed.clear()
+            raised: list[BaseException] = []
+
+            def run() -> None:
+                try:
+                    competitor()
+                except BaseException as exc:  # surfaced on the paused push's thread below
+                    raised.append(exc)
+
+            thread = Thread(target=run)
+            thread.start()
+            thread.join(timeout=30)
+            assert not thread.is_alive(), "the competing push never finished"
+            if raised:
+                raise raised[0]
+        return mark
+
+    monkeypatch.setattr(HostRegistryStore, "high_water", compete_after_read)
+
+
+@pytest.mark.parametrize(
+    ("paused", "competing"),
+    [(range(1, 2), range(1, 3)), (range(1, 3), range(1, 3))],
+    ids=["shorter-paused-push", "same-seqs"],
+)
+def test_a_push_paused_after_its_mark_read_applies_no_seq_a_competing_push_applied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paused: range, competing: range
+) -> None:
+    """Push A reads the mark, then push B carrying the same seqs (or more) applies them all and advances the mark
+    before A writes: A answers every seq already applied and wrote no slug, the stored sample is B's newest, and the
+    mark stays at B's highest seq — A neither overwrites B's sample nor moves the mark back to its own."""
+    hub = build_hub(tmp_path)
+    held = _held(hub, _host(hub))
+    service = hub.services.host_facts
+    competed: list[HostFactIngestResult] = []
+
+    _after_first_mark_read(monkeypatch, lambda: competed.append(service.ingest(held, _samples(competing))))
+    pushed = service.ingest(held, _samples(paused, marker=5.0))
+
+    assert competed[0].applied == list(competing)
+    assert (pushed.applied, pushed.already_applied, pushed.rejected) == ([], list(paused), [])
+    assert pushed.slugs == frozenset()
+    assert _stored_pcts(hub, held.host_id) == [competing[-1] * 10]
+    assert pushed.high_water == hub.services.hosts.high_water(held.host_id) == competing[-1]
+
+
+def test_a_push_resumes_from_the_mark_a_competing_push_left_below_its_own_seqs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Push B lands only the first of A's seqs: A answers that one already applied and applies the rest against the
+    mark B left."""
+    hub = build_hub(tmp_path)
+    held = _held(hub, _host(hub))
+    service = hub.services.host_facts
+    competed: list[HostFactIngestResult] = []
+
+    _after_first_mark_read(monkeypatch, lambda: competed.append(service.ingest(held, _samples(range(1, 2)))))
+    pushed = service.ingest(held, _samples(range(1, 4), marker=5.0))
+
+    assert competed[0].applied == [1]
+    assert (pushed.applied, pushed.already_applied) == ([2, 3], [1])
+    assert _stored_pcts(hub, held.host_id) == [35.0]
+    assert pushed.high_water == hub.services.hosts.high_water(held.host_id) == 3
+
+
+def test_a_mid_batch_crash_lands_neither_the_in_flight_fact_nor_its_mark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each fact's upsert and its mark advance commit together: a crash after the second fact's upsert returns and
+    before its mark advance rolls that upsert back with it, leaving the first fact's sample and mark, so a lost-ack
+    replay answers the first already applied and applies the second once."""
+    hub = build_hub(tmp_path)
+    held = _held(hub, _host(hub))
+    original = HostRegistryStore.record_external_usage
+    calls = [0]
+
+    def crash_on_second_call(self: HostRegistryStore, host_id: str, **fields: Any) -> None:
+        calls[0] += 1
+        original(self, host_id, **fields)
+        if calls[0] == 2:
+            # Seq 2's sample is written; its mark advance is not.
+            raise RuntimeError("simulated crash mid-batch")
+
+    monkeypatch.setattr(HostRegistryStore, "record_external_usage", crash_on_second_call)
+    with pytest.raises(RuntimeError, match="simulated crash mid-batch"):
+        hub.services.host_facts.ingest(held, _samples(range(1, 4)))
+    monkeypatch.undo()
+
+    assert _stored_pcts(hub, held.host_id) == [10.0]
+    assert hub.services.hosts.high_water(held.host_id) == 1
+    replay = hub.services.host_facts.ingest(held, _samples(range(1, 3)))
+    assert (replay.applied, replay.already_applied) == ([2], [1])
+    assert _stored_pcts(hub, held.host_id) == [20.0]
+
+
+def _stored_miss_slugs(hub: HubHarness, host_id: str) -> list[str]:
+    store = hub_store_connections(hub.engine)
+    missed = s.host_external_usage_misses
+    with store.read("stored_miss_slugs") as conn:
+        return sorted(conn.execute(store.select(missed, missed.c.slug).where(missed.c.host_id == host_id)).scalars())
+
+
+def test_a_mid_batch_crash_rolls_the_in_flight_miss_back_with_its_mark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A miss joins its fact's unit as a sample does: a crash after the second miss's upsert returns and before its
+    mark advance leaves no row for that seq's slug, and the mark at the first miss's seq."""
+    hub = build_hub(tmp_path)
+    held = _held(hub, _host(hub))
+    original = HostRegistryStore.record_external_usage_miss
+    calls = [0]
+
+    def crash_on_second_call(self: HostRegistryStore, host_id: str, **fields: Any) -> None:
+        calls[0] += 1
+        original(self, host_id, **fields)
+        if calls[0] == 2:
+            # Seq 2's miss is written; its mark advance is not.
+            raise RuntimeError("simulated crash mid-batch")
+
+    monkeypatch.setattr(HostRegistryStore, "record_external_usage_miss", crash_on_second_call)
+    misses = [
+        PushedFact(seq, EXTERNAL_SUBSCRIPTION_USAGE_MISSED, _miss(seq, slug)["payload"])
+        for seq, slug in ((1, "first"), (2, "second"))
+    ]
+    with pytest.raises(RuntimeError, match="simulated crash mid-batch"):
+        hub.services.host_facts.ingest(held, misses)
+
+    assert _stored_miss_slugs(hub, held.host_id) == ["first"]
+    assert hub.services.hosts.high_water(held.host_id) == 1
+
+
+def test_a_conflict_on_a_mark_no_push_moved_surfaces_rather_than_retrying(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A conflict whose re-read finds the mark where the push read it names no competing push: the push raises it
+    instead of deciding again forever, and the fact's upsert rolls back with its unit."""
+    hub = build_hub(tmp_path)
+    held = _held(hub, _host(hub))
+    attempts: list[int] = []
+
+    def refuse(self: HostRegistryStore, host_id: str, *, seq: int, expected: int, **_: Any) -> None:
+        attempts.append(seq)
+        if len(attempts) > 3:
+            raise AssertionError("the push kept deciding again on a mark that never moved")
+        raise HighWaterConflict(host_id, expected=expected)
+
+    monkeypatch.setattr(HostRegistryStore, "set_high_water", refuse)
+    with pytest.raises(HighWaterConflict):
+        hub.services.host_facts.ingest(held, _samples(range(1, 2)))
+
+    assert attempts == [1]
+    assert _stored_pcts(hub, held.host_id) == []
+
+
+def test_the_host_mark_advances_only_from_the_seq_its_push_last_read(tmp_path: Path) -> None:
+    """An advance decided on a mark since moved — a stale seq, or a first row another push inserted — is refused with
+    :class:`HighWaterConflict` and moves nothing; one from the standing seq lands."""
+    hub = build_hub(tmp_path)
+    store = hub_store_connections(hub.engine)
+    hosts = HostRegistryStore(store)
+    transactions = HubTransactions(store)
+    at = hub.clock.now()
+
+    def advance(seq: int, *, expected: int) -> None:
+        with transactions.begin() as unit:
+            hosts.set_high_water("hs_a", seq=seq, expected=expected, at=at, transaction=unit)
+
+    advance(13, expected=0)
+    with pytest.raises(HighWaterConflict):
+        advance(12, expected=9)
+    with pytest.raises(HighWaterConflict):
+        advance(12, expected=0)
+    assert hosts.high_water("hs_a") == 13
+
+    advance(14, expected=13)
+    assert hosts.high_water("hs_a") == 14
+
+
+def test_a_first_host_mark_colliding_with_no_row_in_scope_is_a_store_fault_not_a_conflict(tmp_path: Path) -> None:
+    """A host id another tenant's mark row already holds collides on the first insert, yet no push of this tenant's
+    moved the mark: the store raises the fault, never a conflict a caller would decide again on."""
+    hub = build_hub(tmp_path)
+    store = hub_store_connections(hub.engine)
+    at = hub.clock.now()
+    with hub.engine.begin() as conn:
+        conn.execute(s.host_high_water.insert().values(host_id="hs_a", seq=5, updated_at=at, tenant_id="ten_other"))
+
+    with pytest.raises(HubStoreError), HubTransactions(store).begin() as unit:
+        HostRegistryStore(store).set_high_water("hs_a", seq=1, expected=0, at=at, transaction=unit)
 
 
 def test_a_retired_hosts_push_is_refused_and_its_mark_stays_put(tmp_path: Path) -> None:
