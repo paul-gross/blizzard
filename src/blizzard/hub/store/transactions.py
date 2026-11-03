@@ -147,4 +147,18 @@ def connection_in(
     return store.write(operation) if write else store.read(operation)
 
 
+@contextmanager
+def chunk_locked_connection(
+    store: ScopedConnections, chunk_id: str, transaction: Transaction | None, operation: str
+) -> Generator[Connection, None, None]:
+    """The connection a chunk-locked write runs on: the caller's unit, which must lock ``chunk_id``, else a scoped
+    ``write`` of its own that locks the chunk's row first (``bzh:store-exclusive-write``)."""
+    if transaction is not None:
+        yield connection_for(store, transaction, chunk=chunk_id)
+        return
+    with store.write(operation) as conn:
+        lock_chunk_row(conn, chunk_id)
+        yield conn
+
+
 _transactions_conform: type[IHubTransactions] = HubTransactions

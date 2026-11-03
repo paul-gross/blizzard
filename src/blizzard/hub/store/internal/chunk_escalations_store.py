@@ -6,8 +6,6 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -27,7 +25,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_for
+from blizzard.hub.store.transactions import chunk_handle_connection, chunk_locked_connection
 
 
 class ChunkEscalationsStore:
@@ -72,7 +70,7 @@ class ChunkEscalationsStore:
         detail: str | None,
         transaction: Transaction | None = None,
     ) -> int | FenceRefusal:
-        with self._escalation_connection(chunk_id, transaction) as conn:
+        with chunk_locked_connection(self._store, chunk_id, transaction, "record_escalation") as conn:
             refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
@@ -90,19 +88,6 @@ class ChunkEscalationsStore:
             )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
-
-    @contextmanager
-    def _escalation_connection(
-        self, chunk_id: str, transaction: Transaction | None
-    ) -> Generator[Connection, None, None]:
-        """The caller's unit, which must lock ``chunk_id``, or a scoped write of its own that locks
-        it first (``bzh:store-exclusive-write``)."""
-        if transaction is not None:
-            yield connection_for(self._store, transaction, chunk=chunk_id)
-            return
-        with self._store.write("record_escalation") as conn:
-            lock_chunk_row(conn, chunk_id)
-            yield conn
 
     def record_bounce_locked(
         self,

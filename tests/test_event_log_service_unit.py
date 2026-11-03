@@ -40,6 +40,7 @@ class _FakeEvents:
         message: str,
         detail: dict[str, object] | None,
         at: datetime,
+        transaction: object = None,
     ) -> int:
         self.rows.append(_RecordedRow(severity=severity, kind=kind))
         return len(self.rows)

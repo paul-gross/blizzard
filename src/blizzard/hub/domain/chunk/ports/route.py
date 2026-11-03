@@ -81,13 +81,20 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         ...
 
     def record_lease_minted(
-        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: Transaction | None = None
     ) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` under the chunk's row lock, admitted by
         :class:`~blizzard.hub.domain.chunk.ports.fence.MintAdmission` — ``None`` when it landed (the first mint at
-        an unowned epoch taking it for ``claimant``'s runner), else the refusal, which lands nothing."""
+        an unowned epoch taking it for ``claimant``'s runner), else the refusal, which lands nothing. Written in
+        ``transaction`` when given, a unit that locks the chunk, else in a write of its own that locks it first
+        (``bzh:transaction-participation``)."""
         ...
 
-    def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        """Advance a runner's applied-seq high-water mark (upsert)."""
+    def set_runner_high_water(
+        self, runner_id: str, *, seq: int, expected: int, at: datetime, transaction: Transaction
+    ) -> None:
+        """Advance a runner's applied-seq high-water mark from ``expected``, the seq its push last read or set, to
+        ``seq``, in the unit that lands the fact ``seq`` covers. Raises
+        :class:`~blizzard.hub.domain.kernel.high_water.HighWaterConflict` when the mark no longer stands at
+        ``expected``, moving nothing (``bzh:write-reestablishes-read``)."""
         ...

@@ -829,9 +829,17 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def record_local_pause(
-        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+        self,
+        runner_id: str,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        reason: str | None = None,
+        transaction: Transaction | None = None,
     ) -> int:
-        """Land a runner-reported local pause/start fact; ``locally_paused`` derives.
+        """Land a runner-reported local pause/start fact; ``locally_paused`` derives. Written in
+        ``transaction`` when given (``bzh:transaction-participation``).
 
         ``reason`` is the fact's own composed cause — ``None`` for a manual
         pause/start, and always ``None`` on a start (a resume carries no reason). Returns
@@ -868,20 +876,38 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def record_external_usage(
-        self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         """Upsert one declared subscription's newest sampled usage snapshot, keyed on
         ``(runner_id, slug)`` — refresh-in-place, not an append. ``sampled_at`` is the snapshot's own
         reported instant; ``at`` is the landing time (``bzh:injected-clock``). Never requires a known
-        runner: a fact for one the registry has not seen lands anyway, and is read once it has."""
+        runner: a fact for one the registry has not seen lands anyway, and is read once it has. Written
+        in ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
     def record_external_usage_miss(
-        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         """Upsert one declared subscription's newest reported miss, keyed on
         ``(runner_id, slug)`` — refresh-in-place, mirroring :meth:`record_external_usage`. The
-        sample row is left untouched: this is a sibling table, not an overwrite of it."""
+        sample row is left untouched: this is a sibling table, not an overwrite of it. Written in
+        ``transaction`` when given (``bzh:transaction-participation``)."""
         ...
 
 

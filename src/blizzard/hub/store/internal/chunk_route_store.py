@@ -29,9 +29,14 @@ from blizzard.hub.store.internal.chunk_rows import (
     route_of_conn,
     routes_of_conn,
 )
-from blizzard.hub.store.locking import lock_chunk_row
+from blizzard.hub.store.internal.high_water import advance_high_water
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_in
+from blizzard.hub.store.transactions import (
+    chunk_handle_connection,
+    chunk_locked_connection,
+    connection_for,
+    connection_in,
+)
 
 _ROUTE_PREFIX = "route"
 
@@ -191,10 +196,9 @@ class ChunkRouteStore:
         )
 
     def record_lease_minted(
-        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: Transaction | None = None
     ) -> FenceRefusal | None:
-        with self._store.write("record_lease_minted") as conn:
-            lock_chunk_row(conn, chunk_id)
+        with chunk_locked_connection(self._store, chunk_id, transaction, "record_lease_minted") as conn:
             admission = mint_admission(conn, chunk_id, epoch=epoch, runner_id=claimant.runner_id)
             refusal = admission.refusal(claimant)
             if refusal is not None:
@@ -212,23 +216,18 @@ class ChunkRouteStore:
             )
             return None
 
-    def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        with self._store.write("set_runner_high_water") as conn:
-            existing = conn.execute(
-                self._store.select(s.runner_high_water, s.runner_high_water.c.runner_id).where(
-                    s.runner_high_water.c.runner_id == runner_id
-                )
-            ).one_or_none()
-            if existing is None:
-                conn.execute(
-                    self._store.insert(s.runner_high_water).values(runner_id=runner_id, seq=seq, updated_at=at)
-                )
-            else:
-                conn.execute(
-                    self._store.update(s.runner_high_water)
-                    .where(s.runner_high_water.c.runner_id == runner_id)
-                    .values(seq=seq, updated_at=at)
-                )
+    def set_runner_high_water(
+        self, runner_id: str, *, seq: int, expected: int, at: datetime, transaction: Transaction
+    ) -> None:
+        advance_high_water(
+            connection_for(self._store, transaction),
+            s.runner_high_water,
+            s.runner_high_water.c.runner_id,
+            runner_id,
+            seq=seq,
+            expected=expected,
+            at=at,
+        )
 
 
 _route_conforms: type[IWriteChunkRouteRepository] = ChunkRouteStore

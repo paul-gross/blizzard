@@ -14,6 +14,7 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, held_routes
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.host import Host, HostLifecycleConflict, HostRetired, IReadHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import (
@@ -334,38 +335,65 @@ class FleetService:
         return fact_id
 
     def record_local_pause(
-        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+        self,
+        runner_id: str,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        reason: str | None = None,
+        transaction: Transaction | None = None,
     ) -> int:
         """Land a runner's report that it paused or started *itself* — not a control: the
         runner has already stopped claiming, and the hub cannot set this brake. ``reason``
         carries the fact's own composed cause, ``None`` for a manual pause and always on a start. Unlike
         ``set_paused`` this does not require a known runner: the buffer replays an outage in FIFO order,
-        so a pause can legitimately arrive before the registration that follows it."""
-        fact_id = self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
-        _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by, reason=reason)
-        return fact_id
+        so a pause can legitimately arrive before the registration that follows it. Written in
+        ``transaction`` when given (``bzh:transaction-participation``)."""
+        return self._registry.record_local_pause(
+            runner_id, paused=paused, at=at, by=by, reason=reason, transaction=transaction
+        )
 
     def record_external_usage(
-        self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        sampled_at: datetime,
+        windows_json: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         """Land one declared subscription's reported usage sample —
         refresh-in-place per ``(runner_id, slug)``, with no known runner required
-        (:meth:`record_local_pause`)."""
+        (:meth:`record_local_pause`). Written in ``transaction`` when given."""
         self._registry.record_external_usage(
-            runner_id, slug=slug, name=name, sampled_at=sampled_at, windows_json=windows_json, at=at
+            runner_id,
+            slug=slug,
+            name=name,
+            sampled_at=sampled_at,
+            windows_json=windows_json,
+            at=at,
+            transaction=transaction,
         )
-        _log.info("runner external usage sample landed", runner_id=runner_id, slug=slug, sampled_at=sampled_at)
 
     def record_external_usage_miss(
-        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+        self,
+        runner_id: str,
+        *,
+        slug: str,
+        name: str,
+        missed_at: datetime,
+        reason: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
         """Land one declared subscription's reported miss — refresh-in-place
-        per ``(runner_id, slug)``, with no known runner required (:meth:`record_local_pause`)."""
+        per ``(runner_id, slug)``, with no known runner required (:meth:`record_local_pause`).
+        Written in ``transaction`` when given."""
         self._registry.record_external_usage_miss(
-            runner_id, slug=slug, name=name, missed_at=missed_at, reason=reason, at=at
-        )
-        _log.info(
-            "runner external usage miss landed", runner_id=runner_id, slug=slug, reason=reason, missed_at=missed_at
+            runner_id, slug=slug, name=name, missed_at=missed_at, reason=reason, at=at, transaction=transaction
         )
 
     def get_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:

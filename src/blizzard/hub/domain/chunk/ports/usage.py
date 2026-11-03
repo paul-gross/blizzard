@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import UsageTotal
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -46,8 +47,10 @@ class IWriteChunkUsageRepository(IReadChunkUsageRepository, Protocol):
         cost_usd: float | None,
         estimated_cost_usd: float | None = None,
         at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
-        """Append one ``usage.recorded`` fact — never a stored aggregate.
+        """Append one ``usage.recorded`` fact — never a stored aggregate — in ``transaction`` when given
+        (``bzh:transaction-participation``).
 
         Deliberately **not** epoch-fenced: called for every landed usage fact regardless
         of whether ``epoch`` is the chunk's latest, since it is real spend either way.

@@ -14,11 +14,13 @@ from sqlalchemy import Select
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
+from blizzard.hub.store.transactions import connection_in
 
 
 def usage_total_stmt(
@@ -78,8 +80,9 @@ class ChunkUsageStore:
         cost_usd: float | None,
         estimated_cost_usd: float | None = None,
         at: datetime,
+        transaction: Transaction | None = None,
     ) -> None:
-        with self._store.write("record_usage") as conn:
+        with connection_in(self._store, transaction, "record_usage", write=True) as conn:
             conn.execute(
                 self._store.insert(s.usage_facts).values(
                     chunk_id=chunk_id,

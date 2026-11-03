@@ -1,13 +1,14 @@
 """Runner-reported fact intake — lease mints, escalations, and the rest of the runner's outbound facts.
 
 :class:`FactIngestService` is the batched store-and-forward push — the one runner fact intake —
-idempotent against a per-runner **high-water mark**. Landing each lease mint is what keeps the epoch
-fence in lockstep across a chunk's successive node-steps. It holds the **write** chunk seams each fact
-lands on (``bzh:controller-read-only``) and stamps landing time from the injected clock."""
+idempotent against a per-runner **high-water mark**, which each fact's own unit advances by compare-and-set.
+Landing each lease mint is what keeps the epoch fence in lockstep across a chunk's successive node-steps. It
+holds the **write** chunk seams each fact lands on (``bzh:controller-read-only``) and stamps landing time from
+the injected clock."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -44,6 +45,8 @@ from blizzard.hub.domain.execution.usage_facts import (
     subscription_identity,
     usage_miss_reason,
 )
+from blizzard.hub.domain.kernel.high_water import HighWaterConflict
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
@@ -51,6 +54,16 @@ _log = get_logger("blizzard.hub.facts")
 # The chunk-scoped, fence-advancing kinds gated on intake: a fabricated one from a
 # non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
+
+# The kinds whose write takes its chunk's row lock: their unit declares that lock before any statement.
+_CHUNK_LOCKED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
+
+
+def _written_id(row_id: int | None) -> int:
+    """The row id a write that always returns one answered."""
+    if row_id is None:
+        raise TypeError("the write answered no row id")
+    return row_id
 
 
 def requires_route_token(kind: str, chunk_id: str | None) -> bool | None:
@@ -104,6 +117,19 @@ class PushedFact:
 
 @domain_model
 @dataclass(frozen=True)
+class _Landing:
+    """An admitted fact's write, decided from reads taken before its unit opens. ``write`` runs in the unit that
+    advances the mark and answers the row id the ack carries, or the write fence's refusal; ``locks`` names the
+    chunk whose row lock that unit declares; ``committed`` runs on what ``write`` answered once the unit commits —
+    a frame published, a line logged — and never when it rolls back (``bzh:publish-after-commit``)."""
+
+    write: Callable[[Transaction], int | FenceRefusal | None]
+    locks: str | None = None
+    committed: Callable[[int | None], object] | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the runner's new high-water mark, the
     pushed seqs partitioned into applied, already applied, and rejected for a non-idempotency
@@ -135,6 +161,7 @@ class FactIngestService:
         events: EventLogService,
         fleet: FleetService,
         retired: RetiredRunnerGuard,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._facts = facts
@@ -146,6 +173,7 @@ class FactIngestService:
         self._events = events
         self._fleet = fleet
         self._retired = retired
+        self._transactions = transactions
         self._clock = clock
 
     @property
@@ -162,7 +190,12 @@ class FactIngestService:
     ) -> FactIngestResult:
         """Apply one push of ``runner_id``'s facts. A retired runner is refused with
         :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before its high-water mark is read, so
-        nothing lands. ``runner_name`` is the pusher's registered name, carried onto the events the push records."""
+        nothing lands. ``runner_name`` is the pusher's registered name, carried onto the events the push records.
+
+        Freshness is decided from the mark this push last read or set. Each fresh fact lands in its own unit with
+        the mark's advance, which is conditioned on that seq (``bzh:write-reestablishes-read``): an overlapping push
+        of the same runner's that moved the mark first rolls the fact back, and this push re-reads the mark and
+        decides again from it, so no seq applies twice and the mark never moves back."""
         self._retired.refuse_if_retired(runner_id, action="fact ingest")
         mark = self._route.runner_high_water(runner_id)
         applied: list[int] = []
@@ -173,17 +206,30 @@ class FactIngestService:
 
         chunks = self._event_chunks([fact for fact in pushed if fact.seq > mark])
         for fact in sorted(pushed, key=lambda f: f.seq):
+            landed: tuple[bool, int | None] = (False, None)
+            while fact.seq > mark:
+                try:
+                    landed = self._apply(
+                        runner_id,
+                        fact,
+                        expected=mark,
+                        route_token_mode=route_token_mode,
+                        runner_name=runner_name,
+                        chunks=chunks,
+                    )
+                    break
+                except HighWaterConflict:
+                    # Another push of this runner's moved the mark since this one read it, and the fact's unit
+                    # rolled back with its row: decide again against the mark that push left. A mark that did not
+                    # move names no such push, and deciding again would only refuse the same way.
+                    moved = self._route.runner_high_water(runner_id)
+                    if moved == mark:
+                        raise
+                    mark = moved
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            ok, row_id = self._apply(
-                runner_id,
-                fact.kind,
-                fact.payload,
-                route_token_mode=route_token_mode,
-                runner_name=runner_name,
-                chunks=chunks,
-            )
+            ok, row_id = landed
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
@@ -195,9 +241,6 @@ class FactIngestService:
             applied.append(fact.seq)
             if row_id is not None:
                 row_id_by_seq[fact.seq] = row_id
-            # Persisted per applied fact, not once after the loop — bounds a crash mid-batch
-            # to the one in-flight fact's double-apply (blizzard-context crash-correctness/hub.md).
-            self._route.set_runner_high_water(runner_id, seq=mark, at=self._clock.now())
 
         _log.info(
             "runner facts ingested",
@@ -247,172 +290,264 @@ class FactIngestService:
     def _apply(
         self,
         runner_id: str,
-        kind: str,
-        payload: dict[str, object],
+        fact: PushedFact,
         *,
+        expected: int,
         route_token_mode: str,
         chunks: Mapping[str, Chunk],
         runner_name: str | None = None,
     ) -> tuple[bool, int | None]:
-        """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
-        row's own id only for a kind whose id is not already in its own
-        payload (``escalation.recorded``/``event.recorded``), else ``None``. ``(False,
-        None)`` on an unknown kind or a route-token rejection."""
+        """Apply one fact in a unit that advances the mark from ``expected`` to its seq; ``(True, row_id)`` on
+        success — ``row_id`` is the freshly-written row's own id only for a kind whose id is not already in its own
+        payload (``escalation.recorded``/``event.recorded``), else ``None``. ``(False, None)`` on an unknown kind, a
+        route-token rejection, or a write-fence refusal, which advance nothing. Raises :class:`HighWaterConflict`
+        when the mark has moved from ``expected``, landing nothing."""
         now = self._clock.now()
-        fact = Payload(payload)
+        payload = Payload(fact.payload)
+        landing = self._landing(
+            runner_id,
+            fact.kind,
+            payload,
+            route_token_mode=route_token_mode,
+            chunks=chunks,
+            runner_name=runner_name,
+            now=now,
+        )
+        if landing is None:
+            return False, None
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([landing.locks]) if landing.locks is not None else unit
+            written = landing.write(transaction)
+            if isinstance(written, FenceRefusal):
+                return self._fenced(fact.kind, payload, written)
+            self._route.set_runner_high_water(
+                runner_id, seq=fact.seq, expected=expected, at=now, transaction=transaction
+            )
+        if landing.committed is not None:
+            landing.committed(written)
+        return True, written
+
+    def _landing(
+        self,
+        runner_id: str,
+        kind: str,
+        fact: Payload,
+        *,
+        route_token_mode: str,
+        chunks: Mapping[str, Chunk],
+        runner_name: str | None,
+        now: datetime,
+    ) -> _Landing | None:
+        """The write that lands one fact, decided before its unit opens — the route-token gate and the answer
+        delivery's guard read on their own connections — or ``None`` on an unknown kind or a refusal."""
         gated = requires_route_token(kind, fact.text("chunk_id"))
         if gated is None:
-            return False, None
+            return None
         if gated and not self._route_token_ok(fact.require_text("chunk_id"), runner_id, fact, mode=route_token_mode):
-            return False, None
+            return None
+        if kind in _CHUNK_LOCKED_KINDS:
+            return self._chunk_locked_landing(runner_id, kind, fact, now=now)
+        if kind == USAGE_RECORDED:
+            # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
+            # own epoch (pinned in tests/test_usage_facts_ingest.py, tests/test_route_token_authz.py).
+            return _Landing(
+                write=lambda transaction: self._usage.record_usage(
+                    fact.require_text("chunk_id"),
+                    node_id=fact.require_text("node_id"),
+                    epoch=fact.require_number("epoch"),
+                    runner_id=runner_id,
+                    kind=fact.require_text("kind"),
+                    model=fact.require_text("model"),
+                    harness_id=fact.text("harness_id"),
+                    harness_version=fact.text("harness_version"),
+                    input_tokens=fact.require_number("input_tokens"),
+                    output_tokens=fact.require_number("output_tokens"),
+                    cache_read_tokens=fact.require_number("cache_read_tokens"),
+                    cache_create_tokens=fact.require_number("cache_create_tokens"),
+                    cost_usd=fact.amount("cost_usd"),
+                    estimated_cost_usd=fact.amount("estimated_cost_usd"),
+                    at=now,
+                    transaction=transaction,
+                )
+            )
+        if kind == EVENT_RECORDED:
+            return self._event_landing(runner_id, fact, chunks=chunks, runner_name=runner_name, now=now)
+        if kind == ANSWER_DELIVERED:
+            # Records that the resume-with-answer ran; derives no status of its own.
+            return self._answer_landing(fact.require_text("question_id"), fact.require_text("chunk_id"), now=now)
+        if kind in (EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, EXTERNAL_SUBSCRIPTION_USAGE_MISSED):
+            return self._external_usage_landing(runner_id, kind, fact, now=now)
+        if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
+            # Runner-scoped and hub-read-only; stamped as :class:`LocalPause` states.
+            pause = LocalPause.of(kind, fact, now=now)
+            return _Landing(
+                write=lambda transaction: self._fleet.record_local_pause(
+                    runner_id,
+                    paused=pause.paused,
+                    at=pause.at,
+                    by=pause.by,
+                    reason=pause.reason,
+                    transaction=transaction,
+                ),
+                committed=lambda _: _log.info(
+                    "runner local pause reported",
+                    runner_id=runner_id,
+                    paused=pause.paused,
+                    by=pause.by,
+                    reason=pause.reason,
+                ),
+            )
+        _log.warning("unknown runner fact kind", kind=kind)
+        return None
+
+    def _chunk_locked_landing(self, runner_id: str, kind: str, fact: Payload, *, now: datetime) -> _Landing:
+        """A fence-advancing fact's write, under its chunk's row lock, which its unit declares."""
+        chunk_id = fact.require_text("chunk_id")
+        claimant = Claimant(runner_id, fact.text("lease_id"))
         if kind == LEASE_MINTED:
-            refusal = self._route.record_lease_minted(
-                fact.require_text("chunk_id"),
-                epoch=fact.require_number("epoch"),
-                claimant=Claimant(runner_id, fact.text("lease_id")),
-                at=now,
+            return _Landing(
+                locks=chunk_id,
+                write=lambda transaction: self._route.record_lease_minted(
+                    chunk_id, epoch=fact.require_number("epoch"), claimant=claimant, at=now, transaction=transaction
+                ),
             )
-            if refusal is not None:
-                return self._fenced(kind, fact, refusal)
-            return True, None
         if kind == ESCALATION_RECORDED:
-            escalation_id = self._escalations.record_escalation(
-                fact.require_text("chunk_id"),
-                epoch=fact.require_number("epoch"),
-                admission=EpochAdmission.AT_OR_ABOVE,
-                claimant=Claimant(runner_id, fact.text("lease_id")),
-                takeover_command=fact.string("takeover_command"),
-                wrapped_takeover_command=fact.string("wrapped_takeover_command"),
-                cause=fact.text("cause"),
-                detail=fact.text("detail"),
-                at=now,
+            return _Landing(
+                locks=chunk_id,
+                write=lambda transaction: self._escalations.record_escalation(
+                    chunk_id,
+                    epoch=fact.require_number("epoch"),
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    claimant=claimant,
+                    takeover_command=fact.string("takeover_command"),
+                    wrapped_takeover_command=fact.string("wrapped_takeover_command"),
+                    cause=fact.text("cause"),
+                    detail=fact.text("detail"),
+                    at=now,
+                    transaction=transaction,
+                ),
             )
-            if isinstance(escalation_id, FenceRefusal):
-                return self._fenced(kind, fact, escalation_id)
-            return True, escalation_id
-        if kind == QUESTION_ASKED:
-            # The runner authors the question_id so it can poll the answer back.
-            refusal = self._questions.record_question(
+        # question.asked — the runner authors the question_id so it can poll the answer back.
+        return _Landing(
+            locks=chunk_id,
+            write=lambda transaction: self._questions.record_question(
                 question_id=fact.require_text("question_id"),
-                chunk_id=fact.require_text("chunk_id"),
+                chunk_id=chunk_id,
                 node_id=fact.text("node_id"),
                 session_id=fact.text("session_id"),
                 harness_id=fact.text("harness_id"),
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
-                claimant=Claimant(runner_id, fact.text("lease_id")),
+                claimant=claimant,
                 question=fact.require_text("question"),
                 options=fact.strings("options"),
                 asked_at=fact.instant("asked_at", now),
-            )
-            if refusal is not None:
-                return self._fenced(kind, fact, refusal)
-            return True, None
-        if kind == USAGE_RECORDED:
-            # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
-            # own epoch (pinned in tests/test_usage_facts_ingest.py, tests/test_route_token_authz.py).
-            self._usage.record_usage(
-                fact.require_text("chunk_id"),
-                node_id=fact.require_text("node_id"),
-                epoch=fact.require_number("epoch"),
-                runner_id=runner_id,
-                kind=fact.require_text("kind"),
-                model=fact.require_text("model"),
-                harness_id=fact.text("harness_id"),
-                harness_version=fact.text("harness_version"),
-                input_tokens=fact.require_number("input_tokens"),
-                output_tokens=fact.require_number("output_tokens"),
-                cache_read_tokens=fact.require_number("cache_read_tokens"),
-                cache_create_tokens=fact.require_number("cache_create_tokens"),
-                cost_usd=fact.amount("cost_usd"),
-                estimated_cost_usd=fact.amount("estimated_cost_usd"),
-                at=now,
-            )
-            return True, None
-        if kind == EVENT_RECORDED:
-            # Neither epoch-fenced nor route-token-gated: an event from a fenced-out or
-            # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            wire_kind = admitted_event_kind(fact.require_text("kind"), fact.require_text("severity"))
-            if wire_kind is None:
-                _log.warning("event fact not admitted to the log", kind=fact.require_text("kind"))
-                return False, None
-            chunk = chunks.get(fact.text("chunk_id") or "")
-            event_id = self._events.record(
+                transaction=transaction,
+            ),
+        )
+
+    def _event_landing(
+        self, runner_id: str, fact: Payload, *, chunks: Mapping[str, Chunk], runner_name: str | None, now: datetime
+    ) -> _Landing | None:
+        """An ``event.recorded``'s log row, whose ``event-logged`` frame publishes once its unit commits. Neither
+        epoch-fenced nor route-token-gated: an event from a fenced-out or dying worker is exactly the signal this
+        log exists to surface. ``chunk_id`` is optional."""
+        wire_kind = admitted_event_kind(fact.require_text("kind"), fact.require_text("severity"))
+        if wire_kind is None:
+            _log.warning("event fact not admitted to the log", kind=fact.require_text("kind"))
+            return None
+        chunk_id = fact.text("chunk_id")
+        chunk = chunks.get(chunk_id or "")
+        project_id = chunk.project_id if chunk is not None else None
+        return _Landing(
+            write=lambda transaction: self._events.record(
                 kind=wire_kind,
                 runner_id=runner_id,
                 runner_name=runner_name,
-                chunk_id=fact.text("chunk_id"),
-                project_id=chunk.project_id if chunk is not None else None,
+                chunk_id=chunk_id,
+                project_id=project_id,
                 lease_id=fact.text("lease_id"),
                 node_name=fact.text("node_name"),
                 message=fact.string("message"),
                 detail=fact.mapping("detail"),
                 at=now,
-            )
-            return True, event_id
-        if kind == ANSWER_DELIVERED:
-            # Records that the resume-with-answer ran; derives no status of its own.
-            return self._deliver_answer(fact.require_text("question_id"), fact.require_text("chunk_id"), now=now), None
+                transaction=transaction,
+            ),
+            committed=lambda event_id: self._events.publish(
+                _written_id(event_id),
+                kind=wire_kind,
+                runner_id=runner_id,
+                runner_name=runner_name,
+                chunk_id=chunk_id,
+                project_id=project_id,
+            ),
+        )
+
+    def _external_usage_landing(self, runner_id: str, kind: str, fact: Payload, *, now: datetime) -> _Landing | None:
+        """A subscription's sample or miss — advisory, each refreshed in place per ``(runner_id, slug)`` in its own
+        table, a miss never touching the sample row."""
+        identity = subscription_identity(fact)
+        if identity is None:
+            return None
+        slug, name = identity
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
-            # Advisory, refresh-in-place per (runner_id, slug).
-            identity = subscription_identity(fact)
-            if identity is None:
-                return False, None
-            slug, name = identity
-            self._fleet.record_external_usage(
-                runner_id,
-                slug=slug,
-                name=name,
-                sampled_at=fact.instant("sampled_at", now),
-                windows_json=external_usage_windows_json(fact.get("windows", []), owner_id=runner_id, slug=slug),
-                at=now,
+            windows_json = external_usage_windows_json(fact.get("windows", []), owner_id=runner_id, slug=slug)
+            sampled_at = fact.instant("sampled_at", now)
+            return _Landing(
+                write=lambda transaction: self._fleet.record_external_usage(
+                    runner_id,
+                    slug=slug,
+                    name=name,
+                    sampled_at=sampled_at,
+                    windows_json=windows_json,
+                    at=now,
+                    transaction=transaction,
+                ),
+                committed=lambda _: _log.info(
+                    "runner external usage sample landed", runner_id=runner_id, slug=slug, sampled_at=sampled_at
+                ),
             )
-            return True, None
-        if kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED:
-            # Advisory sibling to the sampled fact above — refresh-in-place per
-            # (runner_id, slug), in its own table, never touching the sample row.
-            identity = subscription_identity(fact)
-            reason = usage_miss_reason(fact)
-            if identity is None or reason is None:
-                return False, None
-            slug, name = identity
-            self._fleet.record_external_usage_miss(
+        reason = usage_miss_reason(fact)
+        if reason is None:
+            return None
+        missed_at = fact.instant("missed_at", now)
+        return _Landing(
+            write=lambda transaction: self._fleet.record_external_usage_miss(
                 runner_id,
                 slug=slug,
                 name=name,
-                missed_at=fact.instant("missed_at", now),
+                missed_at=missed_at,
                 reason=reason,
                 at=now,
-            )
-            return True, None
-        if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-            # Runner-scoped and hub-read-only; stamped as :class:`LocalPause` states.
-            pause = LocalPause.of(kind, fact, now=now)
-            local_pause_id = self._fleet.record_local_pause(
-                runner_id, paused=pause.paused, at=pause.at, by=pause.by, reason=pause.reason
-            )
-            return True, local_pause_id
-        _log.warning("unknown runner fact kind", kind=kind)
-        return False, None
+                transaction=transaction,
+            ),
+            committed=lambda _: _log.info(
+                "runner external usage miss landed", runner_id=runner_id, slug=slug, reason=reason, missed_at=missed_at
+            ),
+        )
 
-    def _deliver_answer(self, question_id: str, chunk_id: str, *, now: datetime) -> bool:
-        """Land an ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides: written, a
-        replay that writes nothing, or rejected in the ack (an unknown question too)."""
+    def _answer_landing(self, question_id: str, chunk_id: str, *, now: datetime) -> _Landing | None:
+        """An ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides: written, a replay that writes nothing
+        but still advances the mark, or ``None`` — rejected in the ack (an unknown question too)."""
         question: NodeQuestion | None = self._questions.get_question(question_id)
         if question is None:
             _log.warning("answer delivery for an unknown question", question_id=question_id)
-            return False
+            return None
         facts = ChunkFacts.or_default(self._facts.load_facts(question.chunk_id))
         delivery, detail = question.delivery(
             chunk_id=chunk_id, superseded_by_restart=facts.restarted_past(question.epoch)
         )
         if delivery is QuestionDelivery.REFUSE:
             _log.warning("answer delivery rejected", question_id=question_id, detail=detail)
-            return False
-        if delivery is QuestionDelivery.RECORD:
-            self._questions.record_answer_delivered(question_id=question_id, chunk_id=chunk_id, at=now)
-        return True
+            return None
+        if delivery is QuestionDelivery.REPLAY:
+            return _Landing(write=lambda transaction: None)
+        return _Landing(
+            write=lambda transaction: self._questions.record_answer_delivered(
+                question_id=question_id, chunk_id=chunk_id, at=now, transaction=transaction
+            )
+        )
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact — the
