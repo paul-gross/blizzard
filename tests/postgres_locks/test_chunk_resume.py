@@ -12,6 +12,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.operations.pause import PauseService
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import chunk_exclusive_store
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.tenancy import TenantId
@@ -20,8 +21,14 @@ from tests.support import scoped_connections
 pytestmark = pytest.mark.postgres_lock
 
 
-@pytest.mark.parametrize("held_chunk", ["chunk", "other"], ids=["blocker", "negative-control"])
-def test_resume_chunk_lock_and_timestamp(database_url: str, held_chunk: str) -> None:
+@pytest.mark.parametrize(
+    ("held_chunk", "omit_lock"),
+    [("chunk", False), ("other", False), ("chunk", True)],
+    ids=["blocker", "other-chunk", "omitted-lock"],
+)
+def test_resume_chunk_lock_and_timestamp(
+    database_url: str, held_chunk: str, omit_lock: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "resume_holder", "options": options})
     waiter = sa.create_engine(database_url, connect_args={"application_name": "resume_waiter", "options": options})
@@ -54,6 +61,8 @@ def test_resume_chunk_lock_and_timestamp(database_url: str, held_chunk: str) -> 
         stores = build_chunk_stores(waiter_scope, clock, registry=RunnerRegistryStore(waiter_scope))
         service = PauseService(lifecycle=stores.lifecycle, exclusive=stores.exclusive, clock=clock)
         chunk = Chunk(chunk_id="chunk", graph_id="graph", work_refs=[], minted_at=now)
+        if omit_lock:
+            monkeypatch.setattr(chunk_exclusive_store, "lock_chunk_row", lambda *args: None)
         with ThreadPoolExecutor(max_workers=1) as actors:
             with holder.begin() as conn:
                 conn.execute(
@@ -61,7 +70,7 @@ def test_resume_chunk_lock_and_timestamp(database_url: str, held_chunk: str) -> 
                     {"tenant": str(tenant), "chunk": held_chunk},
                 )
                 future = actors.submit(service.resume, chunk, by="operator")
-                if held_chunk == "chunk":
+                if held_chunk == "chunk" and not omit_lock:
                     deadline = monotonic() + 5
                     with observer.connect() as monitor:
                         while monotonic() < deadline:
@@ -81,11 +90,12 @@ def test_resume_chunk_lock_and_timestamp(database_url: str, held_chunk: str) -> 
                     clock.advance(timedelta(seconds=1))
                 else:
                     assert future.result(timeout=5) > 0
+                    clock.advance(timedelta(seconds=1))
             fact_id = future.result(timeout=10)
         with scope.read("check") as conn:
             row = conn.execute(scope.select(s.chunk_pause_facts).where(s.chunk_pause_facts.c.id == fact_id)).one()
         assert row.paused is False
-        assert row.set_at == clock.now()
+        assert row.set_at == (clock.now() if held_chunk == "chunk" and not omit_lock else now)
         assert row.set_by == "operator"
     finally:
         holder.dispose()
