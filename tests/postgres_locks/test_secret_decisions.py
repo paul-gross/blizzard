@@ -1,6 +1,7 @@
 """Secret lifecycle and replacement decisions lock independently of tenant admission."""
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime
 from threading import Event
 from time import monotonic
@@ -13,6 +14,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigCh
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    RepositoryEdit,
     RepositoryFields,
     RepositorySecretUnavailable,
 )
@@ -228,9 +230,10 @@ def test_work_source_serializes_with_secret(
         observer.dispose()
 
 
+@pytest.mark.parametrize("operation", ["create", "edit", "enable"])
 @pytest.mark.parametrize("scenario", ["locked", "negative-control", "retirement"])
-def test_repository_create_serializes_with_secret(
-    database_url: str, scenario: str, monkeypatch: pytest.MonkeyPatch
+def test_repository_serializes_with_secret(
+    database_url: str, operation: str, scenario: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     options = "-c statement_timeout=8000"
     holder = sa.create_engine(database_url, connect_args={"application_name": "ref_secret_holder", "options": options})
@@ -239,7 +242,6 @@ def test_repository_create_serializes_with_secret(
     tenant = TenantId("ten_ref_secret")
     now = datetime.now(UTC)
     ctx = ChangeContext("test", Door.API)
-    secret_change = ConfigChange.of(ctx, RecordKind.SECRET, "gh", 1, ChangeOp.CREATE, (), now)
     retire_change = ConfigChange.of(ctx, RecordKind.SECRET, "gh", 1, ChangeOp.RETIRE, (), now)
     try:
         scoped = scoped_connections(holder, tenant)
@@ -250,20 +252,55 @@ def test_repository_create_serializes_with_secret(
             "github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), ctx, at=now, forge_id=forge_id
         )
         ForgeRecordStore(scoped).create(forge, change=forge_change)
-        SecretStore(scoped).create(
-            "gh",
-            sealed=SealedValue(key_id="key", ciphertext=b"ciphertext", nonce=b"nonce"),
+        for name in ("gh", "other"):
+            secret_change = ConfigChange.of(ctx, RecordKind.SECRET, name, 1, ChangeOp.CREATE, (), now)
+            SecretStore(scoped).create(
+                name,
+                sealed=SealedValue(key_id="key", ciphertext=b"ciphertext", nonce=b"nonce"),
+                at=now,
+                by="test",
+                change=secret_change,
+            )
+        initial, change = ConfiguredRepository.new(
+            "demo",
+            None,
+            RepositoryFields(forge_id, "acme", "demo", "main", "other" if operation == "edit" else "gh"),
+            ctx,
             at=now,
-            by="test",
-            change=secret_change,
-        )
-        record, change = ConfiguredRepository.new(
-            "demo", None, RepositoryFields(forge_id, "acme", "demo", "main", "gh"), ctx, at=now
         )
         writer = scoped_connections(waiter, tenant)
         repos = repository_record_store.RepositoryRecordStore(writer)
+        if operation != "create":
+            repos.create(initial, change=change)
+        if operation == "enable":
+            transition = initial.set_retired(True, ctx, if_match=None, at=now)
+            assert transition is not None
+            retired, change = transition
+            repos.record_lifecycle(
+                retired, retired=True, from_revision=initial.revision, at=now, by="test", change=change
+            )
+            initial = repos.get(initial.repository_id)
+            assert initial is not None
+            transition = initial.set_retired(False, ctx, if_match=None, at=now)
+            assert transition is not None
+            record, change = transition
+        elif operation == "edit":
+            transition = initial.edit(RepositoryEdit(secret_name="gh"), ctx, if_match=None, at=now)
+            assert transition is not None
+            record, change = transition
+        else:
+            record = initial
         if scenario == "negative-control":
             monkeypatch.setattr(repository_record_store, "lock_secret_row", lambda *args: None)
+
+        def act() -> ConfiguredRepository:
+            if operation == "create":
+                return repos.create(record, change=change)
+            if operation == "enable":
+                return repos.record_lifecycle(
+                    record, retired=False, from_revision=initial.revision, at=now, by="test", change=change
+                )
+            return repos.update(record, from_revision=initial.revision, left_slug=None, change=change)
 
         with ThreadPoolExecutor(max_workers=1) as actors:
             # read() supplies a scoped transaction without acquiring the tenant write guard;
@@ -275,7 +312,7 @@ def test_repository_create_serializes_with_secret(
                     )
                 else:
                     lock_secret_row(conn, "gh")
-                future = actors.submit(repos.create, record, change=change)
+                future = actors.submit(act)
                 if scenario == "negative-control":
                     assert future.result(timeout=5) == record
                 else:
@@ -292,21 +329,27 @@ def test_repository_create_serializes_with_secret(
                             ).scalar_one()
                             if blocked:
                                 break
-                            assert not future.done(), "repository create completed without waiting for the secret"
+                            assert not future.done(), f"repository {operation} completed without waiting for the secret"
                             Event().wait(0.02)
                         else:
-                            pytest.fail("repository create did not block on the secret")
+                            pytest.fail(f"repository {operation} did not block on the secret")
                 if scenario == "retirement":
                     conn.commit()
             if scenario == "retirement":
                 with pytest.raises(RepositorySecretUnavailable) as exc:
                     future.result(timeout=10)
                 assert "secret gh is retired" in str(exc.value)
-                assert repos.get(record.repository_id) is None
-                assert SecretReferrersStore(writer).referrers_of(["gh"]) == {"gh": []}
+                assert repos.get(record.repository_id) == (None if operation == "create" else initial)
+                assert SecretReferrersStore(writer).referrers_of(["gh", "other"]) == {
+                    "gh": [],
+                    "other": [RecordRef(RecordKind.REPOSITORY, initial.repository_id, "demo")]
+                    if operation == "edit"
+                    else [],
+                }
             else:
                 assert future.result(timeout=10) == record
-                assert repos.get(record.repository_id) == record
+                stored = repos.get(record.repository_id)
+                assert stored == replace(record, retired_at=None)
                 assert SecretReferrersStore(writer).referrers_of(["gh"]) == {
                     "gh": [RecordRef(RecordKind.REPOSITORY, record.repository_id, "demo")]
                 }
