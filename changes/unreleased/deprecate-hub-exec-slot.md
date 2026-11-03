@@ -1,7 +1,7 @@
 ---
 kind: deprecated
 surfaces: [store]
-removes-in: "0.4"
+removes-in: "0.5"
 ---
 
 The hub store's `hub_exec_slot` table is deprecated. Hub steps take turns on their flows, recorded in `hub_turns`, and

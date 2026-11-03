@@ -1,7 +1,7 @@
 ---
 kind: deprecated
 surfaces: [store]
-removes-in: "0.4"
+removes-in: "0.5"
 ---
 
 The hub store's `repositories.forge_api_url`, `work_sources.api_base` and `work_sources.web_base` columns are

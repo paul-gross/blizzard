@@ -1,7 +1,7 @@
 ---
 kind: deprecated
 surfaces: [http-api, cli]
-removes-in: "0.4"
+removes-in: "0.5"
 ---
 
 Version 1 of the configuration document is deprecated. Use version 2, which declares forges and names them from
