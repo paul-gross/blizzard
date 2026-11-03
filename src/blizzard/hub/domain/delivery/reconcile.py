@@ -97,9 +97,7 @@ class _Standing:
             chunk is not None
             and facts is not None
             and chunk.graph_id == self.graph.graph_id
-            and facts.status() is ChunkStatus.DELIVERING
-            and facts.current_node_id() == self.node.node_id
-            and (facts.latest_epoch() or 0) == self.epoch
+            and facts.delivering_at(self.node.node_id, epoch=self.epoch)
         )
 
 

@@ -3,7 +3,8 @@
 :class:`HubNodeRouter` maps an answer to an authored edge, records a wait, bounces an incomplete delivery, and
 escalates to a person what no edge routes. Every chunk write it makes for a turn goes in one locked transaction with
 the turn's end, which the :class:`ITurnEnd` it is handed writes; with no turn — a refusal at submit, an actionless
-node — the same writes commit alone."""
+node — the same writes commit alone. A refusal, and an answer no edge routes, decide inside that one transaction from
+the chunk's facts and the visit's artifacts re-read under its lock, and publish their events once it commits."""
 
 from __future__ import annotations
 
@@ -23,10 +24,11 @@ from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
+    CloseEnqueueDecision,
     LandedRepos,
     WaitKind,
     decide_close_enqueue,
@@ -59,7 +61,6 @@ from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
     RESERVED_TERMINAL,
-    Edge,
     Graph,
     IReadGraphRepository,
     Node,
@@ -162,6 +163,75 @@ class BounceEnvelope:
         )
 
 
+@domain_model
+@dataclass(frozen=True)
+class _StandingVisit:
+    """A hub visit its chunk still stands at, as read under the chunk's lock, with the chunk's artifacts read there."""
+
+    node_id: str
+    epoch: int
+    artifacts: tuple[StoredArtifact, ...]
+
+    def first(self, name: str) -> bool:
+        """Whether the visit has recorded no ``name`` artifact yet — so the one written now is announced."""
+        return not any(a.node_id == self.node_id and a.epoch == self.epoch and a.name == name for a in self.artifacts)
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Migrate:
+    """A cross-graph edge onto an enabled graph: the chunk migrates to ``landing``."""
+
+    landing: Landing
+
+    def turn_outcome(self, choice: str) -> str:
+        """The outcome a turn routing ``choice`` here ends on."""
+        return choice
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Escalate:
+    """A cross-graph edge naming no enabled graph: the chunk is escalated with ``escalation``, routing nothing."""
+
+    escalation: ActionEscalation
+
+    def turn_outcome(self, choice: str) -> str:
+        """The outcome a turn routing ``choice`` here ends on."""
+        return TURN_ESCALATED
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Unroutable:
+    """A choice no edge routes, or — ``to_node`` — one routed to a node the graph lacks: announced once per visit,
+    and the chunk escalated."""
+
+    to_node: str | None
+
+    def turn_outcome(self, choice: str) -> str:
+        """The outcome a turn routing ``choice`` here ends on."""
+        return TURN_ESCALATED
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Transition:
+    """A node edge: the chunk transitions to ``to_node_id``, the id of the node the edge names ``to_node_name`` — or
+    the reserved terminal."""
+
+    to_node_id: str
+    to_node_name: str
+
+    def turn_outcome(self, choice: str) -> str:
+        """The outcome a turn routing ``choice`` here ends on."""
+        return choice
+
+
+#: Where a choice routes from its node, resolved before the routing's transaction opens.
+type _Destination = _Migrate | _Escalate | _Unroutable | _Transition
+
+
 class ITurnEnd(Protocol):
     """The end of the turn a routing belongs to, written on the routing's own locked transaction."""
 
@@ -234,123 +304,197 @@ class HubNodeRouter:
         """Route ``choice`` along its authored edge at ``epoch + 1``; a choice no edge routes, or one routed to a node
         the graph lacks, escalates. A delivery the markers say is incomplete bounces first, escalating past the
         node's bounce cap."""
-        edge = graph.edge_for_choice(node.node_id, choice)
-        if edge is not None and edge.target_graph is not None:
-            self._migrate(chunk, node, edge, epoch=epoch, choice=choice, ending=ending)
-            return
-        to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
-        if edge is None or to_node_id is None:
-            self._unroutable(
-                chunk, node, epoch=epoch, choice=choice, to_node=edge.to_node_name if edge else None, ending=ending
-            )
+        destination = self._destination(graph, node, choice)
+        if not isinstance(destination, _Transition):
+            self._route_away(chunk, node, destination, epoch=epoch, choice=choice, ending=ending)
             return
         envelope: str | None = None
         # A delivery kick-back, detected from the landed-marker fact and never from the choice name.
-        if commits and to_node_id != RESERVED_TERMINAL:
+        if commits and destination.to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
             artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
             finished = LandedRepos.of(artifacts).names | no_code_repos(artifacts, commits)
             if not pending_repos.issubset(finished):
                 envelope = BounceEnvelope.of(
                     cause=choice,
-                    summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
+                    summary=(
+                        f"hub node `{node.name}` routed `{choice}` to `{destination.to_node_name}` — "
+                        "delivery incomplete"
+                    ),
                     commits=commits,
                     sources=self._delivery_sources(chunk),
                     action=action,
                 ).serialize()
-        self._commit(
-            chunk, node, epoch=epoch, choice=choice, to_node_id=to_node_id, bounce=(choice, envelope), ending=ending
-        )
+        self._commit(chunk, node, destination, epoch=epoch, choice=choice, bounce=(choice, envelope), ending=ending)
+
+    def _destination(self, graph: Graph, node: Node, choice: str) -> _Destination:
+        """Where ``choice`` routes from ``node``, resolved before any lock is taken: a cross-graph edge's target is
+        another aggregate's, read here."""
+        edge = graph.edge_for_choice(node.node_id, choice)
+        if edge is not None and edge.target_graph is not None:
+            target = self._graphs.get_enabled_by_name(edge.target_graph)
+            if target is None:
+                unresolvable = UnresolvableTarget.of(edge)
+                return _Escalate(ActionEscalation(unresolvable.cause, unresolvable.detail))
+            return _Migrate(Landing.authored(edge, target, node))
+        to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
+        if edge is None or to_node_id is None:
+            return _Unroutable(edge.to_node_name if edge is not None else None)
+        return _Transition(to_node_id, edge.to_node_name)
+
+    def _route_away(
+        self,
+        chunk: Chunk,
+        node: Node,
+        destination: _Migrate | _Escalate | _Unroutable,
+        *,
+        epoch: int,
+        choice: str,
+        ending: ITurnEnd,
+    ) -> None:
+        """A choice that does not transition, each in its own transaction under the chunk's lock: a cross-graph
+        migration, which records the migration onto the target graph, opens the landed node's gate, and ends the
+        turn; an escalation; or an answer no edge routes."""
+        if isinstance(destination, _Escalate):
+            self.escalate(chunk, destination.escalation, epoch=epoch, ending=ending)
+            return
+        close_decision = self._close_decision(chunk)
+        if isinstance(destination, _Unroutable):
+            self._unroutable(
+                chunk,
+                node,
+                epoch=epoch,
+                choice=choice,
+                to_node=destination.to_node,
+                close=close_decision,
+                ending=ending,
+            )
+            return
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            self._migrate_on(
+                handle,
+                chunk,
+                node,
+                destination.landing,
+                epoch=epoch,
+                choice=choice,
+                close=close_decision,
+                ending=ending,
+            )
 
     def _commit(
         self,
         chunk: Chunk,
         node: Node,
+        destination: _Transition,
         *,
         epoch: int,
         choice: str,
-        to_node_id: str,
         bounce: tuple[str, str | None],
         ending: ITurnEnd,
     ) -> None:
         """One transaction: the bounce ``(cause, envelope)`` when there is an envelope — escalating past the cap —
         else beside the transition its envelope rides on, and the turn's end."""
+        close_decision = self._close_decision(chunk)
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            self._commit_on(
+                handle,
+                chunk,
+                node,
+                destination,
+                epoch=epoch,
+                choice=choice,
+                bounce=bounce,
+                close=close_decision,
+                ending=ending,
+            )
+
+    def _commit_on(
+        self,
+        handle: ILockedChunkRead,
+        chunk: Chunk,
+        node: Node,
+        destination: _Transition,
+        *,
+        epoch: int,
+        choice: str,
+        bounce: tuple[str, str | None],
+        close: CloseEnqueueDecision,
+        ending: ITurnEnd,
+    ) -> None:
         hub_epoch = epoch + 1
         cause, envelope = bounce
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            artifacts: list[StoredArtifact] = []
-            if envelope is not None:
-                if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
-                    ending.end(handle, outcome=TURN_ESCALATED, closure=None)
-                    return
-                artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
-            wrote = self._hub_exec.record_hub_step_transition_locked(
-                handle,
-                chunk.chunk_id,
-                from_node_id=node.node_id,
-                to_node_id=to_node_id,
-                choice_name=choice,
-                epoch=hub_epoch,
-                admission=EpochAdmission.ABOVE,
-                runner_id=_HUB_RUNNER_ID,
-                transition_id=Id.mint(IdPrefix.TRANSITION, self._clock).value,
-                at=self._clock.now(),
-                artifacts=artifacts,
-                release_route=to_node_id == RESERVED_TERMINAL,
-                close_decision=decide_close_enqueue(
-                    chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-                ),
-            )
-            ending.end(handle, outcome=choice, closure=choice if wrote else None)
-
-    def _migrate(self, chunk: Chunk, node: Node, edge: Edge, *, epoch: int, choice: str, ending: ITurnEnd) -> None:
-        """A cross-graph choice: one transaction records the migration onto the target graph, opens the landed
-        node's gate, and ends the turn. A target naming no enabled graph escalates, routing nothing. The migration
-        is written at the visit's own ``epoch`` — it mints none — and a standing intent stays parked."""
-        target = self._graphs.get_enabled_by_name(edge.target_graph or "")
-        if target is None:
-            unresolvable = UnresolvableTarget.of(edge)
-            self.escalate(chunk, ActionEscalation(unresolvable.cause, unresolvable.detail), epoch=epoch, ending=ending)
-            return
-        landing = Landing.authored(edge, target, node)
-        close_decision = decide_close_enqueue(
-            chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+        artifacts: list[StoredArtifact] = []
+        if envelope is not None:
+            if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
+                ending.end(handle, outcome=TURN_ESCALATED, closure=None)
+                return
+            artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
+        wrote = self._hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk.chunk_id,
+            from_node_id=node.node_id,
+            to_node_id=destination.to_node_id,
+            choice_name=choice,
+            epoch=hub_epoch,
+            admission=EpochAdmission.ABOVE,
+            runner_id=_HUB_RUNNER_ID,
+            transition_id=Id.mint(IdPrefix.TRANSITION, self._clock).value,
+            at=self._clock.now(),
+            artifacts=artifacts,
+            release_route=destination.to_node_id == RESERVED_TERMINAL,
+            close_decision=close,
         )
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            outcome = self._movement.record_migration_locked(
+        ending.end(handle, outcome=choice, closure=choice if wrote else None)
+
+    def _migrate_on(
+        self,
+        handle: ILockedChunkRead,
+        chunk: Chunk,
+        node: Node,
+        landing: Landing,
+        *,
+        epoch: int,
+        choice: str,
+        close: CloseEnqueueDecision,
+        ending: ITurnEnd,
+    ) -> None:
+        """The migration onto ``landing`` at the visit's own ``epoch`` — it mints none — a standing intent staying
+        parked, and the landed node's gate opened."""
+        outcome = self._movement.record_migration_locked(
+            handle,
+            chunk.chunk_id,
+            from_node_id=node.node_id,
+            from_graph_id=node.graph_id,
+            to_graph_id=landing.graph.graph_id,
+            landed_node_id=landing.node_id,
+            choice_name=choice,
+            decision_id=None,
+            model=landing.model,
+            epoch=epoch,
+            admission=EpochAdmission.CURRENT,
+            claimant=None,
+            at=self._clock.now(),
+            artifacts=[],
+            source=landing.source,
+            release_route=landing.releases_route,
+            clear_intent=landing.clear_intent,
+            migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
+            close_decision=close,
+        )
+        wrote = outcome is not None and not isinstance(outcome, FenceRefusal)
+        if wrote:
+            open_graph_gate_on_arrival(
+                self._decisions,
                 handle,
-                chunk.chunk_id,
-                from_node_id=node.node_id,
-                from_graph_id=node.graph_id,
-                to_graph_id=landing.graph.graph_id,
-                landed_node_id=landing.node_id,
-                choice_name=choice,
-                decision_id=None,
-                model=landing.model,
+                self._clock,
+                chunk_id=chunk.chunk_id,
+                graph=landing.graph,
+                node_id=landing.node_id,
                 epoch=epoch,
-                admission=EpochAdmission.CURRENT,
-                claimant=None,
-                at=self._clock.now(),
-                artifacts=[],
-                source=landing.source,
-                release_route=landing.releases_route,
-                clear_intent=landing.clear_intent,
-                migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
-                close_decision=close_decision,
+                close_decision=close,
             )
-            wrote = outcome is not None and not isinstance(outcome, FenceRefusal)
-            if wrote:
-                open_graph_gate_on_arrival(
-                    self._decisions,
-                    handle,
-                    self._clock,
-                    chunk_id=chunk.chunk_id,
-                    graph=landing.graph,
-                    node_id=landing.node_id,
-                    epoch=epoch,
-                    close_decision=close_decision,
-                )
-            ending.end(handle, outcome=choice, closure=choice if wrote else None)
+        ending.end(handle, outcome=choice, closure=choice if wrote else None)
 
     def refuse(
         self,
@@ -365,23 +509,121 @@ class HubNodeRouter:
         ending: ITurnEnd = NO_TURN,
     ) -> None:
         """Record why the visit cannot run — its ``hub-log.<step>`` artifact, and the refusal's event the first time
-        — and route its failure choice, before any pass is taken."""
-        announced = self._artifacts.record_hub_artifact(
-            chunk.chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            name=f"{HUB_LOG_PREFIX}{step}",
-            content=f"[{step.replace('-', ' ')}]\n{detail}\n",
-            at=self._clock.now(),
-            close_decision=decide_close_enqueue(
-                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
-        )
-        if announced and resolution is not None:
-            self._record_refusal_event(chunk, node, resolution, epoch=epoch)
-        self.route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[], ending=ending)
+        — and route its failure choice, before any pass is taken. One transaction under the chunk's lock writes them
+        all with the turn's end, deciding from the chunk's facts and the visit's artifacts re-read there
+        (``bzh:write-reestablishes-read``): a chunk no longer delivering at the visit writes none of them, and only
+        the turn's end is written. The event is published once the transaction commits
+        (``bzh:publish-after-commit``)."""
+        choice = HUB_DEFAULT_FAILURE_CHOICE
+        destination = self._destination(graph, node, choice)
+        close_decision = self._close_decision(chunk)
+        name = f"{HUB_LOG_PREFIX}{step}"
+        logged: list[LoggedEvent] = []
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            visit = self._standing_visit(handle, chunk, node, epoch=epoch)
+            if visit is None:
+                ending.end(handle, outcome=destination.turn_outcome(choice), closure=None)
+                return
+            now = self._clock.now()
+            self._artifacts.record_hub_artifact(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                name=name,
+                content=f"[{step.replace('-', ' ')}]\n{detail}\n",
+                at=now,
+                close_decision=close_decision,
+                transaction=handle.transaction,
+            )
+            if resolution is not None and (kind := REFUSAL_EVENT[resolution.outcome]) and visit.first(name):
+                logged.append(
+                    self._events.record(
+                        kind=kind,
+                        runner_id=None,
+                        chunk_id=chunk.chunk_id,
+                        project_id=chunk.project_id,
+                        lease_id=None,
+                        node_name=node.name,
+                        message=resolution.detail,
+                        detail={"epoch": epoch},
+                        at=now,
+                        transaction=handle.transaction,
+                    )
+                )
+            logged.extend(
+                self._route_on(
+                    handle,
+                    visit,
+                    chunk,
+                    node,
+                    destination,
+                    epoch=epoch,
+                    choice=choice,
+                    close=close_decision,
+                    ending=ending,
+                )
+            )
+        self._events.publish(*logged)
+
+    def _route_on(
+        self,
+        handle: ILockedChunkRead,
+        visit: _StandingVisit,
+        chunk: Chunk,
+        node: Node,
+        destination: _Destination,
+        *,
+        epoch: int,
+        choice: str,
+        close: CloseEnqueueDecision,
+        ending: ITurnEnd,
+    ) -> list[LoggedEvent]:
+        """Route ``choice`` to ``destination`` on ``handle``, as :meth:`route` routes a choice with no delivery to
+        bounce — the events it wrote, to publish once the transaction commits."""
+        if isinstance(destination, _Migrate):
+            self._migrate_on(
+                handle, chunk, node, destination.landing, epoch=epoch, choice=choice, close=close, ending=ending
+            )
+        elif isinstance(destination, _Escalate):
+            self._escalated_on(handle, chunk, destination.escalation, epoch=epoch, ending=ending)
+        elif isinstance(destination, _Unroutable):
+            return self._unroutable_on(
+                handle,
+                visit,
+                chunk,
+                node,
+                epoch=epoch,
+                choice=choice,
+                to_node=destination.to_node,
+                close=close,
+                ending=ending,
+            )
+        else:
+            self._commit_on(
+                handle,
+                chunk,
+                node,
+                destination,
+                epoch=epoch,
+                choice=choice,
+                bounce=(choice, None),
+                close=close,
+                ending=ending,
+            )
+        return []
+
+    def _standing_visit(
+        self, handle: ILockedChunkRead, chunk: Chunk, node: Node, *, epoch: int
+    ) -> _StandingVisit | None:
+        """The visit at ``node`` and ``epoch`` with its artifacts, read on ``handle`` — ``None`` once the chunk is no
+        longer delivering at it (:meth:`ChunkFacts.delivering_at`)."""
+        facts = handle.facts(chunk.chunk_id)
+        if facts is None or not facts.delivering_at(node.node_id, epoch=epoch):
+            return None
+        artifacts = self._artifacts.load_artifacts(chunk.chunk_id, transaction=handle.transaction)
+        return _StandingVisit(node_id=node.node_id, epoch=epoch, artifacts=tuple(artifacts))
 
     def record_wait(
         self,
@@ -412,15 +654,9 @@ class HubNodeRouter:
         """A pending node past its ``poll_timeout`` is a kick-back, not a plain failure: a bounce, an escalation past
         the node's ``bounce_cap``, else the ``failure`` edge with the kick-back envelope riding along."""
         choice = HUB_DEFAULT_FAILURE_CHOICE
-        edge = graph.edge_for_choice(node.node_id, choice)
-        if edge is not None and edge.target_graph is not None:
-            self._migrate(chunk, node, edge, epoch=epoch, choice=choice, ending=ending)
-            return
-        to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
-        if edge is None or to_node_id is None:
-            self._unroutable(
-                chunk, node, epoch=epoch, choice=choice, to_node=edge.to_node_name if edge else None, ending=ending
-            )
+        destination = self._destination(graph, node, choice)
+        if not isinstance(destination, _Transition):
+            self._route_away(chunk, node, destination, epoch=epoch, choice=choice, ending=ending)
             return
         rows = GitCommits.of(self._artifacts.load_artifacts(chunk.chunk_id))
         project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
@@ -440,13 +676,7 @@ class HubNodeRouter:
             action=None,
         ).serialize()
         self._commit(
-            chunk,
-            node,
-            epoch=epoch,
-            choice=choice,
-            to_node_id=to_node_id,
-            bounce=("poll-timeout", envelope),
-            ending=ending,
+            chunk, node, destination, epoch=epoch, choice=choice, bounce=("poll-timeout", envelope), ending=ending
         )
 
     def escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd = NO_TURN) -> None:
@@ -503,9 +733,7 @@ class HubNodeRouter:
             name=f"{HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
             content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
             at=self._clock.now(),
-            close_decision=decide_close_enqueue(
-                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
+            close_decision=self._close_decision(chunk),
         )
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
         outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
@@ -531,8 +759,13 @@ class HubNodeRouter:
         self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd
     ) -> BounceEscalationOutcome:
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            outcome = self._escalate_locked(handle, chunk, escalation.cause, escalation.detail, epoch=epoch + 1)
-            ending.end(handle, outcome=TURN_ESCALATED, closure=None)
+            return self._escalated_on(handle, chunk, escalation, epoch=epoch, ending=ending)
+
+    def _escalated_on(
+        self, handle: ILockedChunkRead, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd
+    ) -> BounceEscalationOutcome:
+        outcome = self._escalate_locked(handle, chunk, escalation.cause, escalation.detail, epoch=epoch + 1)
+        ending.end(handle, outcome=TURN_ESCALATED, closure=None)
         return outcome
 
     def _escalate_locked(
@@ -587,16 +820,49 @@ class HubNodeRouter:
         )
 
     def _unroutable(
-        self, chunk: Chunk, node: Node, *, epoch: int, choice: str, to_node: str | None, ending: ITurnEnd
+        self,
+        chunk: Chunk,
+        node: Node,
+        *,
+        epoch: int,
+        choice: str,
+        to_node: str | None,
+        close: CloseEnqueueDecision,
+        ending: ITurnEnd,
     ) -> None:
-        """An answer no edge routes is a fault in the graph: announce it once per visit, and escalate the chunk."""
+        """An answer no edge routes is a fault in the graph: announce it once per visit, and escalate the chunk — one
+        transaction under the chunk's lock, deciding from the facts and artifacts re-read there, as :meth:`refuse`
+        does. Its event is published once the transaction commits."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            visit = self._standing_visit(handle, chunk, node, epoch=epoch)
+            if visit is None:
+                ending.end(handle, outcome=_Unroutable(to_node).turn_outcome(choice), closure=None)
+                return
+            logged = self._unroutable_on(
+                handle, visit, chunk, node, epoch=epoch, choice=choice, to_node=to_node, close=close, ending=ending
+            )
+        self._events.publish(*logged)
+
+    def _unroutable_on(
+        self,
+        handle: ILockedChunkRead,
+        visit: _StandingVisit,
+        chunk: Chunk,
+        node: Node,
+        *,
+        epoch: int,
+        choice: str,
+        to_node: str | None,
+        close: CloseEnqueueDecision,
+        ending: ITurnEnd,
+    ) -> list[LoggedEvent]:
         now = self._clock.now()
         if to_node is None:
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
         else:
             detail = f"choice `{choice}` on hub node `{node.name}` routes to unknown node `{to_node}`"
         authored = sorted(c.name for c in node.choices)
-        announced = self._artifacts.record_hub_artifact(
+        self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -609,47 +875,38 @@ class HubNodeRouter:
                 "The chunk is escalated to a person; nothing routes it on.\n"
             ),
             at=now,
-            close_decision=decide_close_enqueue(
-                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
+            close_decision=close,
+            transaction=handle.transaction,
         )
-        if announced:
-            self._events.record(
-                kind=_EVENT_UNROUTABLE_OUTCOME,
-                runner_id=None,
-                chunk_id=chunk.chunk_id,
-                project_id=chunk.project_id,
-                lease_id=None,
-                node_name=node.name,
-                message=detail,
-                detail={"choice": choice, "epoch": epoch, "authored_choices": authored},
-                at=now,
+        logged: list[LoggedEvent] = []
+        if visit.first(_UNROUTABLE_ARTIFACT_NAME):
+            logged.append(
+                self._events.record(
+                    kind=_EVENT_UNROUTABLE_OUTCOME,
+                    runner_id=None,
+                    chunk_id=chunk.chunk_id,
+                    project_id=chunk.project_id,
+                    lease_id=None,
+                    node_name=node.name,
+                    message=detail,
+                    detail={"choice": choice, "epoch": epoch, "authored_choices": authored},
+                    at=now,
+                    transaction=handle.transaction,
+                )
             )
         named = f"`{choice}`, which no edge routes" if to_node is None else f"`{choice}`, routed to unknown `{to_node}`"
         unroutable = ActionEscalation(EscalationCause.UNROUTABLE_OUTCOME, f"hub node `{node.name}` answered {named}")
-        self.escalate(chunk, unroutable, epoch=epoch, ending=ending)
+        self._escalated_on(handle, chunk, unroutable, epoch=epoch, ending=ending)
+        return logged
+
+    def _close_decision(self, chunk: Chunk) -> CloseEnqueueDecision:
+        return decide_close_enqueue(chunk.work_refs, lambda source: self._work_sources.closer(source) is not None)
 
     def _delivery_sources(self, chunk: Chunk) -> DeliverySources:
         """The chunk's delivery markers, the PR references already parsed by the store. The historical landing
         facts are left out: a bounce reads only what the markers say landed."""
         read = self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
         return DeliverySources(markers=read.markers, pr_markers=read.pr_markers)
-
-    def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
-        kind = REFUSAL_EVENT[resolution.outcome]
-        if kind is None:
-            return
-        self._events.record(
-            kind=kind,
-            runner_id=None,
-            chunk_id=chunk.chunk_id,
-            project_id=chunk.project_id,
-            lease_id=None,
-            node_name=node.name,
-            message=resolution.detail,
-            detail={"epoch": epoch},
-            at=self._clock.now(),
-        )
 
 
 class HubMarkerWriter:

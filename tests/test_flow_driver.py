@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -17,27 +18,35 @@ from sqlalchemy import Table, func, insert, inspect, select, update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.config import HubConfig
+from blizzard.hub.delivery import flow_turn
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickResult
+from blizzard.hub.delivery.flow_turn import TurnEndRefused
+from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
-from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.actions.visit import Visit, resolve_visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission
+from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission, Withdrawal
 from blizzard.hub.domain.delivery.reconcile import (
     FlowLineReconciler,
     _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched seam's parameter type is module-private
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
+from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
+from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import (
@@ -47,6 +56,7 @@ from tests.support import (
     chunk_stores,
     chunk_unit,
     default_tenant,
+    emitted_events,
     hub_scoped,
     hub_store_connections,
     pointer_token,
@@ -478,6 +488,260 @@ def test_a_visit_that_cannot_name_its_resources_is_refused_at_submit_once(world:
     with world.hub.engine.connect() as conn:
         kinds = conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id))).all()
     assert [k for (k,) in kinds].count("repository-unresolved") == 1
+
+
+#: ``merge``'s failure edge, as authored.
+_MERGE_FAILURE = "          description: Failed to land.\n          to: build\n"
+#: Each failure edge a refusal routes, and the routing write it takes: a node edge transitions, a cross-graph edge
+#: migrates, and an edge to a node the graph lacks escalates.
+_FAILURE_ROUTES: dict[str, tuple[type, str]] = {
+    "node": (ChunkHubExecStore, "record_hub_step_transition_locked"),
+    "cross-graph": (ChunkMovementStore, "record_migration_locked"),
+    "unroutable": (ChunkEscalationsStore, "record_bounce_escalation_locked"),
+}
+#: The events a refusal along each failure edge records, once.
+_REFUSAL_EVENTS = {
+    "node": ["repository-unresolved"],
+    "cross-graph": ["repository-unresolved"],
+    "unroutable": ["repository-unresolved", "hub-node-unroutable-outcome"],
+}
+_REFUSAL_KINDS = frozenset(_REFUSAL_EVENTS["unroutable"])
+
+
+@dataclass(frozen=True)
+class _Refusal:
+    """What a refusal left of the chunk: where it stands, its ``hub-`` artifacts, the kinds of its event rows, and
+    the kinds of the ``event-logged`` frames published for it."""
+
+    standing: tuple[str, str, str]
+    artifacts: list[str]
+    events: list[str]
+    frames: list[str]
+
+
+def _refusal(world: World, chunk_id: str, *, since: int) -> _Refusal:
+    detail = world.detail(chunk_id)
+    artifacts = world.hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    with world.hub.engine.connect() as conn:
+        events = conn.execute(
+            hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id).order_by(s.event_log.c.id))
+        ).scalars()
+        kinds = [kind for kind in events if kind in _REFUSAL_KINDS]
+    frames = [json.loads(e["data"]) for e in emitted_events(world.hub, since=since)]
+    return _Refusal(
+        standing=(detail["graph_id"], detail["current_node_name"], detail["status"]),
+        artifacts=sorted(a.name for a in artifacts if a.name.startswith("hub-")),
+        events=kinds,
+        frames=[f["kind"] for f in frames if f.get("chunk_id") == chunk_id and f.get("kind") in _REFUSAL_KINDS],
+    )
+
+
+def _routing_failure_to(world: World, route: str, *, repo: str) -> str:
+    """A chunk standing at ``merge`` whose visit names ``repo``, ``merge``'s failure edge routing as ``route``
+    names."""
+    graph = _GRAPH
+    if route == "cross-graph":
+        assert world.hub.client.post("/api/graphs", json={"definition_yaml": _LANDING}).status_code == 201
+        graph = _GRAPH.replace(_MERGE_FAILURE, _MERGE_FAILURE.replace("to: build", "to: graph:landing"))
+    chunk_id, build = world.mint(graph)
+    world.complete(chunk_id, build, repo=repo)
+    if route == "unroutable":
+        graph_id = world.detail(chunk_id)["graph_id"]
+        with world.hub.engine.begin() as conn:  # as a graph naming a node it lacks would route
+            merge = conn.execute(
+                hub_scoped(
+                    select(s.graph_nodes.c.node_id).where(
+                        s.graph_nodes.c.graph_id == graph_id, s.graph_nodes.c.name == "merge"
+                    )
+                )
+            ).scalar_one()
+            conn.execute(
+                hub_scoped(
+                    update(s.graph_edges)
+                    .where(s.graph_edges.c.from_node_id == merge, s.graph_edges.c.to_node_name == "build")
+                    .values(to_node_name="nowhere")
+                )
+            )
+    return chunk_id
+
+
+def _refused_at_merge(world: World, route: str) -> str:
+    """A chunk standing at ``merge`` whose visit names a repository no record holds, so the reconcile refuses it,
+    routing ``merge``'s failure edge as ``route`` names."""
+    return _routing_failure_to(world, route, repo="acme/unknown")
+
+
+@pytest.mark.parametrize("raises_at", ["routing", "event"])
+@pytest.mark.parametrize("route", list(_FAILURE_ROUTES))
+def test_a_refusal_that_raises_part_way_commits_nothing_and_a_later_pass_records_it_once(
+    world: World, monkeypatch: pytest.MonkeyPatch, route: str, raises_at: str
+) -> None:
+    chunk_id = _refused_at_merge(world, route)
+    at_merge = _refusal(world, chunk_id, since=0).standing
+    since = world.hub.events.latest_id()
+    raised: list[str] = []
+    store, method = _FAILURE_ROUTES[route]
+    original = getattr(store, method)
+    record_event = ChunkEventsStore.record_event
+
+    def route_then_raise(self: object, *args: Any, **kwargs: Any) -> Any:
+        original(self, *args, **kwargs)
+        raised.append(method)
+        raise RuntimeError("the routing write failed after it ran")
+
+    def raise_instead(self: ChunkEventsStore, **kwargs: Any) -> int:
+        if kwargs["kind"] == "repository-unresolved":
+            raised.append("record_event")
+            raise RuntimeError("the event write failed")
+        return record_event(self, **kwargs)
+
+    with monkeypatch.context() as patch:
+        if raises_at == "routing":
+            patch.setattr(store, method, route_then_raise)
+        else:
+            patch.setattr(ChunkEventsStore, "record_event", raise_instead)
+        world.lines(world.tenant).reconcile(0)
+    failed = _refusal(world, chunk_id, since=since)
+
+    committed: list[bool] = []
+    publish_event_logged = EventBroker.publish_event_logged
+
+    def publish_once_committed(self: EventBroker, **frame: Any) -> int:
+        row_id = int(frame["key"].removeprefix("event_log:"))
+        with world.hub.engine.connect() as conn:  # a fresh connection sees only what has committed
+            row = conn.execute(hub_scoped(select(s.event_log.c.id).where(s.event_log.c.id == row_id))).first()
+        committed.append(row is not None)
+        return publish_event_logged(self, **frame)
+
+    monkeypatch.setattr(EventBroker, "publish_event_logged", publish_once_committed)
+    world.lines(world.tenant).reconcile(0)
+    retried = _refusal(world, chunk_id, since=since)
+
+    assert raised == [method if raises_at == "routing" else "record_event"]
+    graph_id = at_merge[0]
+    landing = world.hub.services.graphs.get_enabled_by_name("landing")
+    routed = {
+        "node": (graph_id, "build", "running"),
+        "cross-graph": (landing.graph_id if landing is not None else "", "merge", "delivering"),
+        "unroutable": (graph_id, "merge", "needs_human"),
+    }[route]
+    hub_logs = ["hub-log.repository-unresolved"] + (["hub-unroutable-outcome"] if route == "unroutable" else [])
+    assert (failed, retried) == (
+        _Refusal(standing=at_merge, artifacts=[], events=[], frames=[]),
+        _Refusal(standing=routed, artifacts=hub_logs, events=_REFUSAL_EVENTS[route], frames=_REFUSAL_EVENTS[route]),
+    )
+    assert committed and all(committed), "every event-logged frame was published after its row committed"
+
+
+@pytest.mark.parametrize(("lever", "body"), [("stop", {"by": "operator"}), ("restart", {"node": "merge"})])
+def test_a_refusal_whose_chunk_left_the_visit_before_its_transaction_writes_nothing(
+    world: World, monkeypatch: pytest.MonkeyPatch, lever: str, body: dict[str, str]
+) -> None:
+    chunk_id = _refused_at_merge(world, "node")
+    since = world.hub.events.latest_id()
+    refuse = HubNodeRouter.refuse
+    outcomes: list[object] = []
+
+    def lever_then_refuse(self: HubNodeRouter, *args: Any, **kwargs: Any) -> None:
+        world.hub.clock.advance(timedelta(seconds=1))
+        outcomes.append(world.hub.client.post(f"/api/chunks/{chunk_id}/{lever}", json=body).status_code)
+        try:
+            outcomes.append(refuse(self, *args, **kwargs))
+        except Exception as exc:
+            outcomes.append(exc)
+            raise
+
+    monkeypatch.setattr(HubNodeRouter, "refuse", lever_then_refuse)
+    world.lines(world.tenant).reconcile(0)
+
+    assert outcomes == [202, None], "the refusal wrote nothing and raised nothing"
+    left = _refusal(world, chunk_id, since=since)
+    assert left.standing[1:] == ("merge", "stopped" if lever == "stop" else "delivering")
+    assert (left.artifacts, left.events, left.frames) == ([], [], [])
+
+
+#: The outcome a turn routing ``merge``'s failure edge ends on.
+_TURN_OUTCOME = {"node": "failure", "cross-graph": "failure", "unroutable": "escalated"}
+
+
+def _refuse_at_the_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The turn's own resolution refuses its visit, as one whose repository records went away after it was
+    submitted: it resolves against no records."""
+
+    def unresolved(artifacts: Any, **kwargs: Any) -> Any:
+        return resolve_visit(artifacts, **{**kwargs, "repositories": []})
+
+    monkeypatch.setattr(flow_turn, "resolve_visit", unresolved)
+
+
+@pytest.mark.parametrize("route", list(_FAILURE_ROUTES))
+def test_a_turns_refusal_whose_end_fails_commits_and_publishes_none_of_it(
+    world: World, monkeypatch: pytest.MonkeyPatch, route: str
+) -> None:
+    chunk_id = _routing_failure_to(world, route, repo=_REPO)
+    at_merge = _refusal(world, chunk_id, since=0).standing
+    since = world.hub.events.latest_id()
+    _refuse_at_the_turn(monkeypatch)
+    end_turn = FlowStore.end_turn_locked
+    raised: list[str] = []
+
+    def end_then_raise(self: FlowStore, *args: Any, **kwargs: Any) -> Any:
+        end_turn(self, *args, **kwargs)
+        raised.append(kwargs["outcome"])
+        raise TurnEndRefused("the turn's end failed after it ran")
+
+    monkeypatch.setattr(FlowStore, "end_turn_locked", end_then_raise)
+    world.tick()
+
+    assert raised == [_TURN_OUTCOME[route]]
+    assert _refusal(world, chunk_id, since=since) == _Refusal(standing=at_merge, artifacts=[], events=[], frames=[])
+    assert world.turn_outcomes(chunk_id) == [None], "the turn is still open"
+
+
+#: Each lever that takes a chunk off its visit mid-turn: its body, the chunk's status after it, and the closure the
+#: turn's end gives the submission.
+_TURN_LEVERS: dict[str, tuple[dict[str, str], str, Withdrawal | None]] = {
+    "stop": ({"by": "operator"}, "stopped", "stopped"),
+    "restart": ({"node": "merge"}, "delivering", "restarted"),
+}
+
+
+@pytest.mark.parametrize("lever", list(_TURN_LEVERS))
+@pytest.mark.parametrize(
+    ("answered", "route"), [("refused", "node"), ("refused", "unroutable"), ("routed", "unroutable")]
+)
+def test_a_turn_whose_chunk_left_the_visit_before_its_routing_writes_nothing_but_its_end(
+    world: World, monkeypatch: pytest.MonkeyPatch, answered: str, route: str, lever: str
+) -> None:
+    chunk_id = _routing_failure_to(world, route, repo=_REPO)
+    graph_id = world.detail(chunk_id)["graph_id"]
+    since = world.hub.events.latest_id()
+    body, status, closure = _TURN_LEVERS[lever]
+    if answered == "refused":
+        _refuse_at_the_turn(monkeypatch)
+    else:
+        world.action.answer = Pass(choice="failure")
+    method = "refuse" if answered == "refused" else "route"
+    original = getattr(HubNodeRouter, method)
+    outcomes: list[object] = []
+
+    def lever_then_route(self: HubNodeRouter, *args: Any, **kwargs: Any) -> None:
+        outcomes.append(world.hub.client.post(f"/api/chunks/{chunk_id}/{lever}", json=body).status_code)
+        try:
+            outcomes.append(original(self, *args, **kwargs))
+        except Exception as exc:
+            outcomes.append(exc)
+            raise
+
+    monkeypatch.setattr(HubNodeRouter, method, lever_then_route)
+    world.tick()
+
+    assert outcomes == [202, None], "the routing wrote nothing and raised nothing"
+    assert _refusal(world, chunk_id, since=since) == _Refusal(
+        standing=(graph_id, "merge", status), artifacts=[], events=[], frames=[]
+    )
+    assert world.turn_outcomes(chunk_id) == [_TURN_OUTCOME[route]]
+    assert [sub.closed for sub in world.submissions(chunk_id)] == [closure]
 
 
 def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_up(world: World) -> None:
