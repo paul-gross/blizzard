@@ -1212,6 +1212,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             route=chunk_route,
             decisions=chunk_decisions,
             exclusive=chunk_exclusive,
+            transactions=stores.transactions,
             retired=retired,
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,

@@ -44,6 +44,7 @@ from blizzard.hub.domain.execution.completion import (
 )
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 
@@ -80,6 +81,14 @@ class ResolutionResult:
     resolved_by: str
 
 
+def lost_to(decision: GateDecision) -> ResolutionResult | None:
+    """The losing result a resolution of ``decision`` meets once it is already resolved, naming the
+    winning choice and resolver; ``None`` while it is unresolved."""
+    if decision.resolved_choice is None:
+        return None
+    return ResolutionResult(resolved=False, choice=decision.resolved_choice, resolved_by=decision.resolved_by or "")
+
+
 class NotEscalated(Exception):
     """A requeue targeted a chunk that is not ``needs_human`` — nothing to supersede
     (:attr:`ChunkVerb.REQUEUE`)."""
@@ -95,6 +104,7 @@ class DecisionService:
         route: IWriteChunkRouteRepository,
         decisions: IWriteChunkDecisionsRepository,
         exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         retired: RetiredRunnerGuard,
         clock: IClock,
         closer_available: Callable[[str], bool],
@@ -104,6 +114,7 @@ class DecisionService:
         self._decisions = decisions
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
+        self._transactions = transactions
         self._retired = retired
         self._clock = clock
         self._closer_available = closer_available
@@ -203,26 +214,35 @@ class DecisionService:
         self, decision: GateDecision, *, choice: str, resolved_by: str, note: str | None = None
     ) -> ResolutionResult:
         """Record a choice and the resolver's ``note``, first-write-wins — a losing resolve's note is dropped
-        with its choice. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare
-        ``decision_id``.
-        :meth:`GateDecision.require_resolvable` decides the refusals; the chunk's derived
-        status is read here for it."""
-        facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
-        decision.require_resolvable(choice=choice, chunk_status=facts.status())
-        won = self._decisions.record_decision_resolution(
-            decision.decision_id,
-            choice=choice,
-            resolved_by=resolved_by,
-            at=self._clock.now(),
-            overrode_red_checks=decision.overrides_red_checks(choice),
-            note=person_note(note),
-        )
-        if won:
-            return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
-        # Lost the CAS — report the winner so the loser is told who resolved.
-        current = self._decisions.get_decision(decision.decision_id)
-        assert current is not None and current.resolved_choice is not None
-        return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")
+        with its choice. Takes the loaded decision (``bzh:domain-takes-objects``), not a bare
+        ``decision_id``, and decides from the decision and its chunk's facts re-read under the chunk's
+        lock in the unit that writes the resolution (``bzh:write-reestablishes-read``):
+        :meth:`GateDecision.require_resolvable` decides the refusals, and a decision already resolved
+        loses to that resolution and writes nothing."""
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([decision.chunk_id])
+            current = self._decisions.get_decision(decision.decision_id, transaction=locked) or decision
+            facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id, transaction=locked))
+            current.require_resolvable(choice=choice, chunk_status=facts.status())
+            lost = lost_to(current)
+            if lost is not None:
+                return lost
+            won = self._decisions.record_decision_resolution(
+                decision.decision_id,
+                choice=choice,
+                resolved_by=resolved_by,
+                at=self._clock.now(),
+                overrode_red_checks=current.overrides_red_checks(choice),
+                note=person_note(note),
+                transaction=locked,
+            )
+            if won:
+                return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
+            # The resolution row's uniqueness backstop found a winner the re-read did not.
+            winner = self._decisions.get_decision(decision.decision_id, transaction=locked)
+            lost = lost_to(winner) if winner is not None else None
+            assert lost is not None
+            return lost
 
 
 class RequeueService:

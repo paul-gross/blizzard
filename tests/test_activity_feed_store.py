@@ -205,7 +205,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 
 
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, engine = _store(tmp_path)
     store.decisions.record_decision(
         imposed_by_runner_id=None,
         decision_id="dec_1",
@@ -219,7 +219,10 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         admission=EpochAdmission.AT_OR_ABOVE,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
-    store.decisions.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.decisions.record_decision_resolution(
+            "dec_1", choice="go", resolved_by="alice", at=_at(2), transaction=unit
+        )
     row = _row_for(store, "decision-resolved")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"

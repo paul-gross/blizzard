@@ -16,7 +16,17 @@ from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, count_queries, count_rows_read, migrate_to, seed_chunk_record, seed_graph, stamp
+from tests.support import (
+    chunk_stores,
+    chunk_unit,
+    count_queries,
+    count_rows_read,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -50,8 +60,11 @@ def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at:
     )
 
 
-def _resolve(store: ChunkStores, decision_id: str, *, choice: str = "pass", by: str = "op") -> None:
-    store.decisions.record_decision_resolution(decision_id, choice=choice, resolved_by=by, at=_T0)
+def _resolve(
+    store: ChunkStores, engine: Engine, chunk_id: str, decision_id: str, *, choice: str = "pass", by: str = "op"
+) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as unit:
+        store.decisions.record_decision_resolution(decision_id, choice=choice, resolved_by=by, at=_T0, transaction=unit)
 
 
 def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
@@ -136,13 +149,13 @@ def test_decision_for_chunk_query_count_is_independent_of_that_chunks_history_le
     _mint(short, "ch_1")
     for i in range(3):
         _record_decision(short, "ch_1", f"dec_closed_{i}")
-        _resolve(short, f"dec_closed_{i}")
+        _resolve(short, short_engine, "ch_1", f"dec_closed_{i}")
         _transition(short, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
     _record_decision(short, "ch_1", "dec_live")
     _mint(long_, "ch_1")
     for i in range(9):
         _record_decision(long_, "ch_1", f"dec_closed_{i}")
-        _resolve(long_, f"dec_closed_{i}")
+        _resolve(long_, long_engine, "ch_1", f"dec_closed_{i}")
         _transition(long_, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
     _record_decision(long_, "ch_1", "dec_live")
 
@@ -160,23 +173,23 @@ def test_list_open_decisions_and_decision_for_chunk_across_the_four_decision_sha
     """A resolved decision, an open one, a transitioned chunk, and a chunk with several
     decisions across its history — the shapes both SQL-filtered reads must still
     resolve correctly, over a real migrated store."""
-    store, _ = _store(tmp_path)
+    store, engine = _store(tmp_path)
     _mint(store, "ch_resolved")
     _mint(store, "ch_open")
     _mint(store, "ch_transitioned")
     _mint(store, "ch_history")
 
     _record_decision(store, "ch_resolved", "dec_resolved")
-    _resolve(store, "dec_resolved")
+    _resolve(store, engine, "ch_resolved", "dec_resolved")
 
     _record_decision(store, "ch_open", "dec_open")
 
     _record_decision(store, "ch_transitioned", "dec_transitioned")
-    _resolve(store, "dec_transitioned")
+    _resolve(store, engine, "ch_transitioned", "dec_transitioned")
     _transition(store, "ch_transitioned", "dec_transitioned", transition_id="tr_transitioned")
 
     _record_decision(store, "ch_history", "dec_history_old")
-    _resolve(store, "dec_history_old")
+    _resolve(store, engine, "ch_history", "dec_history_old")
     _transition(store, "ch_history", "dec_history_old", transition_id="tr_history")
     _record_decision(store, "ch_history", "dec_history_new")
 

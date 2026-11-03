@@ -49,6 +49,7 @@ from tests.support import (
     build_hub,
     capture_statements,
     chunk_stores,
+    chunk_unit,
     count_queries,
     hub_store_connections,
     ingest,
@@ -295,6 +296,21 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         store.hub_exec.record_hub_node_poll_locked(
             handle, "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=T0
         )
+    store.decisions.record_decision(
+        imposed_by_runner_id=None,
+        decision_id="dec_1",
+        chunk_id="ch_kitchen_sink",
+        node_id="nd_g1_hub",
+        node_name="n",
+        epoch=2,
+        choices=[DecisionChoice(name="ok", description="d")],
+        at=T0,
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
+        store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1), transaction=unit)
     store.delivery.record_delivery_repo_landed(
         "ch_kitchen_sink",
         repo="r1",
@@ -306,20 +322,6 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     store.delivery.record_delivery_landed(
         "ch_kitchen_sink", at=T0, close_decision=decide_close_enqueue([], lambda _: True)
     )
-    store.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id="dec_1",
-        chunk_id="ch_kitchen_sink",
-        node_id="nd_g1_hub",
-        node_name="n",
-        epoch=1,
-        choices=[DecisionChoice(name="ok", description="d")],
-        at=T0,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
-    store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1))
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
         store.movement.record_restart_locked(
             handle, "ch_kitchen_sink", from_node_id="nd_g1_runner", to_node_id="nd_g1_runner", by="op", at=_at(3)

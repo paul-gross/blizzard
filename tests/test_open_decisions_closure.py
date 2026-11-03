@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import (
@@ -21,7 +22,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
+from tests.support import chunk_stores, chunk_unit, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -29,6 +30,10 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1", *, imposed_by_runner_id: str | None = None) -> ChunkStores:
+    return _gate(tmp_path, chunk_id, imposed_by_runner_id=imposed_by_runner_id)[0]
+
+
+def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) -> tuple[ChunkStores, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
@@ -47,7 +52,7 @@ def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1", *, imposed_by_runne
         close_decision=decide_close_enqueue([], lambda _: True),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
-    return store
+    return store, engine
 
 
 def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None) -> None:
@@ -138,7 +143,10 @@ def test_the_runner_filter_leaves_out_a_graph_declared_gate(tmp_path: Path) -> N
 
 
 def test_the_runner_filter_leaves_out_a_resolved_decision(tmp_path: Path) -> None:
-    store = _store_with_gate(tmp_path, imposed_by_runner_id="rn_a")
-    assert store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_T0)
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id="rn_a")
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        assert store.decisions.record_decision_resolution(
+            "dec_1", choice="ok", resolved_by="op", at=_T0, transaction=unit
+        )
 
     assert _runner_imposed_ids(store, "rn_a") == []
