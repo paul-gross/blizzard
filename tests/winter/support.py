@@ -3,7 +3,7 @@
 The tier proves the winter workspace provider against the real ``winter`` CLI. It is local-only: it runs when
 ``BLIZZARD_WINTER_BINDING=1`` and a winter source — a workspace holding ``.winter/config.toml`` and
 ``tools/winter-cli`` — is found, from ``$BLIZZARD_MOCK_WINTER_SOURCE`` or by walking up from this repository.
-Source discovery lives only here; the platform tiers (service, e2e, crash) never look for winter.
+Source discovery lives only here; the platform tiers (service, crash) never look for winter.
 """
 
 from __future__ import annotations

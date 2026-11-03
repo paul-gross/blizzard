@@ -203,7 +203,7 @@ def test_parse_accepts_this_source_s_own_full_issue_url() -> None:
 
 
 def test_parse_accepts_this_source_s_own_schemeless_issue_url() -> None:
-    """The schemeless shorthand (``{owner}/{repo}/issues/{n}``) the e2e tier ingests."""
+    """The schemeless shorthand (``{owner}/{repo}/issues/{n}``) the service tier ingests."""
     source = GitHubWorkSource(
         github_double(), source_id="widget", slug="widget", repo="acme/widget", web_base="https://github.com"
     )

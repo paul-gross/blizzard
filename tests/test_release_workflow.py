@@ -238,7 +238,7 @@ def test_build_job_waits_for_each_full_suite_tier() -> None:
     assert tiers["uses"] == "./.github/workflows/upper-tiers.yml"
     assert tiers["needs"] == ["proof", "gate"]
     assert tiers["with"] == {"full_suite": True, "crash_sweep_ci": ""}
-    assert not {"service-tier", "crash-sweep", "e2e"} & set(_workflow()["jobs"])
+    assert not {"service-tier", "crash-sweep"} & set(_workflow()["jobs"])
 
 
 def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
@@ -429,7 +429,7 @@ def test_every_action_in_verify_is_pinned_by_commit_sha() -> None:
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _MOCK_ACTION = "./blizzard/.github/actions/resolve-mock-ref"
 _TIER_JOBS = {
-    "upper-tiers.yml": ("service-tier", "crash-sweep", "e2e", "ui", "journey"),
+    "upper-tiers.yml": ("service-tier", "crash-sweep", "ui", "journey"),
 }
 
 

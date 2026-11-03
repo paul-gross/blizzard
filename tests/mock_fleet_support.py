@@ -23,7 +23,7 @@ from tests.fleet_world import REPO_NAME, scripted_build_prompt
 from tests.runner_join import add_runner, runner_spawn_env
 from tests.support import daemon_log_sink, shared_daemon_log_dir
 
-# The service tier's own gate — independent of BLIZZARD_E2E so a run can select one tier.
+# The service tier's own gate — independent of the other tiers' gates so a run can select one tier.
 SERVICE_ENABLED = os.environ.get("BLIZZARD_SERVICE") == "1"
 
 service_gate = pytest.mark.skipif(

@@ -1,5 +1,5 @@
 """Readers of the published trace dictionary (``contracts/traces/dictionary.json``) shared by the
-trace-contract unit tier and the e2e shape matcher, so neither restates what the dictionary says."""
+trace-contract unit tier and the other trace proofs, so none restates what the dictionary says."""
 
 from __future__ import annotations
 

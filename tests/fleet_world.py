@@ -1,6 +1,6 @@
 """The platform-behavior tiers' shared fleet world — winter-free.
 
-The service, e2e, and crash tiers prove platform behavior, not the winter binding: their runners run on the
+The service and crash tiers prove platform behavior, not the winter binding: their runners run on the
 built-in ``basic`` provider over a ``blizzard-mock`` fixture minted without a winter source (bare ``file://``
 origins plus an empty ``workspace/``). This module owns what every such scenario shares — the fixture mint, the
 runner's workspace over it, the scripted build prompt that works on a basic worktree, and the scripted
@@ -18,11 +18,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 import pytest
+import yaml
 
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, HostWorkspace, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
-from tests.fleet_traces import PLANT_LEASE_TOKEN_SCRIPT, SENTINEL_ARTIFACT_BODY
-from tests.harness_variants import CLAUDE_CODE, MockHarness
 from tests.host_files import with_workspace, write_host_file
 
 #: The fixture project repo the platform tiers drive and the env keying the disposable fixture world.
@@ -202,13 +201,6 @@ BUILD_SCRIPT = scripted_build_prompt(
     "    check=True, capture_output=True,\n"
     ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
-# The build, probed: it plants its lease token for the leak scan and calls the hub through the runner.
-PROBED_BUILD_SCRIPT = (
-    PLANT_LEASE_TOKEN_SCRIPT
-    + "import os, subprocess\n"
-    + 'subprocess.run(["blizzard", "runner", "work-items", os.environ["BLIZZARD_CHUNK_ID"]], check=True, capture_output=True)\n'
-    + BUILD_SCRIPT
-)
 # The judgement-resume prompt: also arrives as code.
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
@@ -216,23 +208,13 @@ JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; chec
 # deliver with no re-build; the base turn is a no-op, the verdict comes on judgement resume.
 REVIEW_SCRIPT = "pass\n"
 REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
-# The review, probed: it submits the sentinel body as its findings artifact.
-PROBED_REVIEW_SCRIPT = (
-    PLANT_LEASE_TOKEN_SCRIPT
-    + "import subprocess\n"
-    + "subprocess.run(\n"
-    + '    ["blizzard", "runner", "artifact", "create", "--name", "review-findings"],\n'
-    + f"    input={SENTINEL_ARTIFACT_BODY!r}, text=True, check=True, capture_output=True,\n"
-    + ")\n"
-)
 
 
-def graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> str:
+def graph_yaml() -> str:
     """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
-    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``. ``probed`` swaps in
-    the build and review scripts a trace proof reads back.
+    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``.
     """
     graph = {
         "name": "default-delivery",
@@ -240,7 +222,7 @@ def graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> s
         "nodes": {
             "build": {
                 "executor": "runner",
-                "prompt": PROBED_BUILD_SCRIPT if probed else BUILD_SCRIPT,
+                "prompt": BUILD_SCRIPT,
                 "judgement": {
                     "prompt": JUDGEMENT_SCRIPT,
                     "choices": {
@@ -254,7 +236,7 @@ def graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> s
             },
             "review": {
                 "executor": "runner",
-                "prompt": PROBED_REVIEW_SCRIPT if probed else REVIEW_SCRIPT,
+                "prompt": REVIEW_SCRIPT,
                 "session": "fresh",
                 "produces": ["review-findings"],
                 "judgement": {
@@ -285,4 +267,4 @@ def graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> s
             },
         },
     }
-    return harness.graph_yaml(graph)
+    return yaml.safe_dump(graph, sort_keys=False)

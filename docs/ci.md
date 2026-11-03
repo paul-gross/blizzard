@@ -1,6 +1,6 @@
 # CI
 
-The policy behind CI — the branch and release model, one repo one wheel, the six test tiers — is owned by
+The policy behind CI — the branch and release model, one repo one wheel, the five test tiers — is owned by
 blizzard-context's
 [`verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md); this
 file is the in-repo operator reference for running it.
@@ -92,14 +92,14 @@ and `flip-without-note` (`pr` mode only) fails a flag turned from `off` to `on` 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep (`blizzard:crash-sweep`) over a two-repo checkout of
 `blizzard` + `blizzard-mock`; `pr.yml`, `push.yml` and `release.yml` all call it. Two inputs choose the shape. With
-`full_suite: true` it also runs the e2e acceptance loop (`blizzard:e2e`), the UI tier (`blizzard:ui`), the acceptance
-journey (`blizzard:journey`), and the hub image and reference compose smokes (`blizzard:image-smoke`,
-`blizzard:compose-smoke`) as parallel jobs; `crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value
-the full one. `pr.yml` and `release.yml` pass `full_suite: true` and the full sweep; `push.yml` keeps the service tier
-and the bounded sweep, since the `edge` channel is not held behind e2e and an admin's direct push is ungated by design.
-The two smokes build their own wheel and need only docker, compose v2, node and uv, not the mock. A leading `mock-ref`
-job resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch a tag run,
-a release-line pull request, and a `master` run each prove against, and when it fails — is owned by
+`full_suite: true` it also runs the UI tier (`blizzard:ui`), the acceptance journey (`blizzard:journey`), and the hub
+image and reference compose smokes (`blizzard:image-smoke`, `blizzard:compose-smoke`) as parallel jobs;
+`crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value the full one. `pr.yml` and `release.yml` pass
+`full_suite: true` and the full sweep; `push.yml` keeps the service tier and the bounded sweep, since the `edge` channel
+is not held behind the full suite and an admin's direct push is ungated by design. The two smokes build their own wheel
+and need only docker, compose v2, node and uv, not the mock. A leading `mock-ref` job resolves the mock once, and every
+tier checks out that commit. The resolution — which mock tag or branch a tag run, a release-line pull request, and a
+`master` run each prove against, and when it fails — is owned by
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
 `release.yml`'s tier jobs resolve through too. The tiers are winter-free: their runners use the built-in `basic`
 provider over a fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests
@@ -111,13 +111,13 @@ revision is more than 30 days old report as skips in `uv run pytest -n auto`; se
 
 Locally the mock-backed tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`). One task
 reproduces the unconditional pull-request tiers: `mise run gate-full` (`blizzard:gate-full`) runs the merge gate, then
-`service-test`, the full `crash-sweep`, `e2e`, `ui`, `journey`, `image-smoke` and `compose-smoke` serially, since the
-smokes bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on
-any red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
+`service-test`, the full `crash-sweep`, `ui`, `journey`, `image-smoke` and `compose-smoke` serially, since the smokes
+bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on any
+red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
 `mise run rehearsal` for a release cut (both need `gh` and Postgres).
 
 Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
-`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `ui`, `journey`, `image-smoke` and
+`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `ui`, `journey`, `image-smoke` and
 `compose-smoke` tasks can also run alone.
 
 The service tier's Playwright half requires the pinned `otelcol-contrib` for its collector trace tests. Run it locally
@@ -125,11 +125,10 @@ with
 `mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner --project=harness-actions`;
 mise installs the collector on first use. CI caches and installs the same tool for each Playwright shard.
 
-**Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
-tag run the e2e job took 1453s, the full crash sweep 837s, the service tier 613s, and the merge gate's pytest shards
-about 1000s. Measured locally, the journey, a Playwright project, takes about 70s and each smoke about 80s on a warm
-docker cache, so none adds to the critical path. A pull request therefore finishes in roughly 25 minutes plus runner
-queueing, against about 17 without e2e. A release cut adds the upgrade rehearsal after its wheel build.
+**Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: the merge gate's
+pytest shards. On the `v0.2.0` tag run those took about 1000s, the full crash sweep 837s, and the service tier 613s.
+Measured locally, the journey, a Playwright project, takes about 70s and each smoke about 80s on a warm docker cache, so
+none adds to the critical path. A release cut adds the upgrade rehearsal after its wheel build.
 
 The winter binding's own tests are the `winter-binding` tier (`mise run winter-binding`, gated on
 `BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
@@ -146,26 +145,6 @@ workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes; the 
 minutes and UI in 3.3 minutes. The current four-shard measurements are below. These are local durations; authoritative
 CI timings arrive with the PR run. The merge gate's slowest pytest shard was about 20 minutes at preflight, and every
 measured service shard remains below it and the timeout.
-
-The following is sizing for remaining e2e ports, not a description of the current job. The initial serial e2e run
-measured 1746s across 25 fleet rows and 262s across 13 UI rows. These were allocation estimates, not measured Playwright
-times: they assigned each row to its profile and split the event log's 82s between fleet/actions and UI/default. The
-resulting profile budgets were:
-
-| Planned project | Estimated serial time |
-| --------------- | --------------------- |
-| Fleet default   | 1263s                 |
-| Fleet actions   | 223s                  |
-| Fleet egress    | 170s                  |
-| UI default      | 273s                  |
-| UI actions      | 10s                   |
-| UI auth         | 70s                   |
-
-Nine trace companions repeat one case's per-file average on fresh hubs, adding an estimated 243s across the fleet
-projects; tail-sampling remains in the acceptance row. As a cross-check, 60 retained fleet cases at about 6.6s host
-initialization plus 13s per whole test suggest 1176s before companions, below the adjusted 1656s serial-row allowance.
-If remaining ports cross the guard, use a fourth service shard and distribute trace companions across them. Every
-Playwright step must fit within 30 minutes; measured CI shard times decide whether another reshaping is needed.
 
 Final runner-tier measurement, with the Python original of every runner-tier test ported and `tests/service/` holding
 only the pytest half. A full `mise run playwright -- --project='service-*'` run, 10 workers on a 20-thread local machine
@@ -184,24 +163,22 @@ Measured port times, from the build's own Playwright run until the `ui (blizzard
 | `tests/ui/auth/login-session.spec.ts`     | UI auth | 13s                  |
 | `tests/ui/auth/runner-federation.spec.ts` | UI auth | 60s                  |
 
-UI auth totals 73s against its 70s estimate and the UI default project 52s against 273s, so no project nears the
-30-minute step.
+UI auth totals 73s and the UI default project 52s, so no project nears the 30-minute step.
 
-Each landed board port records its spec's time below. The nine board files took 192s serially in e2e, and the e2e roster
-itemizes no per-file time, so a row's estimate reads "not itemized" unless one is known. The measured time is the spec's
-local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time replaces it.
+Each landed board port records its spec's time below. The measured time is the spec's local `--workers=1` run until the
+`upper-tiers / ui (blizzard:ui)` job's time replaces it.
 
-| Ported spec                                     | Project    | Estimated    | Measured |
-| ----------------------------------------------- | ---------- | ------------ | -------- |
-| `tests/ui/project-lens.spec.ts`                 | UI default | not itemized | 1.5s     |
-| `tests/ui/actions/gardening-run-dialog.spec.ts` | UI actions | not itemized | 1.2s     |
-| `tests/ui/transcript-tab.spec.ts`               | UI default | not itemized | 1.5s     |
-| `tests/ui/triage-history.spec.ts`               | UI default | not itemized | 2.0s     |
-| `tests/ui/board-cost-live.spec.ts`              | UI default | not itemized | 6.3s     |
-| `tests/ui/glance-board.spec.ts`                 | UI default | not itemized | 12.8s    |
-| `tests/ui/graphs-diagram.spec.ts`               | UI default | not itemized | 4.0s     |
-| `tests/ui/runner-panel-live.spec.ts`            | UI default | not itemized | 8.1s     |
-| `tests/ui/board-browser.spec.ts`                | UI default | not itemized | 32.2s    |
+| Ported spec                                     | Project    | Measured |
+| ----------------------------------------------- | ---------- | -------- |
+| `tests/ui/project-lens.spec.ts`                 | UI default | 1.5s     |
+| `tests/ui/actions/gardening-run-dialog.spec.ts` | UI actions | 1.2s     |
+| `tests/ui/transcript-tab.spec.ts`               | UI default | 1.5s     |
+| `tests/ui/triage-history.spec.ts`               | UI default | 2.0s     |
+| `tests/ui/board-cost-live.spec.ts`              | UI default | 6.3s     |
+| `tests/ui/glance-board.spec.ts`                 | UI default | 12.8s    |
+| `tests/ui/graphs-diagram.spec.ts`               | UI default | 4.0s     |
+| `tests/ui/runner-panel-live.spec.ts`            | UI default | 8.1s     |
+| `tests/ui/board-browser.spec.ts`                | UI default | 32.2s    |
 
 On 2026-10-30,
 `mise run playwright -- --project=service-fleet basic-workspace.spec.ts checks-gate.spec.ts delivery-pr-ci.spec.ts post-merge-node.spec.ts runner-serves-default.spec.ts spike-terminal.spec.ts`
@@ -278,8 +255,8 @@ wheel.
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the whole
-suite as parallel real gate jobs: the service tier, the full crash sweep, e2e, ui, the journey and the two smokes, and
-on a release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
+suite as parallel real gate jobs: the service tier, the full crash sweep, ui, the journey and the two smokes, and on a
+release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
 [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
 not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
 runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's `versions/` directory also runs the
@@ -323,8 +300,8 @@ candidate to borrow from, so it runs the full suite; a candidate never borrows. 
 `actions: read`, with `contents: read` and nothing else. `wheel` checks out full history so `check-version-tag.sh` can
 hold the commit to `origin/release/X.Y`. Unless the proof is borrowed, the run executes the full suite — gate, the
 `compat` backstop, and `upper-tiers` called with `full_suite: true` and the **full** crash sweep (service tier, crash
-sweep, e2e, ui, journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.`
-tag alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `flag-lifecycle`
+sweep, ui, journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag
+alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `flag-lifecycle`
 (`release / flag lifecycle`) runs `blizzard-flag-lifecycle tag` with full history before any build, on every tag — a
 stable tag's borrowed-proof run included, which skips `gate` — and `build` waits on it. `compat`
 (`release / compatibility against supported releases`) runs `blizzard-compat --tag <version>` before any build: it

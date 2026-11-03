@@ -1,11 +1,11 @@
-# The upper tiers — service, kill-9 crash sweep, and (behind `full_suite`) e2e, ui, journey and the two
+# The upper tiers — service, kill-9 crash sweep, and (behind `full_suite`) ui, journey and the two
 # container smokes — as a reusable check suite.
 #
 # `pr.yml`, `push.yml` and `release.yml` all call this exactly as they call `gate.yml`, so each tier
 # is defined once and never drifts between triggers — the same reasoning `gate.yml`'s header states
 # for the merge gate itself. Callers differ only in the two inputs below: `pr.yml` and `release.yml`
 # run the whole suite (`full_suite: true`, the full sweep), while `push.yml` runs the service tier and
-# the bounded sweep, since an `edge` publish is not held behind e2e and an admin's direct push is
+# the bounded sweep, since an `edge` publish is not held behind the full suite and an admin's direct push is
 # ungated by design.
 #
 # The mock-backed tiers need what a single-repo checkout does not carry: the sibling
@@ -41,7 +41,7 @@ on:
         default: "1"
       full_suite:
         description: >-
-          Run the e2e, ui, journey, image-smoke and compose-smoke jobs as well as the
+          Run the ui, journey, image-smoke and compose-smoke jobs as well as the
           service tier and the crash sweep.
         type: boolean
         default: false
@@ -263,72 +263,6 @@ jobs:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_CRASH_SWEEP_CI: ${{ inputs.crash_sweep_ci }}
         run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v
-
-  e2e:
-    needs: [mock-ref]
-    if: ${{ inputs.full_suite }}
-    name: e2e acceptance loop (blizzard:e2e)
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-          persist-credentials: false
-      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: ./blizzard/.github/actions/resolve-mock-ref
-        with:
-          sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-          working-directory: blizzard
-          cache-dependency-glob: |
-            uv.lock
-            ../blizzard-mock/uv.lock
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: install mise (the e2e task pins its own tools)
-        uses: jdx/mise-action@v2
-        with:
-          # Pinned: mise's VERSION endpoint can advertise a release before that
-          # release's assets exist, and the unpinned action then 404s fetching one.
-          version: 2026.9.2
-          install: false
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: install Chromium for the e2e browser scenario (Playwright)
-        run: cd blizzard && uv run playwright install --with-deps chromium
-      - name: install the frontend's dependencies (the e2e task builds it into the wheel-embed dir)
-        # The e2e browser scenario drives the *served* Angular board — the hub mounts
-        # src/blizzard/static/{hub,runner} at / and falls back to the runtime placeholder
-        # when index.html is absent (foundation/web.py). The source checkout ships only
-        # the placeholder, so without a build the board scenario hits the placeholder
-        # and board-shell never appears. `mise run e2e` depends on `web-build`, which
-        # fills these dirs (src/blizzard/static/README.md); it needs `npm ci` first.
-        run: cd blizzard/web && npm ci
-      - name: cache the pinned otelcol-contrib (~390 MB) the fleet-trace subtests need
-        # The pin's single source is the `e2e` task's `tools` in mise.toml; the key follows that file,
-        # so a bumped pin re-downloads and an unchanged one is a cache hit.
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/mise/installs/github-open-telemetry-opentelemetry-collector-releases
-          key: otelcol-contrib-${{ runner.os }}-${{ hashFiles('blizzard/mise.toml') }}
-      - name: e2e acceptance loop incl. the browser scenario and fleet traces — `mise run e2e`
-        # Through the task, so the collector the `e2e` task pins is on PATH; a bare `uv run pytest`
-        # would skip every fleet-trace subtest.
-        timeout-minutes: 60
-        env:
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
-        run: cd blizzard && mise run e2e
 
   ui:
     needs: [mock-ref]

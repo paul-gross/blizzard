@@ -1,7 +1,7 @@
 """Scaffolding for the kill-9 sweep (``blizzard:crash-sweep``).
 
 The sweep runs the daemons as **real subprocesses** so a crash point can SIGKILL a whole
-process the way ``kill -9`` would. It reuses the e2e stack (mock forge + mock harness +
+process the way ``kill -9`` would. It reuses the platform stack (mock forge + mock harness +
 fixture workspace + real hub/runner) and arms a registry crash point via the environment.
 """
 
