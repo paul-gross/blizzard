@@ -27791,7 +27791,7 @@
     },
     "/api/fleet/host/runners/{runner_id}/retire": {
       "post": {
-        "description": "Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does \u2014 409 naming each held\nchunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a\nfirst retire whose runner gained a newer retirement or reinstatement after it was read records no fact and is\nrefused 409.",
+        "description": "Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does \u2014 409 naming each held\nchunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a\nretire \u2014 a re-run included \u2014 whose runner was retired or reinstated after it was read is refused 409, revoking no\ntoken and releasing no route the runner holds since; what it committed first is still published.",
         "operationId": "retire_host_runner_api_fleet_host_runners__runner_id__retire_post",
         "parameters": [
           {
@@ -30010,7 +30010,7 @@
     },
     "/api/hosts/{host_id}/retire": {
       "post": {
-        "description": "Retire a host \u2014 its token is revoked and every runner under it retired; 409 naming each runner's held chunks\nunless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host\nretired by another retire while this one was decided is refused 409; run it again.",
+        "description": "Retire a host \u2014 its token is revoked and every runner under it retired; 409 naming each runner's held chunks\nunless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host\nretired by another retire while this one was decided is refused 409, and so is a retire reaching a runner retired\nor reinstated since the runners under the host were read, which leaves that runner's token and chunks alone; what\nthe retire committed is still published. Run it again.",
         "operationId": "retire_host_api_hosts__host_id__retire_post",
         "parameters": [
           {
@@ -34175,7 +34175,7 @@
     },
     "/api/runners/{runner_id}/reinstate": {
       "post": {
-        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided.",
+        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left\nheld is released first, as the retire's own release pass would, and its ``detached`` frame published.",
         "operationId": "reinstate_runner_api_runners__runner_id__reinstate_post",
         "parameters": [
           {
@@ -34281,7 +34281,7 @@
     },
     "/api/runners/{runner_id}/retire": {
       "post": {
-        "description": "Retire a runner \u2014 its token is revoked and its claims and registrations refused;\n409 naming each held chunk unless ``force``, which releases them. Re-running on a\nretired runner re-runs the release pass. A first retire whose runner gained a newer\nretirement or reinstatement after it was read records no fact and is refused 409; run it\nagain.",
+        "description": "Retire a runner \u2014 its token is revoked and its claims and registrations refused;\n409 naming each held chunk unless ``force``, which releases them. Re-running on a\nretired runner re-runs the release pass. A retire \u2014 a re-run included \u2014 whose runner\nwas retired or reinstated after it was read is refused 409, revoking no token and\nreleasing no route the runner holds since; what it committed first is still published.\nRun it again.",
         "operationId": "retire_runner_api_runners__runner_id__retire_post",
         "parameters": [
           {
@@ -34334,7 +34334,7 @@
     },
     "/api/runners/{runner_id}/token-revocations": {
       "post": {
-        "description": "Revoke a runner's token \u2014 it stays added and must be re-enrolled; 409 when unenrolled.",
+        "description": "Revoke a runner's token \u2014 it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired\nor reinstated while the revocation was decided.",
         "operationId": "revoke_runner_token_api_runners__runner_id__token_revocations_post",
         "parameters": [
           {

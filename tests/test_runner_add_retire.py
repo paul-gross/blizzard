@@ -194,12 +194,29 @@ def test_retire_of_a_runner_holding_chunks_is_refused_leaving_its_entry_and_name
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _registered(tmp_path, fake_init_hub)
-    fake_init_hub.admin.retire_refusal = HostRunnerRetireRefused("409", detail="runner holds ch_1")
+    fake_init_hub.admin.retire_refusal = HostRunnerRetireRefused(
+        "409", detail="runner rn_1 holds 1 chunk(s): ch_1 (environments: e1) — retire with --force to release"
+    )
 
     result = _run(fake_init_hub, "retire", "--runner", "runner-local", "--dir", str(root))
 
     assert result.exit_code != 0
     assert "ch_1" in result.output and "--force" in result.output
+    assert _runner_names(root) == ["runner-local"]
+
+
+def test_retire_of_a_runner_whose_lifecycle_moved_at_the_hub_says_so_leaving_its_entry(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    fake_init_hub.admin.retire_refusal = HostRunnerRetireRefused(
+        "409", detail="runner rn_1 changed after it was read — run it again"
+    )
+
+    result = _run(fake_init_hub, "retire", "--runner", "runner-local", "--dir", str(root))
+
+    assert result.exit_code != 0
+    assert "run it again" in result.output and "holds chunks" not in result.output
     assert _runner_names(root) == ["runner-local"]
 
 

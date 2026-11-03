@@ -135,7 +135,8 @@ A revoked token is refused with a `401` on every fleet route. The hub records ea
 so a token revoked once stays dead even after the runner is enrolled afresh.
 
 `blizzard hub runner revoke-token <id>` revokes the current token and leaves the runner added; it refuses with a `409`
-when the runner holds no token. The runner is refused until `enroll` mints a new one.
+when the runner holds no token, and when the runner was retired or reinstated while the revocation was deciding. The
+runner is refused until `enroll` mints a new one.
 
 `blizzard hub runner retire` revokes the runner's token as part of retiring it
 ([control-verbs.md](./control-verbs.md#runner-level-brakes)). `enroll` on a retired runner refuses with a `409` naming
@@ -178,13 +179,14 @@ flagged subscription.
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
 new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash
 stays dead, as for a runner. `runner-host retire <host_id>` revokes the token and retires the host, then retires each
-runner under the host when its retirement lands; a runner moved to another host before then is left alone. It refuses
-while a runner still holds routes unless `--force` is given, and `--by` records who retired it. Between the host's
-retirement and its last runner's, a runner is still held but its host is gone: `release` of a runner the retire has not
-retired yet refuses with a `409` naming the host, and running `runner-host retire` again finishes the retire, after
-which the runner can be released. `enroll` on a retired host refuses with a `409`. When another verb changes a host's or
-runner's lifecycle while `adopt`, `release`, `retire`, or `add --adopt` is deciding, the verb writes nothing and answers
-`409`; running it again decides it on the current state.
+runner under the host when its retirement lands; a runner moved to another host before then is left alone, and one
+released and reinstated while the retire works through the others makes it answer `409`, leaving that runner's fresh
+token and chunks alone. It refuses while a runner still holds routes unless `--force` is given, and `--by` records who
+retired it. Between the host's retirement and its last runner's, a runner is still held but its host is gone: `release`
+of a runner the retire has not retired yet refuses with a `409` naming the host, and running `runner-host retire` again
+finishes the retire, after which the runner can be released. `enroll` on a retired host refuses with a `409`. When
+another verb changes a host's or runner's lifecycle while `adopt`, `release`, `retire`, or `add --adopt` is deciding,
+the verb writes nothing and answers `409`; running it again decides it on the current state.
 
 The writes require the `runner:retire` permission and the reads `fleet:view`.
 
@@ -246,10 +248,12 @@ host stopped, `retire` forgets the row itself, before it removes the `[[runner]]
 host still configures and the next start or `init` serves the rest. With the host running, `retire` writes nothing to
 the store: the host halts the runner at its next tick, the hub refusing its token, and forgets the row then, which
 `retire` says. A runner still holding chunks refuses the retire, naming them; `--force` releases them. The runner's
-other rows stay in the host's store, inert. `--runner` also takes the id of a runner the host file no longer configures
-but the store's identity row still names, such as one a host crash left behind: with the host stopped it retires that
-runner at the hub and forgets the row, and a running host refuses it, naming that it must be stopped first. Both verbs
-refuse a host holding no host token, naming `blizzard hub runner-host add`.
+other rows stay in the host's store, inert. A runner retired or reinstated at the hub while `retire` is deciding refuses
+it with a `409`; run it again ([control-verbs.md](./control-verbs.md#retire-and-reinstate)). `--runner` also takes the
+id of a runner the host file no longer configures but the store's identity row still names, such as one a host crash
+left behind: with the host stopped it retires that runner at the hub and forgets the row, and a running host refuses it,
+naming that it must be stopped first. Both verbs refuse a host holding no host token, naming
+`blizzard hub runner-host add`.
 
 `GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
 `registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.

@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.model import Chunk, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, NotRouted
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
 pytestmark = pytest.mark.unit
@@ -64,6 +65,7 @@ class _FakeChunkRepo:
 
     released: list[tuple[str, datetime]] = field(default_factory=list)
     causes: list[RouteReleaseCause | None] = field(default_factory=list)
+    expected: list[RunnerLifecycleVersion | None] = field(default_factory=list)
 
     def record_route_released_locked(
         self,
@@ -73,9 +75,11 @@ class _FakeChunkRepo:
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
+        expected_runner: RunnerLifecycleVersion | None = None,
     ) -> None:
         self.released.append((chunk_id, at))
         self.causes.append(cause)
+        self.expected.append(expected_runner)
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DetachService should not touch {name!r}")
@@ -134,6 +138,7 @@ def test_detach_records_its_own_cause() -> None:
 def test_retirements_release_records_its_own_cause() -> None:
     service, repo = _service(_route())
 
-    service.release_held(_CHUNK, runner_id="rn_1")
+    service.release_held(_CHUNK, runner=RunnerLifecycleVersion("rn_1", 4))
 
     assert repo.causes == [RouteReleaseCause.RETIREMENT]
+    assert repo.expected == [RunnerLifecycleVersion("rn_1", 4)]

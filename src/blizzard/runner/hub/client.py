@@ -122,9 +122,10 @@ class HostAddRefused(HubClientError):
 
 
 class HostRunnerRetireRefused(HubClientError):
-    """The hub refused to retire a runner under the host because it still holds chunks (409) — terminal
-    for the caller unless it retires again with ``force``. ``detail`` is the hub's refusal text, naming
-    each held chunk. Still a :class:`HubClientError`."""
+    """The hub refused to retire a runner under the host (409): it still holds chunks, which a retire with
+    ``force`` releases, or it was retired or reinstated at the hub while the retire was decided, which a retire
+    run again decides on the current state. ``detail`` is the hub's refusal text, naming each held chunk or the
+    runner that changed. Still a :class:`HubClientError`."""
 
     def __init__(self, message: str, *, detail: str) -> None:
         super().__init__(message)
@@ -780,6 +781,6 @@ class IHostHubClient(IHostReporter, IHostRecordReader, IHostFactPusher, IHostRun
 
     def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
         """``POST /api/fleet/host/runners/{runner_id}/retire`` — retire a runner under the host. The hub
-        refuses one that still holds chunks unless ``force`` releases them, raising
-        :class:`HostRunnerRetireRefused` naming them."""
+        refuses one that still holds chunks unless ``force`` releases them, and one retired or reinstated
+        while the retire was decided, raising :class:`HostRunnerRetireRefused` with its refusal."""
         ...

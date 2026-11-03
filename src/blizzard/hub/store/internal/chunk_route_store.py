@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -30,6 +31,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     routes_of_conn,
 )
 from blizzard.hub.store.internal.high_water import advance_high_water
+from blizzard.hub.store.internal.lifecycle_versions import require_runner_lifecycles
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import (
     chunk_handle_connection,
@@ -158,10 +160,12 @@ class ChunkRouteStore:
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
+        expected_runner: RunnerLifecycleVersion | None = None,
     ) -> int:
-        return self._record_route_released_conn(
-            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, at=at, cause=cause, reason=reason
-        )
+        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        if expected_runner is not None:
+            require_runner_lifecycles(conn, {expected_runner.runner_id: expected_runner.version})
+        return self._record_route_released_conn(conn, chunk_id, at=at, cause=cause, reason=reason)
 
     def _record_route_released_conn(
         self, conn: Connection, chunk_id: str, *, at: datetime, cause: RouteReleaseCause | None, reason: str | None

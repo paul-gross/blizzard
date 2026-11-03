@@ -1319,8 +1319,8 @@ export const addHostRunnerApiFleetHostRunnersPost = <ThrowOnError extends boolea
  *
  * Retire a runner under the calling host, as ``POST /api/runners/{runner_id}/retire`` does — 409 naming each held
  * chunk unless ``force``. A runner that does not stand under the calling host is refused as unknown (404), and a
- * first retire whose runner gained a newer retirement or reinstatement after it was read records no fact and is
- * refused 409.
+ * retire — a re-run included — whose runner was retired or reinstated after it was read is refused 409, revoking no
+ * token and releasing no route the runner holds since; what it committed first is still published.
  */
 export const retireHostRunnerApiFleetHostRunnersRunnerIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostData, ThrowOnError>): RequestResult<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses, RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostResponses, RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors, ThrowOnError>({
     url: '/api/fleet/host/runners/{runner_id}/retire',
@@ -1867,7 +1867,9 @@ export const releaseRunnersApiHostsHostIdReleasesPost = <ThrowOnError extends bo
  *
  * Retire a host — its token is revoked and every runner under it retired; 409 naming each runner's held chunks
  * unless ``force``, which releases them. Re-running on a retired host re-runs each runner's release pass. A host
- * retired by another retire while this one was decided is refused 409; run it again.
+ * retired by another retire while this one was decided is refused 409, and so is a retire reaching a runner retired
+ * or reinstated since the runners under the host were read, which leaves that runner's token and chunks alone; what
+ * the retire committed is still published. Run it again.
  */
 export const retireHostApiHostsHostIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireHostApiHostsHostIdRetirePostData, ThrowOnError>): RequestResult<RetireHostApiHostsHostIdRetirePostResponses, RetireHostApiHostsHostIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireHostApiHostsHostIdRetirePostResponses, RetireHostApiHostsHostIdRetirePostErrors, ThrowOnError>({
     url: '/api/hosts/{host_id}/retire',
@@ -2655,7 +2657,8 @@ export const pauseRunnerApiRunnersRunnerIdPausePost = <ThrowOnError extends bool
  * Reinstate Runner
  *
  * Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
- * under a retired host, and when its lifecycle moved while the reinstate was decided.
+ * under a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left
+ * held is released first, as the retire's own release pass would, and its ``detached`` frame published.
  */
 export const reinstateRunnerApiRunnersRunnerIdReinstatePost = <ThrowOnError extends boolean = false>(options: Options<ReinstateRunnerApiRunnersRunnerIdReinstatePostData, ThrowOnError>): RequestResult<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError> => (options.client ?? client).post<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/reinstate',
@@ -2685,9 +2688,10 @@ export const resumeRunnerApiRunnersRunnerIdResumePost = <ThrowOnError extends bo
  *
  * Retire a runner — its token is revoked and its claims and registrations refused;
  * 409 naming each held chunk unless ``force``, which releases them. Re-running on a
- * retired runner re-runs the release pass. A first retire whose runner gained a newer
- * retirement or reinstatement after it was read records no fact and is refused 409; run it
- * again.
+ * retired runner re-runs the release pass. A retire — a re-run included — whose runner
+ * was retired or reinstated after it was read is refused 409, revoking no token and
+ * releasing no route the runner holds since; what it committed first is still published.
+ * Run it again.
  */
 export const retireRunnerApiRunnersRunnerIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireRunnerApiRunnersRunnerIdRetirePostData, ThrowOnError>): RequestResult<RetireRunnerApiRunnersRunnerIdRetirePostResponses, RetireRunnerApiRunnersRunnerIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireRunnerApiRunnersRunnerIdRetirePostResponses, RetireRunnerApiRunnersRunnerIdRetirePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/retire',
@@ -2701,7 +2705,8 @@ export const retireRunnerApiRunnersRunnerIdRetirePost = <ThrowOnError extends bo
 /**
  * Revoke Runner Token
  *
- * Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled.
+ * Revoke a runner's token — it stays added and must be re-enrolled; 409 when unenrolled, and when it was retired
+ * or reinstated while the revocation was decided.
  */
 export const revokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPost = <ThrowOnError extends boolean = false>(options: Options<RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostData, ThrowOnError>): RequestResult<RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponses, RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors, ThrowOnError> => (options.client ?? client).post<RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponses, RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/token-revocations',

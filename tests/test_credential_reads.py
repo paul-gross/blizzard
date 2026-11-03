@@ -83,7 +83,7 @@ def test_a_runner_token_resolves_to_its_own_tenants_runner(tmp_path: Path) -> No
 def test_a_revoked_token_names_the_runner_and_tenant_it_was_issued_in(tmp_path: Path) -> None:
     core, _, first = _two_tenants(tmp_path)
     core.open(StoreScope(first)).registry.rotate_token(TokenRotation("rn_a", "hash-a2", at=_AT, by="admin"))
-    core.open(StoreScope(_SECOND)).registry.revoke_token("rn_b", at=_AT, by="admin")
+    core.open(StoreScope(_SECOND)).registry.revoke_token("rn_b", at=_AT, by="admin", expected_lifecycle=0)
     credentials = core.hub_scoped_reads.credentials
 
     assert credentials.revoked_token_runner("hash-a") == TenantRunner(first, "rn_a")

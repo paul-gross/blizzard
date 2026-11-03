@@ -1043,6 +1043,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     fleet = FleetService(
         registry=registry_store,
         hosts=stores.hosts,
+        transactions=stores.transactions,
         routes=chunk_route,
         records=chunk_record,
         facts=chunk_facts,

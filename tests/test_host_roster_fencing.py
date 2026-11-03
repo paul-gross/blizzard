@@ -60,15 +60,17 @@ def _host_facts(hub: HubHarness, host_id: str) -> int:
         return int(conn.execute(store.select(facts, func.count()).where(facts.c.host_id == host_id)).scalar_one())
 
 
-def _once_before(monkeypatch: pytest.MonkeyPatch, target: object, name: str, competitor: Callable[[], None]) -> None:
-    """Patch ``target.name`` so its first call runs ``competitor`` to completion just before it writes; every later
-    call, the competitor's own included, writes as it would."""
+def _once_before(
+    monkeypatch: pytest.MonkeyPatch, target: object, name: str, competitor: Callable[[], None], *, nth: int = 1
+) -> None:
+    """Patch ``target.name`` so its ``nth`` call runs ``competitor`` to completion just before it runs; every other
+    call, the competitor's own included, runs as it would."""
     original = getattr(target, name)
-    armed = [True]
+    calls = [0]
 
     def compete_first(*args: Any, **kwargs: Any) -> Any:
-        if armed:
-            armed.clear()
+        calls[0] += 1
+        if calls[0] == nth:
             competitor()
         return original(*args, **kwargs)
 
@@ -258,7 +260,9 @@ def test_a_roster_runner_retired_before_the_loop_reaches_it_interrupts_the_retir
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     retire_runner = lambda: _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "other"}))  # noqa: E731
-    _once_before(monkeypatch, hub.services.registry, "record_lifecycle", retire_runner)
+    # The host's own holdings read is the first; the second is the loop's retire of rn_a deciding, just before it
+    # writes.
+    _once_before(monkeypatch, hub.services.fleet, "holdings", retire_runner, nth=2)
     since = _last_event_id(hub)
 
     interrupted = _retire_host(hub, hosted)
@@ -280,7 +284,8 @@ def test_a_runner_retire_that_loses_its_fact_write_is_refused(
     headers = {"Authorization": f"Bearer {added['token']}"}
     runner_id = _ok(hub.client.post("/api/fleet/host/runners", json={"name": "r"}, headers=headers), 201)["runner_id"]
     competitor = lambda: _ok(hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "other"}))  # noqa: E731
-    _once_before(monkeypatch, hub.services.registry, "record_lifecycle", competitor)
+    # The retire's holdings read is the last read it decides on before its fact write.
+    _once_before(monkeypatch, hub.services.fleet, "holdings", competitor)
 
     if door == "operator":
         refused = hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "op"})

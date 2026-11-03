@@ -11,6 +11,7 @@ from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
 
@@ -65,10 +66,13 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
+        expected_runner: RunnerLifecycleVersion | None = None,
     ) -> int:
         """Append the ``route.released`` fact, on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), recording which write gave tenure back and, on a
-        release, the caller's reason. Returns the freshly-written ``route_released.id``."""
+        release, the caller's reason. With ``expected_runner`` it lands only while that runner
+        stands at that lifecycle version — :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`
+        otherwise, appending nothing. Returns the freshly-written ``route_released.id``."""
         ...
 
     def record_route_token_locked(
