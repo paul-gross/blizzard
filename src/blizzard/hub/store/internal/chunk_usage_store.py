@@ -16,7 +16,9 @@ from blizzard.hub.domain.chunk.model import UsageTotal
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.host_registry_store import lock_host_registry
 from blizzard.hub.store.internal.project_reach import chunks_of_project
+from blizzard.hub.store.internal.runner_registry_store import refuse_retired_runner_or_host
 from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
@@ -80,6 +82,8 @@ class ChunkUsageStore:
         at: datetime,
     ) -> None:
         with self._store.write("record_usage") as conn:
+            lock_host_registry(conn)
+            refuse_retired_runner_or_host(conn, runner_id, action="fact ingest")
             conn.execute(
                 self._store.insert(s.usage_facts).values(
                     chunk_id=chunk_id,

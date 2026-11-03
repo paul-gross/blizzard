@@ -153,6 +153,45 @@ def test_usage_applied_before_retirement_is_marked_and_not_replayed(tmp_path: Pa
     assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
 
 
+def test_retirement_between_ingest_check_and_usage_write_refuses_without_advancing_mark(
+    tmp_path: Path, monkeypatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    record = hub.services.facts._usage.record_usage
+    registry = hub.services.registry
+    assert isinstance(registry, RunnerRegistryStore)
+
+    def retire_then_record(*args, **kwargs):
+        registry.record_lifecycle("r1", retired=True, at=hub.services.clock.now(), by="test")
+        return record(*args, **kwargs)
+
+    payload = _usage_payload(node_id, epoch=1, cost_usd=0.10)
+    payload["chunk_id"] = chunk_id
+    with monkeypatch.context() as patch:
+        patch.setattr(hub.services.facts._usage, "record_usage", retire_then_record)
+        response = hub.client.post(
+            "/api/fleet/events",
+            json={"runner_id": "r1", "facts": [{"seq": 2, "kind": "usage.recorded", "payload": payload}]},
+        )
+    assert response.status_code == 403
+    assert hub.services.facts._route.runner_high_water("r1") == 1
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["usage"] == []
+
+    registration = registry.get_runner("r1")
+    assert registration is not None
+    registry.record_lifecycle(
+        "r1",
+        retired=False,
+        at=hub.services.clock.now(),
+        by="test",
+        expected_generation=registration.lifecycle_generation,
+    )
+    assert _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2)["applied"] == [2]
+    assert len(hub.client.get(f"/api/chunks/{chunk_id}").json()["usage"]) == 1
+
+
 def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(tmp_path: Path) -> None:
     """The mark is written after every applied fact, not once after the whole batch: a crash
     partway through a multi-fact push leaves it at the last fact whose write actually landed,
