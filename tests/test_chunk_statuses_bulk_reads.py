@@ -160,9 +160,11 @@ class _CountingFactsStore(ChunkFactsStore):
         self.status_facts_for_calls = 0
         self.load_facts_calls = 0
 
-    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         self.status_facts_for_calls += 1
-        return super().status_facts_for(chunk_ids)
+        return super().status_facts_for(chunk_ids, transaction=transaction)
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1

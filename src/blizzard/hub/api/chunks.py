@@ -803,9 +803,8 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    statuses = services.chunks.facts.load_live_statuses()
     try:
-        promoted_id = services.promote.promote(chunk, statuses=statuses, placement=placement)
+        promoted_id = services.promote.promote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (ChunkNotPromotable, NotInList) as exc:
@@ -836,9 +835,8 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    statuses = services.chunks.facts.load_live_statuses()
     try:
-        demoted_id = services.demote.demote(chunk, statuses=statuses, placement=placement)
+        demoted_id = services.demote.demote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (ChunkNotDemotable, NotInList) as exc:

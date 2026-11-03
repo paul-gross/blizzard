@@ -68,7 +68,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
-from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK, IReadChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
@@ -198,6 +198,7 @@ from blizzard.hub.store.internal.transcript_event_store import TranscriptEventSt
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_host_stores, build_stores
@@ -1645,10 +1646,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_ready_2 = "ch_hub_ready_2"
     _mint(chunk_ready_1, "1001", at=_ht(30))
     _mint(chunk_ready_2, "1002", at=_ht(31))
-    with write.exclusive.locked([chunk_ready_1]) as handle:
-        write.queue.record_promote_with_position_locked(handle, chunk_ready_1, position=1.0, at=_ht(32))
-    with write.exclusive.locked([chunk_ready_2]) as handle:
-        write.queue.record_promote_with_position_locked(handle, chunk_ready_2, position=2.0, at=_ht(33))
+    transactions = HubTransactions(hub_store_connections(engine))
+    for chunk_id, position, at in ((chunk_ready_1, 1.0, _ht(32)), (chunk_ready_2, 2.0, _ht(33))):
+        with transactions.begin() as transaction:
+            locked = transaction.lock_set(chunks=[chunk_id], keys=[READY_RANKING_LOCK])
+            write.queue.record_promote_with_position(chunk_id, position=position, at=at, transaction=locked)
     chunk_not_ready = "ch_hub_not_ready"
     _mint(chunk_not_ready, "1003", at=_ht(34))
 

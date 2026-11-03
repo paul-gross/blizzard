@@ -13,17 +13,19 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.operations.queue import (
+    BOTH_LISTS,
     TAIL_PLACEMENT,
     Placement,
     QueueList,
+    ranking_lock_set,
     read_ranking,
     resolve_landing,
-    write_positions_fn,
+    write_positions,
 )
 
 
@@ -61,15 +63,20 @@ def withheld_by_pause(facts_by_id: Mapping[str, ChunkFacts]) -> list[str]:
 
 
 def ready_members(
-    record: IReadChunkRecordRepository, facts: IReadChunkFactsRepository, *, statuses: Mapping[str, ChunkStatus]
+    record: IReadChunkRecordRepository,
+    facts: IReadChunkFactsRepository,
+    *,
+    statuses: Mapping[str, ChunkStatus],
+    transaction: Transaction | None = None,
 ) -> list[Chunk]:
     """The chunks the ``ready`` queue ranks: the ready chunks plus :func:`withheld_by_pause`'s.
-    ``statuses`` is the caller's already-derived fleet statuses."""
-    candidates = record.list_ready(statuses=statuses)
+    ``statuses`` is the caller's already-derived fleet statuses, read in ``transaction`` when one is
+    given, as every read here then is."""
+    candidates = record.list_ready(statuses=statuses, transaction=transaction)
     paused_ids = [chunk_id for chunk_id, status in statuses.items() if status is ChunkStatus.PAUSED]
     if paused_ids:
-        withheld = withheld_by_pause(facts.status_facts_for(paused_ids))
-        candidates = [*candidates, *record.get_many(withheld).values()]
+        withheld = withheld_by_pause(facts.status_facts_for(paused_ids, transaction=transaction))
+        candidates = [*candidates, *record.get_many(withheld, transaction=transaction).values()]
     return candidates
 
 
@@ -82,53 +89,47 @@ class PromoteService:
         record: IReadChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
         facts: IReadChunkFactsRepository,
-        exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._record = record
         self._queue = queue
         self._facts = facts
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
         self._clock = clock
 
-    def promote(
-        self,
-        chunk: Chunk,
-        *,
-        statuses: Mapping[str, ChunkStatus],
-        placement: Placement = TAIL_PLACEMENT,
-    ) -> int | None:
+    def promote(self, chunk: Chunk, *, placement: Placement = TAIL_PLACEMENT) -> int | None:
         """Append the ``chunk.promoted`` fact and stamp an explicit ready-queue position, in one
-        transaction, as :func:`promotion_writes` decides over facts read under the row lock:
-        ``None`` for a replay on a currently promoted chunk, :class:`ChunkNotPromotable` for a
-        terminal one, :class:`ChunkNotFound` for a chunk gone under the lock; otherwise stamps
-        the landing :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the
-        tail, the top, or right after ``placement``'s anchor — and returns the fresh ``chunk_promoted.id``.
+        unit, as :func:`promotion_writes` decides over the chunk's facts read in it: ``None`` for a
+        replay on a currently promoted chunk, :class:`ChunkNotPromotable` for a terminal one,
+        :class:`ChunkNotFound` for a chunk gone; otherwise stamps the landing
+        :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the tail, the top, or
+        right after ``placement``'s anchor — and returns the fresh ``chunk_promoted.id``.
 
-        The landing ranks other chunks — a different aggregate — so it is resolved before the
-        lock from ``statuses``; the chunk's own promotability is not."""
-        pre_lock = self._facts.load_facts(chunk.chunk_id)
-        if pre_lock is not None and pre_lock.promoted:
-            return None  # a replay needs no lock
-        now = self._clock.now()
-        candidates = ready_members(self._record, self._facts, statuses=statuses)
-        landing = resolve_landing(
-            read_ranking(self._queue, candidates),
-            QueueList.READY,
-            candidates,
-            chunk_id=chunk.chunk_id,
-            placement=placement,
-            statuses=statuses,
-        )
-        if landing.renormalized:
-            write_positions_fn(self._queue, QueueList.READY)(list(landing.renormalized), at=now)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        The unit locks the chunk, the anchor, and both lists' rankings — the chunk leaves one and joins
+        the other — before any read, so the landing ranks the queue as it stands when the promote
+        commits (``bzh:write-reestablishes-read``); a refusal commits nothing, the renormalization a
+        spent gap needs included."""
+        with self._transactions.begin() as transaction:
+            locked = ranking_lock_set(transaction, BOTH_LISTS, [chunk.chunk_id, placement.after_chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not promotion_writes(chunk.chunk_id, facts):
                 return None
-            return self._queue.record_promote_with_position_locked(
-                handle, chunk.chunk_id, position=landing.position, at=now
+            statuses = self._facts.load_live_statuses(transaction=locked)
+            candidates = ready_members(self._record, self._facts, statuses=statuses, transaction=locked)
+            landing = resolve_landing(
+                read_ranking(self._queue, candidates, transaction=locked),
+                QueueList.READY,
+                candidates,
+                chunk_id=chunk.chunk_id,
+                placement=placement,
+                statuses=statuses,
+            )
+            now = self._clock.now()
+            if landing.renormalized:
+                write_positions(self._queue, QueueList.READY, landing.renormalized, at=now, transaction=locked)
+            return self._queue.record_promote_with_position(
+                chunk.chunk_id, position=landing.position, at=now, transaction=locked
             )

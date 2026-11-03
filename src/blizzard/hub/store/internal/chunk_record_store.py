@@ -118,13 +118,13 @@ class ChunkRecordStore:
             return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
         return chunk_row(conn, row)
 
-    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+    def get_many(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, Chunk]:
         """`src/blizzard/hub/domain/chunk/ports/record.py`'s `IReadChunkRecordRepository.get_many`.
 
         Reads each batch's full ``chunks`` rows once, via :func:`ephemeral_ids_in`."""
         if not chunk_ids:
             return {}
-        with self._store.read("get_many") as conn:
+        with connection_in(self._store, transaction, "get_many") as conn:
             return self.get_many_conn(conn, chunk_ids)
 
     def get_many_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
@@ -280,18 +280,23 @@ class ChunkRecordStore:
         next_cursor = _encode_chunk_cursor(chunks[-1]) if len(rows) > limit and chunks else None
         return ChunkPage(chunks=chunks, next_cursor=next_cursor)
 
-    def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
-        return self._listed_with_status(ChunkStatus.READY, statuses=statuses)
+    def list_ready(self, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None) -> list[Chunk]:
+        return self._listed_with_status(ChunkStatus.READY, statuses=statuses, transaction=transaction)
 
-    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
-        return self._listed_with_status(ChunkStatus.NOT_READY, statuses=statuses)
+    def list_not_ready(
+        self, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None
+    ) -> list[Chunk]:
+        return self._listed_with_status(ChunkStatus.NOT_READY, statuses=statuses, transaction=transaction)
 
-    def _listed_with_status(self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+    def _listed_with_status(
+        self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None
+    ) -> list[Chunk]:
         """The chunks ``statuses`` — the caller's own already-derived live fleet statuses,
         never this seam's own facts read — names at ``status``, reconstituted by id
         (``bzh:bulk-reconstitution``) so the read is bounded by the live set. An id deleted
         since the caller derived ``statuses`` is silently dropped by :meth:`get_many`."""
-        return list(self.get_many([chunk_id for chunk_id, derived in statuses.items() if derived is status]).values())
+        named = [chunk_id for chunk_id, derived in statuses.items() if derived is status]
+        return list(self.get_many(named, transaction=transaction).values())
 
     def mint(self, chunk: Chunk) -> None:
         """Insert a chunk's rows with no pointer lock held."""

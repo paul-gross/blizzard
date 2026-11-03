@@ -30,10 +30,10 @@ class IReadChunkRecordRepository(Protocol):
     """Read-only chunk-record access."""
 
     def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None: ...
-    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+    def get_many(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, Chunk]:
         """`get`'s batched sibling — every requested id's chunk, keyed by chunk id. An id
         that doesn't exist or is ephemeral is silently dropped, the same as `get`
-        returning None for it."""
+        returning None for it. Joins ``transaction`` when one is given."""
         ...
 
     def graph_id_of_many(self, chunk_ids: Sequence[str]) -> dict[str, str]:
@@ -41,16 +41,19 @@ class IReadChunkRecordRepository(Protocol):
         `get_many`'s narrower sibling for a caller that only needs the graph pin."""
         ...
 
-    def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+    def list_ready(self, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None) -> list[Chunk]:
         """The ready queue's own candidate set, bucketed by ``statuses`` — the caller's
         own already-derived live fleet statuses (``load_live_statuses()``), trusted as given
         with no re-verification against a fresh facts read; a caller passing a stale map
-        can see a chunk bucketed by a status it has since moved past."""
+        can see a chunk bucketed by a status it has since moved past. Joins ``transaction``
+        when one is given — a caller deciding on the list derives ``statuses`` in that unit too."""
         ...
 
-    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+    def list_not_ready(
+        self, *, statuses: Mapping[str, ChunkStatus], transaction: Transaction | None = None
+    ) -> list[Chunk]:
         """The backlog's own candidate set (``bzh:ranking-is-per-list``). See
-        `list_ready` for ``statuses``."""
+        `list_ready` for ``statuses`` and ``transaction``."""
         ...
 
     def list_all(self) -> list[Chunk]: ...

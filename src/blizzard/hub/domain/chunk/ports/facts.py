@@ -40,11 +40,12 @@ class IReadChunkFactsRepository(Protocol):
         for the named chunks; every other family is left empty."""
         ...
 
-    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self, *, transaction: Transaction | None = None) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
         chunk id (``bzh:live-set-read``) — terminal chunks are excluded in the store query,
         before anything is loaded or derived per chunk. A caller needing a terminal status
-        (a done prerequisite) resolves it by id through :meth:`status_facts_for`."""
+        (a done prerequisite) resolves it by id through :meth:`status_facts_for`. Joins
+        ``transaction`` when one is given (``bzh:transaction-participation``)."""
         ...
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
@@ -60,10 +61,12 @@ class IReadChunkFactsRepository(Protocol):
         already settle are derived per chunk."""
         ...
 
-    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
         by chunk id, reading only the fact families behind status, pause, latest epoch,
         restart epochs, cost, and open decision rather than every family
         `load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
-        dropped, the same as `load_facts_for`."""
+        dropped, the same as `load_facts_for`. Joins ``transaction`` when one is given."""
         ...
