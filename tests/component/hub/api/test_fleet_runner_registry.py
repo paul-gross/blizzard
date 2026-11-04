@@ -1,0 +1,541 @@
+"""The fleet registry — register, heartbeat, liveness, and the pause brake (component tier).
+
+Drives the real hub over a tmp store: register, heartbeat, list with derived
+online/offline and paused, and the operator's pause/resume brake. Liveness and paused
+are never stored columns, so assertions drive the clock and read the derived surface."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+
+import sqlalchemy as sa
+
+from blizzard.hub.domain.runners.registration import STALE_AFTER
+from tests.support import (
+    HubHarness,
+    assert_all_timestamps_utc,
+    build_hub,
+    capture_statements,
+    count_queries,
+    emitted_events,
+    mint_graph,
+    seed_runner,
+)
+
+
+def _register(
+    hub: HubHarness,
+    runner_id: str = "runner-a",
+    workspace_id: str = "ws-a",
+    env_capacity: int | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"runner_id": runner_id, "workspace_id": workspace_id}
+    if env_capacity is not None:
+        body["env_capacity"] = env_capacity
+    resp = hub.client.post("/api/fleet/runners", json=body)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_register_is_idempotent_upsert(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert _register(hub)["first_registration"] is True
+    again = hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-b"})
+    assert again.json()["first_registration"] is False
+    # The re-register updated the workspace binding and refreshed last_seen.
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["workspace_id"] == "ws-b"
+
+
+def test_list_runners_derives_online_and_paused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    resp = hub.client.get("/api/runners")
+    runners = resp.json()["runners"]
+    assert len(runners) == 1
+    assert runners[0]["runner_id"] == "runner-a"
+    assert runners[0]["online"] is True  # just seen, at the fixed clock now
+    # Two brakes, reported apart: neither is on for a fresh runner.
+    assert runners[0]["hub_paused"] is False
+    assert runners[0]["locally_paused"] is False
+    assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — registered_at, last_seen_at
+
+
+def test_gates_reported_on_register_land_on_the_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post(
+        "/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["build", "review"]}
+    )
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == ["build", "review"]
+    assert hub.client.get("/api/runners").json()["runners"][0]["gates"] == ["build", "review"]
+
+
+def test_gates_converge_on_reregistration_and_clear_when_omitted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["build"]})
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["review"]})
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == ["review"]
+
+    _register(hub)  # a runner that registers without gates imposes none
+
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == []
+
+
+def test_a_legacy_registration_row_reads_no_gates(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    with hub.engine.begin() as conn:
+        conn.execute(sa.text("UPDATE runner_registrations SET gates = NULL"))
+
+    assert hub.client.get("/api/runners").json()["runners"][0]["gates"] == []
+
+
+def test_liveness_goes_offline_when_stale_and_heartbeat_refreshes(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    hub.clock.advance(STALE_AFTER + timedelta(seconds=1))
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["online"] is False
+
+    hb = hub.client.post("/api/fleet/runners/runner-a/heartbeats")
+    assert hb.status_code == 204
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["online"] is True
+
+
+def test_heartbeat_unknown_runner_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners/ghost/heartbeats").status_code == 404
+
+
+def test_get_of_a_runner_that_never_registered_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/fleet/runners/ghost")
+    assert resp.status_code == 409
+    assert resp.json() == {"detail": "runner ghost has not registered"}
+
+
+def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "alice"})
+    assert paused.status_code == 200
+    assert paused.json()["hub_paused"] is True
+    assert paused.json()["subscriptions"] == []
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is True
+    # The fleet's brake is not the runner's own: pausing here leaves that one alone.
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["locally_paused"] is False
+
+    resumed = hub.client.post("/api/runners/runner-a/resume", json={"by": "alice"})
+    assert resumed.status_code == 200
+    assert resumed.json()["hub_paused"] is False
+    assert resumed.json()["subscriptions"] == []
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is False
+
+
+def test_pause_unknown_runner_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/runners/ghost/pause", json={"by": "op"}).status_code == 404
+
+
+def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    hub.client.post("/api/runners/runner-a/pause", json={"by": "op"})
+    events = emitted_events(hub)
+    assert [e["event"] for e in events] == ["runner-changed", "runner-changed"]
+    assert all("runner-a" in e["data"] for e in events)
+
+
+# --- Environment-pool capacity, reported on registration ---
+# Re-registration is the heartbeat: a changed pool converges, an absent one nulls.
+
+
+def test_env_capacity_reported_on_register_lands_on_the_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    runners = hub.client.get("/api/runners").json()["runners"]
+    assert runners[0]["env_capacity"] == 4
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] == 4
+
+
+def test_env_capacity_converges_on_reregistration(tmp_path: Path) -> None:
+    """Re-registration is the heartbeat, so a changed `workspace_envs` pool overwrites the
+    stored capacity unconditionally — a shrunk or grown fleet converges on the next pull."""
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    _register(hub, env_capacity=6)
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] == 6
+
+
+def test_env_capacity_absent_reports_null(tmp_path: Path) -> None:
+    """A runner registered by a client that predates the field omits it; the hub stores and
+    returns null."""
+    hub = build_hub(tmp_path)
+    _register(hub)  # no env_capacity in the body
+
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
+
+
+def test_env_capacity_resets_to_null_when_a_newer_reregister_omits_it(tmp_path: Path) -> None:
+    """The unconditional overwrite writes an absent value verbatim: a runner that reported a
+    capacity and then re-registers without one (an older binary redeployed) resets to null,
+    rather than leaving a stale total on the row."""
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    _register(hub)  # re-register with the field absent
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
+
+
+# --- The runner's own brake, reported up ---
+# The hub never sets this one — it arrives as a fact through the outbound buffer.
+
+
+def _report_local_pause(
+    hub: HubHarness,
+    *,
+    paused: bool,
+    seq: int = 1,
+    runner_id: str = "runner-a",
+    by: str = "alice",
+    reason: str | None = None,
+) -> dict[str, object]:
+    kind = "runner.locally_paused" if paused else "runner.locally_resumed"
+    payload: dict[str, object] = {"runner_id": runner_id, "by": by}
+    if reason is not None:
+        payload["reason"] = reason
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": kind, "payload": payload}]},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_a_reported_local_pause_lands_and_is_separate_from_the_hubs_brake(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    assert _report_local_pause(hub, paused=True)["applied"] == [1]
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused"] is True
+    assert view["hub_paused"] is False  # the fleet never paused it — the runner did
+
+
+def test_a_reported_local_resume_clears_only_the_local_brake(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    hub.client.post("/api/runners/runner-a/pause", json={"by": "alice"})  # the fleet's brake too
+    _report_local_pause(hub, paused=True, seq=1)
+
+    _report_local_pause(hub, paused=False, seq=2)
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused"] is False
+    assert view["hub_paused"] is True  # untouched — each brake is cleared where it was set
+
+
+def test_a_ceiling_pause_reason_rides_the_report_and_lands_on_the_view(tmp_path: Path) -> None:
+    """A spend-ceiling escalation's cause round-trips runner -> hub and is
+    distinguishable from a manual pause: `by` names "runner-ceiling" and `reason` carries
+    the composed ceiling+spend string, exactly the payload `check_spend_ceiling` composes."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
+    _report_local_pause(hub, paused=True, by="runner-ceiling", reason=reason)
+
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused"] is True
+    assert view["locally_paused_by"] == "runner-ceiling"
+    assert view["locally_paused_reason"] == reason
+
+
+def test_a_manual_pause_carries_no_reason_and_renders_bare(tmp_path: Path) -> None:
+    """A manual `blizzard runner pause` payload carries no `reason` key at all — the
+    column reads back `None` rather than some stale or fabricated value."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    _report_local_pause(hub, paused=True, by="operator")
+
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused"] is True
+    assert view["locally_paused_by"] == "operator"
+    assert view["locally_paused_reason"] is None
+
+
+def test_a_local_resume_clears_the_reason_alongside_the_brake(tmp_path: Path) -> None:
+    """Once resumed, a stale ceiling reason must not keep rendering — the cause is nulled
+    out together with `locally_paused`, not just left dangling on the old fact."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason="spend ceiling $5.00 reached")
+
+    _report_local_pause(hub, paused=False, seq=2, by="operator")
+
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused"] is False
+    assert view["locally_paused_by"] is None
+    assert view["locally_paused_reason"] is None
+
+
+def test_a_replayed_ceiling_pause_records_the_reason_exactly_once(tmp_path: Path) -> None:
+    """Idempotent ingest (the high-water mark) applies a re-delivered ceiling pause fact
+    only once — a replay must not double-record or corrupt the landed reason."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
+
+    first = _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason=reason)
+    assert first["applied"] == [1]
+    replay = _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason=reason)
+    assert replay["applied"] == [] and replay["already_applied"] == [1]
+
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    assert view["locally_paused_by"] == "runner-ceiling"
+    assert view["locally_paused_reason"] == reason
+
+
+def test_a_reported_local_pause_publishes_runner_changed(tmp_path: Path) -> None:
+    """Runner-scoped facts carry no chunk_id, so the chunk-changed path would skip them."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    before = len(emitted_events(hub))
+
+    _report_local_pause(hub, paused=True)
+    fresh = emitted_events(hub, since=before)
+    assert [e["event"] for e in fresh] == ["runner-changed"]
+    assert "runner-a" in fresh[0]["data"]
+
+
+def test_a_replayed_local_pause_is_not_reapplied(tmp_path: Path) -> None:
+    """The buffer is at-least-once, so the runner-scoped path needs the high-water mark too."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    assert _report_local_pause(hub, paused=True, seq=1)["applied"] == [1]
+
+    replay = _report_local_pause(hub, paused=True, seq=1)
+    assert replay["applied"] == [] and replay["already_applied"] == [1]
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["locally_paused"] is True
+
+
+def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> None:
+    """The buffer replays an outage in FIFO order, so a pause can precede its
+    registration — dropping it would lose the brake, so it lands, and the registration
+    that follows finds it already there."""
+    hub = build_hub(tmp_path)
+    assert _report_local_pause(hub, paused=True, runner_id="runner-late")["applied"] == [1]
+
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-late", "workspace_id": "ws-a"})
+    assert hub.client.get("/api/fleet/runners/runner-late").json()["locally_paused"] is True
+
+
+# --- `list_runners`'s query count as fleet size grows ---
+
+
+def _seed_runner_with_every_fact_family(hub: HubHarness, runner_id: str) -> None:
+    """A runner carrying a hub pause, a local pause with a reason, an external-usage
+    sample, and a miss — one row in each of `list_runners`'s four per-runner fact
+    families."""
+    _register(hub, runner_id=runner_id, workspace_id="ws")
+    hub.client.post(f"/api/runners/{runner_id}/pause", json={"by": "op"})
+    hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": runner_id,
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "runner.locally_paused",
+                    "payload": {
+                        "runner_id": runner_id,
+                        "by": "runner-ceiling",
+                        "reason": "spend ceiling $5.00 reached",
+                    },
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "anthropic",
+                        "sampled_at": "2026-07-01T00:00:00+00:00",
+                        "windows": [
+                            {
+                                "window": "5h",
+                                "utilization_pct": 25.0,
+                                "resets_at": "2026-08-01T17:00:00+00:00",
+                                "window_seconds": 18000,
+                            }
+                        ],
+                    },
+                },
+                {
+                    "seq": 3,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": {
+                        "slug": "openai",
+                        "missed_at": "2026-07-01T00:00:00+00:00",
+                        "reason": "credential_lapsed",
+                    },
+                },
+            ],
+        },
+    )
+
+
+def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path) -> None:
+    """`list_runners`'s four per-runner fact families now read in one batched query per
+    family — a fleet of many runners, each carrying a hub pause, a local pause with
+    a reason, an external-usage sample, and a miss, must not cost more queries than a
+    fleet of few."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+
+    for i in range(2):
+        _seed_runner_with_every_fact_family(few, f"runner-{i}")
+    for i in range(8):
+        _seed_runner_with_every_fact_family(many, f"runner-{i}")
+
+    few_count = count_queries(few.engine, lambda: few.services.registry.list_runners())
+    many_count = count_queries(many.engine, lambda: many.services.registry.list_runners())
+    assert few_count == many_count
+
+    few_runners = few.services.registry.list_runners()
+    many_runners = many.services.registry.list_runners()
+    assert len(few_runners) == 2
+    assert len(many_runners) == 8
+    for runner in few_runners + many_runners:
+        assert runner.hub_paused is True
+        assert runner.locally_paused is True
+        assert runner.locally_paused_by == "runner-ceiling"
+        assert [u.slug for u in runner.subscription_usage] == ["anthropic"]
+        assert [m.slug for m in runner.subscription_usage_misses] == ["openai"]
+
+
+def _declare(hub: HubHarness, *slugs: str) -> None:
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": "runner-a",
+            "workspace_id": "ws-a",
+            "subscriptions": [{"slug": slug, "name": slug.title(), "provider": "p"} for slug in slugs],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def _subscriptions(hub: HubHarness) -> dict[str, dict[str, object]]:
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
+    return {item["slug"]: item for item in view["subscriptions"]}
+
+
+def test_a_dropped_subscription_slugs_reports_survive_re_registration_and_resume_on_redeclare(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _declare(hub, "anthropic", "openai")
+    reported_at = hub.clock.now().isoformat()
+    hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "runner-a",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "openai",
+                        "sampled_at": reported_at,
+                        "windows": [
+                            {
+                                "window": "5h",
+                                "utilization_pct": 25.0,
+                                "resets_at": "2099-01-01T00:00:00+00:00",
+                                "window_seconds": 18000,
+                            }
+                        ],
+                    },
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": {"slug": "anthropic", "missed_at": reported_at, "reason": "credential_lapsed"},
+                },
+            ],
+        },
+    )
+    before = _subscriptions(hub)
+    assert set(before) == {"anthropic", "openai"}
+    assert before["anthropic"]["condition"] == "credential_lapsed"
+    assert before["openai"]["windows"]
+
+    _declare(hub, "other")
+    assert set(_subscriptions(hub)) == {"other"}
+
+    _declare(hub, "anthropic", "openai", "other")
+    after = _subscriptions(hub)
+    assert after["anthropic"]["condition"] == "credential_lapsed"
+    assert after["openai"]["windows"] == before["openai"]["windows"]
+    assert after["openai"]["sampled_at"] == before["openai"]["sampled_at"]
+
+
+def _register_gated(hub: HubHarness, runner_id: str, gates: list[str]) -> None:
+    body = {"runner_id": runner_id, "workspace_id": "ws-a", "gates": gates}
+    assert hub.client.post("/api/fleet/runners", json=body).status_code == 201
+
+
+def test_registry_flags_gates_no_graph_runs_on_a_runner_and_clears_them_when_one_does(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    mint_graph(hub.engine, "gr_gate", name="gate-graph", nodes={"nd_gate_0": "build"}, at=hub.clock.now())
+    _register_gated(hub, "runner-a", ["build", "no-such-node"])
+
+    flagged = hub.client.get("/api/runners/runner-a").json()["unenforceable_gates"]
+    assert flagged == [{"node": "no-such-node", "reason": "unknown-node"}]
+    assert hub.client.get("/api/runners").json()["runners"][0]["unenforceable_gates"] == flagged
+
+    # A graph minted later with the node as a runner node clears the flag — nothing was stored.
+    mint_graph(hub.engine, "gr_late", name="late-graph", nodes={"nd_late_0": "no-such-node"}, at=hub.clock.now())
+    assert hub.client.get("/api/runners/runner-a").json()["unenforceable_gates"] == []
+
+
+def test_registry_list_reads_node_executors_once_however_many_runners(tmp_path: Path) -> None:
+    few = build_hub(_sub(tmp_path, "few"))
+    many = build_hub(_sub(tmp_path, "many"))
+    _register_gated(few, "runner-0", ["x"])
+    for i in range(5):
+        _register_gated(many, f"runner-{i}", ["x"])
+
+    def executor_reads(hub: HubHarness) -> int:
+        with capture_statements(hub.engine) as statements:
+            hub.client.get("/api/runners")
+        return sum("graph_nodes" in statement for statement, _ in statements)
+
+    assert executor_reads(few) == executor_reads(many) == 1
+
+
+def _sub(root: Path, name: str) -> Path:
+    path = root / name
+    path.mkdir()
+    return path
+
+
+def test_a_runners_fleet_decisions_read_is_empty_while_it_has_imposed_none(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = seed_runner(hub, "runner-a")
+
+    resp = hub.client.get("/api/fleet/runners/runner-a/decisions", headers={"Authorization": f"Bearer {token}"})
+
+    assert (resp.status_code, resp.json()) == (200, {"decisions": []})
+
+
+def test_registry_list_reads_no_node_executors_while_no_runner_declares_a_gate(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    with capture_statements(hub.engine) as statements:
+        hub.client.get("/api/runners")
+
+    assert not any("graph_nodes" in statement for statement, _ in statements)

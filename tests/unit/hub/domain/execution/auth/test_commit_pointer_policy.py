@@ -1,0 +1,71 @@
+"""Commit-pointer validation (unit tier) — a `git_commit` artifact must name a repo, a
+branch with no `:`, and a full lowercase 40- or 64-hex hash; an asset is never judged."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.domain.execution.auth.commit_pointer import CommitPointerPolicy
+from blizzard.hub.domain.execution.submissions import CompletionArtifact
+
+_SHA1 = "a" * 40
+_SHA256 = "b" * 64
+
+
+def _commit(**overrides: str | None) -> CompletionArtifact:
+    base = CompletionArtifact(
+        name="w", kind=ArtifactKind.GIT_COMMIT, repo="acme/widget", branch_name="feat/x", commit_hash=_SHA1
+    )
+    return replace(base, **overrides)
+
+
+def test_a_complete_pointer_is_accepted() -> None:
+    assert CommitPointerPolicy([_commit()]).rejection() is None
+    assert CommitPointerPolicy([_commit(commit_hash=_SHA256, forge="https://example.test/acme")]).rejection() is None
+
+
+def test_no_artifacts_is_accepted() -> None:
+    assert CommitPointerPolicy([]).rejection() is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"repo": None}, "repo"),
+        ({"repo": "  "}, "repo"),
+        ({"branch_name": None}, "branch_name"),
+        ({"branch_name": ""}, "branch_name"),
+        ({"branch_name": "a:b"}, "branch_name"),
+        ({"commit_hash": None}, "commit_hash"),
+        ({"commit_hash": "abc123"}, "commit_hash"),
+        ({"commit_hash": "A" * 40}, "commit_hash"),
+        ({"commit_hash": "a" * 41}, "commit_hash"),
+        ({"commit_hash": "g" * 40}, "commit_hash"),
+    ],
+)
+def test_each_missing_or_malformed_field_is_refused_by_name(overrides: dict[str, str | None], field: str) -> None:
+    detail = CommitPointerPolicy([_commit(**overrides)]).rejection()
+    assert detail is not None
+    assert "`w`" in detail and f"`{field}`" in detail
+
+
+def test_an_asset_artifact_is_ignored() -> None:
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="diff --git a/x b/x")
+    assert CommitPointerPolicy([asset]).rejection() is None
+
+
+def test_an_asset_listed_ahead_of_a_malformed_pointer_does_not_hide_it() -> None:
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="x")
+    detail = CommitPointerPolicy([asset, _commit(commit_hash="abc123")]).rejection()
+
+    assert detail is not None
+    assert "`w`" in detail and "`commit_hash`" in detail
+
+
+def test_an_asset_listed_ahead_of_a_valid_pointer_leaves_it_accepted() -> None:
+    asset = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="x")
+
+    assert CommitPointerPolicy([asset, _commit()]).rejection() is None

@@ -1,5 +1,5 @@
 """The two completion predicates a node-step is judged by — one definition, shared by both daemons
-(``tests/test_produces_coverage_agreement.py``, ``tests/component/test_checks_gate_agreement.py``)."""
+(``tests/unit/test_produces_coverage_agreement.py``, ``tests/component/test_checks_gate_agreement.py``)."""
 
 from __future__ import annotations
 

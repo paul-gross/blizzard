@@ -180,7 +180,8 @@ def list_graphs(services: Services) -> list[GraphSummaryView]:
 
     Reads the listing-shape projection — nothing here touches nodes,
     edges, sessions or artifacts."""
-    # Unpaged: tests/test_graph_read_routes.py::test_list_graphs_returns_every_mint_past_the_default_page_limit
+    # Unpaged:
+    # tests/component/hub/api/test_graphs_read.py::test_list_graphs_returns_every_mint_past_the_default_page_limit
     graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
     mints = Mints.of(graphs, retired_ids=retired_ids)

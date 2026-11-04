@@ -109,7 +109,7 @@ class Arrival:
 class EffectiveSession:
     """A node's session facets resolved **declaration > chunk default**, merged *field by field*
     (pinned by
-    tests/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field)."""
+    tests/unit/hub/domain/execution/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field)."""
 
     name: str | None
     model: list[str]
@@ -146,7 +146,7 @@ class NoCurrentNode(Exception):
 class Envelope:
     """The envelope ``node`` is worked from. ``graph`` carries no default, so omitting it is a
     ``TypeError`` (pinned by
-    tests/test_pin_hub_domain.py::test_envelope_requires_graph_explicitly)."""
+    tests/unit/hub/domain/execution/test_pin.py::test_envelope_requires_graph_explicitly)."""
 
     chunk: Chunk
     graph: Graph

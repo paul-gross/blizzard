@@ -2,7 +2,7 @@
 
 Tests only the wire: 200/404/409, the fact written, the ``pause`` view, and the two
 events published (``queue-changed`` alongside ``chunk-changed``). The refusal itself is
-unit-tested in ``tests/test_pause_service.py``.
+unit-tested in ``tests/unit/hub/domain/operations/test_pause_service.py``.
 """
 
 from __future__ import annotations

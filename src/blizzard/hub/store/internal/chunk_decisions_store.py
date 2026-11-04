@@ -182,7 +182,8 @@ class ChunkDecisionsStore:
     ) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
         The SQL drops resolved gates, fact-closed gates, and gates whose chunk has ended — mirroring
-        :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
+        :meth:`GateDecision.require_resolvable`, pinned by
+        ``tests/component/hub/store/internal/test_chunk_decisions_store_open_decisions.py`` —
         while :attr:`GateDecision.is_open` remains the exact final check. ``project`` narrows to one project's gates,
         and ``imposed_by_runner_id`` to those that runner's configuration imposed."""
         not_resolved = ~self._store.exists(

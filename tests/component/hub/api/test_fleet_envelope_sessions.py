@@ -1,6 +1,6 @@
 """The effective session declaration on the envelope, over HTTP (component tier).
 
-:mod:`tests.test_envelope` unit-tests the precedence resolution itself; this file proves
+:mod:`tests.unit.hub.domain.execution.test_envelope` unit-tests the precedence resolution itself; this file proves
 the fields survive a real mint, a real chunk edit, and the ``GET /chunks/{id}/envelope``
 read."""
 

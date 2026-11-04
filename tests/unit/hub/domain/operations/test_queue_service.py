@@ -1,0 +1,290 @@
+"""QueueService (unit tier) — the ready-queue/backlog sort key, facts only
+(``bzh:ranking-is-per-list``).
+
+:meth:`QueueService.ordered` and :meth:`reposition` share one sort key across both lists
+— proven by driving each through :data:`QueueList.READY` and :data:`.NOT_READY` alike,
+against a fake chunk repository (``bzh:repository-split``), zero store."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any, cast
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
+from blizzard.hub.domain.operations.queue import QueueList, QueueRanking, QueueService
+
+_NO_STATUSES: dict[str, ChunkStatus] = {}
+"""The fake repo below pre-filters `ready`/`not_ready` itself, so `QueueService` never
+actually reads this map — it exists only to satisfy the now-required keyword."""
+
+
+_MINTED = datetime(2020, 1, 1, tzinfo=UTC)  # long ago
+_PROMOTED = datetime(2026, 1, 1, tzinfo=UTC)  # promoted much later
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _chunk(chunk_id: str, minted_at: datetime = _MINTED) -> Chunk:
+    return Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=minted_at)
+
+
+def test_never_promoted_chunk_falls_back_to_minted_at() -> None:
+    chunk = _chunk("chk_1")
+    position = QueueRanking(positions={}, promoted_ats={}).effective_position(chunk)
+    assert position == _MINTED.timestamp()
+
+
+def test_promoted_but_unmoved_chunk_falls_back_to_promoted_at_not_minted_at() -> None:
+    # A chunk minted long ago but promoted late: its fallback sort
+    # key is the later promoted_at, so it lands at the tail, not mid-queue by mint order.
+    chunk = _chunk("chk_1")
+    position = QueueRanking(positions={}, promoted_ats={"chk_1": _PROMOTED}).effective_position(chunk)
+    assert position == _PROMOTED.timestamp()
+    assert position > _MINTED.timestamp()
+
+
+def test_explicit_position_wins_over_both_promoted_at_and_minted_at() -> None:
+    chunk = _chunk("chk_1")
+    position = QueueRanking(positions={"chk_1": 3.0}, promoted_ats={"chk_1": _PROMOTED}).effective_position(chunk)
+    assert position == 3.0
+
+
+def test_ordering_by_effective_position_places_a_late_promoted_old_mint_chunk_last() -> None:
+    # a: minted long ago, promoted late. b: minted after a, promoted right away. Without
+    # the promoted_at fallback, a would wrongly sort before b on older minted_at.
+    a = _chunk("chk_a", minted_at=_MINTED)
+    b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))
+    promoted_ats = {"chk_a": _PROMOTED, "chk_b": datetime(2025, 1, 1, 0, 0, 1, tzinfo=UTC)}
+
+    ordered = sorted([a, b], key=QueueRanking(positions={}, promoted_ats=promoted_ats).effective_position)
+
+    assert [c.chunk_id for c in ordered] == ["chk_b", "chk_a"]
+
+
+# --- QueueService.ordered/reposition — the shared implementation path over either list
+# ------------------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeChunkRepo:
+    """Only the members :class:`QueueService`'s reads and writes touch are live, the unit it
+    opens included; anything else is a bug. ``ready``/``not_ready`` are independent candidate
+    sets — never merged — mirroring the two lists :class:`QueueList` names
+    (``bzh:ranking-is-per-list``). ``locks`` records each unit's one lock declaration."""
+
+    ready: list[Chunk] = field(default_factory=list[Chunk])
+    not_ready: list[Chunk] = field(default_factory=list[Chunk])
+    positions: dict[str, float] = field(default_factory=dict[str, float])
+    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
+    stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
+    #: Chunks currently promoted — makes :meth:`record_backlog_positions` a no-op for them,
+    #: mirroring the real store.
+    promoted_chunk_ids: set[str] = field(default_factory=set[str])
+    locks: list[tuple[list[str], list[tuple[str, str]]]] = field(
+        default_factory=list[tuple[list[str], list[tuple[str, str]]]]
+    )
+
+    @contextmanager
+    def begin(self) -> Generator[Transaction]:
+        yield cast(Transaction, self)
+
+    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:
+        self.locks.append((sorted(chunks), list(keys)))
+        return cast(LockedTransaction, self)
+
+    def load_live_statuses(self, *, transaction: Transaction | None = None) -> dict[str, ChunkStatus]:
+        return {}
+
+    def list_ready(self, *, statuses: dict[str, ChunkStatus], transaction: Transaction | None = None) -> list[Chunk]:
+        return self.ready
+
+    def list_not_ready(
+        self, *, statuses: dict[str, ChunkStatus], transaction: Transaction | None = None
+    ) -> list[Chunk]:
+        return self.not_ready
+
+    def queue_positions(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, float]:
+        return dict(self.positions)
+
+    def promoted_ats(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, datetime]:
+        return dict(self.promoted_ats_by_chunk)
+
+    def record_queue_positions(
+        self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
+    ) -> None:
+        for chunk_id, position in positions:
+            self.stamped.append((chunk_id, position, at))
+            self.positions[chunk_id] = position
+
+    def record_backlog_positions(
+        self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
+    ) -> None:
+        for chunk_id, position in positions:
+            if chunk_id in self.promoted_chunk_ids:
+                continue
+            self.stamped.append((chunk_id, position, at))
+            self.positions[chunk_id] = position
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"QueueService should not touch {name!r}")
+
+
+def _service(repo: _FakeChunkRepo) -> QueueService:
+    """A :class:`QueueService` over ``repo`` standing behind every port it consumes."""
+    return QueueService(
+        queue=cast(IWriteChunkQueueRepository, repo),
+        record=cast(IReadChunkRecordRepository, repo),
+        facts=cast(IReadChunkFactsRepository, repo),
+        transactions=cast(IHubTransactions, repo),
+        clock=FixedClock(instant=_T0),
+    )
+
+
+def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant() -> None:
+    # The backlog's own fallback is the mint instant (never promoted_at — a not_ready
+    # chunk has none), through the same _effective_position path as the ready queue.
+    a = _chunk("chk_a", minted_at=datetime(2025, 6, 1, tzinfo=UTC))
+    b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))  # minted first, unordered
+    c = _chunk("chk_c", minted_at=datetime(2025, 9, 1, tzinfo=UTC))
+    repo = _FakeChunkRepo(not_ready=[a, b, c], positions={"chk_c": -1.0})  # c explicitly pinned to the top
+    service = _service(repo)
+
+    ordered = service.ordered_not_ready(statuses=_NO_STATUSES)
+
+    assert [chunk.chunk_id for chunk in ordered] == ["chk_c", "chk_b", "chk_a"]
+    assert service.ordered(QueueList.NOT_READY, statuses=_NO_STATUSES) == ordered
+
+
+def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
+    ready_only = _chunk("chk_ready")
+    repo = _FakeChunkRepo(ready=[ready_only], not_ready=[])
+    service = _service(repo)
+
+    assert service.ordered_not_ready(statuses=_NO_STATUSES) == []
+    assert service.ordered_ready(statuses=_NO_STATUSES) == [ready_only]
+
+
+def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
+    a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.READY, m, after=a)
+
+    assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
+
+
+def test_reposition_to_the_top_lands_below_the_current_lowest() -> None:
+    a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 1.0, "chk_b": 2.0, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.READY, m, after=None)
+
+    assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
+
+
+def test_reposition_to_the_top_of_an_otherwise_empty_ready_set_is_zero() -> None:
+    m = _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[m], positions={"chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.READY, m, after=None)
+
+    assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
+
+
+def test_reposition_after_the_last_chunk_lands_one_past_it() -> None:
+    a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.READY, m, after=b)
+
+    assert repo.stamped[-1] == ("chk_m", 2.0, _T0)
+
+
+def test_reposition_between_adjacent_doubles_renormalizes_then_succeeds() -> None:
+    # a and b sit on adjacent representable doubles — no float is strictly between them,
+    # so a plain midpoint would collide with one neighbour rather than landing between.
+    a_pos = 1.0
+    b_pos = math.nextafter(a_pos, math.inf)
+    assert math.nextafter(a_pos, b_pos) >= b_pos  # the exhaustion condition this guards
+
+    a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": a_pos, "chk_b": b_pos, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.READY, m, after=a)
+
+    # Renormalize restamped a/b (and m, inserted between them) with dense ascending
+    # floats; the final write lands strictly between the freshly-spread neighbours.
+    assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]
+
+
+def test_reposition_locks_both_chunks_and_the_list_ranking_and_returns_the_order_it_leaves() -> None:
+    a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
+    repo = _FakeChunkRepo(ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 3.0})
+
+    ranked = _service(repo).reposition(QueueList.READY, m, after=a)
+
+    assert repo.locks == [(["chk_a", "chk_m"], [READY_RANKING_LOCK])]
+    assert [chunk.chunk_id for chunk in ranked.ordered] == ["chk_a", "chk_m", "chk_b", "chk_c"]
+
+
+def test_reorder_names_its_chunks_first_then_the_rest_in_current_order_in_one_locked_unit() -> None:
+    a, b, c = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c")
+    repo = _FakeChunkRepo(not_ready=[a, b, c], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0})
+
+    ranked = _service(repo).reorder(QueueList.NOT_READY, [c])
+
+    assert repo.locks == [(["chk_c"], [BACKLOG_RANKING_LOCK])]
+    assert [chunk.chunk_id for chunk in ranked.ordered] == ["chk_c", "chk_a", "chk_b"]
+    assert repo.positions == {"chk_c": 0.0, "chk_a": 1.0, "chk_b": 2.0}
+
+
+# --- Same shared path, driven over the backlog (``bzh:ranking-is-per-list``) -------
+
+
+def test_reposition_between_two_backlog_neighbours_lands_on_their_midpoint() -> None:
+    a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
+    repo = _FakeChunkRepo(not_ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.NOT_READY, m, after=a)
+
+    assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
+
+
+def test_reposition_between_adjacent_backlog_doubles_renormalizes_then_succeeds() -> None:
+    a_pos = 1.0
+    b_pos = math.nextafter(a_pos, math.inf)
+    assert math.nextafter(a_pos, b_pos) >= b_pos  # the exhaustion condition this guards
+
+    a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
+    repo = _FakeChunkRepo(not_ready=[a, b, m], positions={"chk_a": a_pos, "chk_b": b_pos, "chk_m": 5.0})
+    service = _service(repo)
+
+    service.reposition(QueueList.NOT_READY, m, after=a)
+
+    assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]
+
+
+def test_record_backlog_position_is_a_no_op_for_a_chunk_promoted_since_candidates_were_resolved() -> None:
+    # A concurrent promote committed first: the backlog write must not override the
+    # fresh tail stamp it already landed for this chunk.
+    repo = _FakeChunkRepo(promoted_chunk_ids={"chk_m"})
+
+    repo.record_backlog_positions([("chk_m", 0.0)], at=_T0, transaction=cast(LockedTransaction, repo))
+
+    assert repo.stamped == []
+    assert "chk_m" not in repo.positions

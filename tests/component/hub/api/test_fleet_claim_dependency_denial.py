@@ -1,0 +1,202 @@
+"""The hub denies a claim on an unmet dependency, under the row lock (component
+tier).
+
+Mirrors the terminal denial's shape (``tests/test_route_claim.py``): a distinct 409 body,
+refused outright rather than lost to a race, re-derived fresh under the shared row lock
+so a peek-then-claim window can never slip a blocked chunk through."""
+
+from __future__ import annotations
+
+import threading
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import cast
+
+from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from tests.support import HubHarness, build_hub, count_queries, ingest
+
+
+def _resolve(hub: HubHarness, chunk_id: str):
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    return chunk
+
+
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
+    return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
+
+
+def test_claim_denied_when_the_dependency_is_unmet(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    hub.services.dependencies.declare(
+        _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
+    )
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["chunk_id"] == dependent_id
+    assert body["prerequisite_chunk_id"] == prerequisite_id
+    # Distinguishable from the other two 409 shapes.
+    assert "held_by_runner_id" not in body
+    assert "status" not in body
+    # The claim did not sneak a route onto the blocked chunk before refusing.
+    assert hub.client.get(f"/api/chunks/{dependent_id}").json()["route"] is None
+
+
+def test_claim_allowed_once_the_prerequisite_reaches_done(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    hub.services.dependencies.declare(
+        _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
+    )
+    assert hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id)).status_code == 409
+
+    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+
+    assert resp.status_code == 201, resp.text
+    assert hub.client.get(f"/api/chunks/{dependent_id}").json()["status"] == "running"
+
+
+def test_claim_allowed_against_a_prerequisite_already_done_before_the_edge_declared(tmp_path: Path) -> None:
+    """An edge named against a chunk that is already done is accepted and is simply
+    already satisfied — no special case at claim time either."""
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
+    hub.services.dependencies.declare(
+        _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
+    )
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+
+    assert resp.status_code == 201, resp.text
+
+
+def test_claim_allowed_once_the_edge_is_released(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    edge = hub.services.dependencies.declare(
+        _resolve(hub, dependent_id), PrerequisiteScope(_resolve(hub, prerequisite_id).chunk_id), by="user:alice"
+    )
+    assert hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id)).status_code == 409
+
+    hub.services.dependencies.release(edge, by="user:bob")
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+
+    assert resp.status_code == 201, resp.text
+
+
+def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) -> None:
+    """The peek-then-claim race the acceptance criteria names directly: a runner peeked
+    before the edge existed, but the claim re-derives the standing set fresh under the
+    lock rather than trusting anything read before it — proven here by patching the
+    dependency store's locked write to pause, then racing the claim against it while it
+    holds the row lock the two share (mirrors ``tests/component/hub/domain/chunk/test_dependencies_race.py``'s
+    pattern)."""
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    dependent = _resolve(hub, dependent_id)
+    prerequisite = _resolve(hub, prerequisite_id)
+
+    entered_write = threading.Event()
+    release_write = threading.Event()
+    dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
+    real_declare_locked = dependencies_store.declare_locked
+
+    def _blocking_declare_locked(
+        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
+        entered_write.set()
+        assert release_write.wait(timeout=5), "test never released the declaration's write"
+        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+
+    dependencies_store.declare_locked = _blocking_declare_locked
+
+    declare_thread = threading.Thread(
+        target=lambda: hub.services.dependencies.declare(
+            dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice"
+        )
+    )
+    declare_thread.start()
+    assert entered_write.wait(timeout=5), "the declaration never reached its (patched) write"
+
+    claim_result: dict[str, int] = {}
+
+    def _claim() -> None:
+        claim_result["status"] = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id)).status_code
+
+    claim_thread = threading.Thread(target=_claim)
+    claim_thread.start()
+    claim_thread.join(timeout=0.3)
+    assert claim_thread.is_alive(), "the claim completed while the declaration still held the shared lock"
+
+    release_write.set()
+    declare_thread.join(timeout=5)
+    claim_thread.join(timeout=5)
+
+    assert claim_result["status"] == 409
+
+
+def test_claim_denial_names_the_earliest_declared_unmet_prerequisite(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    first_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-1"}])
+    second_prereq_id = ingest(hub, [{"source": "default", "ref": "prereq-2"}])
+    dependent = _resolve(hub, dependent_id)
+    hub.services.dependencies.declare(
+        dependent, PrerequisiteScope(_resolve(hub, first_prereq_id).chunk_id), by="user:alice"
+    )
+    hub.clock.advance(timedelta(seconds=1))  # a distinct `declared_at` — the store's own total order
+    hub.services.dependencies.declare(
+        dependent, PrerequisiteScope(_resolve(hub, second_prereq_id).chunk_id), by="user:alice"
+    )
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["prerequisite_chunk_id"] == first_prereq_id
+
+
+def _seed_unmet_dependent(hub: HubHarness, *, prerequisite_count: int) -> str:
+    """Every prerequisite but the last-declared one is already done — the earliest-unmet
+    scan must walk the whole standing set before landing on the one denial, rather than
+    short-circuiting on the first edge."""
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    dependent = _resolve(hub, dependent_id)
+    for i in range(prerequisite_count):
+        prereq_id = ingest(hub, [{"source": "default", "ref": f"prereq-{i}"}])
+        prereq = _resolve(hub, prereq_id)
+        if i < prerequisite_count - 1:
+            hub.services.complete.complete(prereq, by="user:alice")
+        hub.services.dependencies.declare(dependent, PrerequisiteScope(prereq.chunk_id), by="user:alice")
+    return dependent_id
+
+
+def test_claim_denial_query_count_is_independent_of_prerequisite_count(tmp_path: Path) -> None:
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    few_dependent_id = _seed_unmet_dependent(few, prerequisite_count=3)
+    many = build_hub(tmp_path / "many")
+    many_dependent_id = _seed_unmet_dependent(many, prerequisite_count=9)  # 3x the few fixture
+
+    def call(hub: HubHarness, dependent_id: str) -> None:
+        resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+        assert resp.status_code == 409, resp.text
+
+    few_count = count_queries(few.engine, lambda: call(few, few_dependent_id))
+    many_count = count_queries(many.engine, lambda: call(many, many_dependent_id))
+
+    assert few_count == many_count

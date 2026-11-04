@@ -4,7 +4,8 @@ A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.depend
 :func:`decide_declare` owns what declaring decides, and release has no window. Declaring runs
 under the row lock (``bzh:store-exclusive-write``) plus a residual per-tenant
 ``threading.Lock`` the cycle check alone still needs — pinned by
-``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
+``tests/component/hub/domain/chunk/test_dependencies_race.py`` and
+``tests/component/hub/domain/chunk/test_dependencies_service.py``."""
 
 from __future__ import annotations
 

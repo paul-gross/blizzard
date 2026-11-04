@@ -1,6 +1,6 @@
 """The restart/claim race is atomic (component tier).
 
-Mirrors ``tests/test_edit_claim_race.py``'s own interleaving pattern: ``RestartService``
+Mirrors ``tests/component/hub/api/test_chunks_edit_claim_race.py``'s own interleaving pattern: ``RestartService``
 and ``ClaimService`` now serialize through the same locked row transaction
 (``bzh:store-exclusive-write``), not a shared in-process lock — a claim landing on a
 chunk mid-restart can't interleave with the restart's own read-then-write."""

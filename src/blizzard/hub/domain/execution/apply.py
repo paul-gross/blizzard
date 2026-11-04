@@ -160,7 +160,7 @@ class ApplyResult:
     @classmethod
     def hub_node_taken_replay(cls) -> ApplyResult:
         """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node
-        (``tests/test_migration_apply.py::test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken``)."""
+        (``tests/component/hub/api/test_fleet_migration_apply.py::test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken``)."""
         return cls(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
 
 
