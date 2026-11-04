@@ -304,7 +304,7 @@
     {
       "id": "takeover-park-supersede-reclaims",
       "statement": "A hub-side supersede of an ordinary park leaves the chunk ready with no local requeue mark, so InterruptedClaims.reconcile falls to its reclaim arm and the held workdir goes to a fresh attempt rather than being skipped for the open takeover that had parked it.",
-      "owner": "tests/test_runner_takeover.py#test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover",
+      "owner": "tests/component/runner/lifecycle/test_takeover.py#test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover",
       "owner_kind": "test",
       "owner_assert": {
         "quote": "does not outlive the park itself"
@@ -314,7 +314,7 @@
       ],
       "sites": [
         {
-          "file": "tests/test_runner_takeover.py",
+          "file": "tests/component/runner/lifecycle/test_takeover.py",
           "symbol": "test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover",
           "role": "owner"
         }

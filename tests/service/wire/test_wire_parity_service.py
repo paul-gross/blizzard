@@ -69,7 +69,7 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
     """The escalation wire round trip through ``push_facts`` -> ``POST /api/fleet/events``
     — the runner's only path to it (``IHubClient.report_escalation`` had no callers and
     is gone). Real ingest is pinned by ``tests/test_store_and_forward.py``
-    and ``tests/test_runner_loop.py``."""
+    and ``tests/unit/runner/loop/test_loop.py``."""
     bin_dir = require_mock_fleet()
     with mock_hub(bin_dir) as hub, http_hub_client(url_of(hub)) as client:
         chunk_id = _seed(hub)
