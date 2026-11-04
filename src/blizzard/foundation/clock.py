@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from blizzard.foundation.logging import get_logger
+import structlog
+
 from blizzard.foundation.roles import collaborator, domain_model
 
 
@@ -124,7 +125,6 @@ def _require_aware(instant: datetime, what: str) -> None:
         raise ValueError(f"{what} must be timezone-aware, got naive {instant.isoformat()}")
 
 
-@collaborator
 class ControlledClock:
     """A clock that stands at its anchor until ``set`` or ``advance`` moves it, and only forward
     (``bzh:injected-clock``). Every read and every move, with its check, happens under one lock."""
@@ -165,7 +165,7 @@ ENV_CLOCK = "BLIZZARD_CLOCK"
 #: The fence (``bzh:injected-clock``): only the value ``1`` permits what ``ENV_CLOCK`` asks for.
 ENV_CLOCK_FENCE = "BLIZZARD_CLOCK_FENCE"
 
-_logger = get_logger(__name__)
+_logger = structlog.get_logger(__name__)
 
 
 @domain_model
