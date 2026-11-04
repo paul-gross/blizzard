@@ -38,10 +38,7 @@ mise run process-ref-lint
 
 # --- Structural gate (contracts/ast-grep/) -----------------------------------
 step "structural gate (blizzard:structural-gate): ast-grep scan"
-uv run ast-grep scan --error=unused-suppression .
-
-step "structural gate (blizzard:structural-gate): ast-grep test"
-uv run ast-grep test
+mise run structural-gate
 
 # --- Repo-path pointers in Python prose (blizzard:pointer-check) -------------
 step "repo-path pointers (blizzard:pointer-check): mise run pointer-check"

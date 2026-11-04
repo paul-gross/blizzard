@@ -190,6 +190,7 @@ do_not_mutate = [
 pytest_add_cli_args = ["-m", "unit"]
 also_copy = [
     "pyproject.toml",
+    ".gitignore",
     # The winter-free guard scans the Playwright package's TypeScript.
     "tests/harness",
     "tests/journey",

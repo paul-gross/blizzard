@@ -21,6 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: false
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -33,7 +37,7 @@ jobs:
       - name: pyright
         run: uv run pyright
       - name: structural gate (blizzard:structural-gate)
-        run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
+        run: mise run structural-gate
       - name: repo-path pointers (blizzard:pointer-check)
         run: uv run python scripts/repo_pointers.py check
 

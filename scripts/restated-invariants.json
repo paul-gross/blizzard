@@ -332,7 +332,9 @@
       "markers": [
         "runner s admitted range currently",
         "admitted opencode version range currently",
-        "range of opencode versions currently"
+        "range of opencode versions currently",
+        "opencode version inside either major version s admitted range",
+        "proof for its major version opencode 1"
       ],
       "sites": [
         {

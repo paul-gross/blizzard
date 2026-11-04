@@ -52,7 +52,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pyright
 mise run process-ref-lint
-uv run ast-grep scan --error=unused-suppression .
+mise run structural-gate
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"

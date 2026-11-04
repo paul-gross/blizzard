@@ -5,9 +5,10 @@ Python syntax rather than text. `rules/` holds one YAML file per rule; `rule-tes
 negative shape with `ast-grep test`'s own `valid:`/`invalid:` fixtures and snapshots.
 
 `sgconfig.yml` at the repo root points here (`ruleDirs`/`testConfigs`); `mise run structural-gate` and
-`scripts/ci-gate.sh` both run `ast-grep scan --error=unused-suppression .` — the `--error=unused-suppression` flag is
+`scripts/ci-gate.sh` both run the scan defined by `mise run structural-gate` — the `--error=unused-suppression` flag is
 load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported instead of failing the gate — then
-`ast-grep test`, so a `rule-tests/` fixture or snapshot regression fails the same gate as a live violation.
+`ast-grep test`, so a `rule-tests/` fixture or snapshot regression fails the same gate as a live violation. The scan
+disregards ignore files, as pyright does, and prunes pyright's generated and dependency trees explicitly.
 
 ## Rules
 

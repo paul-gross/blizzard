@@ -15,6 +15,7 @@ ignores:
   - '**/node_modules/**'
   - '**/__pycache__/**'
   - '**/.*/**'
+  - '**/.*'
   - 'mutants/**'
   - 'build/**'
   - 'dist/**'
