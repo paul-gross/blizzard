@@ -164,17 +164,24 @@ class OpenCodeTwoAdapter:
         )
 
     def _launch(
-        self, request: DriveRequest, env: dict[str, str], stdout_path: str, stderr_path: str
+        self, request: DriveRequest, env: dict[str, str], stdout_path: str, stderr_path: str, *, stdout_mode: str = "ab"
     ) -> LaunchedProcess:
-        """Write ``request`` and launch its driver, deferred until the caller's durable record lands."""
+        """Write ``request`` and launch its driver, deferred until the caller's durable record lands. Every failure
+        before the driver exists is the seam's :class:`HarnessSpawnError`."""
         try:
             self._keeper.ensure()
         except ServiceUnavailableError as exc:
             raise HarnessSpawnError(f"no OpenCode service to drive the turn on: {exc}") from exc
-        path = write_request(self._request_dir, request)
+        try:
+            path = write_request(self._request_dir, request)
+        except OSError as exc:
+            raise HarnessSpawnError(f"cannot write the OpenCode 2 drive request: {exc}") from exc
         argv = [*self._driver_command, "runner", "opencode", "drive", "--request", str(path)]
         try:
-            with stdout_target(stdout_path) as stdout_file, stdout_target(stderr_path) as stderr_file:
+            with (
+                stdout_target(stdout_path, mode=stdout_mode) as stdout_file,
+                stdout_target(stderr_path) as stderr_file,
+            ):
                 launched = self._launcher.launch(
                     argv,
                     cwd=request.directory,
@@ -270,7 +277,7 @@ class OpenCodeTwoAdapter:
             if preamble is not None
             else self._worker_env.variables
         )
-        launched = self._launch(request, env, output_path, "")
+        launched = self._launch(request, env, output_path, "", stdout_mode="wb")
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,

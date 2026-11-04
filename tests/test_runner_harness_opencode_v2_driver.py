@@ -17,7 +17,7 @@ from blizzard.runner.harness.opencode_v2.driver import (
     TurnTimeoutError,
     bind_service,
 )
-from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration
+from blizzard.runner.harness.opencode_v2.registration import RegistrationError, ServiceRegistration
 from tests.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
 
 pytestmark = pytest.mark.unit
@@ -180,6 +180,36 @@ def test_a_service_unreachable_past_the_bound_fails_the_turn() -> None:
     clock.now += 5
     with pytest.raises(ServiceRestartedError, match="stopped answering"):
         core.check_service("ses_r")
+
+
+def test_a_service_that_returns_within_the_grace_after_the_bound_has_the_tree_interrupted() -> None:
+    """A service gone past the bound still fails the turn, but one that comes back within the grace resumed the turn
+    by itself, so it is stopped before the driver gives up."""
+    core, machine, clock = _core(FakeService(running={"ses_r"}))
+    machine.transport.service = None
+    core.check_service("ses_r")
+    clock.now += 5
+    returned = FakeService(pid=200, running={"ses_r"})
+
+    def back_on_the_next_poll(seconds: float) -> None:
+        clock.now += seconds
+        machine.transport.service = returned
+        machine.registration = replace(REGISTRATION, id="svc-2", pid=200)
+
+    core._sleep = back_on_the_next_poll  # pyright: ignore[reportPrivateUsage]  # drives the grace loop's time
+    with pytest.raises(ServiceRestartedError, match="stopped answering"):
+        core.check_service("ses_r")
+    assert returned.interrupted == ["ses_r"]
+
+
+def test_a_malformed_registration_reads_as_no_service_answering() -> None:
+    core, _, _ = _core(FakeService())
+
+    def unreadable() -> ServiceRegistration | None:
+        raise RegistrationError("the OpenCode service registration is not JSON")
+
+    core._source = unreadable  # pyright: ignore[reportPrivateUsage]  # a registration read mid-rewrite
+    assert core.current_identity() is None
 
 
 def test_interrupt_tree_stops_running_descendants_deepest_first_then_the_root() -> None:

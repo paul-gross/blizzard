@@ -34,6 +34,7 @@ from blizzard.runner.harness.opencode_v2.driver import (
     ServiceRestartedError,
     TurnTimeoutError,
 )
+from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES
 from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableError
 from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE,
@@ -43,8 +44,6 @@ from blizzard.runner.harness.opencode_v2.version import (
 
 PROOF_METADATA_KEY = "blizzard"
 TURN_TIMEOUT_SECONDS = 240.0
-#: The rules every proof session carries: native questions are denied, as for every fleet session.
-FIXED_DENIES: tuple[PermissionRule, ...] = (PermissionRule("question", "*", PermissionEffect.DENY),)
 _CHOICE = re.compile(r"<Choice>\s*(?P<choice>[A-Za-z_-]+)\s*</Choice>")
 
 
@@ -1055,7 +1054,6 @@ SOURCE_ERROR_SHAPES: JsonObject = {
 
 
 __all__ = [
-    "FIXED_DENIES",
     "PROOF_METADATA_KEY",
     "SOURCE_ERROR_SHAPES",
     "OpenCodeTwoProof",

@@ -77,6 +77,8 @@ class SessionService:
     on_prompt: Hook | None = None
     on_reply: Hook | None = None
     polls: int = 0
+    #: A path suffix -> the status every request ending in it answers instead.
+    failing: dict[str, int] = field(default_factory=dict[str, int])
     on_poll: Callable[[SessionService], None] | None = None
 
     def add_session(self, session_id: str, *, parent: str | None = None, **fields: object) -> Record:
@@ -101,6 +103,9 @@ class SessionService:
         body: Record = json.loads(request.body) if request.body else {}
         segments = path.split("/")[3:]
         method = request.method
+        for suffix, status in self.failing.items():
+            if path.endswith(suffix):
+                return status, {"error": "failing"}
         if path == "/api/info":
             if self.on_poll is not None:
                 self.polls += 1

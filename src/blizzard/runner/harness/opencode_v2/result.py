@@ -1,6 +1,6 @@
-"""The driver's result, ``opencode-v2-driver/1``: NDJSON records, each naming its ``record`` kind, ending in one
-``result`` record. A decision is written when it is made; steps, the error, and the result once the turn ends. A
-capture without its ``result`` record was cut short and is unusable."""
+"""The driver's result, ``opencode-v2-driver/1``: NDJSON records, each naming its ``record`` kind, from one ``header``
+to one ``result`` record. A decision is written when it is made; steps, the error, and the result once the turn ends.
+A lease's capture appends attempts, so a reader reads the last one, unusable when it never reached its ``result``."""
 
 from __future__ import annotations
 
@@ -165,11 +165,13 @@ def _error(record: JsonObject) -> TurnError | None:
 
 
 def parse_result(output: str) -> DriverResult | None:
-    """The result ``output`` carries, or ``None`` when it ends without a ``result`` record. A line that is not a
-    record is skipped, so stray output never costs a verdict."""
+    """The last attempt ``output`` carries, or ``None`` when it never reached its ``result`` record — an earlier
+    attempt's result is stale. Each ``header`` starts an attempt afresh; a line that is not a record is skipped, so
+    stray output never costs a verdict."""
     steps: list[Step] = []
     decisions: list[Decision] = []
     error: TurnError | None = None
+    last: DriverResult | None = None
     for line in output.splitlines():
         try:
             record = decode_json(line)
@@ -178,7 +180,9 @@ def parse_result(output: str) -> DriverResult | None:
         if not isinstance(record, dict):
             continue
         kind = record.get("record")
-        if kind == "step":
+        if kind == "header":
+            steps, decisions, error, last = [], [], None, None
+        elif kind == "step":
             step = _step(record)
             if step is not None:
                 steps.append(step)
@@ -200,8 +204,8 @@ def parse_result(output: str) -> DriverResult | None:
             try:
                 outcome = Outcome(_str(record, "outcome"))
             except ValueError:
-                return None
-            return DriverResult(
+                continue
+            last = DriverResult(
                 session_id=_str(record, "session"),
                 outcome=outcome,
                 text=_str(record, "text"),
@@ -209,7 +213,7 @@ def parse_result(output: str) -> DriverResult | None:
                 decisions=tuple(decisions),
                 error=error,
             )
-    return None
+    return last
 
 
 __all__ = ["SCHEMA", "Decision", "DriverResult", "Outcome", "ResultWriter", "Step", "parse_result"]

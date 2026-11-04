@@ -20,7 +20,7 @@ from blizzard.runner.harness.opencode_v2.client import (
     ServiceShapeError,
     SessionCreate,
 )
-from blizzard.runner.harness.opencode_v2.driver import DriverCore, ServiceRestartedError
+from blizzard.runner.harness.opencode_v2.driver import DEFAULT_REACH_BOUND_SECONDS, DriverCore, ServiceRestartedError
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError, classify_error
 from blizzard.runner.harness.opencode_v2.request import DriveRequest
 from blizzard.runner.harness.opencode_v2.result import Decision, DriverResult, Outcome, ResultWriter, Step
@@ -38,6 +38,9 @@ from blizzard.runner.harness.opencode_v2.shapes import (
 from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableError
 
 DEFAULT_GRACE_SECONDS = 30.0
+#: What a call the driver makes can fail with that the service, not the turn, is to blame for.
+_SERVICE_FAULTS = (ServiceUnreachableError, ServiceRequestError, ServiceShapeError, OpenCodeTwoShapeError)
+_STEP_TYPES = frozenset({"assistant", "compaction"})
 _SETTLED_TOOL_STATES = frozenset({"completed", "error"})
 _OUTCOMES = {outcome.value: outcome for outcome in Outcome}
 
@@ -80,6 +83,7 @@ class TurnDriver:
         stop: threading.Event,
         poll_seconds: float = 1.0,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
+        failing_bound_seconds: float = DEFAULT_REACH_BOUND_SECONDS,
         listen: bool = True,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -91,6 +95,9 @@ class TurnDriver:
         self._stop = stop
         self._poll_seconds = poll_seconds
         self._grace_seconds = grace_seconds
+        self._failing_bound_seconds = failing_bound_seconds
+        self._failing_since: float | None = None
+        self._prompted = False
         self._listen = listen
         self._monotonic = monotonic
         self._wake = threading.Event()
@@ -110,21 +117,30 @@ class TurnDriver:
         return self._wake
 
     def run(self) -> DriverResult:
+        """The turn's result, always written: a failure the service is to blame for ends it ``failed``, the tree
+        interrupted first once it was prompted."""
         root = self._request.session_id
-        try:
-            self._open()
-        except _Refused as refused:
-            return self._finish(Outcome.FAILED, "", [], refused.error)
         listener = threading.Thread(target=self._listen_events, name="opencode-events", daemon=True)
         try:
+            self._open()
             self._seed(self._poll())
             if self._listen:
                 listener.start()
             delivery = None if self._request.kind.mints() else Delivery.QUEUE
             self._core.client.prompt(root, self._request.prompt, delivery)
+            self._prompted = True
             return self._watch()
+        except _Refused as refused:
+            return self._finish(Outcome.FAILED, "", [], refused.error)
         except ServiceRestartedError as exc:
             return self._finish(Outcome.FAILED, "", [], TurnError(ErrorKind.SERVICE, str(exc)))
+        except _SERVICE_FAULTS as exc:
+            if self._prompted:
+                with suppress(*_SERVICE_FAULTS):
+                    self._core.interrupt_tree(root)
+            return self._finish(
+                Outcome.FAILED, "", [], TurnError(ErrorKind.SERVICE, f"the OpenCode service failed: {exc}")
+            )
         finally:
             self._done.set()
 
@@ -217,18 +233,32 @@ class TurnDriver:
             if self._stop.is_set():
                 return self._interrupt()
             if self._core.check_service(root):
-                with suppress(ServiceUnreachableError):
+                try:
                     poll = self._poll()
                     self._cover_children(poll)
                     self._answer(poll)
                     self._observe_tools(poll)
                     self._compact_if_due(poll)
                     settled = self._settled(poll)
+                except _SERVICE_FAULTS:
+                    self._missed_poll()
+                else:
+                    self._failing_since = None
                     if settled and self._settled_once:
                         return self._conclude(poll)
                     self._settled_once = settled
             self._wake.wait(self._poll_seconds)
             self._wake.clear()
+
+    def _missed_poll(self) -> None:
+        """A poll the service failed — a request gone by the time it was answered, a transient error — is retried
+        like an outage, and fails the turn once failures outlast the bound."""
+        self._settled_once = False
+        now = self._monotonic()
+        if self._failing_since is None:
+            self._failing_since = now
+        elif now - self._failing_since >= self._failing_bound_seconds:
+            raise ServiceUnreachableError(f"every poll failed for {self._failing_bound_seconds:.0f}s")
 
     def _cover_children(self, poll: _Poll) -> None:
         """Apply the session's rules to each child as it appears; a child never inherits them, nor the environment,
@@ -297,7 +327,7 @@ class TurnDriver:
 
     def _interrupt(self) -> DriverResult:
         root = self._request.session_id
-        with suppress(ServiceUnreachableError, ServiceRequestError):
+        with suppress(*_SERVICE_FAULTS):
             self._core.interrupt_tree(root)
         deadline = self._monotonic() + self._grace_seconds
         poll = _Poll()
@@ -306,7 +336,7 @@ class TurnDriver:
                 poll = self._poll()
                 if not any(session_id in self._core.client.running_sessions() for session_id in poll.parents):
                     break
-            except (ServiceUnreachableError, ServiceRequestError):
+            except _SERVICE_FAULTS:
                 pass
             time.sleep(min(self._poll_seconds, 0.2))
         return self._finish(Outcome.INTERRUPTED, self._final_text(poll), self._steps(poll), None)
@@ -332,7 +362,7 @@ class TurnDriver:
         steps: list[Step] = []
         for session_id, parent in poll.parents.items():
             for message in self._turn_messages(poll, session_id):
-                if message.type != "assistant" or message.tokens is None:
+                if message.type not in _STEP_TYPES or message.tokens is None:
                     continue
                 model = None if message.model is None else f"{message.model.provider_id}/{message.model.id}"
                 steps.append(Step(session_id, parent, message.id, model, message.tokens, message.cost or 0.0))

@@ -76,6 +76,8 @@ def test_every_captured_message_and_part_parses(version: str) -> None:
     tools = [part for message in assistants for part in message.parts if part.type == "tool"]
     assert tools and all(part.id and part.name and part.state is not None for part in tools)
     assert {part.state.status for part in tools if part.state is not None} >= {"completed", "error"}
+    compactions = [message for message in messages if message.type == "compaction"]
+    assert compactions and all(m.tokens is not None and m.tokens.input > 0 and m.cost is not None for m in compactions)
     prompt = [parse_message(item) for item in _items(_fixture(version, "prompt_messages"))]
     assert prompt[1].final_text() == "READY"
     assert prompt[-1].outcome == "succeeded"

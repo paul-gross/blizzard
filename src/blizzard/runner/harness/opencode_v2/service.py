@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.runner.harness.opencode_v2.client import ServiceRequestError, ServiceShapeError
 from blizzard.runner.harness.opencode_v2.driver import (
     ServiceIdentity,
     ServiceIdentityError,
@@ -15,7 +16,11 @@ from blizzard.runner.harness.opencode_v2.driver import (
     bind_service,
 )
 from blizzard.runner.harness.opencode_v2.registration import RegistrationError, read_registration, registration_path
-from blizzard.runner.harness.opencode_v2.transport import IServiceTransport, ServiceUnreachableError
+from blizzard.runner.harness.opencode_v2.transport import (
+    IServiceTransport,
+    NonLoopbackServiceError,
+    ServiceUnreachableError,
+)
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import ChildLaunchError, IChildProcesses
 
@@ -66,7 +71,15 @@ class ServiceKeeper:
         path = self._registration_file()
         try:
             _, identity = bind_service(lambda: read_registration(path), self._transport)
-        except (ServiceNotRegisteredError, ServiceIdentityError, ServiceUnreachableError, RegistrationError):
+        except (
+            ServiceNotRegisteredError,
+            ServiceIdentityError,
+            ServiceUnreachableError,
+            ServiceRequestError,
+            ServiceShapeError,
+            RegistrationError,
+            NonLoopbackServiceError,
+        ):
             return None
         return identity
 

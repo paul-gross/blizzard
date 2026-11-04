@@ -319,6 +319,65 @@ def test_a_failed_turn_carries_its_classified_error() -> None:
     assert harness.records("error")[0]["kind"] == "usage-limit"
 
 
+def test_a_permission_request_gone_before_its_reply_is_a_missed_poll() -> None:
+    """The operator answered it in their own TUI between the list and the reply: the reply's 404 is retried away."""
+
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.permissions[session_id] = [{"id": "per_1", "sessionID": session_id, "action": "shell"}]
+        service.failing["/permission/per_1/reply"] = 404
+
+    def advance(service: SessionService) -> None:
+        if service.polls == 3:
+            service.permissions.clear()
+            service.messages[ROOT] += [assistant("msg_a", "answered elsewhere"), idle("msg_i")]
+
+    service = SessionService(on_prompt=prompt, on_poll=advance)
+    result = Harness(service, _request()).run()
+    assert result.outcome is Outcome.SUCCEEDED and result.text == "answered elsewhere"
+
+
+def test_polls_that_keep_failing_fail_the_turn_and_interrupt_the_tree() -> None:
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.running.add(session_id)
+        service.failing["/message"] = 500
+
+    service = SessionService(on_prompt=prompt)
+    harness = Harness(service, _request())
+    harness.driver._failing_bound_seconds = 0.05  # pyright: ignore[reportPrivateUsage]  # a short bound
+    result = harness.run()
+    assert result.outcome is Outcome.FAILED
+    assert result.error is not None and result.error.kind is ErrorKind.SERVICE
+    assert service.interrupted == [ROOT]
+
+
+def test_a_shape_the_driver_cannot_read_fails_the_turn_with_a_result() -> None:
+    service = _finishes()
+    service.add_session(ROOT, metadata={"blizzard": {"runner": "run_1"}})
+    del service.sessions[ROOT]["location"]
+    harness = Harness(service, _request(DriveKind.RESUME))
+    result = harness.run()
+    assert result.error is not None and result.error.kind is ErrorKind.SERVICE
+    assert harness.records("result")
+
+
+def test_a_compaction_this_turn_ran_counts_toward_its_usage() -> None:
+    compaction: Record = {
+        "type": "compaction",
+        "id": "msg_k",
+        "time": {"created": 2},
+        "tokens": {"input": 700, "output": 90, "reasoning": 40, "cache": {"read": 6400, "write": 0}},
+        "cost": 0.01,
+        "model": MODEL,
+    }
+
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.messages[session_id] += [assistant("msg_a", "done"), compaction, idle("msg_i")]
+
+    result = Harness(SessionService(on_prompt=prompt), _request()).run()
+    assert [step.message_id for step in result.steps] == ["msg_a", "msg_k"]
+    assert result.steps[1].tokens.cache_read == 6400
+
+
 def test_the_password_never_reaches_the_result() -> None:
     harness = Harness(_finishes(), _request())
     harness.run()
