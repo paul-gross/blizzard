@@ -1,0 +1,420 @@
+"""Route claim — exactly-one-wins, paused-denial, and the first-node envelope (component tier)."""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+from sqlalchemy import select
+
+from blizzard.hub.store import schema as s
+from tests.support import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
+
+_POINTER = {"source": "default", "ref": "7"}
+
+
+def _ingest(hub: HubHarness, ref: str = "7") -> str:
+    pointer = {"source": "default", "ref": ref}
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    return chunk_id
+
+
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
+    return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a", "env-b"]}
+
+
+def _register(hub: HubHarness, runner_id: str = "r1", workspace_id: str = "w1") -> None:
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": runner_id,
+            "workspace_id": workspace_id,
+            "capabilities": [{"harness_id": "claude", "default": True}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["environment_ids"] == ["env-a", "env-b"]
+    env = body["envelope"]
+    assert env["chunk_id"] == chunk_id
+    # The claim does not mint the lease: the runner reports its epoch via
+    # POST /events, so the claim envelope carries the current epoch (0, no lease yet).
+    assert env["epoch"] == 0
+    assert env["node"]["node_name"] == "triage"
+    assert env["node"]["executor"] == "runner"
+    assert env["prompt"]
+    assert env["judgement_prompt"]
+    assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
+    assert {c["name"] for c in env["node"]["choices"]} == {
+        "already-done",
+        "basic",
+        "advanced",
+        "harness",
+        "unfulfillable",
+    }
+    assert env["work_refs"] == [{**_POINTER, "label": "default#7"}]
+
+
+def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:
+    """``ChunkSummary.environment_count`` counts the live route's environments
+    — never the full ``environment_ids`` list. A grouped chunk counts all its envs;
+    an unrouted chunk is 0."""
+    hub = build_hub(tmp_path)
+    grouped = _ingest(hub, ref="7")
+    single = _ingest(hub, ref="8")
+    unrouted = _ingest(hub, ref="9")
+
+    hub.client.post("/api/fleet/routes", json=_claim_body(grouped))  # env-a, env-b — grouped
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": single, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-c"]},
+    )
+
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
+    assert summaries[grouped]["environment_count"] == 2
+    assert summaries[single]["environment_count"] == 1
+    assert summaries[unrouted]["environment_count"] == 0
+
+
+def test_summary_carries_the_routes_workspace_while_in_progress(tmp_path: Path) -> None:
+    """``ChunkSummary.workspace_id`` is the live route's workspace — what lets a surface attribute
+    a chunk to the binding it was claimed for; an unrouted chunk reads ``None``."""
+    hub = build_hub(tmp_path)
+    routed = _ingest(hub, ref="7")
+    unrouted = _ingest(hub, ref="8")
+    hub.client.post("/api/fleet/routes", json=_claim_body(routed))
+
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
+    assert summaries[routed]["workspace_id"] == "w1"
+    assert summaries[unrouted]["workspace_id"] is None
+
+
+# A graph whose single **runner** node authors `pass -> done` — landing the terminal
+# from a runner node stamps no `route.released` (only a hub node landing does, #140).
+_RUNNER_TERMINAL_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: done
+"""
+
+
+def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
+    """A terminal chunk holds no claim, so its ``runner_id``/``workspace_id``/
+    ``environment_count`` read unrouted even while its route facts still show a route —
+    proven through a real completion, not a hand-written transition row."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
+    running = _ingest(hub, ref="7")
+    finished = _ingest(hub, ref="8")
+    stopped = _ingest(hub, ref="9")
+
+    node_ids = {}
+    for chunk_id, envs in ((running, ["env-a", "env-b"]), (finished, ["env-c"]), (stopped, ["env-d"])):
+        resp = hub.client.post(
+            "/api/fleet/routes",
+            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": envs},
+        )
+        assert resp.status_code == 201, resp.text
+        node_ids[chunk_id] = resp.json()["envelope"]["node"]["node_id"]
+
+    report_lease(hub, finished, epoch=1, seq=1)  # the fence input the completion checks against
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{finished}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_ids[finished], "artifacts": []},
+    )
+    assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
+    # The premise, asserted rather than asserted-about: apply landed the terminal and left
+    # the route live. If that ever changes, this line fails and the fix's rationale is stale.
+    assert hub.services.chunks.route.route_of(finished) is not None
+    assert hub.client.post(f"/api/chunks/{stopped}/stop", json={"by": "operator"}).status_code == 202
+
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
+    assert summaries[running]["status"] == "running"
+    assert (summaries[running]["runner_id"], summaries[running]["environment_count"]) == ("r1", 2)
+    assert summaries[finished]["status"] == "done"
+    assert (summaries[finished]["runner_id"], summaries[finished]["environment_count"]) == (None, 0)
+    assert (summaries[running]["workspace_id"], summaries[finished]["workspace_id"]) == ("w1", None)
+    assert summaries[stopped]["status"] == "stopped"
+    assert (summaries[stopped]["runner_id"], summaries[stopped]["environment_count"]) == (None, 0)
+
+    # The registry's own fold over a runner with mixed finished + in-progress chunks:
+    # one claim line, and a numerator that is live occupancy alone.
+    held = [c for c in summaries.values() if c["runner_id"] == "r1"]
+    assert [c["chunk_id"] for c in held] == [running]
+    assert sum(c["environment_count"] for c in held) == 2
+
+    # The raw route fact stays truthful on the detail — the summary filters, not the store.
+    detail = hub.client.get(f"/api/chunks/{finished}").json()
+    assert detail["route"] is not None
+    assert detail["route"]["runner_id"] == "r1"
+
+
+def test_a_claim_on_a_finished_chunk_is_denied_as_terminal_not_as_held(tmp_path: Path) -> None:
+    """A runner-authored ``done`` leaves the route fact live, yet the route confers no
+    tenure: a second runner's claim reads the terminal denial, naming no holder."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
+    chunk_id = _ingest(hub, ref="8")
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+    assert resp.status_code == 201, resp.text
+    node_id = resp.json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
+    )
+    assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
+    assert hub.services.chunks.route.route_of(chunk_id) is not None
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, runner="r2"))
+
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["status"] == "done"
+    assert "held_by_runner_id" not in body
+
+
+# --- Route capability token — mint at claim, hash-only at rest, returned once (#84a) ---
+
+
+def test_winning_claim_carries_a_plaintext_route_token(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+
+    body = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()
+
+    assert isinstance(body["route_token"], str)
+    assert len(body["route_token"]) > 30  # secrets.token_urlsafe(32) -> a 43-char token
+
+
+def test_hub_persists_only_the_tokens_sha256_hash(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+
+    token = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()["route_token"]
+
+    with hub.engine.connect() as conn:
+        row = conn.execute(
+            hub_scoped(select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id))
+        ).one()
+    assert row.token_hash != token  # the plaintext never lands in the store
+    assert row.token_hash == hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def test_two_claims_on_different_chunks_mint_different_tokens(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_a = _ingest(hub, ref="7")
+    chunk_b = _ingest(hub, ref="8")
+
+    token_a = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_a)).json()["route_token"]
+    token_b = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_b, "r2")).json()["route_token"]
+
+    assert token_a != token_b
+
+
+def test_completion_carrying_the_claims_route_token_is_accepted(tmp_path: Path) -> None:
+    """Present-only in this phase: the hub does not yet reject on
+    a missing/mismatched token, but a completion carrying the claim's own token is
+    accepted exactly as one without it — no behavior regression from adding the field."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    claimed = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()
+    node_id = claimed["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "already-done",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": node_id,
+            "artifacts": [],
+            "route_token": claimed["route_token"],
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] != "failure"
+
+
+def test_second_claim_loses_with_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+
+    assert hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1")).status_code == 201
+    loser = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r2"))
+    assert loser.status_code == 409
+    assert loser.json()["held_by_runner_id"] == "r1"
+
+
+def test_claim_on_unknown_chunk_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/routes", json=_claim_body("ch_missing")).status_code == 404
+
+
+def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    claimed = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()["envelope"]
+
+    # The lost-apply recovery read returns the same current-node envelope, at the chunk's
+    # newest epoch — which the claim's own reservation has since raised one past its floor.
+    reread = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
+    assert reread["node"]["node_id"] == claimed["node"]["node_id"]
+    assert reread["epoch"] == claimed["epoch"] + 1
+
+
+# --- The hub denies a claim from a registry-paused runner outright ---
+# Distinct from the 409 race loss above: this claim never enters the race at all.
+
+
+def test_claim_denied_while_hub_paused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    _register(hub, "r1")
+    assert hub.client.post("/api/runners/r1/pause", json={"by": "operator"}).status_code == 200
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1"))
+
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["chunk_id"] == chunk_id
+    assert body["runner_id"] == "r1"
+    # Distinguishable from a 409 conflict: no other runner holds this chunk, it was
+    # simply never allowed to enter the race — it stays claimable.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "running"
+
+
+def test_claim_allowed_after_resume(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    _register(hub, "r1")
+    hub.client.post("/api/runners/r1/pause", json={"by": "operator"})
+    assert hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1")).status_code == 403
+
+    assert hub.client.post("/api/runners/r1/resume", json={"by": "operator"}).status_code == 200
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1"))
+
+    assert resp.status_code == 201
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+
+
+def test_claim_denied_the_instant_the_pause_lands_mid_tick(tmp_path: Path) -> None:
+    """The motivating race: a pause landing at the hub between a runner's last pull
+    and its claim POST — the pause fact is already durable by the time the claim
+    arrives, whatever the runner's stale local copy says."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    _register(hub, "r1")
+    # Simulate the operator's pause landing after the runner's last pull would have
+    # mirrored "not paused" but before its in-flight claim reaches the hub.
+    hub.client.post("/api/runners/r1/pause", json={"by": "operator"})
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1"))
+
+    assert resp.status_code == 403  # the hub is the arbiter — it catches what the runner missed
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is None
+
+
+def test_claim_allowed_while_only_locally_paused(tmp_path: Path) -> None:
+    """Local pause is the runner's own restraint — the hub never denies on it."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    _register(hub, "r1")
+    reported = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [{"seq": 1, "kind": "runner.locally_paused", "payload": {"runner_id": "r1", "by": "alice"}}],
+        },
+    )
+    assert reported.status_code == 200
+    view = hub.client.get("/api/fleet/runners/r1").json()
+    assert view["locally_paused"] is True
+    assert view["hub_paused"] is False
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1"))
+
+    assert resp.status_code == 201
+
+
+def test_claim_from_an_unregistered_runner_is_denied_before_the_race(tmp_path: Path) -> None:
+    """Neither brake nor the runner's capabilities can be judged without a registration, so a
+    claimant the registry has never heard from is refused in the paused-denial shape and the
+    chunk stays claimable."""
+    hub = build_hub(tmp_path, auto_register_claimants=False)
+    chunk_id = _ingest(hub)
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
+
+    assert resp.status_code == 403
+    assert resp.json() == {
+        "chunk_id": chunk_id,
+        "runner_id": "r-unregistered",
+        "detail": "runner r-unregistered is not registered at the hub",
+    }
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+
+
+def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> None:
+    """Pause stops new claims; it does not strand work already held."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    _register(hub, "r1")
+    claimed = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1")).json()
+    node_id = claimed["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    hub.client.post("/api/runners/r1/pause", json={"by": "operator"})
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "already-done", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] != "failure"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+
+
+# --- The hub refuses a claim on an already-terminal chunk outright ---
+# The peek-then-claim race `hub stop` opens; the hub re-derives status under the lock.
+
+
+def test_claim_denied_when_the_chunk_is_already_stopped(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["chunk_id"] == chunk_id
+    assert body["status"] == "stopped"
+    # Distinguishable from a race-loss 409 (`RouteClaimConflict`): no other runner
+    # holds this chunk, it was simply never eligible to claim in the first place.
+    assert "held_by_runner_id" not in body
+    # The claim did not sneak a route onto the terminal chunk before refusing.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is None

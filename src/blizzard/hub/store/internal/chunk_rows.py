@@ -407,7 +407,8 @@ def next_route_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``seq`` across ``route_created``, ``route_released``
     and ``route_token_minted`` for this chunk, so the triple is totally ordered even
     when timestamps tie. Read-then-insert, so concurrent callers are serialized by
-    :func:`lock_chunk_row` (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
+    :func:`lock_chunk_row` (``bzh:sql-portable``;
+    ``tests/unit/hub/store/internal/test_chunk_rows_route_seq_concurrency.py``)."""
     lock_chunk_row(conn, chunk_id)
     stmts = statements_of(conn)
     created_max, released_max, token_max = (
@@ -421,7 +422,8 @@ def next_artifact_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``artifacts.seq`` for this chunk — the artifacts' durable
     write order, which a same-millisecond pair of ids cannot settle. Read-then-insert, so
     concurrent callers are serialized by :func:`lock_chunk_row` (``bzh:sql-portable``;
-    ``tests/test_artifact_seq_concurrency.py``). Call it in the inserting transaction."""
+    ``tests/unit/hub/store/internal/test_chunk_rows_artifact_seq_concurrency.py``).
+    Call it in the inserting transaction."""
     lock_chunk_row(conn, chunk_id)
     current = conn.execute(
         statements_of(conn).select(s.artifacts, func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)

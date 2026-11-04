@@ -2,7 +2,7 @@
 
 These pin the ``waiting_on_human`` branch and requeue supersession as pure queries over
 an in-memory :class:`ChunkFacts` — no store, no tokens (``bzh:domain-takes-objects``).
-The component tier (test_gates) proves the same on the wired hub.
+The component tier (test_decisions_gates) proves the same on the wired hub.
 """
 
 from __future__ import annotations

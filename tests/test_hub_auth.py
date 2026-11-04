@@ -1,6 +1,6 @@
 """``FleetRequest.assert_owns`` (unit tier) — confining a route that addresses a runner to the caller.
 
-Bearer-token resolution is exercised at component tier (``tests/test_runner_enrollment.py``)."""
+Bearer-token resolution is exercised at component tier (``tests/component/hub/api/test_runners_enrollment.py``)."""
 
 from __future__ import annotations
 

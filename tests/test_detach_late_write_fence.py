@@ -19,7 +19,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "38"}
 
 # A gateless build -> deliver graph — the same minimal shape `tests/test_zombie_fence.py`
-# and `tests/test_gates.py` already use for fence/detach coverage.
+# and `tests/component/hub/api/test_decisions_gates.py` already use for fence/detach coverage.
 _PLAIN_YAML = """
 name: default-delivery
 entry: build

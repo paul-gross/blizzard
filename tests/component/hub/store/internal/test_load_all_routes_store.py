@@ -1,7 +1,7 @@
 """``IReadChunkRouteRepository.load_all_routes`` (component tier).
 
 Proves the bulk read derives the same route per chunk as ``route_of`` called one at a
-time, across ``test_load_all_facts_store``'s fixture, in a bounded query count."""
+time, across ``test_chunk_facts_store_load_all_facts``'s fixture, in a bounded query count."""
 
 from __future__ import annotations
 
