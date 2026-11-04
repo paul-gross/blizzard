@@ -76,7 +76,7 @@ else:
     sys.exit(2)
 """
 
-#: Every keyword maps 1:1 onto a ``blizzard_mock.harness.opencode2_surface.levers.Lever`` member, kept in step by
+#: Every keyword maps 1:1 onto a ``blizzard_mock.harness.opencode2_core.levers.Lever`` member, kept in step by
 #: hand (``bzh:opencode-lever-roster-extends-both-sides``), since this repo cannot import ``blizzard_mock``.
 _LEVERS = (
     "NEVER_REGISTERED",
