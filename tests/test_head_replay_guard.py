@@ -43,6 +43,13 @@ def test_a_module_under_a_tier_folder_cannot_replay_from_empty(tmp_path: Path, f
 
 
 @pytest.mark.unit
+def test_a_frame_resolving_to_the_tests_dir_itself_is_not_a_test_module(tmp_path: Path) -> None:
+    from tests.head_replay_guard import _in_test_tree  # pyright: ignore[reportPrivateUsage]
+
+    assert not _in_test_tree(tmp_path, tmp_path)
+
+
+@pytest.mark.unit
 def test_a_runner_named_ancestor_does_not_turn_a_hub_tree_into_a_runner_tree(tmp_path: Path) -> None:
     url = f"sqlite:///{tmp_path / 'store.db'}"
     runner = replace(

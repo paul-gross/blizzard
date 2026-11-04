@@ -20,7 +20,7 @@ def _in_test_tree(caller: Path, tests: Path) -> bool:
         relative = caller.relative_to(tests)
     except ValueError:
         return False
-    return relative.parts[0] in _TIER_FOLDERS
+    return relative.parts[:1] != () and relative.parts[0] in _TIER_FOLDERS
 
 
 def install_head_replay_guard() -> None:
