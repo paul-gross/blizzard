@@ -1,6 +1,6 @@
 """A minimal fake ``opencode`` CLI for ``tests/test_runner_harness_opencode_adapter.py``'s
 own unit/component tests — distinct from the compatibility diagnostic's own proof
-scaffolding (``tests/service/test_opencode_compatibility_service.py``,
+scaffolding (``tests/service/harnesses/test_opencode_compatibility_service.py``,
 ``bzh:external-cli-fake-is-service-tier``, driven off a real ``mock-opencode emit``
 artifact instead)."""
 

@@ -1,6 +1,6 @@
 """Unit-tier mirror of the service guard's table-vs-protocol check.
 
-``tests/service/test_parity_guard.py``'s table-vs-protocol check is service-gated as
+``tests/service/wire/test_parity_guard.py``'s table-vs-protocol check is service-gated as
 a whole, so a drifted ``_IHUBCLIENT_ENDPOINTS`` entry would only trip under
 ``BLIZZARD_SERVICE=1``. Re-runs just that half here, at the unit tier.
 """
