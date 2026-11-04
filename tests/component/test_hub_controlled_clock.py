@@ -13,7 +13,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import ControlledClock
 from blizzard.foundation.web import Frontend
 from blizzard.hub.api.clock import clock_router
-from blizzard.hub.api.test_flow_control import controlled_flow_router
+from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR
@@ -36,7 +36,7 @@ async def test_cancelled_controlled_step_drains_a_failing_pass_before_releasing_
 
     driver = Mock(spec=FlowDriver)
     driver.step = AsyncMock(side_effect=failing_step)
-    step = next(r.endpoint for r in controlled_flow_router(driver, clock, lock).routes if isinstance(r, APIRoute))
+    step = next(r.endpoint for r in flow_control_router(driver, clock, lock).routes if isinstance(r, APIRoute))
     stepping = asyncio.create_task(step())
     await asyncio.wait_for(entered.wait(), timeout=5)
     stepping.cancel()
@@ -51,7 +51,6 @@ async def test_cancelled_controlled_step_drains_a_failing_pass_before_releasing_
 def test_clock_routes_on_store_behind_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
     monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
-    monkeypatch.delenv("BLIZZARD_TEST_FLOW_STEP", raising=False)
     config = init_hub(tmp_path / "hub")
     migration_runner(config).downgrade("base")
     app = build_hosted_hub_app(config)
@@ -68,7 +67,6 @@ def test_clock_routes_on_store_behind_head(tmp_path: Path, monkeypatch: pytest.M
 def test_clock_and_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
     monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
-    monkeypatch.delenv("BLIZZARD_TEST_FLOW_STEP", raising=False)
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
     try:
         with TestClient(app) as client:
@@ -114,23 +112,14 @@ def test_clock_and_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
             target = datetime.fromisoformat(step["now"]) + timedelta(seconds=1)
             forward = client.post("/api/admin/clock", json={"to": target.astimezone(UTC).isoformat()})
             assert forward.json() == {"previous": step["now"], "now": target.isoformat()}
-            assert client.post("/api/admin/test-flow/advance", json={"seconds": 1}).status_code in (404, 405)
             assert "/api/admin/clock" not in client.get("/openapi.json").json()["paths"]
     finally:
         app.state.engine.dispose()
 
 
-@pytest.mark.parametrize("legacy", [False, True])
-def test_built_board_does_not_mask_unmounted_controls(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, legacy: bool
-) -> None:
+def test_built_board_does_not_mask_unmounted_controls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BLIZZARD_CLOCK", raising=False)
     monkeypatch.delenv("BLIZZARD_CLOCK_FENCE", raising=False)
-    for name in ("BLIZZARD_TEST_FLOW_STEP", "BLIZZARD_CRASH_FENCE"):
-        if legacy:
-            monkeypatch.setenv(name, "1")
-        else:
-            monkeypatch.delenv(name, raising=False)
     board = tmp_path / "board"
     board.mkdir()
     (board / "index.html").write_text("<html>board shell</html>")
@@ -138,13 +127,9 @@ def test_built_board_does_not_mask_unmounted_controls(
     app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
     try:
         with TestClient(app) as client:
-            for path in ("/api/admin/clock", "/api/admin/test-flow/step", "/api/admin/test-flow/advance"):
+            for path in ("/api/admin/clock", "/api/admin/test-flow/step"):
                 assert client.get(path).status_code == 404
-                if not legacy or path.endswith("clock"):
-                    assert client.post(path, json={"seconds": 0}).status_code == 404
-            assert client.post("/api/admin/test-flow/advance", json={"seconds": 0}).status_code == (
-                200 if legacy else 404
-            )
+                assert client.post(path, json={"seconds": 0}).status_code == 404
             assert client.get("/some/board/route").text == "<html>board shell</html>"
             assert client.get("/api/unrelated-missing").text == "<html>board shell</html>"
     finally:
@@ -152,28 +137,18 @@ def test_built_board_does_not_mask_unmounted_controls(
 
 
 @pytest.mark.parametrize(
-    "clock,fence,step,crash",
+    "clock,fence",
     [
-        (None, None, None, None),
-        ("controlled", None, None, None),
-        ("controlled", "true", None, None),
-        (None, "1", None, None),
-        (None, None, "1", "1"),
+        (None, None),
+        ("controlled", None),
+        ("controlled", "true"),
+        (None, "1"),
     ],
 )
 def test_unpermitted_clock_routes(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    clock: str | None,
-    fence: str | None,
-    step: str | None,
-    crash: str | None,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clock: str | None, fence: str | None
 ) -> None:
-    for name, value in zip(
-        ("BLIZZARD_CLOCK", "BLIZZARD_CLOCK_FENCE", "BLIZZARD_TEST_FLOW_STEP", "BLIZZARD_CRASH_FENCE"),
-        (clock, fence, step, crash),
-        strict=True,
-    ):
+    for name, value in (("BLIZZARD_CLOCK", clock), ("BLIZZARD_CLOCK_FENCE", fence)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
         else:
@@ -183,9 +158,6 @@ def test_unpermitted_clock_routes(
         with TestClient(app) as client:
             assert not any(isinstance(route, APIRoute) and route.path == "/api/admin/clock" for route in app.routes)
             assert client.post("/api/admin/clock", json={"advance_seconds": 0}).status_code in (404, 405)
-            assert (client.post("/api/admin/test-flow/advance", json={"seconds": 0}).status_code == 200) == (
-                step == "1" and crash == "1"
-            )
     finally:
         app.state.engine.dispose()
 
@@ -197,7 +169,7 @@ def test_authorization(tmp_path: Path) -> None:
     app = create_hub_app(
         hub.wired_app.state.config,
         services=hub.hub_services,
-        test_flow_router=controlled_flow_router(hub.flow_driver, clock, lock),
+        test_flow_router=flow_control_router(hub.flow_driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),
     )
     tenant = seed_session(hub, seed_user(hub, username="tenant-admin", role=Role.ADMIN))
@@ -209,7 +181,6 @@ def test_authorization(tmp_path: Path) -> None:
         for method, url, body in (
             ("GET", "/api/admin/clock", None),
             ("POST", "/api/admin/clock", {"advance_seconds": 0}),
-            ("POST", "/api/admin/test-flow/step", None),
         ):
             for token, expected in ((None, 401), (tenant, 403), (runner_token("r1"), 403), (admin, 200)):
                 headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -230,7 +201,7 @@ async def test_step_serializes_move_but_not_read(cancel: bool) -> None:
 
     driver = Mock(spec=FlowDriver)
     driver.step = AsyncMock(side_effect=held)
-    step = next(r.endpoint for r in controlled_flow_router(driver, clock, lock).routes if isinstance(r, APIRoute))
+    step = next(r.endpoint for r in flow_control_router(driver, clock, lock).routes if isinstance(r, APIRoute))
     routes = clock_router(clock, lock).routes
     read = next(r.endpoint for r in routes if isinstance(r, APIRoute) and r.methods and "GET" in r.methods)
     move = next(r.endpoint for r in routes if isinstance(r, APIRoute) and r.methods and "POST" in r.methods)

@@ -90,7 +90,7 @@ export type { Repository };
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
 export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
-  api: async ({ testHub, tenant, level, ledger }, use, testInfo) => {
+  api: async ({ testHub, tenant, level, ledger, clockMode }, use, testInfo) => {
     await use(
       hubApi({
         context: testHub.context,
@@ -98,6 +98,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
         tenantId: tenant.id,
         narrow: sharesTenant(level.served),
         level: level.served,
+        clockMode,
         ledger,
         logContext: () => testHub.logTail(tenant.id),
         beforeRequest: () => testHub.refreshSession(),
@@ -130,10 +131,10 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await disposeAll();
   },
 
-  anonymous: async ({ testHub, level, ledger, playwright }, use, testInfo) => {
+  anonymous: async ({ testHub, level, ledger, playwright, clockMode }, use, testInfo) => {
     const context = await playwright.request.newContext({ baseURL: testHub.coordinates.url });
     try {
-      await use(hubApi({ context, testInfo, narrow: false, level: level.served, ledger, logContext: () => testHub.logTail() }));
+      await use(hubApi({ context, testInfo, narrow: false, level: level.served, clockMode, ledger, logContext: () => testHub.logTail() }));
     } finally {
       await context.dispose();
     }

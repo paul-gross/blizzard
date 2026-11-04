@@ -62,16 +62,12 @@ export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: R
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
 }
 
-/**
- * A controlled stack needs a hub of the test's own, and pairs with the hub's controlled step, not its flow-step control,
- * which the hub refuses to boot beside it. Throws before any daemon starts, naming the options.
- */
-export function requireClockOptions(clockMode: ClockMode, served: Level, flowStepped: boolean): void {
+/** A controlled stack needs a hub of the test's own. Throws before any daemon starts, naming the options. */
+export function requireClockOptions(clockMode: ClockMode, served: Level): void {
   if (clockMode !== 'controlled') return;
   if (served !== 'fresh-hub') {
     throw new Error(`clockMode "controlled" moves every clock of the hub's stack, and this test is served "${served}". Declare isolation "fresh-hub".`);
   }
-  if (flowStepped) throw new Error('flowStepped and clockMode "controlled" cannot both be set: the controlled hub steps the flow driver itself (api.flowStep()). Drop one of the options.');
 }
 
 /** Whether a level shares its tenant with other tests, so reads are narrowed to what the test made. */
@@ -114,9 +110,8 @@ export interface FreshHub {
    * Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. With an
    * `overlay`, the hub's file first takes it, merged over what the file holds and checked as `hubConfig` is: the same
    * record under a changed configuration. Throws naming every problem, changing nothing, when the overlay is unsound.
-   * An `egress.directory` the overlay names is made if it is not there. A flow-stepped hub cannot restart: its
-   * virtual clock would be lost. Use reset() to start with empty data and a new clock instead. A controlled hub
-   * rejoins its stack, which sets it forward to the stack's instant before this resolves.
+   * An `egress.directory` the overlay names is made if it is not there. A controlled hub rejoins its stack, which
+   * sets it forward to the stack's instant before this resolves.
    */
   start(overlay?: TomlTable): Promise<HubCoordinates>;
   /**
@@ -181,8 +176,6 @@ export interface TestFixtures {
   hubConfig: TomlTable;
   /** Environment for the fresh hub's process; `fresh-hub` only. */
   hubEnv: Record<string, string>;
-  /** Freeze and explicitly step the flow driver on a fresh hub. */
-  flowStepped: boolean;
   /**
    * Reads the export directory a fresh hub writes, which the test's `hubConfig` names as `${egress}`; `fresh-hub` only.
    */
@@ -300,9 +293,6 @@ async function startFreshTestHub(options: {
     },
     start: async (overlay) => {
       if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
-      if (env.BLIZZARD_TEST_FLOW_STEP === '1' && env.BLIZZARD_CRASH_FENCE === '1') {
-        throw new Error('a flow-stepped fresh hub cannot restart: its virtual clock would be lost; use reset() for empty data');
-      }
       if (overlay !== undefined) applyOverlay(dir, coordinates, overlay, controlled);
       hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
       await joinHub();
@@ -402,19 +392,17 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   hubConfig: [{}, { option: true }],
   hubEnv: [{}, { option: true }],
-  flowStepped: [false, { option: true }],
 
-  level: async ({ isolation, hubConfig, hubEnv, flowStepped, clockMode }, use, testInfo) => {
+  level: async ({ isolation, hubConfig, hubEnv, clockMode }, use, testInfo) => {
     const level = resolveLevel(isolation, process.env.BLIZZARD_ISOLATION_RAISE === '1');
     requireHubOptions(level.served, hubConfig, hubEnv);
-    if (flowStepped && level.served !== 'fresh-hub') throw new Error('flowStepped requires isolation "fresh-hub"');
-    requireClockOptions(clockMode, level.served, flowStepped);
+    requireClockOptions(clockMode, level.served);
     // The cross-check names a test by the level it declared, which the report carries only through this.
     testInfo.annotations.push({ type: 'isolation-level', description: level.declared });
     await use(level);
   },
 
-  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, coldInit, flowStepped, held, heldStacks, clockStack }, use, testInfo) => {
+  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, coldInit, held, heldStacks, clockStack }, use, testInfo) => {
     if (level.served !== 'fresh-hub') {
       if (held !== undefined) throw new Error(`held names a stack of the block's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
       const coordinates = hub.coordinates();
@@ -434,8 +422,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       });
       return;
     }
-    const env = flowStepped ? { ...hubEnv, BLIZZARD_TEST_FLOW_STEP: '1', BLIZZARD_CRASH_FENCE: '1' } : hubEnv;
-    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv: env, coldInit, testInfo, clock: clockStack });
+    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv, coldInit, testInfo, clock: clockStack });
     if (held !== undefined) {
       await use(await heldStacks.acquire(`hub:${held}`, open));
       return;

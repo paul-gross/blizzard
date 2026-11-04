@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
-from blizzard.foundation.clock import ControlledClock, FixedClock, IClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -31,7 +29,7 @@ def step_answer(result: TickResult, clock: IClock) -> dict[str, object]:
     }
 
 
-def controlled_flow_router(driver: FlowDriver, clock: ControlledClock, lock: asyncio.Lock) -> APIRouter:
+def flow_control_router(driver: FlowDriver, clock: IClock, lock: asyncio.Lock) -> APIRouter:
     router = APIRouter(
         prefix="/api/admin/test-flow",
         dependencies=[Depends(reject_runner_principal), Depends(require_hub(Permission.TENANT_ADMIN))],
@@ -59,38 +57,5 @@ def controlled_flow_router(driver: FlowDriver, clock: ControlledClock, lock: asy
             if cancelled:
                 raise asyncio.CancelledError
             return step_answer(result, clock)
-
-    return router
-
-
-class AdvanceClock(BaseModel):
-    seconds: float = Field(ge=0, le=31536000, allow_inf_nan=False)
-
-
-def flow_control_router(driver: FlowDriver, clock: FixedClock) -> APIRouter:
-    """Create controls for one hosted process; the lock covers turns as well as ticks and clock changes."""
-    lock = asyncio.Lock()
-    router = APIRouter(
-        prefix="/api/admin/test-flow",
-        dependencies=[Depends(reject_runner_principal), Depends(require_hub(Permission.TENANT_ADMIN))],
-        include_in_schema=False,
-    )
-
-    @router.post("/step")
-    async def step() -> dict[str, object]:
-        async with lock:
-            task = asyncio.create_task(driver.step())
-            try:
-                result = await asyncio.shield(task)
-            except asyncio.CancelledError:
-                await task
-                raise
-            return step_answer(result, clock)
-
-    @router.post("/advance")
-    async def advance(body: AdvanceClock) -> dict[str, str]:
-        async with lock:
-            clock.advance(timedelta(seconds=body.seconds))
-            return {"now": iso_utc(clock.now())}
 
     return router

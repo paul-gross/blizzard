@@ -77,6 +77,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
       tenantId,
       narrow: sharesTenant(context.level),
       level: context.level,
+      clockMode: context.clock.mode,
       ledger: context.ledger,
       logContext: () => context.testHub.logTail(tenantId),
     });

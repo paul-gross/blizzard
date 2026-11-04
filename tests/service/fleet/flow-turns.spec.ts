@@ -149,15 +149,15 @@ test('test_two_chunks_each_landing_both_repositories_both_land', async ({ reposi
 });
 
 test.describe('stepped flow fairness', () => {
-test.use({ isolation: 'fresh-hub', flowStepped: true });
-test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repository, issue, api, forge, runnerHosts }) => {
+test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repository, issue, api, forge, runnerHosts, clock }) => {
   test.setTimeout(240_000);
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   await lever(forge, repo, true);
   const ids: string[] = [];
   for (const [file, interval] of [['SLOW.md', 60], ['BRISK.md', 1]] as const) {
-    await api.flowAdvance(1);
+    await clock.advance(1);
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], file, interval) } })).status).toBe(201);
     const id = (await issue(file, { repository: repo })).chunk.chunk_id;
     ids.push(id);
@@ -179,8 +179,8 @@ test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repo
   expect(slowTurns[0]!.ended_at).not.toBeNull();
   expect(briskTurns).toHaveLength(1);
   for (let i = 1; i <= 3; i++) {
-    const clock = await api.flowAdvance(1);
-    expect(Date.parse(clock.now)).toBeLessThan(Date.parse(slowDue));
+    const moved = await clock.advance(1);
+    expect(moved.getTime()).toBeLessThan(Date.parse(slowDue));
     await api.flowStep();
     expect(await turns(api, slow)).toEqual(slowTurns);
     const current = await turns(api, brisk);
@@ -190,7 +190,7 @@ test('test_a_pending_chunk_yields_its_branch_until_its_next_poll', async ({ repo
   await lever(forge, repo, false);
   for (const id of [slow, brisk]) {
     const detail = await stepUntil(host, async () => {
-      await api.flowAdvance(60);
+      await clock.advance(60);
       await api.flowStep();
       return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
     }, (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 80, progress: chunkProgress });

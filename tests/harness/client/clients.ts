@@ -4,6 +4,7 @@ import type { Ledger } from './ledger';
 import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing } from './mock';
 import type { SweepPassResponse } from './wire/hub/types.gen';
 import { identityFor } from '../auth';
+import type { ClockMode } from '../clock-stack';
 import { requireFreshHub } from '../factories';
 import type { Level } from '../tenancy';
 
@@ -28,8 +29,11 @@ export interface FlowStep {
 }
 
 export interface HubApi extends Verbs {
+  /**
+   * Steps the hub's flow driver once and answers with the clock's `now`. Refused below `fresh-hub`, and on a stack not
+   * declared `clockMode: 'controlled'`, before any request.
+   */
   flowStep(): Promise<FlowStep>;
-  flowAdvance(seconds: number): Promise<{ now: string }>;
   /**
    * Runs one pass of a sweep over the test's tenant and returns once it has finished, so a test acts on the sweep's
    * outcome rather than a timer. Every answer but a `completed` pass fails the test, naming the sweep, the status, and
@@ -61,6 +65,8 @@ export function hubApi(options: {
   narrow: boolean;
   /** The level the test is served, which `sweep` reads to refuse an all-tenant pass below `fresh-hub`. */
   level: Level;
+  /** The stack's clock mode: `flowStep()` steps only a controlled hub. */
+  clockMode: ClockMode;
   ledger: Ledger;
   logContext: LogContext;
   /** Awaited before each request: re-signs the session of this client's holder when the controlled clock has passed its window. */
@@ -78,15 +84,12 @@ export function hubApi(options: {
     ...verbs(engine, options.narrow),
     async flowStep(): Promise<FlowStep> {
       requireFreshHub(options.level, 'flowStep()');
+      if (options.clockMode !== 'controlled') {
+        throw new Error("flowStep() steps a controlled hub, and this stack runs on the system clock. Declare test.use({ clockMode: 'controlled' }).");
+      }
       const answer = await send(engine, 'POST', '/api/admin/test-flow/step', {}, false);
       if (!answer.ok) throw new Error(`flow step answered ${answer.status}: ${JSON.stringify(answer.body)}`);
       return answer.body as unknown as FlowStep;
-    },
-    async flowAdvance(seconds: number): Promise<{ now: string }> {
-      requireFreshHub(options.level, 'flowAdvance()');
-      const answer = await send(engine, 'POST', '/api/admin/test-flow/advance', { data: { seconds } }, false);
-      if (!answer.ok) throw new Error(`flow advance answered ${answer.status}: ${JSON.stringify(answer.body)}`);
-      return answer.body as { now: string };
     },
     async sweep(name: SweepName, sweepOptions?: { allTenants: true }): Promise<SweepPassResponse> {
       const allTenants = sweepOptions?.allTenants === true;

@@ -7,10 +7,9 @@ from unittest.mock import patch
 import pytest
 from structlog.testing import capture_logs
 
-from blizzard.foundation.clock import ControlledClock, FixedClock, SystemClock
+from blizzard.foundation.clock import ControlledClock, SystemClock
 from blizzard.hub.app import Sweep
 from blizzard.hub.composition import build_flow_driver, build_hub_core
-from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.tenancy import StoreScope
 from tests.config_inputs import build_hosted_hub_app, init_hub
@@ -18,14 +17,11 @@ from tests.hub_event_rows import hub_event_rows
 
 
 @pytest.mark.parametrize(
-    "clock,fence,step,crash,expected",
+    "clock,fence,expected",
     [
-        (None, None, None, None, SystemClock),
-        ("controlled", "1", None, None, ControlledClock),
-        ("controlled", "true", None, None, SystemClock),
-        (None, None, "1", "1", FixedClock),
-        ("controlled", None, "1", "1", FixedClock),
-        ("controlled", "1", "1", None, ControlledClock),
+        (None, None, SystemClock),
+        ("controlled", "1", ControlledClock),
+        ("controlled", "true", SystemClock),
     ],
 )
 def test_hosted_clock_modes(
@@ -33,15 +29,9 @@ def test_hosted_clock_modes(
     monkeypatch: pytest.MonkeyPatch,
     clock: str | None,
     fence: str | None,
-    step: str | None,
-    crash: str | None,
     expected: type,
 ) -> None:
-    for name, value in zip(
-        ("BLIZZARD_CLOCK", "BLIZZARD_CLOCK_FENCE", "BLIZZARD_TEST_FLOW_STEP", "BLIZZARD_CRASH_FENCE"),
-        (clock, fence, step, crash),
-        strict=True,
-    ):
+    for name, value in (("BLIZZARD_CLOCK", clock), ("BLIZZARD_CLOCK_FENCE", fence)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
         else:
@@ -67,21 +57,12 @@ def test_hosted_clock_modes(
         app.state.engine.dispose()
 
 
-def test_conflicting_modes_refuse_boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("BLIZZARD_CLOCK_FENCE", "BLIZZARD_TEST_FLOW_STEP", "BLIZZARD_CRASH_FENCE"):
-        monkeypatch.setenv(name, "1")
-    monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
-    with pytest.raises(ConfigError, match=r"BLIZZARD_TEST_FLOW_STEP.*BLIZZARD_CLOCK"):
-        build_hosted_hub_app(init_hub(tmp_path / "hub"))
-
-
 @pytest.mark.asyncio
 async def test_controlled_graph_boot_announcements_and_forced_wake(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
     monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
-    monkeypatch.delenv("BLIZZARD_TEST_FLOW_STEP", raising=False)
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc")
     monkeypatch.delenv("OTEL_TRACES_EXPORTER", raising=False)
