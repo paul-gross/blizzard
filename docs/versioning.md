@@ -96,9 +96,6 @@ A release carries a surface whether or not a feature flag has it on, so it is he
 A route or environment variable that exists only behind a test fence is not part of any supported surface and may change
 in any release.
 
-A route or variable that exists only behind a test fence is not part of any supported surface and may change in any
-release.
-
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.
 
