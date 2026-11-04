@@ -13,8 +13,6 @@ import yaml
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _WORKFLOW_PATH = repo_root() / ".github" / "workflows" / "rehearsal.yml"
 
 

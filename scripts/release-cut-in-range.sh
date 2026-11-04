@@ -5,7 +5,7 @@
 #
 # Prints `true` when any commit in <base>..<head> carries a `Release-Cut: <X.Y.Z>` trailer, and
 # `false` otherwise. pr.yml reads it to decide whether the upgrade rehearsal runs.
-# Pulled out of workflow YAML so it is unit-testable (tests/test_release_cut_in_range.py).
+# Pulled out of workflow YAML so it is unit-testable (tests/guards/test_release_cut_in_range.py).
 set -euo pipefail
 
 base="${1:?usage: release-cut-in-range.sh <base> <head>}"

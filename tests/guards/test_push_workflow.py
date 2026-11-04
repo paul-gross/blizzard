@@ -16,8 +16,6 @@ import pytest
 from tests.ci_workflows import Job, Step, load_workflow
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "push.yml"
 

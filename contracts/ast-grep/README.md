@@ -18,7 +18,7 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   file states none of that prose, only what the rule mechanically checks:
   - Scoped to `src/blizzard/hub/domain/**` and the runner's domain core — every module of a runner layer node outside an
     `internal/` package, one `files:` glob per top-level node with `**/internal/**` ignored — a domain operation's own
-    home, not the whole repo. `tests/test_layering.py` holds the runner globs equal to the layer table's nodes.
+    home, not the whole repo. `tests/guards/test_layering.py` holds the runner globs equal to the layer table's nodes.
   - A domain *operation* is a public method; a leading-underscore helper is an internal step, not an edge-facing entry
     point, and is exempt even when it shares the same id-in, load-by-id shape.
   - Matches a public method taking a `*_id: str` parameter whose body calls a `get_`/`load_`-prefixed method on `self.*`

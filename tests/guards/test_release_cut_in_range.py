@@ -8,8 +8,6 @@ import pytest
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _SCRIPT = repo_root() / "scripts" / "release-cut-in-range.sh"
 _GIT_ENV = {
     "GIT_AUTHOR_NAME": "t",

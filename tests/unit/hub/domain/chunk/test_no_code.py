@@ -2,13 +2,9 @@
 
 from dataclasses import replace
 
-import pytest
-
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.no_code import no_code_marker, no_code_repos
-
-pytestmark = pytest.mark.unit
 
 
 def test_no_code_evidence_matches_only_its_declaration() -> None:

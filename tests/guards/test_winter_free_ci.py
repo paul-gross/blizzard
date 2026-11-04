@@ -17,8 +17,6 @@ import yaml
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _ROOT = repo_root()
 _PLATFORM_TIERS = ("service", "crash")
 _PLAYWRIGHT_TIERS = ("harness", "service", "journey")

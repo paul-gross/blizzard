@@ -12,8 +12,6 @@ import pytest
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _SCRIPT = repo_root() / "scripts" / "verify-release.sh"
 _TAG = "v0.2.0"
 _VERSION = "0.2.0"

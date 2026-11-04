@@ -9,8 +9,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
@@ -39,8 +37,6 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
-
-pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 9, 18, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]

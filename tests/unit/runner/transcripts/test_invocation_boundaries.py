@@ -17,8 +17,6 @@ from blizzard.runner.transcripts.invocation_boundaries import (
     worker_boundary_open,
 )
 
-pytestmark = pytest.mark.unit
-
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 

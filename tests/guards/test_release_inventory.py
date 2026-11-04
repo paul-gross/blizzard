@@ -14,8 +14,6 @@ import pytest
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _SCRIPT = repo_root() / "scripts" / "release-inventory.sh"
 _DIGEST = "sha256:" + "ab" * 32
 

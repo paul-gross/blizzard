@@ -108,7 +108,7 @@ tier checks out that commit. The resolution — which mock tag or branch a tag r
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
 `release.yml`'s tier jobs resolve through too. The tiers are winter-free: their runners use the built-in `basic`
 provider over a fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests
-sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
+sets `persist-credentials: false`; `tests/guards/test_winter_free_ci.py` pins both.
 
 Store-migration tests live beside their revisions, in `src/blizzard/{hub,runner}/store/migrations/tests/`. Those whose
 revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
@@ -294,7 +294,7 @@ uploads its wheel, which is why a dogfood build is a green run's. The `dev-image
 `[gate, upper-tiers, dev-build, rehearsal]` — the tiers and the upgrade rehearsal so the channel advances only on proven
 commits, and `dev-build` solely to reuse its computed dev version for the image's `org.opencontainers.image.version`
 annotation rather than recomputing it. Unlike the release fan-out, the dev tags and OCI annotations are inlined in the
-`dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
+`dev-image` job — no branching logic to unit-test — and `tests/guards/test_push_workflow.py` pins the job.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) opens with `proof`, which asks
 [`scripts/borrowed-proof.sh`](../scripts/borrowed-proof.sh), unit-tested by `tests/test_borrowed_proof.py`, whether the
@@ -343,14 +343,14 @@ The release tag fan-out (`vX.Y.Z` → exact + minor, plus `latest` only when no 
 exact only) lives in [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py` —
 `build` hands it the repository's tags and `publish` creates the GitHub Release with `--latest=false` unless `latest`
 moved — and the attached set's assembly in `scripts/release-inventory.sh`, unit-tested by
-`tests/test_release_inventory.py`, and its post-publish proof in `scripts/verify-release.sh`, unit-tested by
-`tests/test_verify_release.py` — never inline in workflow YAML.
+`tests/guards/test_release_inventory.py`, and its post-publish proof in `scripts/verify-release.sh`, unit-tested by
+`tests/guards/test_verify_release.py` — never inline in workflow YAML.
 
 The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope.
 Job-level blocks replace the workflow-level one: `build` declares `contents: read`, `packages: write` (the GHCR push),
 `id-token: write` (the OIDC identity), and `attestations: write`; `publish` declares only `contents: write`
 (`gh release create`); `verify` declares only `contents: read`. The image push runs in `build`, before `publish`, so a
-failed image build cannot leave a Release advertising a missing image; `tests/test_release_workflow.py` pins each job's
+failed image build cannot leave a Release advertising a missing image; `tests/guards/test_release_workflow.py` pins each job's
 scopes and the read-only workflow level.
 
 Every signature and attestation carries the identity

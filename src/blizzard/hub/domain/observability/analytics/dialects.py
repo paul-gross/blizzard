@@ -2,7 +2,7 @@
 by a segment's own exact ``normalizer_version``. A kind absent from a dialect
 derives zero events of that kind; a version absent from :data:`DIALECTS`
 derives zero events at all (``bzh:domain-core``). Version keys stay string
-literals (``tests/test_layering.py::test_hub_does_not_import_runner``)."""
+literals (``tests/guards/test_layering.py::test_hub_does_not_import_runner``)."""
 
 from __future__ import annotations
 

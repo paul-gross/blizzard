@@ -20,8 +20,6 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.execution.release import ReleaseRefusalKind, refuse_release
 from blizzard.hub.domain.runners.route import Route
 
-pytestmark = pytest.mark.unit
-
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ROUTE = Route(chunk_id="chk_1", runner_id="rn_1", workspace_id="ws_1", environment_ids=["env_1"], created_at=_T0)
 

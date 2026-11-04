@@ -220,7 +220,7 @@ def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Ta
 
     The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances in the same
     transaction as the row, so a rollback returns the seq, and a counter never moves backwards, so a pruned row's seq is
-    never issued again. ``tests/test_layering.py`` fails an insert into either table that goes around it."""
+    never issued again. ``tests/guards/test_layering.py`` fails an insert into either table that goes around it."""
     seq = _advance_counter(
         store, conn, outbox_counters, outbox_counters.c.lane == _OUTBOX_LANES[table], lane=_OUTBOX_LANES[table]
     )
@@ -237,8 +237,8 @@ def insert_fact_row(store: RunnerStoreConnections, conn: Connection, table: Tabl
     consumes requeue — is judged by ``seq``, never by comparing instants.
 
     The one door every write to those tables passes through: the counter advances in the same transaction as the row,
-    so rows are numbered in the order they were appended and a rollback returns the seq. ``tests/test_layering.py``
-    fails an insert into any of them that goes around it."""
+    so rows are numbered in the order they were appended and a rollback returns the seq.
+    ``tests/guards/test_layering.py`` fails an insert into any of them that goes around it."""
     seq = _advance_counter(store, conn, fact_counters)
     conn.execute(store.insert(table).values(seq=seq, **values))
     return seq
