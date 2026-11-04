@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -13,10 +14,14 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 from sqlalchemy import insert, inspect, select, update
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import ControlledClock, FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.hub.api.clock import clock_router
+from blizzard.hub.api.test_flow_control import controlled_flow_router
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import flow_turn
 from blizzard.hub.delivery.action_registry import HubActions
@@ -47,6 +52,8 @@ from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import TenantId
+from blizzard.wire.clock import ClockMoveRequest
+from tests.config_inputs import create_hub_app
 from tests.flow_driver_world import (
     _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
     _REPO,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
@@ -142,6 +149,85 @@ def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(
         ("turn-ended", "pending"),
     ]
     assert world.action.passes == [chunk_id]
+
+
+def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: World) -> None:
+    chunk_id = world.at_merge()
+    clock = ControlledClock(world.hub.clock.now())
+    driver = FlowDriver(world.stores, clock)
+    lock = asyncio.Lock()
+    app = create_hub_app(
+        world.hub.wired_app.state.config,
+        services=world.hub.hub_services,
+        test_flow_router=controlled_flow_router(driver, clock, lock),
+        controlled_clock_router=clock_router(clock, lock),
+    )
+    client = TestClient(app)
+    step = client.post("/api/admin/test-flow/step")
+    assert step.status_code == 200
+    assert step.json()["started"] == 1
+    submissions = world.submissions(chunk_id)
+    assert len(submissions) == 1
+    turns = client.get(f"/api/chunks/{chunk_id}/flow-submissions/{submissions[0].submission_id}/turns")
+    assert turns.status_code == 200
+    assert [(t["outcome"], t["ended_at"] is not None) for t in turns.json()["items"]] == [("pending", True)]
+    assert world.action.passes == [chunk_id]
+
+    # Consume the turn's wake, then a short move must not force another reconcile.
+    assert client.post("/api/admin/test-flow/step").json()["reconciled"] == 1
+    events = emitted_events(world.hub)
+    facts = world.hub.services.flows.facts_of(submissions[0].submission_id)
+    assert client.post("/api/admin/clock", json={"advance_seconds": 1}).status_code == 200
+    assert emitted_events(world.hub) == events
+    assert world.hub.services.flows.facts_of(submissions[0].submission_id) == facts
+    assert world.action.passes == [chunk_id]
+    assert client.post("/api/admin/test-flow/step").json()["skipped"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_controlled_step_holds_clock_until_real_turn_finishes(
+    world: World, monkeypatch: pytest.MonkeyPatch, cancel: bool
+) -> None:
+    chunk_id = world.at_merge()
+    clock = ControlledClock(world.hub.clock.now())
+    driver = FlowDriver(world.stores, clock)
+    lock = asyncio.Lock()
+    entered, release = threading.Event(), threading.Event()
+    take = world.action.take
+
+    async def held(visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
+        entered.set()
+        assert await asyncio.to_thread(release.wait, 5)
+        return await take(visit, forges, effects)
+
+    monkeypatch.setattr(world.action, "take", held)
+    step = next(r.endpoint for r in controlled_flow_router(driver, clock, lock).routes if isinstance(r, APIRoute))
+    move = next(
+        r.endpoint for r in clock_router(clock, lock).routes if isinstance(r, APIRoute) and r.methods == {"POST"}
+    )
+    initial = clock.now().isoformat()
+    stepping = asyncio.create_task(step())
+    assert await asyncio.to_thread(entered.wait, 5)
+    if cancel:
+        stepping.cancel()
+    moving = asyncio.create_task(move(ClockMoveRequest(advance_seconds=1)))
+    try:
+        await asyncio.sleep(0)
+        assert not stepping.done() and not moving.done()
+        assert world.turn_outcomes(chunk_id) == [None]
+    finally:
+        release.set()
+    if cancel:
+        with pytest.raises(asyncio.CancelledError):
+            await stepping
+    else:
+        assert (await stepping)["now"] == initial
+    assert (await moving).previous == initial
+    (submission,) = world.submissions(chunk_id)
+    response = world.hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions/{submission.submission_id}/turns")
+    assert response.status_code == 200
+    assert [(turn["outcome"], turn["ended_at"] is not None) for turn in response.json()["items"]] == [("pending", True)]
 
 
 def test_a_hub_to_hub_transition_is_routed_by_a_turn_and_the_next_node_submitted_once(world: World) -> None:
