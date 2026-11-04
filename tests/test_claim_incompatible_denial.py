@@ -1,6 +1,6 @@
 """The hub denies a claim whose runner capabilities no longer cover the chunk, under the
 claim lock (component tier) — mirroring the dependency denial's shape
-(``tests/test_claim_dependency_denial.py``): a distinct 409, refused outright rather than
+(``tests/component/hub/api/test_fleet_claim_dependency_denial.py``): a distinct 409, refused outright rather than
 lost to a race, re-derived fresh against the *stored registration* so a peek-then-claim
 skew in reported capabilities can never slip an incompatible chunk through."""
 

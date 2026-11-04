@@ -930,7 +930,7 @@ class FollowLatest:
     """Whether a chunk pinned to a graph follows the newest mint of its name.
 
     ``hub_default`` carries no default, so omitting it raises — pinned by
-    tests/test_pin_hub_domain.py::test_follow_latest_requires_hub_default_explicitly"""
+    tests/unit/hub/domain/execution/test_pin.py::test_follow_latest_requires_hub_default_explicitly"""
 
     enabled: bool
 

@@ -40,7 +40,8 @@ class ChunkQuestionsStore:
 
     def list_open_questions(self, *, project: ProjectId | None = None) -> list[NodeQuestion]:
         """The unanswered questions whose chunk has not ended — the SQL mirror of
-        :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``.
+        :meth:`NodeQuestion.require_answerable`, pinned by
+        ``tests/component/hub/store/internal/test_chunk_questions_store_open_questions.py``.
         Question ids are runner-minted, so the answered set is read within the scope too: another
         tenant's answer under the same id never hides this tenant's question. ``project`` narrows to
         one project's questions."""

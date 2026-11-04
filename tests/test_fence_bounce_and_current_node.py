@@ -5,7 +5,7 @@
 since the hub turn began; a completion or runner-config decision re-derives the current node on
 the write's own locked connection, so a racing duplicate answers as the replay it is and writes
 nothing twice. Each interleaving holds a writer on the chunk row lock while the submission is
-in flight (the shape of ``tests/test_write_fence.py``)."""
+in flight (the shape of ``tests/component/hub/api/test_fleet_write_fence.py``)."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ nodes:
 
 
 class _StandingChunk(Chunk):
-    """An already-ingested chunk wearing the shape the ``test_write_fence`` writers act on —
+    """An already-ingested chunk wearing the shape the ``test_fleet_write_fence`` writers act on —
     ``Chunk.__init__`` would ingest and claim a fresh chunk of its own instead."""
 
     def __init__(self, hub: HubHarness, chunk_id: str, build_node_id: str) -> None:

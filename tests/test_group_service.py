@@ -3,7 +3,7 @@ chunk's dependency edges onto it.
 
 A fake stands in for each repository — only the methods :class:`GroupService` actually
 calls are meaningfully implemented; every other seam raises loudly if called. Mirrors
-``DeleteService``'s own fake shape (``tests/test_delete_service.py``)."""
+``DeleteService``'s own fake shape (``tests/unit/hub/domain/operations/test_delete_service.py``)."""
 
 from __future__ import annotations
 

@@ -1,0 +1,372 @@
+"""Graph read routes — ``GET /api/graphs`` and ``GET /api/graphs/{id}`` (component tier)."""
+
+from __future__ import annotations
+
+import json
+from datetime import timedelta
+from pathlib import Path
+
+import yaml
+
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
+from tests.support import HubHarness, build_hub, count_queries
+
+_GRAPH_A = """
+name: alpha
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+        fail:
+          description: it does not
+          to: build
+    retries:
+      max: 1
+      exhausted: escalate
+"""
+
+_GRAPH_B = """
+name: beta
+entry: ship
+nodes:
+  ship:
+    executor: hub
+    action: test.answer
+    with: {choice: landed}
+    judgement:
+      choices:
+        landed:
+          description: every repo merged cleanly
+          to: done
+        conflict:
+          description: a repo did not merge cleanly
+          to: ship
+        failure:
+          description: a command failed
+          to: ship
+"""
+
+
+_GRAPH_SESSION_SOURCE = """
+name: gamma
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    session: resume:build
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: review
+  review:
+    executor: runner
+    prompt: review it
+    session: fresh
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+        fail:
+          description: it does not
+          to: build
+"""
+
+
+def _mint(hub: HubHarness, definition_yaml: str) -> str:
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["graph_id"]
+
+
+def test_list_graphs_on_empty_store_is_empty(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+def test_list_graphs_marks_newest_per_name_effective(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    old_id = _mint(hub, _GRAPH_A)
+    hub.clock.advance(timedelta(hours=1))
+    new_id = _mint(hub, _GRAPH_A)
+    other_id = _mint(hub, _GRAPH_B)
+
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    by_id = {row["graph_id"]: row for row in body}
+
+    assert by_id[old_id]["effective"] is False
+    assert by_id[new_id]["effective"] is True
+    assert by_id[other_id]["effective"] is True
+    assert by_id[new_id]["name"] == "alpha"
+    assert by_id[new_id]["entry_node_id"]
+    assert by_id[new_id]["created_at"]
+
+    # Newest-first ordering — the route's own contract.
+    created_ats = [row["created_at"] for row in body]
+    assert created_ats == sorted(created_ats, reverse=True)
+
+
+def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_path: Path) -> None:
+    """``GET /api/graphs`` reads the listing-shape projection — proves its
+    response is unchanged over a fixture mixing a retired mint, a superseded-but-live
+    mint, and the newest effective one."""
+    hub = build_hub(tmp_path)
+    old_id = _mint(hub, _GRAPH_A)
+    hub.clock.advance(timedelta(hours=1))
+    superseded_id = _mint(hub, _GRAPH_A)
+    hub.clock.advance(timedelta(hours=1))
+    newest_id = _mint(hub, _GRAPH_A)
+    retired = hub.client.post(f"/api/graphs/{old_id}/retire")
+    assert retired.status_code == 202, retired.text
+
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    by_id = {row["graph_id"]: row for row in resp.json()}
+
+    assert by_id[old_id]["retired"] is True
+    assert by_id[old_id]["effective"] is False
+    assert by_id[superseded_id]["retired"] is False
+    assert by_id[superseded_id]["effective"] is False
+    assert by_id[newest_id]["retired"] is False
+    assert by_id[newest_id]["effective"] is True
+    assert by_id[old_id]["lifecycle"] == "retired"
+    assert by_id[superseded_id]["lifecycle"] == "superseded"
+    assert by_id[newest_id]["lifecycle"] == "effective"
+
+
+def test_list_graphs_returns_every_mint_past_the_default_page_limit(tmp_path: Path) -> None:
+    """``GET /api/graphs`` is unpaged: ``effective`` is each name's newest non-retired mint, which a page of mints
+    cannot compute, and mints are insert-only and few."""
+    hub = build_hub(tmp_path)
+    alpha_ids: list[str] = []
+    for _ in range(DEFAULT_LIMIT):
+        alpha_ids.append(_mint(hub, _GRAPH_A))
+        hub.clock.advance(timedelta(seconds=1))
+    beta_id = _mint(hub, _GRAPH_B)
+
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert len(body) == DEFAULT_LIMIT + 1
+    effective = {row["graph_id"] for row in body if row["effective"]}
+    assert effective == {alpha_ids[-1], beta_id}
+
+
+def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -> None:
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+    for _ in range(2):
+        _mint(few, _GRAPH_A)
+    for _ in range(6):  # 3x the small fleet
+        _mint(many, _GRAPH_A)
+
+    def call(hub: HubHarness) -> int:
+        resp = hub.client.get("/api/graphs")
+        assert resp.status_code == 200, resp.text
+        return len(resp.json())
+
+    few_count = count_queries(few.engine, lambda: call(few))
+    many_count = count_queries(many.engine, lambda: call(many))
+
+    assert few_count == many_count
+
+
+def test_get_graph_returns_full_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_A)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["graph_id"] == graph_id
+    assert body["name"] == "alpha"
+    assert body["enabled"] is True
+    build = next(n for n in body["nodes"] if n["name"] == "build")
+    assert build["executor"] == "runner"
+    assert build["session"] == "resume"
+    assert build["session_source"] is None
+    assert build["judged_by"] == "worker"
+    assert build["retries_max"] == 1
+    assert build["retries_exhausted"] == "escalate"
+    assert build["judgement_prompt"] == "judge it"
+    assert {c["name"] for c in build["choices"]} == {"pass", "fail"}
+    assert len(body["edges"]) == 2
+    edge = body["edges"][0]
+    assert set(edge.keys()) >= {"from_node_id", "choice_id", "to_node_name", "prompt_addendum"}
+
+
+def test_get_graph_serves_the_authoring_body_verbatim(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_A)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["definition_yaml"] == _GRAPH_A
+
+
+def test_every_route_serving_the_graph_view_carries_its_body(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_A})
+    graph_id = minted.json()["graph_id"]
+
+    responses = [
+        minted,
+        hub.client.post(f"/api/graphs/{graph_id}/retire"),
+        hub.client.post(f"/api/graphs/{graph_id}/enable"),
+        hub.client.patch(f"/api/graphs/{graph_id}", json={"follow_latest": True}),
+        hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": None}),
+    ]
+
+    assert [r.status_code for r in responses] == [201, 202, 202, 200, 202]
+    assert all(r.json()["definition_yaml"] == _GRAPH_A for r in responses)
+
+
+def test_posting_the_served_body_back_unchanged_mints_the_same_graph_again(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    first = hub.client.get(f"/api/graphs/{_mint(hub, _GRAPH_A)}").json()
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": first["definition_yaml"]})
+
+    assert resp.status_code == 201, resp.text
+    second = resp.json()
+    assert second["graph_id"] != first["graph_id"]
+    assert second["definition_yaml"] == first["definition_yaml"]
+    assert [(n["name"], n["prompt"]) for n in second["nodes"]] == [(n["name"], n["prompt"]) for n in first["nodes"]]
+
+
+def test_the_default_graphs_body_round_trips_with_its_prompts_inlined(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    first = hub.client.get(f"/api/graphs/{graph.graph_id}").json()
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": first["definition_yaml"]})
+
+    assert resp.status_code == 201, resp.text
+    second = resp.json()
+    assert second["name"] == first["name"]
+    assert [(n["name"], n["prompt"]) for n in second["nodes"]] == [(n["name"], n["prompt"]) for n in first["nodes"]]
+    assert {n.name: n.prompt for n in hub.services.default_graph_doc.nodes} == {
+        n["name"]: n["prompt"] for n in second["nodes"]
+    }
+
+
+def test_get_graph_classifies_each_edge_target(tmp_path: Path) -> None:
+    """Each edge carries its target's kind — ``done`` for the reserved terminal, ``node`` for a
+    same-graph node — and no target graph for either."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_A)
+
+    body = hub.client.get(f"/api/graphs/{graph_id}").json()
+    kinds = {e["to_node_name"]: (e["target_kind"], e["target_graph"]) for e in body["edges"]}
+
+    assert kinds == {"done": ("done", None), "build": ("node", None)}
+
+
+def test_get_graph_round_trips_session_source(tmp_path: Path) -> None:
+    """A node's targeted ``session: resume:<name>`` form survives store persistence
+    and the API node view; a bare ``resume``/``fresh`` node round-trips
+    ``session_source == None`` (Slice 2)."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_SESSION_SOURCE)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    by_name = {n["name"]: n for n in body["nodes"]}
+
+    assert by_name["build"]["session"] == "resume"
+    assert by_name["build"]["session_source"] == "build"
+
+    assert by_name["review"]["session"] == "fresh"
+    assert by_name["review"]["session_source"] is None
+
+
+def test_get_graph_unknown_id_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/graphs/gr_does_not_exist")
+    assert resp.status_code == 404
+    assert "gr_does_not_exist" in resp.json()["detail"]
+
+
+_GRAPH_CHECKS_GATING = """
+name: delta
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    checks:
+      - mise run lint
+      - mise run test
+    checks_cwd: blizzard
+    checks_timeout: 300
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+          requires_checks: true
+        fail:
+          description: it does not
+          to: build
+"""
+
+
+def test_get_graph_round_trips_checks_gating(tmp_path: Path) -> None:
+    """A node's ``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks``
+    survive store persistence and the API node view — the mint -> store ->
+    view round trip. An ungated choice reads ``requires_checks == False``."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_CHECKS_GATING)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    build = next(n for n in body["nodes"] if n["name"] == "build")
+
+    assert build["checks"] == ["mise run lint", "mise run test"]
+    assert build["checks_cwd"] == "blizzard"
+    assert build["checks_timeout"] == 300
+    by_name = {c["name"]: c for c in build["choices"]}
+    assert by_name["pass"]["requires_checks"] is True
+    assert by_name["fail"]["requires_checks"] is False
+
+
+def test_mint_rejects_a_duplicate_key_with_the_decode_error(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": "name: a\nname: b\n"})
+
+    assert resp.status_code == 422
+    report = resp.json()
+    assert report["ok"] is False
+    assert "duplicate key 'name'" in report["errors"][0]
+    assert hub.client.get("/api/graphs").json() == []
+
+
+def test_mint_accepts_a_json_definition_in_the_definition_field(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    _mint(hub, json.dumps(yaml.safe_load(_GRAPH_A)))

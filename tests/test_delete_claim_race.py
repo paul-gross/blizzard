@@ -1,6 +1,6 @@
 """The delete/claim race is atomic (component tier).
 
-Mirrors ``tests/test_edit_claim_race.py``'s own interleaving pattern: ``DeleteService``
+Mirrors ``tests/component/hub/api/test_chunks_edit_claim_race.py``'s own interleaving pattern: ``DeleteService``
 and ``ClaimService`` share one claim lock, so a claim landing on a chunk mid-delete
 can't interleave with the delete's own guard-check-then-write."""
 

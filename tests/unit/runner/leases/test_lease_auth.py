@@ -1,7 +1,7 @@
 """Lease-token authorization (unit tier) — ``LeaseToken``.
 
 A pure value over already-loaded values (``bzh:domain-takes-objects``): no store, no
-HTTP, no clock — mirroring ``tests/test_route_auth.py``'s shape for ``RouteToken``.
+HTTP, no clock — mirroring ``tests/unit/hub/domain/execution/auth/test_route.py``'s shape for ``RouteToken``.
 """
 
 from __future__ import annotations

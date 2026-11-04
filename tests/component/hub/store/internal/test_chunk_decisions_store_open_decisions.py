@@ -1,0 +1,150 @@
+"""``list_open_decisions`` lists only gates still awaiting a resolution: a gate a transition
+closed undecided, or whose chunk is stopped or done, has left the open list (component tier)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from sqlalchemy import Engine
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DecisionChoice,
+    decide_close_enqueue,
+    verb_legal_from,
+)
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from tests.support import chunk_stores, chunk_unit, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1", *, imposed_by_runner_id: str | None = None) -> ChunkStores:
+    return _gate(tmp_path, chunk_id, imposed_by_runner_id=imposed_by_runner_id)[0]
+
+
+def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) -> tuple[ChunkStores, Engine]:
+    _, engine = migrate_to(tmp_path, "head")
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_T0)
+    store = chunk_stores(engine, FixedClock(_T0))
+    seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    store.decisions.record_decision(
+        imposed_by_runner_id=imposed_by_runner_id,
+        decision_id="dec_1",
+        chunk_id=chunk_id,
+        node_id="nd_1",
+        node_name="n",
+        epoch=1,
+        choices=[DecisionChoice(name="ok", description="d")],
+        at=_T0,
+        artifacts=[],
+        close_decision=decide_close_enqueue([], lambda _: True),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    return store, engine
+
+
+def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None) -> None:
+    store.movement.record_transition(
+        transition_id="tr_1",
+        chunk_id="ch_1",
+        from_node_id="nd_1",
+        to_node_id=to_node_id,
+        choice_name="ok",
+        epoch=1,
+        runner_id="r1",
+        at=_T0,
+        artifacts=[],
+        close_decision=decide_close_enqueue([], lambda _: True),
+        decision_id=decision_id,
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+
+
+def _open_ids(store: ChunkStores) -> list[str]:
+    return [d.decision_id for d in store.decisions.list_open_decisions()]
+
+
+def test_an_unresolved_gate_on_a_live_chunk_is_open(tmp_path: Path) -> None:
+    assert _open_ids(_store_with_gate(tmp_path)) == ["dec_1"]
+
+
+def test_a_gate_a_transition_closed_undecided_leaves_the_open_list(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path)
+    _transition(store, to_node_id="nd_2", decision_id="dec_1")
+
+    assert _open_ids(store) == []
+
+
+def test_a_gate_on_a_stopped_chunk_leaves_the_open_list(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+
+    assert _open_ids(store) == []
+
+
+def test_a_gate_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path)
+    _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
+
+    assert _open_ids(store) == []
+
+
+def _stop(store: ChunkStores) -> None:
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+
+
+def _finish(store: ChunkStores) -> None:
+    _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
+
+
+@pytest.mark.parametrize("end", [None, _stop, _finish], ids=["live", "stopped", "done"])
+def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_resolve_window(
+    tmp_path: Path, end: Callable[[ChunkStores], None] | None
+) -> None:
+    store = _store_with_gate(tmp_path)
+    if end is not None:
+        end(store)
+
+    status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
+
+    assert ("dec_1" in _open_ids(store)) is verb_legal_from(ChunkVerb.RESOLVE_DECISION, status)
+
+
+def _runner_imposed_ids(store: ChunkStores, runner_id: str) -> list[str]:
+    return [d.decision_id for d in store.decisions.list_open_decisions(imposed_by_runner_id=runner_id)]
+
+
+def test_the_runner_filter_lists_only_the_decisions_that_runner_imposed(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path, imposed_by_runner_id="rn_a")
+
+    assert _runner_imposed_ids(store, "rn_a") == ["dec_1"]
+    assert _runner_imposed_ids(store, "rn_b") == []
+
+
+def test_the_runner_filter_leaves_out_a_graph_declared_gate(tmp_path: Path) -> None:
+    store = _store_with_gate(tmp_path, imposed_by_runner_id=None)
+
+    assert _open_ids(store) == ["dec_1"]
+    assert _runner_imposed_ids(store, "rn_a") == []
+
+
+def test_the_runner_filter_leaves_out_a_resolved_decision(tmp_path: Path) -> None:
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id="rn_a")
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        assert store.decisions.record_decision_resolution(
+            "dec_1", choice="ok", resolved_by="op", at=_T0, transaction=unit
+        )
+
+    assert _runner_imposed_ids(store, "rn_a") == []
