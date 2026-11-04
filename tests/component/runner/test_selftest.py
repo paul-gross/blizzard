@@ -383,6 +383,9 @@ class _HangingAdapter:
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         raise AssertionError("unreachable — spawn never returns")
 
+    def orphan(self, session_id: str) -> None:
+        raise AssertionError("unreachable — spawn never returns")
+
     def judge(
         self,
         session_cwd: str,

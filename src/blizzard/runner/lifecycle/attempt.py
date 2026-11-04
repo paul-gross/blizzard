@@ -34,6 +34,7 @@ from blizzard.runner.lifecycle.model import (
     retry_owner_admitted,
     routed_away,
 )
+from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
@@ -110,11 +111,13 @@ class Attempt:
         """Best-effort teardown of this lease's own worker process — the shared,
         liveness-checked, pgid-preferring kill (:func:`kill_owned_process`) every owned-process
         teardown in the runner loop reaches through, rather than each reimplementing its own
-        liveness check."""
+        liveness check. A closing lease's worker is killed or already gone without a result, so its session is
+        orphaned too: a turn that outlives its worker is stopped."""
         lease = self.lease
         kill_owned_process(
             self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
         )
+        orphan_session(self.ctx, lease, via="close")
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then abandon, retry, defer, or escalate per :func:`failure_move`."""

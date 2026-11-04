@@ -486,6 +486,22 @@ def test_a_park_older_than_the_drain_budget_judges_its_group_past_the_deadline(
     assert group[0][1]["past_deadline"] is True
 
 
+def test_a_worker_alive_past_the_drain_budget_is_killed_and_its_session_orphaned(tmp_path: Path):
+    rig = _rig(tmp_path, probe=FakeProbe(alive={(100, "start-100")}, groups_alive={100}))
+    rig.clock.advance(timedelta(hours=1))
+
+    _settle(rig)
+
+    assert rig.harness.orphaned == ["sess-a"]
+
+
+def test_a_worker_alive_within_the_drain_budget_is_left_running_and_not_orphaned(tmp_path: Path):
+    rig = _rig(tmp_path, probe=FakeProbe(alive={(100, "start-100")}, groups_alive={100}))
+
+    assert _settle(rig) is PauseParkSettle.UNSETTLED
+    assert rig.harness.orphaned == []
+
+
 def test_a_settled_worker_with_no_named_elicitation_settles_leaving_any_standing_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

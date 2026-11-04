@@ -60,6 +60,7 @@ from blizzard.runner.lifecycle.model import (
 )
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
@@ -147,6 +148,8 @@ class SpawnStores(TranscriptPumpStores, GateStores, Protocol):
     def pause(self) -> IWritePauseRepository: ...
     @property
     def tokens(self) -> IWriteTokenRepository: ...
+    @property
+    def takeover(self) -> IReadTakeoverRepository: ...
 
 
 class SpawnHostStores(GateHostStores, Protocol):

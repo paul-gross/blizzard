@@ -37,6 +37,7 @@ from blizzard.runner.lifecycle.model import (
     routed_away,
     unpause_move,
 )
+from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner, SuppressionCause
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
@@ -450,6 +451,7 @@ class DormantSession:
             return False
         leader_alive = process.is_alive(pid, process_start_time)
         kill_owned_process(process, pid=pid, process_start_time=process_start_time, pgid=pgid)
+        orphan_session(self.ctx, self.lease, via="pause-park")
         _log.warning(
             "paused process outlived the interrupt budget — killed",
             chunk_id=self.lease.chunk_id,
@@ -610,6 +612,8 @@ class DormantSession:
         kill_owned_process(
             self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
         )
+        # The killed generation's turn is stopped before the resume prompts the same session.
+        orphan_session(self.ctx, lease, via="restart-resume")
         _CP_RESUME_AFTER_KILL.reached()  # re-run kills the dead pid (no-op) then re-attaches
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None or harness is None:

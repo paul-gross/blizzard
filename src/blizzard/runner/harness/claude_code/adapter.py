@@ -778,6 +778,10 @@ class ClaudeCodeAdapter:
         envelope = ResultEnvelope.of(output)
         return envelope.result if envelope is not None else output
 
+    def orphan(self, session_id: str) -> None:
+        """A no-op: the worker owns its turn's processes, so killing it stopped the turn."""
+        del session_id
+
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
     ) -> dict[str, str]:

@@ -29,9 +29,12 @@ from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
+from blizzard.runner.harness.opencode_v2.orphan import ISessionOrphaner, SessionOrphaner
+from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration, read_registration, registration_path
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, parse_result
 from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceUnavailableError
+from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -81,6 +84,7 @@ class OpenCodeTwoAdapter:
         supported_models: Sequence[str] | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
         transcript_source: IHarnessTranscriptSource | None = None,
+        orphaner: ISessionOrphaner | None = None,
     ) -> None:
         self._runner_id = runner_id
         self._worker_env = worker_env
@@ -98,6 +102,7 @@ class OpenCodeTwoAdapter:
         self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         self._autonomy = autonomy
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
+        self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(self._registration, UrllibServiceTransport())
 
     @property
     def autonomy(self) -> Autonomy:
@@ -313,6 +318,15 @@ class OpenCodeTwoAdapter:
             process_start_time=launched.process_start_time,
             confirm_durable=launched.confirm_durable,
         )
+
+    def _registration(self) -> ServiceRegistration | None:
+        path = registration_path(self._worker_env.tool().variables)
+        return read_registration(path) if path is not None else None
+
+    def orphan(self, session_id: str) -> None:
+        """Interrupt the session tree a killed driver left running; best effort, bounded, and never starting a
+        service."""
+        self._orphaner.orphan(session_id)
 
     def resume_command(
         self,

@@ -67,6 +67,9 @@ class FixedPidAdapter:
     ) -> str:
         return f"cd {session_cwd} && fake --resume {session_id}"
 
+    def orphan(self, session_id: str) -> None:
+        del session_id
+
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         return {"BLIZZARD_SESSION_ID": session_id, "BLIZZARD_CHUNK_ID": chunk_id}
 

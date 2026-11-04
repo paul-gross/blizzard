@@ -165,6 +165,21 @@ def test_no_service_fails_the_launch_before_any_request_is_written(tmp_path: Pat
     assert not (tmp_path / "requests").exists() or not list((tmp_path / "requests").iterdir())
 
 
+class _Orphaner:
+    def __init__(self) -> None:
+        self.orphaned: list[str] = []
+
+    def orphan(self, session_id: str) -> None:
+        self.orphaned.append(session_id)
+
+
+def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:
+    orphaner = _Orphaner()
+    adapter, launcher = _adapter(tmp_path, orphaner=orphaner)
+    adapter.orphan("ses_1")
+    assert orphaner.orphaned == ["ses_1"] and launcher.requests == []
+
+
 def test_models_and_efforts_resolve_and_takeover_goes_through_attend(tmp_path: Path) -> None:
     adapter, _ = _adapter(tmp_path, model_aliases=[("tier:fast", "openai/gpt-6-mini")], effort_aliases=[("x", "max")])
     assert adapter.resolve_model(["tier:fast"]) == "openai/gpt-6-mini"

@@ -228,6 +228,12 @@ class IHarnessWorkerLifecycle(Protocol):
         off display surfaces."""
         ...
 
+    def orphan(self, session_id: str) -> None:
+        """Stop the turn of a worker the runner just killed, or that exited without a result, when it can outlive
+        its worker. Best effort and bounded: a failure is logged, never raised. The runner chooses ``session_id`` and
+        never hands over a session under takeover; a binding whose worker owns its turn's processes does nothing."""
+        ...
+
 
 class IHarnessModelResolution(Protocol):
     """Resolving an authored model/effort/compaction-window preference to this harness's

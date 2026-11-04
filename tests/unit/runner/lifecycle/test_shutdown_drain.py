@@ -124,10 +124,18 @@ def test_drain_shares_one_deadline_across_every_marked_worker() -> None:
         _lease_record(),
         _lease_record(lease_id="lease_2", pid=200, process_start_time="start-200", session_id="sess-b", pgid=200),
     ]
-    ShutdownDrain(process=probe, clock=clock, sleep=sleep, deadline_seconds=1.0).run(leases)
+    orphaned: list[str] = []
+    ShutdownDrain(
+        process=probe,
+        clock=clock,
+        sleep=sleep,
+        deadline_seconds=1.0,
+        orphan=lambda lease: orphaned.append(lease.lease_id),
+    ).run(leases)
 
     assert set(probe.interrupted_groups) == {100, 200}
     assert probe.killed_groups == [200]  # only the survivor
+    assert orphaned == ["lease_2"]  # and only the survivor's session is orphaned
 
 
 def test_shutdown_drain_deadline_default_is_sixty_seconds() -> None:
