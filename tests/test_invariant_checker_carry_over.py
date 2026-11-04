@@ -6,18 +6,18 @@ import pytest
 
 from blizzard.hub.store import schema as hub
 from blizzard.tools.invariants import hub_invariants
+from tests.invariant_checker_world import (
+    _flow,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _link,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _submit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _terms,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+)
 from tests.migration_support_invariant_checker import NOW, insert
 from tests.support import default_project, default_tenant, hub_scoped, stamp
-from tests.test_invariant_checker import (
-    _flow,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _link,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _submit,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-    _terms,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
-)
 
 pytestmark = pytest.mark.component
 

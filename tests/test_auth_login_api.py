@@ -14,57 +14,16 @@ import pytest
 import sqlalchemy as sa
 from httpx2 import Response
 
-from blizzard.auth_core import Role
-from blizzard.hub.auth.models import ProviderIdentity, User
-from blizzard.hub.auth.oauth.provider import OAuthExchangeError
+from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.config import LoginThrottleConfig
 from blizzard.hub.store import schema
-from tests.support import HubHarness, build_hub, hub_scoped, seed_user
+from tests.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
+from tests.support import HubHarness, build_hub, hub_scoped
 
 pytestmark = pytest.mark.component
 
 
-class FakeOAuthProvider:
-    """A canned :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider` — resolves a
-    fixed code -> :class:`ProviderIdentity` map; raises :class:`OAuthExchangeError` for
-    an unrecognized code."""
-
-    def __init__(self, *, name: str, display_name: str = "", type: str = "oidc") -> None:
-        self.name = name
-        self.display_name = display_name or name
-        self.type = type
-        self.codes: dict[str, ProviderIdentity] = {}
-        self.authorize_calls: list[tuple[str, str]] = []
-
-    def authorize_url(self, *, state: str, redirect_uri: str) -> str:
-        self.authorize_calls.append((state, redirect_uri))
-        return f"https://provider.example/{self.name}/authorize?state={state}"
-
-    def exchange(self, *, code: str, redirect_uri: str) -> ProviderIdentity:
-        identity = self.codes.get(code)
-        if identity is None:
-            raise OAuthExchangeError(f"unrecognized code {code!r}")
-        return identity
-
-
-def state_from_redirect(location: str) -> str:
-    # `RedirectResponse` urlencodes the query string the fake's `authorize_url` built.
-    return location.rsplit("state=", 1)[1]
-
-
 # --- providers ------------------------------------------------------------------
-
-
-#: Ada as an authoritative provider reports her, with the verified email :func:`known_ada` seeds her under.
-ADA = ProviderIdentity(
-    subject="1", handle="ada", email="ada@example.com", email_verified=True, emails_authoritative=True
-)
-
-
-def known_ada(hub: HubHarness) -> User:
-    """Ada as a person the hub already knows — a user with no membership holding ``ADA``'s verified email, so her
-    sign-in links to her under the email-merge rule rather than being refused as a stranger's."""
-    return seed_user(hub, username="ada", role=Role.PENDING, email="ada@example.com")
 
 
 def test_providers_lists_every_configured_provider(tmp_path: Path) -> None:

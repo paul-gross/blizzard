@@ -8,6 +8,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
+from tests.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
 from tests.support import (
     add_tenant,
     build_hub,
@@ -18,7 +19,6 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_transcript_segments_api import bearer, cookie, enrolled_runner_token, ingest_chunk
 
 pytestmark = pytest.mark.component
 

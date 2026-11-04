@@ -17,6 +17,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
+from tests.hub_request_auth import bearer, enroll_runner, register_runner
 from tests.support import (
     HubHarness,
     build_hub,
@@ -29,7 +30,6 @@ from tests.support import (
     seed_graph,
     stamp,
 )
-from tests.test_fleet_auth import bearer, enroll_runner, register_runner
 
 pytestmark = pytest.mark.component
 

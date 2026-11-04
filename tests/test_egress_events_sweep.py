@@ -4,174 +4,31 @@ hub's composed sweep to a real directory, partitioned by their step's start, wit
 from __future__ import annotations
 
 import gzip
-import json
-from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
-from typing import Literal, TypedDict, Unpack, cast
+from typing import Literal, cast
 
-import duckdb
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli.egress import StatusView
-from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.observability.egress import sweep as sweep_module
-from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
-from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
+from tests.egress_world import (
+    _PLANTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    OLD_VERSION,
+    Events,
+    _config,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    kinds,
+)
 from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
-from tests.repo_files import repo_root
-from tests.support import HubHarness, SeedingTranscriptSegmentStore, hub_level_connections, hub_store_connections
-from tests.test_egress_sweep import closed_step, graph_node_id, kinds
-from tests.trace_hub import trace_hub
+from tests.support import HubHarness, hub_level_connections, hub_store_connections
 
 pytestmark = pytest.mark.component
-
-OLD_VERSION = "blizzard-analytics/0"
-_PLANTED = "PLANTED-PROMPT-TEXT"
-_PROVENANCE = SegmentProvenance("claude_code", "1.0", "claude-sonnet-5", "high")
-
-
-class _EgressFields(TypedDict, total=False):
-    batch_limit: int
-    extractor_versions: Literal["current", "all"]
-    file_paths: Literal["relative", "hashed", "absolute", "omit"]
-
-
-def _config(tmp_path: Path, **extra: Unpack[_EgressFields]) -> EgressConfig:
-    fields: _EgressFields = {"file_paths": "absolute"}
-    fields.update(extra)
-    (tmp_path / "out").mkdir(parents=True, exist_ok=True)
-    return EgressConfig(
-        directory=tmp_path / "out",
-        settle_seconds=0,
-        min_free_bytes=0,
-        **fields,
-    )
-
-
-class Events:
-    """A hub with the export on, a closed runner step, and that step's transcript segments, derived by hand."""
-
-    def __init__(self, tmp_path: Path, *, path_key: bytes | None = None, **extra: Unpack[_EgressFields]) -> None:
-        self.directory = tmp_path / "out"
-        self.hub, self.graph = trace_hub(tmp_path, egress=_config(tmp_path, **extra), egress_path_key=path_key)
-        self.sweep()  # anchors every dataset
-        self.chunk_id = closed_step(self.hub, self.graph, 1)
-
-    def sweep(self) -> None:
-        sweep = self.hub.hub_services.egress_export
-        assert sweep is not None
-        self.hub.clock.advance(timedelta(seconds=1))
-        sweep.sweep()
-
-    def segment(self, segment_id: str, chunk_id: str | None = None) -> None:
-        record = TranscriptSlice(
-            segment_id=segment_id,
-            chunk_id=chunk_id or self.chunk_id,
-            node_id=graph_node_id(self.graph),
-            epoch=1,
-            spawn_generation=1,
-            runner_id="r1",
-            turn_range_start=0,
-            turn_range_end=0,
-            final=True,
-            normalizer_version="claude-code-jsonl/2",
-            harness_version="claude-code-1.0",
-            record_truncated=False,
-            turns_json=json.dumps([{"index": 0, "kind": "user", "text": _PLANTED}]),
-            spawn_cwd="/work",
-        )
-        SeedingTranscriptSegmentStore(hub_store_connections(self.hub.engine)).insert_accepted(
-            record, byte_count=1, at=self.hub.clock.now()
-        )
-
-    def derive(
-        self, segment_id: str, events: int, *, version: str = EXTRACTOR_VERSION, chunk_id: str | None = None
-    ) -> None:
-        self.derive_events(
-            segment_id, [self._event(turn, chunk_id or self.chunk_id) for turn in range(events)], version
-        )
-
-    def derive_events(self, segment_id: str, events: list[TranscriptEvent], version: str = EXTRACTOR_VERSION) -> None:
-        self.hub.clock.advance(timedelta(seconds=1))
-        TranscriptEventStore(hub_store_connections(self.hub.engine)).replace_segment_events(
-            segment_id,
-            version,
-            events,
-            complete=True,
-            content_fingerprint="fp",
-            at=self.hub.clock.now(),
-            provenance=_PROVENANCE,
-        )
-
-    def drop(self, segment_id: str) -> None:
-        self.hub.clock.advance(timedelta(seconds=1))
-        TranscriptEventStore(hub_store_connections(self.hub.engine)).drop_segments(
-            frozenset({segment_id}), at=self.hub.clock.now()
-        )
-
-    def reads_version(self, version: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Make the sweep read ``version`` as the hub's current extractor version, as an upgrade does."""
-        sweep = self.hub.hub_services.egress_export
-        assert sweep is not None
-        monkeypatch.setattr(sweep, "_extractor_version", version)
-        monkeypatch.setattr(sweep_module, "EXTRACTOR_VERSION", version)
-
-    def view(self, name: str) -> list[tuple[str, ...]]:
-        """The rows of the published view ``name`` over this directory, as ``(segment_id, extractor_version,
-        kind, subject)`` in that order."""
-        connection = duckdb.connect()
-        listed = ", ".join(f"'{path}'" for path in self.files("events"))
-        connection.execute(
-            f"CREATE VIEW events AS SELECT * FROM read_json_auto([{listed}], format = 'newline_delimited', "
-            "union_by_name = true, sample_size = -1)"
-        )
-        sql = (repo_root() / "contracts" / "egress" / f"{name}.sql").read_text()
-        return connection.execute(
-            f"SELECT segment_id, extractor_version, kind, subject FROM ({sql}) ORDER BY 1, 2, 3, 4"
-        ).fetchall()
-
-    def event(self, kind: str, turn: int, subject: str, occurrence: int = 0) -> TranscriptEvent:
-        return replace(self._event(turn, self.chunk_id), kind=kind, subject=subject, occurrence=occurrence)
-
-    def _event(self, turn: int, chunk_id: str) -> TranscriptEvent:
-        return TranscriptEvent(
-            kind="file_read",
-            turn_path=str(turn),
-            occurrence=0,
-            payload=json.dumps({"input": _PLANTED}),
-            subject=f"/work/src/f{turn}.py",
-            tool="Read",
-            chunk_id=chunk_id,
-            node_id=graph_node_id(self.graph),
-            epoch=1,
-            spawn_generation=1,
-            graph_id="gr_stamped_elsewhere",
-            depth=0,
-            agent_type=None,
-            occurred_at=None,
-        )
-
-    def files(self, dataset: str) -> list[Path]:
-        return sorted(self.directory.glob(f"{dataset}/v1/*/*.ndjson.gz"))
-
-    def rows(self, dataset: str = "events") -> list[dict[str, object]]:
-        out: list[dict[str, object]] = []
-        for path in self.files(dataset):
-            with gzip.open(path, "rt") as handle:
-                out += [json.loads(line) for line in handle.read().splitlines()]
-        return out
-
-    def manifests(self) -> list[dict[str, object]]:
-        return [json.loads(path.read_text()) for path in sorted((self.directory / "_manifests").glob("*.json"))]
 
 
 def _derivations(rows: list[dict[str, object]]) -> list[tuple[object, ...]]:

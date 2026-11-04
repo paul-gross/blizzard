@@ -11,8 +11,8 @@ from click.testing import CliRunner
 from blizzard.cli.main import blizzard
 from blizzard.hub import runtime as hub_runtime
 from blizzard.runner import runtime as runner_runtime
+from tests.baseline_floor_trees import make_tree
 from tests.config_inputs import init_host, init_hub
-from tests.test_baseline_floor import make_tree
 
 pytestmark = pytest.mark.component
 

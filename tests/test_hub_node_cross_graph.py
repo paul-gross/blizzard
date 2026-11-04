@@ -14,13 +14,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.delivery import hub_node
+from tests.hub_command_graphs import ALWAYS_PENDING_GRAPH_YAML, HUB_CMD_GRAPH_YAML, submit_build_pass, to_merge_node
 from tests.support import HubHarness, build_hub
-from tests.test_hub_command_node import (
-    ALWAYS_PENDING_GRAPH_YAML,
-    HUB_CMD_GRAPH_YAML,
-    submit_build_pass,
-    to_merge_node,
-)
 
 pytestmark = pytest.mark.component
 

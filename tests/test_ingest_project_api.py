@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -13,43 +12,15 @@ from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.wire.chunk import ChunkIngestConflict
+from tests.project_ingest import ingest_project, two_projects
 from tests.support import (
-    FakeWorkSource,
     HubHarness,
-    build_hub,
-    default_project,
     hub_store_connections,
-    link_project,
-    seed_fake_work_sources,
     seed_graph,
-    seed_project,
     seed_work_item,
 )
 
 pytestmark = pytest.mark.component
-
-
-def two_projects(tmp_path: Path) -> tuple[HubHarness, ProjectId, ProjectId]:
-    """A hub whose ``first`` project draws from ``a`` and ``shared``, and whose ``second`` draws from ``b`` and
-    ``shared``; ``loose`` is linked to neither."""
-    names = ("a", "b", "shared", "loose")
-    hub = build_hub(tmp_path, work_sources={name: FakeWorkSource(name=name) for name in names}, link=False)
-    seed_fake_work_sources(hub.engine, names, tmp_path=tmp_path, link=False)
-    first = ProjectId(default_project(hub.engine))
-    second = seed_project(hub.engine, "second")
-    for project, sources in ((first, ("a", "shared")), (second, ("b", "shared"))):
-        for source in sources:
-            link_project(hub.engine, project=project, source=source)
-    return hub, first, second
-
-
-def ingest_project(hub: HubHarness, *tokens: str, project: str | None = None) -> tuple[int, dict[str, Any]]:
-    body: dict[str, object] = {"tokens": list(tokens)}
-    if project is not None:
-        body["project"] = project
-    resp = hub.client.post("/api/chunks", json=body)
-    decoded: dict[str, Any] = resp.json()
-    return resp.status_code, decoded
 
 
 def _project_of(hub: HubHarness, chunk_id: str) -> ProjectId | None:

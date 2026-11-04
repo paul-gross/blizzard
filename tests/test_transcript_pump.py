@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -59,10 +59,14 @@ from tests.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.transcript_batches import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.transcript_batches
+    incomplete_batch,
+    normalized_turn,
+    transcript_batch,
+)
 
 pytestmark = pytest.mark.component
-
-_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
 def _cap_share(fraction: float) -> int:
@@ -112,19 +116,6 @@ def _ledger_row_stub() -> TranscriptSegmentState:
         finalized_at=None,
         stamped_at=_NOW,
         harness_id=CLAUDE_CODE_HARNESS_ID,
-    )
-
-
-def normalized_turn(index: int, text: str) -> NormalizedTurn:
-    return NormalizedTurn(
-        index=index,
-        kind="asst",
-        timestamp=_NOW,
-        text=text,
-        tool=None,
-        thinking_redacted=False,
-        sidechain=None,
-        truncated=False,
     )
 
 
@@ -200,44 +191,6 @@ def _sidechain_turn(index: int, *, sidechain_text: str) -> NormalizedTurn:
             agent_id="sub_1", agent_type="general", link="linked", turns=[normalized_turn(0, sidechain_text)]
         ),
         truncated=False,
-    )
-
-
-def transcript_batch(
-    turns: list[NormalizedTurn],
-    *,
-    next_token: str,
-    unlinked_sidechains: list[SidechainConversation] | None = None,
-    truncated: bool = False,
-    sidechain_truncated: bool = False,
-    late_tool_outputs: list[LateToolOutput] | None = None,
-    agent_tool_use_ids: dict[str, str] | None = None,
-) -> TranscriptBatch:
-    return TranscriptBatch(
-        session_id="sess-a",
-        available=True,
-        reason=None,
-        turns=turns,
-        unlinked_sidechains=unlinked_sidechains or [],
-        next_position=TranscriptPosition(next_token),
-        complete=True,
-        truncated=truncated,
-        sidechain_truncated=sidechain_truncated,
-        normalizer_version="fake/1",
-        harness_version=None,
-        late_tool_outputs=late_tool_outputs or [],
-        agent_tool_use_ids=agent_tool_use_ids or {},
-    )
-
-
-def incomplete_batch(
-    turns: list[NormalizedTurn], *, next_token: str, unlinked_sidechains: list[SidechainConversation] | None = None
-) -> TranscriptBatch:
-    """``_batch``'s ``complete=False`` counterpart — the per-batch read budget ran out
-    before this whole window was covered, so ``next_position`` is where a caller resumes
-    RIGHT NOW, not next tick."""
-    return replace(
-        transcript_batch(turns, next_token=next_token, unlinked_sidechains=unlinked_sidechains), complete=False
     )
 
 

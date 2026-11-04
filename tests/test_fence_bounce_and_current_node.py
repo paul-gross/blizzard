@@ -26,6 +26,7 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
+from tests.hub_command_graphs import post_build_pass
 from tests.support import (
     HubHarness,
     build_hub,
@@ -35,8 +36,7 @@ from tests.support import (
     pointer_token,
     report_lease,
 )
-from tests.test_hub_command_node import post_build_pass
-from tests.test_write_fence import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
+from tests.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
 
 pytestmark = pytest.mark.component
 

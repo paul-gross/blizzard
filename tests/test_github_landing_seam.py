@@ -13,7 +13,7 @@ from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.internal.github_reads import ANSWERS_MAX, COMPARISONS_MAX, KeptAnswers, KeptComparisons
 from blizzard.hub.forge.landing import Comparison, ComparisonStatus, ForgeRejected, MergeMethod
-from tests.test_github_landing import REPO, Harness, pull, reply, workflow_run
+from tests.github_landing_harness import REPO, Harness, pull, reply, workflow_run
 
 pytestmark = pytest.mark.unit
 

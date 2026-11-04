@@ -21,8 +21,8 @@ from blizzard.runner.lifecycle.judgement.internal.elicitation_files import Elici
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store
+from tests.selftest_probes import FixedPidAdapter, RecordingProcessProbe
 from tests.support_child_launch import CHILDREN, tool_env
-from tests.test_runner_selftest import FixedPidAdapter, RecordingProcessProbe
 
 pytestmark = pytest.mark.component
 

@@ -32,6 +32,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
+from tests.runner_resume_world import running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -72,15 +73,6 @@ def _seed_running_lease(
         spawned_at=_NOW,
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-
-
-def running_chunk(chunk: str = "ch_1", *, runner_id: str = "r1") -> ChunkState:
-    return ChunkState(
-        chunk_id=chunk,
-        status=ChunkStatus.RUNNING,
-        latest_epoch=1,
-        route_runner_id=runner_id,
-    )
 
 
 # --- Marking — the graceful-shutdown hook ---

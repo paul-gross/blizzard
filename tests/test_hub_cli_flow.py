@@ -13,7 +13,7 @@ import pytest
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from tests.test_flow_routes import Line
+from tests.flow_route_lines import Line
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component

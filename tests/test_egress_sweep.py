@@ -4,9 +4,7 @@ written one ``sweep()`` at a time against a fixed clock, to the in-memory writer
 from __future__ import annotations
 
 import gzip
-import itertools
 import json
-import threading
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -22,17 +20,13 @@ from fastapi import FastAPI
 from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
-from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.hub.domain.observability.egress.sweep import EgressSweep
 from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps, TraceCheckpoint
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
 from blizzard.hub.egress.writer import (
@@ -51,14 +45,28 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
+from tests.egress_world import (
+    _SEQ,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    SETTLED,
+    _push_usage,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    closed_step,
+    egress_cursor_rows,
+    egress_hub,
+    egress_rows,
+    egress_store,
+    egress_sweep,
+    graph_node_id,
+    home_project,
+    kinds,
+    project_of,
+)
+from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
 from tests.support import (
     HubHarness,
     InMemoryEgressWriter,
     added_runner,
     count_queries,
     count_rows_read,
-    default_project,
     default_tenant,
     hub_level_connections,
     hub_scoped,
@@ -67,19 +75,12 @@ from tests.support import (
     seed_project,
     seed_runner,
 )
-from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_hub, trace_store
+from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_store
 
 pytestmark = pytest.mark.component
 
-SETTLED = EgressConfig(directory=Path("unused"), settle_seconds=0, sweep_seconds=60)
 _LOW_DISK = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=5, required_bytes=10)
 _IO = EgressFailure(EgressFailureCause.IO_ERROR, "no such directory")
-_SEQ = itertools.count(1000)
-_PATHS = FilePathPolicy("absolute")
-
-
-def egress_hub(tmp_path: Path, config: EgressConfig | None = None) -> tuple[HubHarness, Graph]:
-    return trace_hub(tmp_path, egress=config) if config is not None else trace_hub(tmp_path)
 
 
 def _lines(path: Path) -> list[str]:
@@ -92,112 +93,12 @@ def _app(hub: HubHarness) -> FastAPI:
     return hub.app
 
 
-def egress_store(hub: HubHarness) -> EgressStore:
-    return EgressStore(
-        hub_store_connections(hub.engine),
-        hub_events=hub_events_of(hub.engine),
-        usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
-    )
-
-
-def egress_sweep(
-    hub: HubHarness,
-    writer: IEgressWriter,
-    config: EgressConfig = SETTLED,
-    *,
-    store: EgressStore | None = None,
-    pass_lock: threading.Lock | None = None,
-    steps: IReadTraceSteps | None = None,
-) -> EgressSweep:
-    connections = hub_store_connections(hub.engine)
-    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
-    return EgressSweep(
-        steps=steps or trace_store(hub),
-        egress=store or EgressStore(connections, hub_events=hub_events_of(hub.engine), usage=corpus),
-        event_reads=corpus,
-        paths=_PATHS,
-        writer=writer,
-        events=hub_event_log_of(hub.engine),
-        clock=hub.clock,
-        config=config,
-        pass_lock=pass_lock,
-    )
-
-
-def _push_usage(hub: HubHarness, chunk_id: str, node_id: str, *, cost: float | None = 0.5, late: bool = False) -> None:
-    payload = {
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": 1,
-        "kind": "spawn",
-        "model": "claude-opus-4-8",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 10,
-        "cache_create_tokens": 5,
-        "cost_usd": cost,
-    }
-    if late:
-        payload.update(
-            kind="resume",
-            input_tokens=11,
-            output_tokens=7,
-            cache_read_tokens=5,
-            cache_create_tokens=3,
-            estimated_cost_usd=0.125,
-        )
-    resp = hub.client.post(
-        "/api/fleet/events",
-        json={"runner_id": "r1", "facts": [{"seq": next(_SEQ), "kind": "usage.recorded", "payload": payload}]},
-    )
-    assert resp.status_code == 200, resp.text
-
-
-def graph_node_id(graph: Graph, name: str = "build") -> str:
-    return next(n.node_id for n in graph.nodes if n.name == name)
-
-
-def closed_step(hub: HubHarness, graph: Graph, ref: int, *, usage: int = 1) -> str:
-    """A chunk claimed, billed ``usage`` times, and moved out of ``build`` — one closed runner step."""
-    chunk_id = ingest(hub, [{"source": "default", "ref": str(ref)}])
-    claim(hub, chunk_id, seq=next(_SEQ))
-    for _ in range(usage):
-        _push_usage(hub, chunk_id, graph_node_id(graph))
-    hub.clock.advance(timedelta(seconds=5))
-    pass_build(hub, chunk_id, graph)
-    return chunk_id
-
-
-def kinds(hub: HubHarness) -> list[str]:
-    return hub_event_kinds(hub.engine, "egress-")
-
-
-def egress_cursor_rows(hub: HubHarness) -> int:
-    with hub.engine.connect() as conn:
-        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(schema.egress_cursor))).scalar_one()
-
-
-def egress_rows(writer: InMemoryEgressWriter, dataset: str) -> list[dict[str, object]]:
-    return [dict(row.values) for b in writer.batches if b.schema.name == dataset for row in b.rows]
-
-
 def _tenant_name(hub: HubHarness) -> str | None:
     return hub.hub_services.tenants.open_tenants.name(default_tenant(hub.engine))
 
 
 def _tenant_of(row: dict[str, object]) -> tuple[object, object]:
     return (row["tenant_id"], row["tenant_name"])
-
-
-def project_of(row: dict[str, object]) -> tuple[object, object, object]:
-    return (row["project_id"], row["project_slug"], row["project_name"])
-
-
-def home_project(hub: HubHarness) -> tuple[str, str, str]:
-    """The default tenant's only project as ``(project_id, slug, name)``."""
-    project = hub.services.projects.get(ProjectId(default_project(hub.engine)))
-    assert project is not None
-    return (project.project_id, project.slug, project.name)
 
 
 def _anchored(hub: HubHarness, writer: IEgressWriter, config: EgressConfig = SETTLED) -> None:

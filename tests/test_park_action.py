@@ -15,15 +15,15 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ChangeState
 from tests.github_double import change
-from tests.test_land_action import (
-    _GADGET,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _forge,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _land,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _row,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _Sink,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
-    _visit,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+from tests.land_action_doubles import (
+    _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _forge,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _land,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _row,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _Sink,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
 )
 
 pytestmark = pytest.mark.component

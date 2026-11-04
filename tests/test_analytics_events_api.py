@@ -11,8 +11,9 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from tests.support import HubHarness, build_hub, seed_session, seed_user
-from tests.test_fleet_auth import seed_enrolled
+from tests.analytics_events_world import record_transcript, seeded_hub, tool_turn
+from tests.hub_request_auth import cookie, ingest_chunk, seed_enrolled
+from tests.support import build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -27,89 +28,8 @@ _ROUTES = [
 ]
 
 
-def cookie(token: str) -> dict[str, str]:
-    return {"Cookie": f"bz_session={token}"}
-
-
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: str | None = None) -> dict[str, object]:
-    return {
-        "index": index,
-        "kind": "tool",
-        "timestamp": timestamp,
-        "text": "",
-        "tool": {
-            "name": name,
-            "input": input,
-            "input_unparsed": None,
-            "input_shape": "object",
-            "tool_use_id": f"t{index}",
-            "output": None,
-            "output_truncated": False,
-        },
-        "thinking_redacted": False,
-        "sidechain": None,
-        "truncated": False,
-    }
-
-
-def record_transcript(
-    chunk_id: str,
-    *,
-    turns: list[dict[str, object]],
-    node_id: str = "nd_build",
-    segment_id: str = "sg_1",
-    harness_id: str | None = None,
-    harness_version: str | None = "claude-code-1.0",
-    model: str | None = None,
-    effort: str | None = None,
-) -> dict[str, object]:
-    return {
-        "seq": 1,
-        "segment_id": segment_id,
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": 1,
-        "spawn_generation": 1,
-        "turn_range_start": 0,
-        "turn_range_end": len(turns) - 1,
-        "final": True,
-        "normalizer_version": "claude-code-jsonl/2",
-        "harness_version": harness_version,
-        "harness_id": harness_id,
-        "model": model,
-        "effort": effort,
-        "turns": turns,
-    }
-
-
-def ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
-    assert resp.status_code == 201, resp.text
-    return str(resp.json()["chunk_id"])
-
-
-def seeded_hub(tmp_path: Path) -> tuple[HubHarness, str, str]:
-    """A contributor session, one chunk carrying a file_read/skill_invocation/agent_spawn
-    triad derived and stored, ready for the routes' own auth/filter/paging assertions."""
-    hub = build_hub(tmp_path, auth_mode="oauth")
-    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
-    token = seed_session(hub, contributor)
-    chunk_id = ingest_chunk(hub, headers=cookie(token))
-    turns = [
-        tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z"),
-        tool_turn(1, "Skill", {"skill": "wf-commit"}, timestamp="2026-08-12T10:00:00Z"),
-        tool_turn(2, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z"),
-    ]
-    push = hub.client.post(
-        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns)]}
-    )
-    assert push.status_code == 200, push.text
-    hub.hub_services.event_derivation.sweep()
-    return hub, token, chunk_id
 
 
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------

@@ -618,7 +618,7 @@ def test_patch_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_every_work_source_route(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import bearer, seed_enrolled
+    from tests.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)

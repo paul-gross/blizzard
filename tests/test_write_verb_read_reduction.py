@@ -21,6 +21,8 @@ from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
 from blizzard.hub.store.scoped import ScopedConnections
+from tests.chunk_questions import ask_question
+from tests.gate_decisions import GATE_YAML
 from tests.support import (
     HubHarness,
     build_hub,
@@ -29,10 +31,6 @@ from tests.support import (
     seed_session,
     seed_user,
     serve_default_tenant,
-)
-from tests.test_decisions_api import GATE_YAML
-from tests.test_questions_api import (
-    ask_question,
 )
 
 pytestmark = pytest.mark.component

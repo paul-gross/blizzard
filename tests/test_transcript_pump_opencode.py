@@ -22,6 +22,14 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
+from tests.opencode_export_fakes import (
+    FakeExporter,
+    assistant_message,
+    error_factory,
+    opencode_export,
+    tool_part,
+    user_message,
+)
 from tests.repo_files import repo_root
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -31,14 +39,6 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_store,
-)
-from tests.test_runner_harness_opencode_transcript import (
-    FakeExporter,
-    assistant_message,
-    error_factory,
-    opencode_export,
-    tool_part,
-    user_message,
 )
 
 pytestmark = pytest.mark.component

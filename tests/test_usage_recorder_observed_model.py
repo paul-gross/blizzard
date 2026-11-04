@@ -27,6 +27,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.usage.recorder import UsageRecorder
+from tests.opencode_export_fakes import FakeExporter
 from tests.repo_files import repo_root
 from tests.runner_fakes import (
     FakeHarness,
@@ -38,7 +39,6 @@ from tests.runner_fakes import (
     single_workspace,
 )
 from tests.support_child_launch import CHILDREN, version_probe
-from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.component
 
@@ -379,7 +379,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    from tests.test_runner_harness_opencode_subagents import opencode_events, opencode_session, opencode_task, step
+    from tests.opencode_subagent_events import opencode_events, opencode_session, opencode_task, step
 
     def at(ms: int) -> datetime:
         return datetime.fromtimestamp(ms / 1000, UTC)

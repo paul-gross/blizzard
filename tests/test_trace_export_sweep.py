@@ -25,7 +25,6 @@ from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
-from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.store import schema
 from tests.config_inputs import build_hosted_hub_app, init_hub
@@ -38,16 +37,12 @@ from tests.support import (
     hub_scoped,
     ingest,
 )
-from tests.trace_hub import claim, pass_build, trace_hub, trace_store, transitioned_and_stopped
+from tests.trace_export_world import closed_pair, trace_export_sweep
+from tests.trace_hub import claim, pass_build, trace_hub, trace_store
 
 pytestmark = pytest.mark.component
 
 _SETTLED = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600)
-
-
-def trace_export_sweep(hub: HubHarness) -> TraceExportSweep:
-    assert hub.hub_services.trace_export is not None
-    return hub.hub_services.trace_export
 
 
 def _row_count(hub: HubHarness) -> int:
@@ -68,12 +63,6 @@ def _hub(tmp_path: Path, config: TracingConfig = _SETTLED) -> tuple[HubHarness, 
     exporter = InMemoryTraceExporter()
     hub, _graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=config)
     return hub, exporter
-
-
-def closed_pair(hub: HubHarness, ref: int = 1) -> tuple[str, str]:
-    graph = hub.services.graphs.get_enabled_by_name("default-delivery")
-    assert graph is not None
-    return transitioned_and_stopped(hub, graph, ref)
 
 
 def _roots(exporter: InMemoryTraceExporter) -> list[int]:

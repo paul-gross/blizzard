@@ -18,11 +18,12 @@ from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import DATASETS
+from tests.analytics_events_world import seeded_hub
+from tests.analytics_spend_world import mint_chunk, push_usage
+from tests.analytics_spend_world import seeded_hub as _seeded_spend_hub
+from tests.hub_request_auth import cookie
 from tests.repo_files import repo_root
 from tests.support import HubHarness
-from tests.test_analytics_events_api import cookie, seeded_hub
-from tests.test_analytics_spend_api import mint_chunk, push_usage
-from tests.test_analytics_spend_api import seeded_hub as _seeded_spend_hub
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component

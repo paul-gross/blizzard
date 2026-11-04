@@ -14,8 +14,8 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.writer import EgressWriterSettings
+from tests.egress_world import closed_step, egress_hub
 from tests.support import HubHarness
-from tests.test_egress_sweep import closed_step, egress_hub
 from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component

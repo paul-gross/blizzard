@@ -17,8 +17,9 @@ from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
+from tests.analytics_events_world import seeded_hub
+from tests.hub_request_auth import cookie
 from tests.support import HubHarness, seed_session, seed_user
-from tests.test_analytics_events_api import cookie, seeded_hub
 from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component

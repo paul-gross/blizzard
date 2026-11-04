@@ -9,12 +9,9 @@ from typing import Any
 
 import pytest
 
+from tests.hub_request_auth import bearer
+from tests.project_ingest import ingest_project, two_projects
 from tests.support import count_queries, emitted_events
-from tests.test_fleet_auth import bearer
-from tests.test_ingest_project_api import (
-    ingest_project,
-    two_projects,
-)
 
 pytestmark = pytest.mark.component
 

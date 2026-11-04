@@ -17,8 +17,8 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
+from tests.route_classes import api_routes, dependency_names
 from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
-from tests.test_route_classification import api_routes, dependency_names
 
 pytestmark = pytest.mark.component
 

@@ -38,7 +38,7 @@ from tests.support import (
     ingest,
     scoped_connections,
 )
-from tests.test_store_work_source_registry import create, forge, promote
+from tests.work_source_registry_ops import create, forge, promote
 
 # Re-exported so pytest resolves the registry suite's `forge` fixture here; the tests request it by name.
 _FIXTURES = (forge,)

@@ -5,7 +5,7 @@ tenant's row, and never on a tenant closed since the pass read its corpus."""
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import cast
 from unittest.mock import Mock
@@ -17,9 +17,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision, PendingCloseIntent, WorkRef
-from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import TenantWorkRef, WorkRefsSignature
 from blizzard.hub.domain.observability.analytics.derivation import (
     DerivationTally,
@@ -39,11 +37,7 @@ from blizzard.hub.domain.work_items.closure import (
     fair_share,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.store.transactions import HubTransactions
-from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId
+from blizzard.hub.tenancy import TenantClosed, TenantId
 from tests.pass_isolation import (
     HEALTHY,
     POISONED,
@@ -55,17 +49,17 @@ from tests.pass_isolation import (
     build_sweep,
 )
 from tests.support import (
-    HubHarness,
     build_hub,
     close_tenant,
     default_tenant,
-    hub_level_connections,
     hub_scoped,
-    make_graph,
-    seed_chunk_record,
+)
+from tests.tenant_sweeps import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_sweeps
+    close_events,
+    landed_hub_ref,
 )
 
-_NOW = datetime(2026, 7, 13, tzinfo=UTC)
 _A = TenantId("ten_a")
 _B = TenantId("ten_b")
 _log = get_logger("test.sweep_tenants")
@@ -322,45 +316,6 @@ def test_an_annotation_pass_skips_a_tenant_closed_since_the_open_set_was_read() 
 
 
 # --- the close drain over two tenants of one hub --------------------------------------------
-
-
-def _stores_of(hub: HubHarness, tenant: TenantId) -> ChunkStores:
-    connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
-    return build_chunk_stores(
-        connections, hub.clock, registry=RunnerRegistryStore(connections), transactions=HubTransactions(connections)
-    )
-
-
-def landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkStores:
-    """A chunk of ``tenant`` holding the hub source's ref ``1`` — the same ref in every tenant — landed,
-    so its close intent is pending; the tenant's chunk stores."""
-    connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
-    graph_id = f"gr_{chunk_id}"
-    GraphStore(connections).mint(make_graph(graph_id, "g"), definition_yaml="", at=hub.clock.now())
-    stores = _stores_of(hub, tenant)
-    seed_chunk_record(
-        stores, Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[WorkRef("hub", "1")], minted_at=_NOW)
-    )
-    stores.artifacts.record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="merged/widget",
-        content="sha",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("hub", "1")}), skipped=frozenset()),
-    )
-    return stores
-
-
-def close_events(hub: HubHarness, tenant: TenantId) -> list[str]:
-    connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
-    log = s.event_log
-    with connections.read("test close events") as conn:
-        rows = conn.execute(connections.select(log).where(log.c.kind.like("work-item-close%"))).all()
-    return [row.chunk_id for row in rows]
 
 
 @pytest.mark.component

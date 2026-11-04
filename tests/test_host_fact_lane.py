@@ -21,8 +21,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.transactions import HubTransactions
+from tests.hub_request_auth import bearer
 from tests.support import HubHarness, build_hub, count_queries, emitted_events, hub_store_connections, seed_runner
-from tests.test_fleet_auth import bearer
 
 pytestmark = pytest.mark.component
 

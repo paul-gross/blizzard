@@ -17,6 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.store import schema
+from tests.invitation_reads import resolved_after_first_read
 from tests.support import (
     HubHarness,
     build_hub,
@@ -27,7 +28,6 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_invitation_acceptance import resolved_after_first_read
 
 pytestmark = pytest.mark.component
 

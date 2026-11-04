@@ -17,6 +17,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from tests.analytics_events_world import record_transcript, tool_turn
 from tests.support import (
     HubHarness,
     build_hub,
@@ -28,7 +29,6 @@ from tests.support import (
     seed_project,
     seed_runner,
 )
-from tests.test_analytics_events_api import record_transcript, tool_turn
 
 pytestmark = pytest.mark.component
 

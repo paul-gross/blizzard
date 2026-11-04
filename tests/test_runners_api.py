@@ -150,7 +150,7 @@ def test_get_runner_reflects_pause_state(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_get_runner(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import seed_enrolled
+    from tests.hub_request_auth import seed_enrolled
 
     token = seed_enrolled(tmp_path, runner_id="r1", workspace_id="w1")
     hub = build_hub(tmp_path)
