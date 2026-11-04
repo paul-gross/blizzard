@@ -192,3 +192,9 @@ def test_publish_creates_a_missing_directory_and_leaves_no_temp_file(tmp_path: P
 def test_bound_tcp_serves_an_ipv6_host() -> None:
     with bound_tcp("::1", 0) as sock:
         assert bound_port(sock) > 0
+
+
+def test_publish_brackets_an_ipv6_host(tmp_path: Path) -> None:
+    target = tmp_path / "hub.url"
+    publish_listening_file(target, "::1", 8123)
+    assert target.read_text() == "http://[::1]:8123\n"

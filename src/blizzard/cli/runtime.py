@@ -108,7 +108,8 @@ def publish_listening_file(path: Path, host: str, port: int) -> None:
     descriptor, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(descriptor, "w") as handle:
-            handle.write(f"http://{host}:{port}\n")
+            authority = f"[{host}]" if ":" in host else host
+            handle.write(f"http://{authority}:{port}\n")
         os.chmod(temp, 0o644)
         os.replace(temp, path)
     except BaseException:
