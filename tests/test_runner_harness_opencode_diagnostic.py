@@ -1,6 +1,6 @@
 """Component proof for the hermetic OpenCode compatibility diagnostic. Cases that drive the
 fake OpenCode-shaped CLI as an out-of-process subprocess live in
-``tests/service/test_opencode_compatibility_service.py`` (``bzh:external-cli-fake-is-service-tier``).
+``tests/service/harnesses/test_opencode_compatibility_service.py`` (``bzh:external-cli-fake-is-service-tier``).
 
 This module holds:
 

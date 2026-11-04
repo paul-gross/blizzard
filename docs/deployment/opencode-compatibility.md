@@ -173,8 +173,8 @@ exit status, and the sanitized evidence together.
 This section covers OpenCode 1. OpenCode 2 admits by `ADMITTED_OPENCODE_V2_RANGE`
 (`src/blizzard/runner/harness/opencode_v2/version.py`), normalized by `normalize_opencode_v2_version`; its corpus lives
 at the same `src/blizzard/runner/harness/contracts/opencode/<version>/` path with `"major_version": 2` in its manifest,
-and `tests/test_runner_harness_opencode_v2_compatibility.py` and `tests/service/test_opencode2_compatibility_service.py`
-judge it.
+and `tests/test_runner_harness_opencode_v2_compatibility.py` and
+`tests/service/harnesses/test_opencode2_compatibility_service.py` judge it.
 
 This page's live diagnostic (above) runs against a version already inside the runner's admitted range —
 `ADMITTED_OPENCODE_RANGE` (`src/blizzard/runner/harness/opencode/compatibility/probe.py`), a
@@ -209,7 +209,7 @@ Either way, the same four-tier proof plus this page's own live diagnostic is owe
      (`tests/test_runner_selftest.py`) pass against the candidate's CLI surface, independent of the live compatibility
      diagnostic above.
    - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
-     (`tests/service/runner/opencode.spec.ts`, `tests/service/test_opencode_compatibility_service.py`,
+     (`tests/service/runner/opencode.spec.ts`, `tests/service/harnesses/test_opencode_compatibility_service.py`,
      `tests/service/runner/mixed-harness-dispatch.spec.ts`).
    - `blizzard:crash-sweep` — crash verification: the candidate survives an unattended kill-9 at every registered
      OpenCode crash point (the `_OPENCODE_GENERIC_SWEEP` and `_OPENCODE_RESUME_SWEEP` points in
