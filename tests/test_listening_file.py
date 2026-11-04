@@ -180,3 +180,15 @@ def test_a_host_composed_on_a_bound_port_zero_derives_every_runner_url_from_the_
             assert env["BLIZZARD_RUNNER_URL"] == expected
         finally:
             host.close()
+
+
+def test_publish_creates_a_missing_directory_and_leaves_no_temp_file(tmp_path: Path) -> None:
+    target = tmp_path / "missing" / "hub.url"
+    publish_listening_file(target, "127.0.0.1", 8123)
+    assert target.read_text() == "http://127.0.0.1:8123\n"
+    assert [entry.name for entry in target.parent.iterdir()] == ["hub.url"]
+
+
+def test_bound_tcp_serves_an_ipv6_host() -> None:
+    with bound_tcp("::1", 0) as sock:
+        assert bound_port(sock) > 0

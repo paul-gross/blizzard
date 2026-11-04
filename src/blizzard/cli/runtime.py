@@ -83,7 +83,7 @@ def run_migrate(
 def bound_tcp(host: str, port: int) -> Generator[socket.socket, None, None]:
     """A listening TCP socket at HOST:PORT, closed when the block exits. Port ``0`` lets the kernel pick one;
     read the port actually bound from :func:`bound_port`. A bind failure is a ``click.ClickException``."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         sock.bind((host, port))
@@ -102,11 +102,14 @@ def bound_port(sock: socket.socket) -> int:
 
 def publish_listening_file(path: Path, host: str, port: int) -> None:
     """Write ``http://HOST:PORT`` and a newline to PATH atomically: a temp file in PATH's directory, then
-    ``os.replace``, so a reader sees no file or the whole URL — never part of one."""
+    ``os.replace``, so a reader sees no file or the whole URL — never part of one. A missing directory is created;
+    the file is world-readable, as any daemon's published address is."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(descriptor, "w") as handle:
             handle.write(f"http://{host}:{port}\n")
+        os.chmod(temp, 0o644)
         os.replace(temp, path)
     except BaseException:
         Path(temp).unlink(missing_ok=True)

@@ -1930,6 +1930,8 @@ def listening_args(listening_file: Path, port: int) -> list[str]:
     as this start's readiness. A pinned ``port`` is recorded first, for :func:`published_port`."""
     if port:
         _pinned(listening_file).write_text(str(port))
+    else:
+        _pinned(listening_file).unlink(missing_ok=True)
     listening_file.unlink(missing_ok=True)
     return ["--port", str(port), "--listening-file", str(listening_file)]
 
