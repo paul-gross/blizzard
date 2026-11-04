@@ -1,0 +1,842 @@
+"""``garden_delivery`` — the delivery node's own check:
+each artifact parses and matches its wire shape, every finding id named is well-formed
+and live on the run's routine, a transformation stays inside the run's declared scope,
+a cited commit is well-formed and (when addressable) resolves, and a `gone` fact
+carries a note. Plain unit tests over hand-built objects — this module takes no I/O
+(``bzh:domain-takes-objects``, the ``tests/unit/hub/domain/garden/proposals/test_model.py`` shape)."""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import UTC, datetime
+
+import pytest
+
+from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.api.garden_formats import GardenFormats
+from blizzard.hub.domain.garden.delivery.validation import (
+    CommitResolution,
+    CommitResolver,
+    ExitedResolver,
+    GardenDeliveryRejected,
+    check_add_refs,
+    check_proposal,
+    check_proposal_refs,
+    commits_to_resolve,
+    parse_artifacts,
+    resolve_commits,
+    validate_delivery,
+)
+from blizzard.hub.domain.garden.delivery.validation import (
+    check_delta as _check_delta,
+)
+from blizzard.hub.domain.garden.findings.bucket import FindingBucket
+from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, Finding
+from blizzard.hub.domain.garden.formats import (
+    DeliveredDelta,
+    FindingAddOp,
+    FindingGoneOp,
+    FindingObservedOp,
+    ProposalCandidate,
+)
+from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
+from tests.garden_artifacts import add_op, candidate, wire_json
+
+_PROJECT = "proj_test"
+
+_FORMATS = GardenFormats()
+
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="runner", mode="full")
+
+
+def _fin() -> str:
+    return Id.mint_at(IdPrefix.FINDING, _T0).value
+
+
+_FIN1 = _fin()
+_FIN2 = _fin()
+_FIN3 = _fin()
+
+
+def _validate(
+    *,
+    run: RunContext,
+    delta_artifacts: dict[str, str],
+    proposal_artifacts: dict[str, str],
+    bucket: FindingBucket,
+    formats: GardenFormats,
+    resolve_commit: CommitResolver | None = None,
+    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
+):
+    """What the recorder does around the rules: parse, resolve every cited commit up front, then validate."""
+    parsed = parse_artifacts(delta_artifacts=delta_artifacts, proposal_artifacts=proposal_artifacts, formats=formats)
+    resolutions = resolve_commits(commits_to_resolve(parsed.deltas, run=run), resolve_commit)
+    return validate_delivery(
+        run=run, parsed=parsed, bucket=bucket, resolutions=resolutions, resolve_exited=resolve_exited
+    )
+
+
+def _check(
+    delta: DeliveredDelta,
+    *,
+    run: RunContext,
+    live_findings: dict[str, str],
+    resolve_commit: CommitResolver | None = None,
+):
+    """:func:`check_delta` over the resolutions the recorder would have made for `delta`."""
+    resolutions = resolve_commits(commits_to_resolve([delta], run=run), resolve_commit)
+    return _check_delta(delta, run=run, live_findings=live_findings, resolutions=resolutions)
+
+
+_GOOD_COMMIT = "a" * 40
+_BAD_COMMIT = "not-a-sha"
+
+
+def _live(*, in_scope: bool = True) -> dict[str, str]:
+    scope = _RUN.scope_slug if in_scope else "other-scope"
+    return {_FIN1: scope, _FIN2: scope, _FIN3: scope}
+
+
+def _bucket(findings: list[Finding]) -> FindingBucket:
+    return FindingBucket(citable=[f for f in findings if f.state not in EXIT_KINDS])
+
+
+def _finding(
+    finding_id: str,
+    *,
+    scope_slug: str = _RUN.scope_slug,
+    live: bool = True,
+    state: str | None = None,
+    actor: str | None = None,
+) -> Finding:
+    resolved_state = state if state is not None else ("live" if live else "gone")
+    return Finding(
+        project_id=_PROJECT,
+        finding_id=finding_id,
+        routine_name=_RUN.routine_name,
+        scope_slug=scope_slug,
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s",
+        introduced=None,
+        introduced_at=None,
+        first_observed_at=_T0,
+        live=live,
+        state=resolved_state,
+        note=None,
+        last_seen_at=_T0,
+        observed_count=1,
+        actor=actor,
+    )
+
+
+def _resolver(result: bool | None) -> CommitResolver:
+    resolution = None if result is None else CommitResolution(exists=result)
+    return lambda repo, sha: resolution
+
+
+def _add(
+    *, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None, ref: str | None = None
+) -> FindingAddOp:
+    # `class` is a pydantic alias (`FindingAddOp.class_`), so this builds via
+    # `model_validate` rather than the `class_=` kwarg — `tests/unit/wire/test_finding.py`'s shape.
+    payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
+    if introduced is not None:
+        payload["introduced"] = introduced
+    if ref is not None:
+        payload["ref"] = ref
+    return add_op(payload)
+
+
+def _proposal(*, findings: list[str], ref: str = "p1") -> ProposalCandidate:
+    return candidate({"ref": ref, "class": "remediate", "title": "t", "body": "b", "findings": findings})
+
+
+# --- parse_delta / parse_proposals ------------------------------------------------
+
+
+def test_parse_delta_rejects_malformed_json() -> None:
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")):
+        _FORMATS.finding_delta("survey.json", "{not json")
+
+
+def test_parse_delta_rejects_a_shape_mismatch() -> None:
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")) as exc:
+        _FORMATS.finding_delta("survey.json", '{"revisions": {}}')  # missing required `scope`
+    assert exc.value.fault is GardenDeliveryFault.DELTA
+
+
+@pytest.mark.parametrize("field", ["class", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_parse_delta_rejects_an_add_with_a_blank_field(field: str, blank: str) -> None:
+    add = {"op": "add", "class": "c", "locus": "a.py:1", "summary": "s", field: blank}
+    raw = json.dumps({"scope": "runner", "findings": [add]})
+
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")):
+        _FORMATS.finding_delta("survey.json", raw)
+
+
+def test_parse_delta_accepts_a_well_formed_delta() -> None:
+    delta = _FORMATS.finding_delta("survey.json", '{"scope": "runner", "revisions": {}, "findings": []}')
+
+    assert delta.scope == "runner"
+    assert delta.findings == []
+
+
+def test_parse_proposals_rejects_malformed_json() -> None:
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("proposals.json")):
+        _FORMATS.proposal_candidates("proposals.json", "[not json]")
+
+
+def test_parse_proposals_rejects_a_shape_mismatch() -> None:
+    # `findings` must be a list — a bare string fails the wire shape.
+    body = '[{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": "not-a-list"}]'
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("proposals.json")) as exc:
+        _FORMATS.proposal_candidates("proposals.json", body)
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
+
+
+def test_parse_proposals_accepts_well_formed_candidates() -> None:
+    body = f'[{{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": ["{_FIN1}"]}}]'
+
+    candidates = _FORMATS.proposal_candidates("proposals.json", body)
+
+    assert [c.ref for c in candidates] == ["p1"]
+
+
+# --- finding id well-formedness and liveness --------------------------------------
+
+
+def test_check_delta_rejects_a_finding_id_that_is_not_fin_ulid_shaped() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id="fin_tooshort")])
+
+    with pytest.raises(GardenDeliveryRejected, match="not a well-formed"):
+        _check(delta, run=_RUN, live_findings=_live())
+
+
+def test_check_delta_rejects_a_finding_id_not_live_on_this_routine() -> None:
+    unknown = _fin()
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=unknown)])
+
+    with pytest.raises(GardenDeliveryRejected, match="not live on routine") as exc:
+        _check(delta, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.DELTA
+
+
+def test_check_delta_rejects_a_delta_whose_scope_differs_from_the_runs_declared_scope() -> None:
+    delta = DeliveredDelta(scope="other-scope", findings=[])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"other-scope.*runner") as exc_info:
+        _check(delta, run=_RUN, live_findings=_live())
+
+    assert "other-scope" in str(exc_info.value)
+    assert "runner" in str(exc_info.value)
+
+
+def test_check_delta_rejects_a_transformation_outside_the_declared_scope() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+
+    with pytest.raises(GardenDeliveryRejected, match=f"{_FIN1}.*runner") as exc_info:
+        _check(delta, run=_RUN, live_findings=_live(in_scope=False))
+
+    assert _FIN1 in str(exc_info.value)
+    assert "runner" in str(exc_info.value)
+
+
+def test_check_proposal_rejects_a_finding_not_live_on_this_routine() -> None:
+    proposal = _proposal(findings=[_fin()])
+
+    with pytest.raises(GardenDeliveryRejected, match="not live on routine") as exc:
+        check_proposal(proposal, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
+
+
+def test_check_proposal_accepts_a_live_finding() -> None:
+    proposal = _proposal(findings=[_FIN1])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_proposal_accepts_a_proposal_citing_no_findings() -> None:
+    proposal = _proposal(findings=[])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_proposal_rejects_the_same_finding_id_cited_twice() -> None:
+    # `garden_proposal_findings`'s primary key is `(proposal_id, finding_id)` — a
+    # repeated citation would collide there rather than bounce legibly.
+    proposal = _proposal(findings=[_FIN1, _FIN1])
+
+    with pytest.raises(GardenDeliveryRejected, match=f"{_FIN1}.*more than once"):
+        check_proposal(proposal, run=_RUN, live_findings=_live())
+
+
+def test_check_proposal_rejects_the_same_ref_cited_twice() -> None:
+    proposal = _proposal(findings=["new-1", "new-1"])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))
+
+
+def test_check_proposal_refs_rejects_one_artifact_naming_a_ref_twice() -> None:
+    # `(source artifact, ref)` is a delivered proposal's identity — one artifact naming
+    # `p1` twice claims two different proposals are the same one.
+    proposals = [_proposal(findings=[_FIN1]), _proposal(findings=[_FIN2])]
+
+    with pytest.raises(GardenDeliveryRejected, match="more than once"):
+        check_proposal_refs("docket", proposals)
+
+
+def test_check_proposal_refs_accepts_distinct_refs() -> None:
+    proposals = [_proposal(findings=[_FIN1], ref="p1"), _proposal(findings=[_FIN2], ref="p2")]
+
+    check_proposal_refs("docket", proposals)  # does not raise
+
+
+@pytest.mark.parametrize("field", ["class_", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_check_delta_rejects_an_add_with_a_blank_field_whatever_door_built_it(field: str, blank: str) -> None:
+    op = FindingAddOp(**{"class_": "c", "locus": "a.py:1", "summary": "s", field: blank})
+    delta = DeliveredDelta(scope="runner", findings=[op])
+
+    with pytest.raises(GardenDeliveryRejected, match="blank") as exc:
+        _check(delta, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.DELTA
+
+
+# --- submission-local finding refs --------------------------------------------------
+
+
+def test_check_delta_rejects_an_add_ops_ref_shaped_like_a_finding_id() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[_add(ref=_fin())])
+
+    with pytest.raises(GardenDeliveryRejected, match="shaped like a finding id"):
+        _check(delta, run=_RUN, live_findings=_live())
+
+
+def test_check_delta_accepts_an_add_op_carrying_an_ordinary_ref() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[_add(ref="new-1")])
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_add_refs_collects_every_distinct_ref_across_deltas() -> None:
+    delta_a = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = DeliveredDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-2")])
+
+    assert check_add_refs([delta_a, delta_b]) == {"new-1", "new-2"}
+
+
+def test_check_add_refs_ignores_add_ops_carrying_no_ref() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1")])
+
+    assert check_add_refs([delta]) == frozenset()
+
+
+def test_check_add_refs_rejects_a_ref_duplicated_across_deltas() -> None:
+    delta_a = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = DeliveredDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-1")])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        check_add_refs([delta_a, delta_b])
+
+
+def test_check_proposal_accepts_a_ref_from_this_deliverys_own_deltas() -> None:
+    proposal = _proposal(findings=["new-1"])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))  # does not raise
+
+
+def test_check_proposal_rejects_a_ref_absent_from_this_deliverys_deltas() -> None:
+    proposal = _proposal(findings=["ghost-ref"])
+
+    with pytest.raises(GardenDeliveryRejected, match="ghost-ref"):
+        check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))
+
+
+def test_check_proposal_accepts_a_mix_of_live_id_and_own_run_ref() -> None:
+    proposal = _proposal(findings=[_FIN1, "new-1"])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))  # does not raise
+
+
+def test_validate_delivery_resolves_a_proposal_citing_its_own_runs_add_ref() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[_add(ref="new-1")])
+    proposal = _proposal(findings=["new-1"])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={"docket": f"[{wire_json(proposal)}]"},
+        bucket=_bucket([]),
+    )
+
+    assert [p.findings for p in result.proposals] == [["new-1"]]
+
+
+def test_validate_delivery_rejects_a_proposal_citing_a_ref_absent_from_the_delta() -> None:
+    proposal = _proposal(findings=["ghost-ref"])
+
+    with pytest.raises(GardenDeliveryRejected, match="ghost-ref"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={},
+            proposal_artifacts={"docket": f"[{wire_json(proposal)}]"},
+            bucket=_bucket([]),
+        )
+
+
+def test_validate_delivery_rejects_an_add_ref_duplicated_across_two_delta_artifacts() -> None:
+    delta_a = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = DeliveredDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-1")])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={
+                "survey-a.json": wire_json(delta_a),
+                "survey-b.json": wire_json(delta_b),
+            },
+            proposal_artifacts={},
+            bucket=_bucket([]),
+        )
+
+
+def test_validate_delivery_still_accepts_a_proposal_citing_a_prior_runs_live_id() -> None:
+    """A docket citing a `fin_` id already live on the routine still resolves exactly as
+    before this submission-local ref existed — unaffected by whether this delivery's own
+    deltas carry any `add` ops at all."""
+    proposal = _proposal(findings=[_FIN1])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={"docket": f"[{wire_json(proposal)}]"},
+        bucket=_bucket([_finding(_FIN1)]),
+    )
+
+    assert [p.findings for p in result.proposals] == [[_FIN1]]
+
+
+def test_validate_delivery_accepts_an_empty_proposals_docket() -> None:
+    """`--proposals` naming an artifact whose content is `[]` — a docket with nothing in
+    it — validates cleanly, `validate_delivery`'s own share of "an empty docket delivers
+    as recorded"."""
+    delta = DeliveredDelta(scope="runner", findings=[])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={"docket": "[]"},
+        bucket=_bucket([]),
+    )
+
+    assert result.proposals == []
+
+
+# --- commit checks -----------------------------------------------------------------
+
+
+def test_check_delta_rejects_a_commit_sha_with_a_trailing_newline() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "abcdef1\n"})
+
+    with pytest.raises(GardenDeliveryRejected, match="well-formed commit"):
+        _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
+
+
+def test_check_delta_rejects_a_malformed_commit_regardless_of_resolver() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _BAD_COMMIT})
+
+    with pytest.raises(GardenDeliveryRejected, match="well-formed commit"):
+        _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
+
+
+def test_check_delta_rejects_an_unresolvable_commit_on_an_addressable_repo() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT})
+
+    with pytest.raises(GardenDeliveryRejected, match="does not resolve"):
+        _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(False))
+
+
+def test_check_delta_accepts_a_well_formed_resolvable_commit() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT})
+
+    _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))  # does not raise
+
+
+def test_check_delta_degrades_to_well_formedness_when_repo_is_unaddressable() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT})
+
+    _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(None))  # does not raise
+
+
+def test_check_delta_degrades_to_well_formedness_when_no_resolver_is_given() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT})
+
+    _check(delta, run=_RUN, live_findings=_live(), resolve_commit=None)  # does not raise
+
+
+def test_check_delta_resolves_an_add_ops_introduced_commit_against_the_sole_repo() -> None:
+    # Well-formed but unresolvable, so it reaches the resolver — proving the sole-repo
+    # branch runs at all, not merely that malformed shas are rejected before it.
+    other_commit = "b" * 40
+    calls: list[tuple[str, str]] = []
+
+    def _stub(repo: str, sha: str) -> CommitResolution:
+        calls.append((repo, sha))
+        return CommitResolution(exists=sha != other_commit)
+
+    delta = DeliveredDelta(
+        scope="runner",
+        revisions={"blizzard": _GOOD_COMMIT},
+        findings=[_add(introduced=other_commit)],
+    )
+
+    with pytest.raises(GardenDeliveryRejected, match="does not resolve"):
+        _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_stub)
+
+    assert ("blizzard", other_commit) in calls
+
+
+def test_check_delta_returns_the_resolved_introduced_at_for_a_sole_repo() -> None:
+    commit_at = datetime(2025, 12, 25, tzinfo=UTC)
+
+    def _stub(repo: str, sha: str) -> CommitResolution:
+        return CommitResolution(exists=True, authored_at=commit_at)
+
+    delta = DeliveredDelta(
+        scope="runner", revisions={"blizzard": _GOOD_COMMIT}, findings=[_add(introduced=_GOOD_COMMIT)]
+    )
+
+    introduced_at = _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_stub)
+
+    assert introduced_at == {("blizzard", _GOOD_COMMIT): commit_at}
+
+
+def test_check_delta_returns_no_introduced_at_when_the_repo_count_is_ambiguous() -> None:
+    delta = DeliveredDelta(
+        scope="runner",
+        revisions={"blizzard": _GOOD_COMMIT, "blizzard-context": "c" * 40},
+        findings=[_add(introduced=_GOOD_COMMIT)],
+    )
+
+    introduced_at = _check(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
+
+    assert introduced_at == {}
+
+
+# --- gone / observed fact shape -----------------------------------------------------
+
+
+def test_check_delta_rejects_a_gone_op_without_a_note() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id=_FIN1, note="")])
+
+    with pytest.raises(GardenDeliveryRejected, match="non-empty note"):
+        _check(delta, run=_RUN, live_findings=_live())
+
+
+def test_check_delta_accepts_a_gone_op_with_a_note() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id=_FIN1, note="no longer reproduces")])
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_delta_accepts_an_observed_op_carrying_only_an_id() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_delta_rejects_two_ops_naming_the_same_finding() -> None:
+    """One finding under both an `observed` and a `gone` op would durably write
+    contradictory facts — worst against a `delivered` finding, where `gone` settles it
+    while `observed` revives it. Rejected outright rather than left to collide."""
+    delta = DeliveredDelta(
+        scope="runner",
+        findings=[FindingObservedOp(id=_FIN1), FindingGoneOp(id=_FIN1, note="no longer reproduces")],
+    )
+
+    with pytest.raises(GardenDeliveryRejected, match="more than one op"):
+        _check(delta, run=_RUN, live_findings=_live())
+
+
+# --- delta shapes --------------------------------------------------------------------
+
+
+def test_check_delta_accepts_a_clean_delta_with_no_findings() -> None:
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT}, measurement="12 findings")
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_delta_accepts_an_additions_only_delta() -> None:
+    delta = DeliveredDelta(
+        scope="runner",
+        findings=[_add(locus="a.py:1", summary="s"), _add(locus="b.py:2", summary="s2")],
+    )
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_delta_accepts_a_transformations_only_delta() -> None:
+    delta = DeliveredDelta(
+        scope="runner",
+        findings=[FindingObservedOp(id=_FIN1), FindingGoneOp(id=_FIN2, note="fixed upstream")],
+    )
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_delta_accepts_a_mixed_delta() -> None:
+    delta = DeliveredDelta(
+        scope="runner",
+        findings=[_add(), FindingObservedOp(id=_FIN1), FindingGoneOp(id=_FIN2, note="fixed upstream")],
+    )
+
+    _check(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+# --- validate_delivery, end to end ---------------------------------------------------
+
+
+def test_validate_delivery_accepts_a_full_delivery_and_bundles_it() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+    proposal = _proposal(findings=[_FIN1])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={"proposals.json": f"[{wire_json(proposal)}]"},
+        bucket=_bucket([_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)]),
+    )
+
+    assert result.run == _RUN
+    assert result.deltas == [delta]
+    assert [p.ref for p in result.proposals] == ["p1"]
+    assert result.proposal_sources == ["proposals.json"]
+
+
+def test_validate_delivery_pairs_each_proposal_with_its_own_source_artifact_name() -> None:
+    """`proposal_sources` stays positionally parallel to `proposals` across several
+    artifacts, each carrying several candidates — the materialize phase's `zip(...,
+    strict=True)` depends on this holding exactly."""
+    proposal_a1 = _proposal(findings=[_FIN1], ref="a1")
+    proposal_a2 = _proposal(findings=[_FIN1], ref="a2")
+    proposal_b1 = _proposal(findings=[_FIN2], ref="b1")
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={
+            "docket-a": f"[{wire_json(proposal_a1)}, {wire_json(proposal_a2)}]",
+            "docket-b": f"[{wire_json(proposal_b1)}]",
+        },
+        bucket=_bucket([_finding(_FIN1), _finding(_FIN2)]),
+    )
+
+    assert [p.ref for p in result.proposals] == ["a1", "a2", "b1"]
+    assert result.proposal_sources == ["docket-a", "docket-a", "docket-b"]
+
+
+def test_validate_delivery_accepts_two_artifacts_reusing_one_ref() -> None:
+    """A `ref` is stable only within its own submission, so two artifacts each naming
+    `p1` carry unrelated proposals — distinct under `(source artifact, ref)`."""
+    proposal = _proposal(findings=[_FIN1])
+    raw = f"[{wire_json(proposal)}]"
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={"docket-a": raw, "docket-b": raw},
+        bucket=_bucket([_finding(_FIN1)]),
+    )
+
+    assert [p.ref for p in result.proposals] == ["p1", "p1"]
+    assert result.proposal_sources == ["docket-a", "docket-b"]
+
+
+def test_validate_delivery_rejects_one_artifact_naming_a_ref_twice() -> None:
+    proposal = _proposal(findings=[_FIN1])
+    twice = f"[{wire_json(proposal)}, {wire_json(proposal)}]"
+
+    with pytest.raises(GardenDeliveryRejected, match="more than once"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={},
+            proposal_artifacts={"docket": twice},
+            bucket=_bucket([_finding(_FIN1)]),
+        )
+
+
+def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:
+    # A finding recorded `gone` must still be present in the bucket
+    # (reversibility) — an `observed` targeting it is accepted, not rejected as unknown.
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={},
+        bucket=_bucket([_finding(_FIN1, live=False)]),
+    )
+
+    assert result.deltas == [delta]
+
+
+def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding() -> None:
+    """`delivered`'s own revival mirror — an `observed` targeting a `delivered` finding
+    is accepted like the `gone`-revival case above, since `delivered` is excluded from
+    `EXIT_KINDS`: not yet a person's word, still addressable."""
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={},
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor="u_1")]),
+    )
+
+    assert result.deltas == [delta]
+
+
+def test_validate_delivery_settles_a_delivered_findings_gone_by_actor() -> None:
+    """A `delivered` finding is a valid delta target (`delivered`
+    is outside `EXIT_KINDS`) and its closer's actor rides on the result for
+    materialization to settle a later `gone` op with."""
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id=_FIN1, note="no longer reproduces")])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={},
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor="u_1")]),
+    )
+
+    assert result.gone_settlements[_FIN1] == ("resolved", "u_1")
+
+
+def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> None:
+    """A `delivered` finding whose closing fact carries no actor must still gate a later
+    `gone` op to settling, not fall through to flagging plain `gone` —
+    `gone_settlements` keys on state alone, never on the actor being truthy."""
+    delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id=_FIN1, note="no longer reproduces")])
+
+    result = _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={},
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor=None)]),
+    )
+
+    assert result.gone_settlements[_FIN1] == ("resolved", None)
+
+
+def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
+    """A human-exited finding is dropped from `live_findings` — unlike
+    `gone`, an exit is not addressable by a later run's delta op."""
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1)])
+
+    with pytest.raises(GardenDeliveryRejected, match="has been exited"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={"survey.json": wire_json(delta)},
+            proposal_artifacts={},
+            bucket=_bucket([]),
+            resolve_exited=lambda ids: ids & {_FIN1},
+        )
+
+
+def test_validate_delivery_asks_for_exited_status_once_and_only_of_cited_absent_ids() -> None:
+    asked: list[frozenset[str]] = []
+
+    def _resolve(ids: frozenset[str]) -> frozenset[str]:
+        asked.append(ids)
+        return frozenset()
+
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_FIN1), FindingObservedOp(id=_FIN2)])
+    with pytest.raises(GardenDeliveryRejected, match="is not live"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={"survey.json": wire_json(delta)},
+            proposal_artifacts={},
+            bucket=_bucket([_finding(_FIN1)]),
+            resolve_exited=_resolve,
+        )
+    assert asked == [frozenset({_FIN2})]
+
+
+def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:
+    """The resolver is a network call made inside the delivering turn, so a delta citing one
+    commit across many findings must spend exactly one call on it."""
+    calls: list[tuple[str, str]] = []
+
+    def _stub(repo: str, sha: str) -> CommitResolution:
+        calls.append((repo, sha))
+        return CommitResolution(exists=True)
+
+    shared = "c" * 40
+    delta = DeliveredDelta(
+        scope="runner",
+        revisions={"blizzard": _GOOD_COMMIT},
+        findings=[_add(locus=f"a.py:{i}", introduced=shared) for i in range(5)],
+    )
+
+    _validate(
+        formats=_FORMATS,
+        run=_RUN,
+        delta_artifacts={"survey.json": wire_json(delta)},
+        proposal_artifacts={},
+        bucket=_bucket([]),
+        resolve_commit=_stub,
+    )
+
+    assert sorted(calls) == [("blizzard", _GOOD_COMMIT), ("blizzard", shared)]
+
+
+def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:
+    delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=_fin())])  # unknown finding
+
+    with pytest.raises(GardenDeliveryRejected, match="not live on routine"):
+        _validate(
+            formats=_FORMATS,
+            run=_RUN,
+            delta_artifacts={"survey.json": wire_json(delta)},
+            proposal_artifacts={},
+            bucket=_bucket([_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)]),
+        )
+
+
+def test_validate_delivery_expects_the_state_of_every_finding_an_observed_or_gone_op_names() -> None:
+    bucket = _bucket([_finding(_FIN1), _finding(_FIN2, state="delivered", actor="u1"), _finding(_FIN3)])
+    raw = wire_json(
+        DeliveredDelta(
+            scope=_RUN.scope_slug,
+            revisions={},
+            findings=[FindingObservedOp(id=_FIN1), FindingGoneOp(id=_FIN2, note="n")],
+            measurement=None,
+        )
+    )
+
+    validated = _validate(run=_RUN, delta_artifacts={"d": raw}, proposal_artifacts={}, bucket=bucket, formats=_FORMATS)
+
+    assert validated.expect == {_FIN1: "live", _FIN2: "delivered"}
