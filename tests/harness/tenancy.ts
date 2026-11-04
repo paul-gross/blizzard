@@ -110,9 +110,8 @@ export interface FreshHub {
    * Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. With an
    * `overlay`, the hub's file first takes it, merged over what the file holds and checked as `hubConfig` is: the same
    * record under a changed configuration. Throws naming every problem, changing nothing, when the overlay is unsound.
-   * An `egress.directory` the overlay names is made if it is not there. A flow-stepped hub cannot restart: its
-   * virtual clock would be lost. Use reset() to start with empty data and a new clock instead. A controlled hub
-   * rejoins its stack, which sets it forward to the stack's instant before this resolves.
+   * An `egress.directory` the overlay names is made if it is not there. A controlled hub rejoins its stack, which
+   * sets it forward to the stack's instant before this resolves.
    */
   start(overlay?: TomlTable): Promise<HubCoordinates>;
   /**
