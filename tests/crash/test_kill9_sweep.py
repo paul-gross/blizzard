@@ -60,6 +60,7 @@ from tests.crash.support import (
     await_http,
     build_script,
     checks_graph_yaml,
+    daemon_url,
     git_bare,
     graph_yaml,
     intended_migrate_source_yaml,
@@ -96,7 +97,7 @@ from tests.runner_fakes import (
 )
 from tests.runner_ingest_support import RUNNER_TABLES, contents, invariant_violations, seed_runner
 from tests.runner_join import RUNNER_BIN, runner_spawn_env
-from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
+from tests.support import create_repositories, fixture_repository, hub_scoped, seed_drainable_history
 from tests.support_child_launch import env_git
 
 pytestmark = pytest.mark.crash_sweep
@@ -529,13 +530,12 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
     """A ``kill -9`` at ``point`` recovers to a correct state and the chunk lands once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     on_hub = point.startswith(_HUB_SIDE_GENERIC_PREFIXES)
     base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point if on_hub else None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point if on_hub else None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         # For a `claim.*` point, ingest+promote alone leaves the chunk ready; the runner's
@@ -543,7 +543,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         chunk_id = _ingest_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None if on_hub else point)
 
@@ -559,7 +559,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         # Restart the killed daemon unarmed (startup = REAP first, for the runner) and
         # let it converge.
         if on_hub:
-            hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+            hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
             await_http(hub, "/api/health", proc=hub_proc)
         else:
             runner_proc = start_runner(runner_dir, crash_point=None)
@@ -607,18 +607,17 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     once, its history carrying exactly one migration."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_migrate_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -639,7 +638,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
         # Restart the hub UNARMED; the runner's replayed completion re-derives MIGRATED and
         # the chunk re-queues + lands under the target graph.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -697,18 +696,17 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
     fact, so recovery never re-fires it, and the target's build + deliver lands once."""
     landed_file = f"LANDED-INTENDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_intended_migrate_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -739,7 +737,7 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
 
         # Restart the hub UNARMED; the runner's replayed completion re-derives MIGRATED and
         # the chunk re-queues + lands under the target graph — the intent never re-fires.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -788,18 +786,17 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
     let the holding runner's ADVANCE poll carry the chunk to ``done`` without wedging."""
     title = f"HUB-MIGRATE-{point.replace('.', '_')}"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_migrate_hub_chunk(hub, crash_env.forge, title)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -823,7 +820,7 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
 
         # Restart the hub UNARMED; the retained route means the holding runner's ADVANCE poll
         # drives the landed hub node to `done` — no fresh claim, no re-queue.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -851,19 +848,17 @@ _ATTACH_NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("point", _ATTACH_SWEEP)
-def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, refused_url: str, point: str) -> None:
     """A ``kill -9`` right after the runner records a worker attachment keeps it, with
     full provenance readable against the same store after the ungraceful death."""
     runner_dir = tmp_path / "runner"
-    # Nothing listens on ``hub_port`` — the attach path never calls the hub; the loop's hub
+    # Nothing listens on ``refused_url`` — the attach path never calls the hub; the loop's hub
     # polls just fail and are swallowed, and the local API serves regardless.
-    hub_port, runner_port = free_port(), free_port()
     write_runner_config(
         runner_dir,
         workspace=crash_env.workspace,
         bin_dir=crash_env.bin_dir,
-        hub_port=hub_port,
-        port=runner_port,
+        hub_url=refused_url,
         join=False,
     )
     db_url = load_runner_config(runner_dir).db_url
@@ -897,10 +892,10 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     store.record_park(lease_id="lease_attach", chunk_id="ch_attach", question_id="q_park", parked_at=_ATTACH_NOW)
     engine.dispose()
 
-    runner = runner_api(runner_dir, runner_port)
     runner_proc = start_runner(runner_dir, crash_point=point)
+    runner = None
     try:
-        await_host(runner_port, runner_proc)
+        runner = runner_api(runner_dir, await_host(runner_dir, runner_proc))
 
         # The runner records the attachment durably, then self-SIGKILLs before the response —
         # the client sees the killed connection, never a 200.
@@ -944,7 +939,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
         # Restart the runner UNARMED; the attachment is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_host(runner_port, runner_proc)
+        await_host(runner_dir, runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
             assert SqlAlchemyRunnerStore(engine3, runner_store_errors()).attachments_for_lease("lease_attach") == {
@@ -953,7 +948,8 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         finally:
             engine3.dispose()
     finally:
-        runner.close()
+        if runner is not None:
+            runner.close()
         terminate(runner_proc)
 
 
@@ -968,7 +964,7 @@ _DECLARE_COMMIT_NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("point", _DECLARE_COMMIT_SWEEP)
-def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path, refused_url: str, point: str) -> None:
     """A ``kill -9`` right after the runner records a worker git-commit declaration keeps
     it, with full provenance readable against the same store after the ungraceful death."""
     runner_dir = tmp_path / "runner"
@@ -977,15 +973,13 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     [acquired] = BasicWorkspaceProvider(
         str(crash_env.workspace), repos=world_repos(crash_env.workspace), max_environments=1, git=env_git()
     ).acquire("ch_declare_commit", 1, [])
-    # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
+    # Nothing listens on ``refused_url`` — the declare path never calls the hub; the loop's
     # hub polls just fail and are swallowed, and the local API serves regardless.
-    hub_port, runner_port = free_port(), free_port()
     write_runner_config(
         runner_dir,
         workspace=crash_env.workspace,
         bin_dir=crash_env.bin_dir,
-        hub_port=hub_port,
-        port=runner_port,
+        hub_url=refused_url,
         join=False,
     )
     db_url = load_runner_config(runner_dir).db_url
@@ -1033,10 +1027,10 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     )
     engine.dispose()
 
-    runner = runner_api(runner_dir, runner_port)
     runner_proc = start_runner(runner_dir, crash_point=point)
+    runner = None
     try:
-        await_host(runner_port, runner_proc)
+        runner = runner_api(runner_dir, await_host(runner_dir, runner_proc))
 
         # The runner records the declaration durably, then self-SIGKILLs before the
         # response — the client sees the killed connection, never a 200.
@@ -1091,7 +1085,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
 
         # Restart the runner UNARMED; the declaration is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_host(runner_port, runner_proc)
+        await_host(runner_dir, runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
             declarations = SqlAlchemyRunnerStore(engine3, runner_store_errors()).git_commit_declarations_for_lease(
@@ -1101,7 +1095,8 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         finally:
             engine3.dispose()
     finally:
-        runner.close()
+        if runner is not None:
+            runner.close()
         terminate(runner_proc)
 
 
@@ -1128,17 +1123,16 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     and the chunk still landing exactly once."""
     landed_file = f"NUDGE-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_nudge_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=point)
 
@@ -1186,17 +1180,16 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     once and ``runner:checks-recorded-when-marked`` green."""
     landed_file = f"CHECKS-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_checks_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=point)
 
@@ -1277,16 +1270,15 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
     (``_crash_orphaned``'s ``ended`` skip), pinned deterministically (``bzh:crash-sweep``)."""
     landed_file = "LANDED-runner-after-session-end.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -1340,19 +1332,18 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
     whether a subsequent attempt declares a commit or produces no code."""
     landed_file = "LANDED-runner-pre-declare.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     pushed_marker = tmp_path / "pushed.marker"
     go_marker = tmp_path / "go.marker"
     base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_pre_declare_chunk(hub, crash_env.forge, landed_file, pushed_marker, go_marker)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -1615,16 +1606,15 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
     once, and the drain-interrupted generation records a real (non-NULL) usage cost."""
     landed_file = "LANDED-restart-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_sigint_drain_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -1689,16 +1679,15 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
     to the same RESUME the graceful path uses, landing the chunk exactly once."""
     landed_file = "LANDED-crash-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -1754,16 +1743,15 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     invariants green."""
     landed_file = f"LANDED-resume-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -1842,19 +1830,18 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
     armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
     landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
     # Every named point here fires in the RUNNER's loop (`src/blizzard/runner/lifecycle/`), never the hub.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_opencode_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=point)
 
@@ -1951,16 +1938,15 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
     lease/epoch/session and the same (OpenCode) harness."""
     landed_file = f"LANDED-OPENCODE-resume-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_opencode_hanging_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -2147,16 +2133,15 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-once.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_abandon_chunk(hub, crash_env.forge, landed_file, marker)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # Armed from the start, but unarmed in effect until a live PULL discovers the
         # detach and reaches `point` inside the abandon it triggers.
@@ -2233,17 +2218,16 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
     session lands exactly once under the same lease, no retry consumed."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         # The hanging graph: the worker commits, then hangs — real in-flight work to pause.
         chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # Armed from the start: unarmed in effect until a live PULL discovers the pause and
         # reaches `point` inside the park it triggers.
@@ -2346,10 +2330,10 @@ def _usage_limit_mark_count(runner_dir: Path) -> int:
         return len(conn.execute(select(runner_schema.subscription_usage_limits.c.id)).all())
 
 
-def _clear_subscription_floor(runner_dir: Path, port: int) -> None:
+def _clear_subscription_floor(runner_dir: Path, host_url: str) -> None:
     """Open the floor of the subscription the runner spends through the host's clear route."""
     slug = load_runner_config(runner_dir).subscriptions[0].slug
-    with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+    with httpx2.Client(base_url=host_url, timeout=30.0) as host:
         host.post(f"/api/host/subscriptions/{slug}/floor/clear", json={"by": "crash-sweep"}).raise_for_status()
 
 
@@ -2367,11 +2351,10 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
     is_judge = point.startswith("usagelimit.judge")
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     runner: httpx2.Client | None = None
     try:
         await_http(hub, "/api/health", proc=hub_proc)
@@ -2381,7 +2364,7 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         else:
             chunk_id = _ingest_usage_limited_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # Armed from the start: unarmed in effect until the runner's own ADVANCE step
         # classifies the exited generation and reaches `point` inside the park it triggers.
@@ -2418,8 +2401,8 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         # A usage-limit park, not a hub-side per-chunk pause — the hub still sees the chunk as
         # running, unlike the operator pause-park scenario's `"paused"`.
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
-        await_host(runner_port, runner_proc)
-        runner = runner_api(runner_dir, runner_port)
+        runner_url = await_host(runner_dir, runner_proc)
+        runner = runner_api(runner_dir, runner_url)
         view = runner.get("/api/runner").json()
         assert view["pause"]["local"] is False, "a usage limit engaged the runner's brake"
         assert _usage_limit_mark_count(runner_dir) == 1, "the recovered pass marked the limit a second time"
@@ -2429,7 +2412,7 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
 
         # The limit named no reset, so the floor would hold for its fallback; a clear opens it now and
         # the SAME session finishes the work it was parked mid-way through.
-        _clear_subscription_floor(runner_dir, runner_port)
+        _clear_subscription_floor(runner_dir, runner_url)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
         after = leases_for_chunk(runner_dir, chunk_id)
@@ -2572,12 +2555,11 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     usage_limited = point.startswith("release.usage-limited")
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     marker = tmp_path / "release-marker"
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         if usage_limited:
@@ -2590,7 +2572,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             )
         chunk_id = _ingest_release_chunk(hub, crash_env.forge, landed_file, graph)
         config = write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         with_runner(config, throttle=throttle)
         _utilization_sample(runner_dir, _UNDER_LINE_PCT)
@@ -2612,7 +2594,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # Restart UNARMED, the gate still declining: a usage-limited lease is abandoned at once, and an interrupted
         # claim's binding is held unclaimed until the gate admits again; either way the chunk stays ready.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_host(runner_port, runner_proc)
+        runner_url = await_host(runner_dir, runner_proc)
         if usage_limited:
             assert wait_for_closure(runner_dir, lease_id) == "released"
             deadline = time.monotonic() + 30.0
@@ -2630,7 +2612,7 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
         # The gate reopens: the chunk is claimed cold and lands once.
         if usage_limited:
-            _clear_subscription_floor(runner_dir, runner_port)
+            _clear_subscription_floor(runner_dir, runner_url)
         else:
             _utilization_sample(runner_dir, _UNDER_LINE_PCT)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
@@ -2725,19 +2707,16 @@ def test_kill9_at_flow_crash_point(crash_env: CrashEnv, tmp_path: Path, point: s
     left open, and the two passes the node needs are each taken exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     boot = point == "flow.boot.after-interrupt"
 
-    hub_proc = start_hub(
-        hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=_OPEN_TURN_POINT if boot else point
-    )
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=_OPEN_TURN_POINT if boot else point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_pending_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -2746,12 +2725,12 @@ def test_kill9_at_flow_crash_point(crash_env: CrashEnv, tmp_path: Path, point: s
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
         if boot:
             assert _open_turns(hub_dir) == 1, "the first kill must leave a turn open for boot to end"
-            hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+            hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
             code = wait_death(hub_proc)
             assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
             _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
@@ -2815,9 +2794,9 @@ def _merged_markers(hub: httpx2.Client, chunk_id: str) -> list[str]:
     return sorted(a["name"] for a in detail.json()["artifacts"] if a["name"].startswith("merged/"))
 
 
-def _create_web_repository(hub: httpx2.Client, forge_port: int) -> None:
+def _create_web_repository(hub: httpx2.Client, forge_url: str) -> None:
     """The second repository the two-repo land resolves its ``toy-web`` commit against."""
-    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, f"http://127.0.0.1:{forge_port}", owner=OWNER)])
+    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, forge_url, owner=OWNER)])
 
 
 def _repo_pull_count(forge: httpx2.Client, repo: str) -> int:
@@ -2870,11 +2849,10 @@ def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     turn is left open."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         minted = hub.post("/api/graphs", json={"definition_yaml": _action_graph_yaml(landed_file)})
@@ -2886,7 +2864,7 @@ def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -2895,7 +2873,7 @@ def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart unarmed: boot ends the open turn and the flow driver takes the hub node's next turn.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
@@ -2980,16 +2958,15 @@ def _kill_two_repo_land(crash_env: CrashEnv, tmp_path: Path, point: str, *, merg
     died, restart it unarmed, and assert each repository landed exactly once through exactly one PR."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     api_bare = crash_env.origins / f"{REPO_NAME}.git"
     web_bare = crash_env.origins / f"{_WEB_REPO_NAME}.git"
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        _create_web_repository(hub, crash_env.forge_port)
+        _create_web_repository(hub, crash_env.forge_url)
         api_pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
         web_pulls_before = _repo_pull_count(crash_env.forge, _WEB_REPO_NAME)
 
@@ -3002,7 +2979,7 @@ def _kill_two_repo_land(crash_env: CrashEnv, tmp_path: Path, point: str, *, merg
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -3013,7 +2990,7 @@ def _kill_two_repo_land(crash_env: CrashEnv, tmp_path: Path, point: str, *, merg
         assert len(landed_at_kill) == merged_at_kill, f"{point}: {landed_at_kill} were durable at the kill"
 
         # Restart unarmed: boot ends the open turn and the flow driver takes the hub node's next turn.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
@@ -3056,10 +3033,9 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     park = point in {"policy.after-open-change.before-marker", "policy.after-merged-read.before-marker"}
     landed_file = f"POLICY-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         configured = hub.patch(
@@ -3089,7 +3065,7 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -3111,7 +3087,7 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         code = wait_death(hub_proc, timeout=180.0)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         if point == "policy.after-open-change.before-marker":
             deadline = time.monotonic() + 60
@@ -3206,16 +3182,15 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-first.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_preempt_chunk(hub, crash_env.forge, landed_file, marker)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # Armed from the start: unarmed in effect until a live PULL discovers the restart's
         # fence and reaches `point` inside the preempt it triggers.
@@ -3335,16 +3310,15 @@ def test_kill9_at_escalate_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
     the closure and its ``escalation.recorded`` fact are one transaction, so recovery reads
     either an open lease it re-escalates or a durable escalation it delivers."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_graph_chunk(hub, crash_env.forge, f"escalate {point}", _always_fails_graph_yaml())
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=point)
 
@@ -3435,16 +3409,15 @@ def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "answered.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_graph_chunk(hub, crash_env.forge, landed_file, _asking_graph_yaml(landed_file, marker))
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # Armed from the start: unarmed in effect until ON_ANSWER reaches `_wake`.
         runner_proc = start_runner(runner_dir, crash_point=point)
@@ -3484,18 +3457,16 @@ _TAKEOVER_NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("point", _TAKEOVER_SWEEP)
-def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, refused_url: str, point: str) -> None:
     """A ``kill -9`` inside a forced takeover entry, after its decision committed, recovers on an unarmed restart:
     the displaced worker is dead, the interrupted takeover is ended, a fresh forced entry is admitted, and the
     invariant checker passes."""
     runner_dir = tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     write_runner_config(
         runner_dir,
         workspace=crash_env.workspace,
         bin_dir=crash_env.bin_dir,
-        hub_port=hub_port,
-        port=runner_port,
+        hub_url=refused_url,
         join=False,
     )
     db_url = load_runner_config(runner_dir).db_url
@@ -3539,9 +3510,8 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         )
         engine.dispose()
 
-        runner = runner_api(runner_dir, runner_port)
         runner_proc = start_runner(runner_dir, crash_point=point)
-        await_host(runner_port, runner_proc)
+        runner = runner_api(runner_dir, await_host(runner_dir, runner_proc))
 
         # The runner records the entry's decision, then self-SIGKILLs inside the entry: the client sees the
         # killed connection, never a 201.
@@ -3558,7 +3528,7 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
 
         # Restart UNARMED: startup recovery finishes the displacement and ends the interrupted entry.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_host(runner_port, runner_proc)
+        await_host(runner_dir, runner_proc)
         assert _poll(lambda: not runner.get("/api/takeovers").json()["items"], 30), "the takeover was never ended"
         worker.wait(timeout=30)  # the worker is dead, killed by the entry or by the recovery
         assert worker.returncode is not None
@@ -3672,19 +3642,18 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     converges: the pending intent survives the crash and the item closes exactly once,
     driven through the built-in ``hub`` work source, landed through ``land`` against the mock forge."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
     # Both close.* windows fire inside the HUB. The item comes from the always-seated built-in `hub`
     # source; the seeded forge repository is what `land` merges through.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, ref = _ingest_hub_item_chunk(hub, _close_intent_graph_yaml(f"close-{point}.txt"))
 
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # The runner's own poll loop is what drives the held chunk's hub-advance calls
         # (#65/#66) — no work for it to claim otherwise, since `land` is hub-executed.
@@ -3701,7 +3670,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
 
         # Restart the hub UNARMED; the runner's replayed hub-advance poll resumes the
         # interrupted run, and the always-on drain sweep retires the surviving intent.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -3783,18 +3752,15 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     """A ``kill -9`` after the exporter accepted a batch but before its cursor row lands
     re-sends the same span ids on the next pass, and one cursor row then covers them."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
     _scaffold_traced_hub(hub_dir)
 
     with otlp_sink() as sink:
         # Tracing is on from the hub's first start, before any step closes: the cursor
         # opens at enable time, so a step closed earlier would never be told.
         otel_env = {"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": sink.traces_endpoint}
-        hub_proc = start_hub(
-            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, extra_env=otel_env
-        )
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point, extra_env=otel_env)
         runner_proc = None
-        hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+        hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
             chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
@@ -3802,8 +3768,7 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
                 runner_dir,
                 workspace=crash_env.workspace,
                 bin_dir=crash_env.bin_dir,
-                hub_port=hub_port,
-                port=runner_port,
+                hub_url=daemon_url(hub_dir),
             )
             runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -3819,9 +3784,7 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
                 "a cursor row recorded spans the killed pass never got to record"
             )
 
-            hub_proc = start_hub(
-                hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, extra_env=otel_env
-            )
+            hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, extra_env=otel_env)
             await_http(hub, "/api/health", proc=hub_proc)
             status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
             assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
@@ -3921,18 +3884,17 @@ def _without_export_time(row: dict[str, object]) -> dict[str, object]:
 def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A kill between placing files and recording the cursor writes the same rows again, in new files."""
     hub_dir, runner_dir, directory = tmp_path / "hub", tmp_path / "runner", tmp_path / "egress"
-    hub_port, runner_port = free_port(), free_port()
     _scaffold_egress_hub(hub_dir, directory)
 
     # On from the first start: the cursor anchors at enable time.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
@@ -3951,7 +3913,7 @@ def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         )
         killed_bytes = {name: (directory / name).read_bytes() for name in killed}
 
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
@@ -4026,15 +3988,14 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
     """A ``kill -9`` of the runner after the exporter accepted a batch but before its cursor row
     lands re-sends the same span ids on the next pass, and one cursor row then covers them."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
 
     with otlp_sink() as sink:
         # Tracing is on from the runner's first start, before any lease closes: the cursor
         # opens at enable time, so a lease closed earlier would never be told.
         otel_env = {"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": sink.traces_endpoint}
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
         runner_proc = None
-        hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+        hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
             chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
@@ -4042,8 +4003,7 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
                 runner_dir,
                 workspace=crash_env.workspace,
                 bin_dir=crash_env.bin_dir,
-                hub_port=hub_port,
-                port=runner_port,
+                hub_url=daemon_url(hub_dir),
             )
             _trace_runner_config(runner_dir)
             runner_proc = start_runner(runner_dir, crash_point=point, extra_env=otel_env)
@@ -4128,14 +4088,13 @@ def test_kill9_at_host_lane_crash_point(crash_env: CrashEnv, tmp_path: Path, poi
     leaves the facts buffered; the restarted host re-pushes them, the hub answers them already applied, and the
     host clears them and records the mark the hub holds."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
     runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
         )
         # `runner init` registered the host and wrote its token, and the runner stands under it from its start.
         host_token = assigned_token((runner_dir / ".env").read_text(), "BZ_HOST_TOKEN")
@@ -4287,9 +4246,9 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
     """A ``kill -9`` inside a tenant's deletion — after its close, between two drain batches, or after its drain — is
     finished by the restarted hub's ``tenant_teardown`` sweep: nothing of the tenant is left, its deletion counts
     every row it removed exactly once, and the other tenant keeps every row it had."""
-    hub_dir, hub_port = tmp_path / "hub", free_port()
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    hub_dir = tmp_path / "hub"
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         created = hub.post("/api/admin/tenants", json={"name": "doomed"})
@@ -4307,7 +4266,7 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         assert total > DRAIN_BATCH_ROWS, "the doomed tenant fits one drain batch; no batch would have a next one"
 
         # Restart armed: the delete request's own inline drain reaches the point and the hub dies mid-request.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
         await_http(hub, "/api/health", proc=hub_proc)
         with contextlib.suppress(httpx2.HTTPError):
             hub.delete(f"/api/admin/tenants/{doomed}")
@@ -4330,7 +4289,7 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         _assert_hub_invariants(hub_dir, when=f"immediately after kill at {point}")
 
         # Restart unarmed: the sweep's first pass finds the deletion underway and finishes it.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         deleted = _wait_deleted(hub_dir, doomed, timeout=60.0)
         assert deleted is not None and deleted.deleted_at is not None, f"deletion not completed after kill at {point}"
@@ -4444,10 +4403,10 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     """A ``kill -9`` of ``blizzard runner ingest`` after it copied the runner's rows, or after it moved the runner's
     configuration and token, is completed by an unarmed re-run: the end state is the one an uninterrupted ingest
     leaves, and both stores hold their invariants at every step."""
-    hub_dir, hub_port = tmp_path / "hub", free_port()
-    hub_url = f"http://127.0.0.1:{hub_port}"
+    hub_dir = tmp_path / "hub"
     here, there = tmp_path / "here", tmp_path / "there"
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
+    hub_url = daemon_url(hub_dir)
     hub = httpx2.Client(base_url=hub_url, timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)

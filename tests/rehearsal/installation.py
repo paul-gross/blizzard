@@ -5,7 +5,9 @@ TOML text, so a baseline's directories never carry HEAD's shapes."""
 
 from __future__ import annotations
 
+import functools
 import re
+import socket
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,11 +17,43 @@ import httpx2
 from blizzard.tools.release_install import Installation
 from tests.fleet_launchers import await_http, terminate
 from tests.runner_join import runner_spawn_env
-from tests.support import daemon_log_sink, free_port, write_mock_harness_credentials
+from tests.support import (
+    LISTENING_FILE,
+    await_listening_url,
+    daemon_log_sink,
+    listening_args,
+    refused_address,
+    write_mock_harness_credentials,
+)
 
 #: The mock harness's fence variable, which a worker reaches only through the runner's passthrough list.
 FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 _HUB_DB_VAR = "BZ_HUB_DB_URL"
+
+
+def baseline_daemon_port() -> int:
+    """A localhost port free at the moment of asking, for a daemon's first start under a baseline release.
+
+    The one test-side port choice the tiers keep (``bzh:daemon-binds-port-zero``): a release older than
+    ``--listening-file`` cannot bind ``--port 0`` and say where it landed, so its first start needs a port
+    chosen for it. The socket closes before the daemon binds, so another process can take the port in
+    between; that race lasts only until every supported release ships the flag."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@functools.cache
+def _publishes_listening_file(installation: Installation, daemon: str) -> bool:
+    """Whether ``installation``'s ``daemon host`` takes ``--listening-file`` — a candidate does, an older baseline not."""
+    return "--listening-file" in installation.run(daemon, "host", "--help").stdout
+
+
+def _port_args(installation: Installation, daemon: str, listening: Path, port: int) -> tuple[list[str], bool]:
+    """The ``host`` flags pinning ``port``, with ``--listening-file`` when the installation publishes one."""
+    if _publishes_listening_file(installation, daemon):
+        return listening_args(listening, port), True
+    return ["--port", str(port)], False
 
 
 class StepFailure(AssertionError):
@@ -39,11 +73,12 @@ class Leg:
 
 @dataclass
 class Hub:
-    """One hub directory, hosted by whichever installation is given."""
+    """One hub directory, hosted by whichever installation is given, always on ``port`` — chosen with
+    :func:`baseline_daemon_port` for its first start under the baseline, and pinned on every restart."""
 
     dir: Path
-    port: int
     db_url: str | None
+    port: int = 0
     proc: subprocess.Popen[str] | None = None
 
     @property
@@ -79,12 +114,15 @@ class Hub:
 
     def start(self, installation: Installation) -> httpx2.Client:
         """Host the directory under ``installation`` and answer a client once ``/api/ready`` does."""
-        log = self.dir / "daemon.log"
+        log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
+        port_args, publishes = _port_args(installation, "blizzard-hub", listening, self.port)
         self.proc = subprocess.Popen(
             [str(installation.bin_dir / "blizzard-hub"), "host", "--dir", str(self.dir), "--host", "127.0.0.1",
-             "--port", str(self.port), *self._db_flags()],
+             *port_args, *self._db_flags()],
             env=installation.env(self._db_env()), stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
         )  # fmt: skip
+        if publishes:
+            await_listening_url(self.proc, listening, log=log)
         client = httpx2.Client(base_url=self.url, timeout=30.0)
         await_http(self.proc, client, "/api/ready", log=log)
         return client
@@ -97,10 +135,12 @@ class Hub:
 
 @dataclass
 class Host:
-    """One runner host directory, hosted by whichever installation is given."""
+    """One runner host directory, hosted by whichever installation is given, always on ``port`` — chosen with
+    :func:`baseline_daemon_port` for its first start under the baseline (its host file names it), and pinned on
+    every restart."""
 
     dir: Path
-    port: int
+    port: int = 0
     proc: subprocess.Popen[str] | None = None
 
     @property
@@ -109,10 +149,15 @@ class Host:
 
     def scaffold(self, installation: Installation) -> None:
         """``runner init`` against a hub nothing answers at: the directory is written, nothing is registered."""
-        dead = f"http://127.0.0.1:{free_port()}"
-        installation.run(
-            "blizzard-runner", "init", str(self.dir), "--hub", dead, env=runner_spawn_env(dead, base=installation.env())
-        )
+        with refused_address() as dead:
+            installation.run(
+                "blizzard-runner",
+                "init",
+                str(self.dir),
+                "--hub",
+                dead,
+                env=runner_spawn_env(dead, base=installation.env()),
+            )
         assert (self.dir / "blizzard-host.toml").is_file(), f"{installation.label} runner init wrote no host file"
 
     def init(self, installation: Installation, hub_url: str) -> None:
@@ -128,12 +173,15 @@ class Host:
 
     def start(self, installation: Installation, hub_url: str) -> None:
         """Host the directory under ``installation`` until its ``/api/ready`` answers."""
-        log = self.dir / "daemon.log"
+        log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
         env = runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.3", FENCE_VAR: "1"}, base=installation.env())
+        port_args, publishes = _port_args(installation, "blizzard-runner", listening, self.port)
         self.proc = subprocess.Popen(
-            [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir)],
+            [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir), *port_args],
             env=env, stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
         )  # fmt: skip
+        if publishes:
+            await_listening_url(self.proc, listening, log=log)
         with httpx2.Client(base_url=f"http://127.0.0.1:{self.port}", timeout=30.0) as client:
             await_http(self.proc, client, "/api/ready", log=log)
 

@@ -21,7 +21,7 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.fleet_launchers import await_http, mock_bin_dir, mock_daemon_client, terminate
 from tests.fleet_world import REPO_NAME, scripted_build_prompt
 from tests.runner_join import add_runner, runner_spawn_env
-from tests.support import daemon_log_sink, shared_daemon_log_dir
+from tests.support import LISTENING_FILE, await_listening_url, daemon_log_sink, listening_args, shared_daemon_log_dir
 
 # The service tier's own gate — independent of the other tiers' gates so a run can select one tier.
 SERVICE_ENABLED = os.environ.get("BLIZZARD_SERVICE") == "1"
@@ -108,13 +108,38 @@ def require_codex_app_server_surface(bin_dir: Path) -> Path:
     return mock_codex
 
 
-def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
-    """Where one mock daemon's merged output goes (``bzh:daemon-stdout-to-file``).
+def _mock_daemon_files(name: str, log_dir: Path | None) -> tuple[Path, Path]:
+    """Where one mock daemon's merged output goes (``bzh:daemon-stdout-to-file``), and the file it
+    publishes its URL to.
 
     The mock fleet's daemons own no runtime directory, so ``log_dir`` defaults to
-    :func:`~tests.support.shared_daemon_log_dir`; named by daemon and port so several
-    concurrent instances of the same mock never share a file."""
-    return (log_dir or shared_daemon_log_dir()) / f"{name}-{port}.log"
+    :func:`~tests.support.shared_daemon_log_dir`; each start takes a fresh directory under it, so
+    several concurrent instances of the same mock never share a file."""
+    run_dir = Path(tempfile.mkdtemp(prefix=f"{name}-", dir=log_dir or shared_daemon_log_dir()))
+    return run_dir / "daemon.log", run_dir / LISTENING_FILE
+
+
+@contextlib.contextmanager
+def _mock_daemon(
+    args: list[str], log: Path, listening: Path, env: dict[str, str] | None = None
+) -> Generator[httpx2.Client]:
+    """Spawn one mock daemon on a kernel-picked port and yield a client at the URL it published."""
+    proc = subprocess.Popen(
+        [*args, *listening_args(listening, 0)],
+        env=env,
+        stdout=daemon_log_sink(log),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        client = mock_daemon_client(await_listening_url(proc, listening, log=log))
+        try:
+            await_http(proc, client, "/api/health", log=log)
+            yield client
+        finally:
+            client.close()
+    finally:
+        terminate(proc)
 
 
 # The scripted build node: commits a file, pushes the branch, and declares it via
@@ -305,45 +330,30 @@ def mock_hub_chunk_spec(work_ref: str) -> MockChunkSpec:
 
 
 @contextlib.contextmanager
-def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Generator[httpx2.Client]:
-    """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
-    log = _mock_daemon_log("mock-hub", port, log_dir)
-    proc = subprocess.Popen(
-        [str(bin_dir / "blizzard-mock-hub"), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = mock_daemon_client(port)
-    try:
-        await_http(proc, client, "/api/health", log=log)
+def mock_hub(bin_dir: Path, *, log_dir: Path | None = None) -> Generator[httpx2.Client]:
+    """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it; its ``base_url`` is the hub's URL."""
+    log, listening = _mock_daemon_files("mock-hub", log_dir)
+    with _mock_daemon([str(bin_dir / "blizzard-mock-hub"), "--host", "127.0.0.1"], log, listening) as client:
         yield client
-    finally:
-        client.close()
-        terminate(proc)
 
 
 @contextlib.contextmanager
 def mock_runner(
     bin_dir: Path,
-    port: int,
-    hub_port: int,
+    hub_url: str,
     *,
     name: str = "runner-mock",
     token: str | None = None,
     log_dir: Path | None = None,
 ) -> Generator[httpx2.Client]:
-    """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it. With no
+    """Run ``blizzard-mock-runner`` (a driver) pointed at the hub at ``hub_url``, and yield a client to it. With no
     ``token`` the driver adds itself at the hub on start, as ``runner init`` does; the id the hub minted
     reads back from its ``POST /_drive/register``."""
-    hub_url = f"http://127.0.0.1:{hub_port}"
-    log = _mock_daemon_log("mock-runner", port, log_dir)
+    log, listening = _mock_daemon_files("mock-runner", log_dir)
     args = [
         str(bin_dir / "blizzard-mock-runner"),
         "--host",
         "127.0.0.1",
-        "--port",
-        str(port),
         "--hub-url",
         hub_url,
         "--name",
@@ -351,34 +361,21 @@ def mock_runner(
     ]
     if token is not None:
         args += ["--token", token]
-    proc = subprocess.Popen(
-        args,
-        env=runner_spawn_env(hub_url),
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = mock_daemon_client(port)
-    try:
-        await_http(proc, client, "/api/health", log=log)
+    with _mock_daemon(args, log, listening, env=runner_spawn_env(hub_url)) as client:
         yield client
-    finally:
-        client.close()
-        terminate(proc)
 
 
 @contextlib.contextmanager
-def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-parity") -> Generator[HttpHubClient]:
-    """A real :class:`HttpHubClient` pointed at a hub subprocess on ``port``, driven
+def http_hub_client(hub_url: str, *, token: str | None = None, name: str = "runner-parity") -> Generator[HttpHubClient]:
+    """A real :class:`HttpHubClient` pointed at a hub subprocess at ``hub_url``, driven
     directly rather than through the runner loop — for a wire-parity assertion that needs
     a specific ``IHubClient`` method's response (see ``LoopWiring.tick_once`` for the
     behavioral-outcome alternative). It presents ``token``, else one for a runner it adds
     under ``name``, since the hub answers every tokenless fleet call ``401``."""
-    base_url = f"http://127.0.0.1:{port}"
     if token is None:
-        with httpx2.Client(base_url=base_url, timeout=15.0) as operator:
+        with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
             _runner_id, token = add_runner(operator, name)
-    client = httpx2.Client(base_url=base_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"})
+    client = httpx2.Client(base_url=hub_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"})
     try:
         yield HttpHubClient(client)
     finally:

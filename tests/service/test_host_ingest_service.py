@@ -26,7 +26,15 @@ from tests.mock_fleet_support import mock_hub, poll_until, require_mock_fleet, s
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env
 from tests.runner_store_sql import insert as insert_rows
 from tests.runner_store_sql import select, utc_text
-from tests.support import daemon_log_sink, free_port, read_daemon_log
+from tests.support import (
+    LISTENING_FILE,
+    await_listening_url,
+    daemon_log_sink,
+    listening_args,
+    port_of,
+    read_daemon_log,
+    url_of,
+)
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -172,20 +180,20 @@ def _logged(log: Path, event: str, lease_id: str) -> bool:
 
 
 def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_backlog_above_its_mark(
-    tmp_path: Path,
+    tmp_path: Path, refused_url: str
 ) -> None:
     bin_dir = require_mock_fleet()
-    hub_port, port = free_port(), free_port()
-    hub_url = f"http://127.0.0.1:{hub_port}"
     here, there = tmp_path / "here", tmp_path / "there"
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
+        hub_url = url_of(hub)
         host = _added(hub, "/api/hosts", {"name": "box"})
         staying = _runner(hub, "runner-local", host["host_id"])
         moving = _runner(hub, _MOVING, host["host_id"])
         for runner, tag in ((staying, "a"), (moving, "b")):
             _deliver_acked(hub, runner, tag)
-        _host_directory(here, staying, hub_url=hub_url, port=port)
-        _host_directory(there, moving, hub_url=hub_url, port=free_port())
+        _host_directory(here, staying, hub_url=hub_url, port=0)
+        # ``there`` is never served; its host file names a port nothing listens on.
+        _host_directory(there, moving, hub_url=hub_url, port=port_of(refused_url))
         _relative_prompt_file(there)
         HubTokenFile.of(here, HOST_TOKEN_VARIABLE).write(host["token"])
         _seed(here, staying, "a")
@@ -228,16 +236,17 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         )
         assert invariants.returncode == 0, invariants.stdout + invariants.stderr
 
-        log = here / "daemon.log"
+        log, listening = here / "daemon.log", here / LISTENING_FILE
         proc = subprocess.Popen(
-            [str(RUNNER_BIN), "host", "--dir", str(here)],
+            [str(RUNNER_BIN), "host", "--dir", str(here), *listening_args(listening, 0)],
             env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
             stdout=daemon_log_sink(log),
             stderr=subprocess.STDOUT,
             text=True,
         )
-        local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+        local = None
         try:
+            local = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=10.0)
             await_http(proc, local, "/api/health", log=log)
             for runner, tag in ((staying, "a"), (moving, "b")):
                 assert poll_until(lambda r=runner: _hub_mark(hub, r) >= _ACKED + _BACKLOG, timeout=30.0), (
@@ -256,5 +265,6 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
                 )
                 assert poll_until(lambda t=tag: _logged(log, "park resumed", f"lease_parked_{t}")), read_daemon_log(log)
         finally:
-            local.close()
+            if local is not None:
+                local.close()
             terminate(proc)

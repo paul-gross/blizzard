@@ -27,11 +27,15 @@ from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import join_runner, runner_spawn_env
 from tests.support import (
+    LISTENING_FILE,
+    await_listening_url,
     create_repositories,
     create_work_sources,
     daemon_log_sink,
     fixture_repositories,
     fixture_work_source,
+    listening_args,
+    published_port,
     write_mock_harness_credentials,
 )
 
@@ -42,9 +46,9 @@ REPO = f"{OWNER}/{REPO_NAME}"
 TICK_SECONDS = "0.3"
 
 
-def default_work_sources(forge_port: int) -> tuple[WorkSourceDocument, ...]:
+def default_work_sources(forge_url: str) -> tuple[WorkSourceDocument, ...]:
     """The one source the crash sweep's ``build -> deliver`` scenarios ingest against."""
-    return (fixture_work_source(REPO_NAME, REPO, f"http://127.0.0.1:{forge_port}"),)
+    return (fixture_work_source(REPO_NAME, REPO, forge_url),)
 
 
 # Env var names the crash mechanism and the mock-harness fence read.
@@ -61,7 +65,7 @@ class CrashEnv:
     bin_dir: Path
     workspace: Path
     origins: Path
-    forge_port: int
+    forge_url: str
     forge: httpx2.Client
 
 
@@ -679,15 +683,28 @@ def wait_death(proc: subprocess.Popen[str], *, timeout: float = 60.0) -> int:
 
 
 @contextlib.contextmanager
-def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Client]:
-    log = daemon_log_sink(origins.parent / "forge.log")
+def forge_daemon(bin_dir: Path, origins: Path) -> Generator[httpx2.Client]:
+    """The mock forge over ``origins``, on a kernel-picked port; the client's ``base_url`` is its URL."""
+    log = origins.parent / "forge.log"
+    listening = origins.parent / f"forge.{LISTENING_FILE}"
     proc = subprocess.Popen(
-        [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=log,
+        [
+            str(bin_dir / "blizzard-mock-forge"),
+            "--repos-dir",
+            str(origins),
+            "--host",
+            "127.0.0.1",
+            *listening_args(listening, 0),
+        ],
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    try:
+        client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=15.0)
+    except BaseException:
+        terminate(proc)
+        raise
     try:
         await_http(client, "/healthz", proc=proc)
         yield client
@@ -699,8 +716,7 @@ def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Cl
 def start_hub(
     hub_dir: Path,
     *,
-    forge_port: int,
-    port: int,
+    forge_url: str,
     crash_point: str | None,
     work_sources: Sequence[WorkSourceDocument] | None = None,
     new_session: bool = False,
@@ -710,8 +726,11 @@ def start_hub(
 
     ``new_session`` makes the hub a process-group leader so a caller can ``os.killpg`` the
     whole tree, including any spawned ``run:`` subprocess — required for a faithful
-    kill -9 mid-script. A first start seeds ``work_sources`` (the default source when
-    ``None``) through the hub's own API once it answers; a restart finds them stored."""
+    kill -9 mid-script. A first start binds a kernel-picked port and returns once the hub has
+    published its URL (read it back with :func:`daemon_url`); a restart pins the port the former
+    start published, so clients already holding the URL reach it again. A first start seeds
+    ``work_sources`` (the default source when ``None``) through the hub's own API once it answers;
+    a restart finds them stored."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     first_start = not (hub_dir / "blizzard-hub.toml").exists()
     if first_start:
@@ -721,38 +740,48 @@ def start_hub(
     _apply_crash_env(env, crash_point)
     if extra_env:
         env.update(extra_env)
+    listening = hub_dir / LISTENING_FILE
+    port = published_port(listening)
     proc = subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, port)],
         env=env,
         stdout=daemon_log_sink(hub_dir / "daemon.log"),
         stderr=subprocess.STDOUT,
         text=True,
         start_new_session=new_session,
     )
-    if first_start:
-        with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as hub:
-            await_http(hub, "/api/health", proc=proc)
-            seeded = work_sources if work_sources is not None else default_work_sources(forge_port)
-            create_work_sources(hub, seeded)
-            create_repositories(hub, fixture_repositories(seeded, f"http://127.0.0.1:{forge_port}"))
+    if port == 0:
+        url = await_listening_url(proc, listening, log=hub_dir / "daemon.log")
+        if first_start:
+            with httpx2.Client(base_url=url, timeout=30.0) as hub:
+                await_http(hub, "/api/health", proc=proc)
+                seeded = work_sources if work_sources is not None else default_work_sources(forge_url)
+                create_work_sources(hub, seeded)
+                create_repositories(hub, fixture_repositories(seeded, forge_url))
     return proc
 
 
+def daemon_url(daemon_dir: Path) -> str:
+    """The URL the daemon over ``daemon_dir`` last published — the hub's once :func:`start_hub` returns."""
+    return (daemon_dir / LISTENING_FILE).read_text().strip()
+
+
 def write_runner_config(
-    runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_port: int, port: int, join: bool = True
+    runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_url: str, join: bool = True
 ) -> RunnerConfig:
-    """Scaffold + persist a runner config pointed at the fixture workspace and mock harness. ``join``
-    first adds the runner at the hub on ``hub_port`` through ``runner init``, which writes its token to
-    ``runner_dir/.env``; a scenario with no hub listening passes ``join=False``."""
+    """Scaffold + persist a runner config pointed at the fixture workspace and mock harness, its host
+    file at ``port = 0`` — :func:`start_runner` chooses the port. ``join`` first adds the runner at the
+    hub at ``hub_url`` through ``runner init``, which writes its token to ``runner_dir/.env``; a scenario
+    with no hub listening passes ``join=False``."""
     if join:
-        join_runner(runner_dir, f"http://127.0.0.1:{hub_port}")
+        join_runner(runner_dir, hub_url)
     base = init_runner_environment(runner_dir)
     claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     config = dataclasses.replace(
         base,
         host="127.0.0.1",
-        port=port,
-        hub_url=f"http://127.0.0.1:{hub_port}",
+        port=0,
+        hub_url=hub_url,
         workspaces=(basic_workspace(workspace),),
         # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s
         # ``transcripts_root``) — without this the real adapter's transcript reads (usage-limit
@@ -783,30 +812,35 @@ def write_runner_config(
     return config
 
 
-def runner_api(runner_dir: Path, port: int) -> httpx2.Client:
-    """A client addressing the runner ``runner_dir`` configures, under its prefix on the host at ``port``."""
+def runner_api(runner_dir: Path, host_url: str) -> httpx2.Client:
+    """A client addressing the runner ``runner_dir`` configures, under its prefix on the host at ``host_url``."""
     prefix = runner_prefix(load_runner_config(runner_dir).served_id())
-    return httpx2.Client(base_url=f"http://127.0.0.1:{port}{prefix}", timeout=30.0)
+    return httpx2.Client(base_url=f"{host_url}{prefix}", timeout=30.0)
 
 
-def await_host(port: int, proc: subprocess.Popen[str]) -> None:
-    """Wait until the host at ``port`` answers its root health probe."""
-    with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+def await_host(runner_dir: Path, proc: subprocess.Popen[str]) -> str:
+    """Wait until the host over ``runner_dir`` publishes its URL and answers its root health probe; return the URL."""
+    url = await_listening_url(proc, runner_dir / LISTENING_FILE, log=runner_dir / "daemon.log")
+    with httpx2.Client(base_url=url, timeout=30.0) as host:
         await_http(host, "/api/health", proc=proc)
+    return url
 
 
 def start_runner(
     runner_dir: Path, *, crash_point: str | None, extra_env: dict[str, str] | None = None
 ) -> subprocess.Popen[str]:
-    """Start (or restart) the runner daemon; arm ``crash_point`` for a runner-side point."""
+    """Start (or restart) the runner daemon; arm ``crash_point`` for a runner-side point. A first start
+    binds a kernel-picked port; a restart pins the port the former start published, so the hub and any
+    client already holding the URL reach it again. Returns at once — :func:`await_host` waits for it."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     env = runner_spawn_env(
         load_runner_config(runner_dir).hub_url,
         {"BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
     )
     _apply_crash_env(env, crash_point)
+    listening = runner_dir / LISTENING_FILE
     return subprocess.Popen(
-        [runner_bin, "host", "--dir", str(runner_dir)],
+        [runner_bin, "host", "--dir", str(runner_dir), *listening_args(listening, published_port(listening))],
         env=env,
         stdout=daemon_log_sink(runner_dir / "daemon.log"),
         stderr=subprocess.STDOUT,

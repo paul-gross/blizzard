@@ -32,7 +32,7 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
 from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import OP, ForgeDouble, ForgeIssue, forge_state, free_port, github_double, hub_store_connections
+from tests.support import OP, ForgeDouble, ForgeIssue, bound_socket, forge_state, github_double, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -45,11 +45,11 @@ _ISSUES: dict[str, ForgeIssue] = {
 def forge() -> Iterator[tuple[ForgeDouble, str]]:
     """The double and the loopback URL it is served on."""
     double = github_double(issues={key: value.copy() for key, value in _ISSUES.items()})
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(double.app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
+    sock = bound_socket()
+    server = uvicorn.Server(uvicorn.Config(double.app, log_level="warning"))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
-    url = f"http://127.0.0.1:{port}"
+    url = f"http://127.0.0.1:{sock.getsockname()[1]}"
     deadline = time.monotonic() + 10.0
     while not server.started:
         assert time.monotonic() < deadline, "forge double never came up"
@@ -59,6 +59,7 @@ def forge() -> Iterator[tuple[ForgeDouble, str]]:
     finally:
         server.should_exit = True
         thread.join(timeout=10.0)
+        sock.close()
 
 
 @pytest.fixture

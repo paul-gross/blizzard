@@ -14,7 +14,6 @@ from blizzard.wire.runner import (
     RunnerRegistrationResponse,
 )
 from tests.mock_fleet_support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
-from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -47,7 +46,7 @@ def _peek(hub: httpx2.Client, token: str, request: QueuePeekRequest) -> list[str
 
 def test_a_bindings_registration_and_a_project_narrowed_peek_run_against_the_mock_hub() -> None:
     bin_dir = require_mock_fleet()
-    with mock_hub(bin_dir, free_port()) as hub:
+    with mock_hub(bin_dir) as hub:
         web = hub.post("/_seed/projects", json={"slug": "web", "name": "Web"})
         assert web.status_code == 201, web.text
         web_chunk = _seed_chunk(hub, "1", web.json()["project_id"])

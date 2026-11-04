@@ -9,12 +9,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
-import hashlib
 import json
-import os
 import re
 import shutil
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -1891,43 +1890,84 @@ def shared_daemon_log_dir() -> Path:
     return Path(tempfile.mkdtemp(prefix="blizzard-daemon-logs-"))
 
 
-_PORT_FLOOR = 20000
-_PORT_CEILING = 32768  # the kernel's ephemeral range starts here
-_PORT_BAND = 256
-_port_lock = threading.Lock()
-_port_cursor: list[int] = []
+#: The file a spawned daemon publishes its URL to (``--listening-file``), beside its runtime.
+LISTENING_FILE = "listening"
 
 
-def _worker_port_band() -> int:
-    """This worker's first port: bands are disjoint within a run and shifted per run."""
-    run_id = os.environ.get("PYTEST_XDIST_TESTRUNUID") or f"{os.getpid()}-{time.time_ns()}"
-    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    bands = (_PORT_CEILING - _PORT_FLOOR) // _PORT_BAND
-    run_offset = int.from_bytes(hashlib.sha256(run_id.encode()).digest()[:4], "big")
-    return _PORT_FLOOR + ((run_offset + int(worker.removeprefix("gw"))) % bands) * _PORT_BAND
+def port_of(url: str) -> int:
+    """The port of an ``http://HOST:PORT`` URL."""
+    port = urlparse(url).port
+    assert port is not None, f"{url!r} names no port"
+    return port
 
 
-def _port_is_free(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-        return True
+def url_of(client: httpx2.Client) -> str:
+    """The ``http://HOST:PORT`` URL a client addresses, without the trailing slash its ``base_url`` carries."""
+    return str(client.base_url).rstrip("/")
 
 
-def free_port() -> int:
-    """A localhost port no other xdist worker of this run can be handed before its daemon binds."""
-    with _port_lock:
-        if not _port_cursor:
-            _port_cursor.append(_worker_port_band())
-        band = _port_cursor[0] - (_port_cursor[0] - _PORT_FLOOR) % _PORT_BAND
-        for _ in range(_PORT_BAND):
-            port = _port_cursor[0]
-            _port_cursor[0] = band + (port - band + 1) % _PORT_BAND
-            if _port_is_free(port):
-                return port
-    raise RuntimeError(f"no free port in the band starting at {band}")
+def _pinned(listening_file: Path) -> Path:
+    """Where a pinned start records its port, so a start that dies before publishing keeps the pin."""
+    return listening_file.with_name(f"{listening_file.name}.port")
+
+
+def published_port(listening_file: Path) -> int:
+    """The port the daemon last held — published to ``listening_file``, or pinned by a start that died before
+    publishing — else ``0``.
+
+    A restart passes it as ``--port`` so the daemon comes back where its peers already address it;
+    a first start passes ``0`` and lets the kernel pick."""
+    if listening_file.is_file():
+        return port_of(listening_file.read_text().strip())
+    pinned = _pinned(listening_file)
+    return int(pinned.read_text()) if pinned.is_file() else 0
+
+
+def listening_args(listening_file: Path, port: int) -> list[str]:
+    """The ``--port``/``--listening-file`` pair a daemon start passes, with any stale file removed first.
+
+    The daemon never removes its file on stop, so a start that kept it would read the former URL
+    as this start's readiness. A pinned ``port`` is recorded first, for :func:`published_port`."""
+    if port:
+        _pinned(listening_file).write_text(str(port))
+    listening_file.unlink(missing_ok=True)
+    return ["--port", str(port), "--listening-file", str(listening_file)]
+
+
+def await_listening_url(
+    proc: subprocess.Popen[str], listening_file: Path, *, log: Path | None = None, timeout: float = 40.0
+) -> str:
+    """Block until the daemon publishes its URL to ``listening_file``; return it, or fail naming why.
+
+    The file appears only once the daemon serves, so a startup failure surfaces as the process
+    exiting — reported with ``log``'s tail and the exit code."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if listening_file.is_file():
+            return listening_file.read_text().strip()
+        if proc.poll() is not None:
+            raise AssertionError(f"process exited early ({proc.returncode}):\n{read_daemon_log(log)}")
+        time.sleep(0.05)
+    raise AssertionError(f"process did not publish {listening_file} within {timeout}s:\n{read_daemon_log(log)}")
+
+
+def bound_socket() -> socket.socket:
+    """A localhost TCP socket bound to a kernel-picked port and held — the caller owns and closes it.
+
+    An in-process server takes it as uvicorn's ``sockets=``, so the port is the server's from the
+    bind on and no other process can be handed it in between."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    return sock
+
+
+@contextmanager
+def refused_address() -> Generator[str]:
+    """An ``http://127.0.0.1:PORT`` URL nothing listens on, for as long as the block runs.
+
+    The port stays bound without listening, so a connect is refused and no daemon can take it."""
+    with bound_socket() as sock:
+        yield f"http://127.0.0.1:{sock.getsockname()[1]}"
 
 
 class RouteClaimReply(TypedDict):

@@ -17,7 +17,7 @@ from tests.crash.support import (
     mock_bin_dir,
 )
 from tests.fleet_world import mint_world
-from tests.support import free_port
+from tests.support import url_of
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -33,14 +33,13 @@ def crash_env(tmp_path_factory: pytest.TempPathFactory) -> Iterator[CrashEnv]:
     scratch = tmp_path_factory.mktemp("crash-scratch")
     workspace, origins, _bare = mint_world(bin_dir, scratch, fence="crash-sweep fence marker\n")
 
-    forge_port = free_port()
-    with forge_daemon(bin_dir, origins, forge_port) as forge:
+    with forge_daemon(bin_dir, origins) as forge:
         repo = forge.get("/repos/blizzard/toy-api")
         assert repo.status_code == 200 and repo.json()["default_branch"] == "main", repo.text
         yield CrashEnv(
             bin_dir=bin_dir,
             workspace=workspace,
             origins=origins,
-            forge_port=forge_port,
+            forge_url=url_of(forge),
             forge=forge,
         )

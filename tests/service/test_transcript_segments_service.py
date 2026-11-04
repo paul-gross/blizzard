@@ -18,7 +18,6 @@ from tests.mock_fleet_support import (
     transcript_segment_record,
 )
 from tests.runner_join import fleet_headers
-from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -31,8 +30,7 @@ def test_the_mock_hubs_counterpart_route_round_trips_a_shipped_lease(tmp_path: P
     """The mock hub's retention and its own counterpart route, driven from the app
     side over real HTTP against a real ``blizzard-mock-hub`` subprocess."""
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(f"{REPO}/issues/1"))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]

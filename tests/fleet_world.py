@@ -60,11 +60,12 @@ def basic_graph_yaml() -> str:
     return graph_yaml()
 
 
-def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, origin: Path) -> RunnerConfig:
+def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_url: str, origin: Path) -> RunnerConfig:
+    """A runner daemon's host file over the plain-git ``origin``, at ``port = 0`` for its ``--port`` to choose."""
     from tests.fleet_launchers import runner_config
 
     config = with_workspace(
-        runner_config(runner_dir, workspace, bin_dir, hub_port), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
+        runner_config(runner_dir, workspace, bin_dir, hub_url), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
     )
     write_host_file(config)
     return config
