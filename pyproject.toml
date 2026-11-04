@@ -247,6 +247,7 @@ also_copy = [
     "scripts/restated_invariants.py",
     "scripts/repo_pointers.py",
     "scripts/mutation.py",
+    "scripts/probe_opencode_bundle_runner.py",
     "scripts/probe_opencode_compaction_window.py",
     "scripts/probe_opencode_operator_bundle.py",
     "scripts/probe_headless_permission_refusal.py",

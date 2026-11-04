@@ -1,5 +1,7 @@
 import importlib
 import json
+import subprocess
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,11 +15,70 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 from blizzard.runner.harness.opencode.permissions.permission_resolver import OpenCodeEffectivePermissions
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import ChildEnv
+from blizzard.wire.queue import QueuePeekResponse
 
 compaction = importlib.import_module("scripts.probe_opencode_compaction_window")
 bundle = importlib.import_module("scripts.probe_opencode_operator_bundle")
 headless = importlib.import_module("scripts.probe_headless_permission_refusal")
 telemetry = importlib.import_module("scripts.probe_claude_code_telemetry_precedence")
+runner_probe = importlib.import_module("scripts.probe_opencode_bundle_runner")
+
+
+@pytest.mark.parametrize("status", ["ready", "running"])
+def test_runner_probe_queue_preserves_selected_project(status: str) -> None:
+    selected: dict[str, object] = {
+        "status": status,
+        "graph_id": "graph-1",
+        "work_refs": [],
+        "blocked": None,
+        "project_id": "project-123",
+        "project_slug": "example",
+        "project_name": "Example project",
+    }
+    response = QueuePeekResponse.model_validate(runner_probe._selected_queue("chunk-1", selected))
+    if status != "ready":
+        assert response.entries == []
+    else:
+        (entry,) = response.entries
+        assert (entry.chunk_id, entry.graph_id, entry.position) == ("chunk-1", "graph-1", 0)
+        assert (entry.project_id, entry.project_slug, entry.project_name) == (
+            "project-123",
+            "example",
+            "Example project",
+        )
+
+
+def test_runner_probe_registers_fresh_identity_before_init(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    names: list[str] = []
+
+    def init(command: list[str], *, env: dict[str, str], check: bool, capture_output: bool) -> None:
+        assert command[3:5] == ["runner", "init"]
+        assert check and capture_output
+        assert "BZ_HOST_TOKEN" not in env and "BZ_HUB_TOKEN_RUNNER_LOCAL" not in env
+        root = Path(command[5])
+        config = tomllib.loads((root / "blizzard-host.toml").read_text())
+        name: str = config["runner"][0]["name"]
+        assert name != "runner-local" and name not in names
+        names.append(name)
+        token_key = "BZ_HUB_TOKEN_" + name.upper().replace("-", "_")
+        (root / ".env").write_text(f"BZ_HOST_TOKEN=host-token\n{token_key}=runner-token\n")
+
+    monkeypatch.setattr(subprocess, "run", init)
+    for index in range(2):
+        root = tmp_path / f"root-{index}"
+        root.mkdir()
+        env = {
+            "BZ_HUB_URL": "http://localhost:1234",
+            "BZ_HOST_TOKEN": "standing",
+            "BZ_HUB_TOKEN_RUNNER_LOCAL": "standing",
+        }
+        runner_probe._runtime(root, tmp_path / f"scratch-{index}", env, "http://localhost:5678")
+        config = tomllib.loads((root / "blizzard-host.toml").read_text())
+        assert config["runner"][0]["name"] == names[-1]
+        assert config["hub_url"] == "http://localhost:5678"
+        assert (root / ".env").read_text() == (
+            f"BZ_HOST_TOKEN=host-token\nBZ_HUB_TOKEN_{names[-1].upper().replace('-', '_')}=runner-token\n"
+        )
 
 
 @pytest.mark.parametrize("name", ["fresh", "resume", "judge", "nudge"])

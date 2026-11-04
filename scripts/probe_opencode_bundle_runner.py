@@ -19,8 +19,13 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import TypedDict, TypeVar
+from unittest.mock import patch
+
+from blizzard.runner.host_config import HostConfig
 
 
 class Chunk(TypedDict):
@@ -28,6 +33,9 @@ class Chunk(TypedDict):
     graph_id: str
     work_refs: list[object]
     blocked: object
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
 
 
 class Health(TypedDict):
@@ -76,6 +84,24 @@ def _request[T](url: str, response_type: type[T], body: object | None = None) ->
         return json.load(response)
 
 
+def _selected_queue(chunk_id: str, selected: Chunk) -> dict[str, list[dict[str, object]]]:
+    entries: list[dict[str, object]] = []
+    if selected["status"] == "ready":
+        entries.append(
+            {
+                "chunk_id": chunk_id,
+                "graph_id": selected["graph_id"],
+                "position": 0,
+                "work_refs": selected.get("work_refs", []),
+                "blocked": selected.get("blocked"),
+                "project_id": selected["project_id"],
+                "project_slug": selected["project_slug"],
+                "project_name": selected["project_name"],
+            }
+        )
+    return {"entries": entries}
+
+
 def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer:
     """Only expose the selected chunk at FILL's read and claim doors."""
 
@@ -97,18 +123,7 @@ def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             if path == "/api/fleet/queue/peek" and self.command in {"GET", "POST"}:
                 selected = _request(f"{hub_url}/api/chunks/{chunk_id}", Chunk)
-                entries: list[dict[str, object]] = []
-                if selected["status"] == "ready":
-                    entries = [
-                        {
-                            "chunk_id": chunk_id,
-                            "graph_id": selected["graph_id"],
-                            "position": 0,
-                            "work_refs": selected.get("work_refs", []),
-                            "blocked": selected.get("blocked"),
-                        }
-                    ]
-                self._reply(200, json.dumps({"entries": entries}).encode())
+                self._reply(200, json.dumps(_selected_queue(chunk_id, selected)).encode())
                 return
             if path == "/api/fleet/routes" and self.command == "POST" and json.loads(body).get("chunk_id") != chunk_id:
                 self._reply(409, b'{"detail":"probe refuses a foreign chunk claim"}')
@@ -182,8 +197,14 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
     # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
     # standing runner's from the shell exports.
-    for name in [name for name in env if name.startswith("BZ_HUB_TOKEN")]:
+    for name in [name for name in env if name.startswith("BZ_HUB_TOKEN") or name == "BZ_HOST_TOKEN"]:
         del env[name]
+    with patch.dict(os.environ, env, clear=True):
+        scaffold = HostConfig.scaffold(root, hub_url=env["BZ_HUB_URL"])
+    (runner,) = scaffold.runners
+    scaffold = replace(scaffold, runners=(replace(runner, name=f"bundle-probe-{uuid.uuid4().hex}"),))
+    config = root / "blizzard-host.toml"
+    config.write_text(scaffold.to_toml())
     subprocess.run(
         ["uv", "run", "blizzard", "runner", "init", str(root), "--hub", env["BZ_HUB_URL"]],
         env=env,
@@ -192,12 +213,7 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     )
     auth = root / "auth.json"
     auth.write_text('{"mock":"present"}')
-    config = root / "blizzard-host.toml"
     text = config.read_text()
-    text = text.replace('name = "runner-local"', 'name = "runner-bundle-probe"')
-    # The token variable follows the runner's name, so the token init wrote follows the rename.
-    dotenv = root / ".env"
-    dotenv.write_text(dotenv.read_text().replace("BZ_HUB_TOKEN_RUNNER_LOCAL=", "BZ_HUB_TOKEN_RUNNER_BUNDLE_PROBE="))
     text = text.replace("[runner.claude_code]\nenabled = true", "[runner.claude_code]\nenabled = false")
     text = text.replace(
         '[runner.opencode]\nenabled = true\nbinary = "opencode"',
