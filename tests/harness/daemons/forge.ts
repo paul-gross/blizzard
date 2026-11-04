@@ -3,7 +3,7 @@ import { daemonEnv, mockBinDir, requireBinary } from '../env';
 import { type DaemonRecord, startDaemon } from './process';
 
 /** The mock forge, its repositories directory starting empty. */
-export function startForge(dir: string): Promise<DaemonRecord> {
+export function startForge(dir: string, env: Record<string, string> = {}): Promise<DaemonRecord> {
   const binary = requireBinary(mockBinDir(), 'blizzard-mock-forge');
   return startDaemon({
     name: 'forge',
@@ -12,7 +12,7 @@ export function startForge(dir: string): Promise<DaemonRecord> {
     launch: (port, listeningFile) => ({
       command: binary,
       args: ['--repos-dir', path.join(dir, 'origins'), '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile],
-      env: daemonEnv(),
+      env: daemonEnv(env),
     }),
   });
 }

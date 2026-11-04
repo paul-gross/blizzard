@@ -276,6 +276,26 @@ export interface HostSocketClient extends HostRoutes {
   stepHost(): Promise<TickPass>;
 }
 
+/** One request over a Unix socket, answered whatever its status; a transport failure rejects naming the route and the log. */
+export function socketRequest(options: { socket: string; logContext: LogContext }, method: string, route: string, headers: Record<string, string>, body?: Uint8Array | string): Promise<{ status: number; text: string; headers: Record<string, string> }> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : Buffer.from(body);
+    const request = http.request({ socketPath: options.socket, path: route, method, headers: { 'content-length': String(payload?.length ?? 0), ...headers } }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () =>
+        resolve({
+          status: response.statusCode ?? 0,
+          text: Buffer.concat(chunks).toString('utf8'),
+          headers: Object.fromEntries(Object.entries(response.headers).map(([name, value]) => [name, [value].flat().join(', ')])),
+        }),
+      );
+    });
+    request.on('error', (error) => reject(new Error(`${method} ${route} over ${options.socket} failed: ${error.message}\nhost log:\n${options.logContext()}`, { cause: error })));
+    request.end(payload);
+  });
+}
+
 /**
  * The host's routes over its Unix socket, which the human-lane gate always admits, so stepping works on a host whose
  * hub offers an IdP. A request has no client timeout of its own: the test's bounds it. A step answered other than `200`
@@ -283,23 +303,7 @@ export interface HostSocketClient extends HostRoutes {
  * form does, any status returned.
  */
 export function hostSocketApi(options: { socket: string; logContext: LogContext }): HostSocketClient {
-  const send = (method: string, route: string, headers: Record<string, string>, body?: Uint8Array | string): Promise<{ status: number; text: string; headers: Record<string, string> }> =>
-    new Promise((resolve, reject) => {
-      const payload = body === undefined ? undefined : Buffer.from(body);
-      const request = http.request({ socketPath: options.socket, path: route, method, headers: { 'content-length': String(payload?.length ?? 0), ...headers } }, (response) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () =>
-          resolve({
-            status: response.statusCode ?? 0,
-            text: Buffer.concat(chunks).toString('utf8'),
-            headers: Object.fromEntries(Object.entries(response.headers).map(([name, value]) => [name, [value].flat().join(', ')])),
-          }),
-        );
-      });
-      request.on('error', (error) => reject(new Error(`${method} ${route} over ${options.socket} failed: ${error.message}\nhost log:\n${options.logContext()}`, { cause: error })));
-      request.end(payload);
-    });
+  const send = (method: string, route: string, headers: Record<string, string>, body?: Uint8Array | string) => socketRequest(options, method, route, headers, body);
   const answered = async (method: string, route: string, headers: Record<string, string> = {}, body?: Uint8Array | string): Promise<ApiResponse> => {
     const answer = await send(method, route, headers, body);
     let parsed: unknown = answer.text;

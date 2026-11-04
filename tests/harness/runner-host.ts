@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { parse, stringify } from 'smol-toml';
 import { type CliResult, runCommand } from './cli';
+import { clockEnv, ClockStack, type Membership, RANK } from './clock-stack';
+import { hostClock } from './client/clock';
 import { type HostSocketClient, hostSocketApi, type RunnerClient, type RunnerHostClient, runnerHostApi, type TickPass } from './client/runner';
 import type { Ledger } from './client/ledger';
 import { type LiveDaemon, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
@@ -233,6 +235,8 @@ export interface BuilderContext {
   ledger: Ledger;
   testInfo: TestInfo;
   vendor: VendorUsage;
+  /** The stack the world's clock is: on a controlled one, each host starts on the controlled clock and joins it. System when absent. */
+  clock?: ClockStack;
   /** Where each host's scratch root is made; the harness check alone overrides it. */
   scratchRoot?: string;
 }
@@ -316,6 +320,7 @@ export function checkRunnerEnv(runnerEnv: Record<string, string>, pinned: string
   return Object.keys(runnerEnv).flatMap((name) => {
     if (pinned.includes(name)) return [`runnerEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`];
     if (name === FENCE_VAR) return [`runnerEnv ${name}: the fixture sets it, so a test cannot change it`];
+    if (name === 'BLIZZARD_CLOCK') return [`runnerEnv ${name}: the fixture sets it from clockMode, so a test cannot change it`];
     return [];
   });
 }
@@ -357,7 +362,8 @@ interface Timings {
   bootMs: number;
 }
 
-export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
+export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
+  const ctx = { ...given, clock: given.clock ?? new ClockStack('system') };
   const { testInfo } = ctx;
   const made: { dispose: (failed: boolean) => Promise<string[]> }[] = [];
   let count = 0;
@@ -365,6 +371,9 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
   const create = async (given: Partial<RunnerHostOptions> = {}): Promise<RunnerHost> => {
     let options: RunnerHostOptions = { ...DEFAULT_RUNNER_OPTIONS, ...given };
     if (options.runnerTraceEndpoint !== undefined && options.runnerOtlp !== false) throw new Error('runnerTraceEndpoint and runnerOtlp cannot both be set');
+    if (ctx.clock.controlled && options.runnerLoop === 'timed') {
+      throw new Error('runnerLoop "timed" runs the host\'s passes on a timer, and clockMode "controlled" pairs only with stepped daemons. Use runnerLoop "stepped", or declare clockMode "system".');
+    }
     const profile = profileFor(testInfo.file, options.runnerConfig);
     const problems = checkHostOptions(profile, options.runnerEnv, options.runnerWinterTrap);
     if (problems.length > 0) throw new Error(`the runner host options are unsound:\n${problems.join('\n')}`);
@@ -388,10 +397,16 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     let daemon: LiveDaemon | undefined;
     let disposed = false;
     let otlp: OtlpSink | undefined;
+    let membership: Membership | undefined;
+    const leaveClock = (): void => {
+      membership?.leave();
+      membership = undefined;
+    };
 
     const dispose = async (failed: boolean): Promise<string[]> => {
       if (disposed) return [];
       disposed = true;
+      leaveClock();
       if (daemon !== undefined) await stopDaemon(daemon);
       await otlp?.close();
       const refusals = scanLog(logPath).map((line) => line.raw);
@@ -580,9 +595,11 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const boot = async (): Promise<void> => {
         const begun = Date.now();
         const port = url === undefined ? undefined : Number(new URL(url).port);
-        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: hostEnv() });
+        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: { ...hostEnv(), ...clockEnv(ctx.clock.controlled) } });
         url = daemon.url;
         timings.bootMs = Date.now() - begun;
+        // Aligned before the call that booted it resolves; a controlled host that took no clock fails here.
+        membership = await ctx.clock.join({ name: `runner host ${index}`, rank: RANK.host, client: hostClock(socket, () => logTail(logPath)) });
       };
       if (options.runnerStarted) await boot();
       const hostUrl = (): string => {
@@ -736,13 +753,16 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         stepHost: () => sock.stepHost(),
         async stop() {
           if (daemon === undefined) throw new Error('the host was never started; restart() boots it');
+          leaveClock();
           return stopLive(daemon);
         },
         async kill() {
           if (daemon === undefined) throw new Error('the host was never started; restart() boots it');
+          leaveClock();
           await killLive(daemon);
         },
         async restart() {
+          leaveClock();
           if (daemon !== undefined && isAlive(daemon.pid)) await stopLive(daemon);
           await boot();
         },

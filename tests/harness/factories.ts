@@ -5,6 +5,8 @@ import { type ForgeApi, type HubApi } from './client/clients';
 import type { ApiResponse } from './client/engine';
 import type { Ledger } from './client/ledger';
 import type { MockDriveAnswer, MockIssue, MockRunnerLeverListing } from './client/mock';
+import { clockEnv, type ClockStack, type Membership, RANK } from './clock-stack';
+import { mockClock } from './client/clock';
 import { startMockRunner } from './daemons/mock-runner';
 import { type DaemonRecord, stopDaemon } from './daemons/process';
 import { runDir } from './env';
@@ -29,6 +31,8 @@ export interface MockRunner {
   drive<V extends string>(verb: V, body?: unknown): Promise<ApiResponse<MockDriveAnswer<V>>>;
   lever(kind: string, body?: unknown): Promise<ApiResponse>;
   levers(): Promise<ApiResponse<MockRunnerLeverListing>>;
+  /** `GET /_clock`: where the mock runner's controlled clock stands. */
+  clock(): Promise<ApiResponse>;
 }
 
 export type RunnerOptions = Pick<RunnerAddRequest, 'projects'>;
@@ -45,7 +49,9 @@ export interface FactoryContext {
   level: Level;
   testHub: TestHub;
   ledger: Ledger;
-  mockClient: (url: string) => Pick<MockRunner, 'drive' | 'lever' | 'levers'>;
+  /** The stack's clock: a mock runner on a controlled stack starts on the controlled clock and joins it. */
+  clock: ClockStack;
+  mockClient: (url: string) => Pick<MockRunner, 'drive' | 'lever' | 'levers' | 'clock'>;
   /** A name unique to this test and run. */
   unique: (prefix: string) => string;
 }
@@ -170,6 +176,7 @@ export function issueFactory(
  */
 export function mockRunnerFactory(context: FactoryContext): { factory: (name: string, options?: RunnerOptions) => Promise<MockRunner>; stopAll: () => Promise<void> } {
   const started: DaemonRecord[] = [];
+  const memberships: Membership[] = [];
   return {
     factory: async (name, options) => {
       requireOwnTenant(context.level, 'mockRunner()');
@@ -178,12 +185,15 @@ export function mockRunnerFactory(context: FactoryContext): { factory: (name: st
       context.ledger.add('runner', minted.body.runner_id as string);
       const dir = path.join(runDir(), 'runners', context.unique(`${name}-`));
       fs.mkdirSync(dir, { recursive: true });
-      const daemon = await startMockRunner(dir, { hubUrl: context.testHub.coordinates.url, name, token: minted.body.token as string });
+      const daemon = await startMockRunner(dir, { hubUrl: context.testHub.coordinates.url, name, token: minted.body.token as string, env: clockEnv(context.clock.controlled) });
       started.push(daemon);
+      // Aligned before the call that started it resolves.
+      memberships.push(await context.clock.join({ name: `mock runner ${name}`, rank: RANK.daemon, client: mockClock(daemon.url) }));
       return { name, runnerId: minted.body.runner_id as string, token: minted.body.token as string, url: daemon.url, ...context.mockClient(daemon.url) };
     },
     // A runner's log is read for the guard's refusal when it stops.
     stopAll: async () => {
+      for (const membership of memberships) membership.leave();
       await Promise.all(started.map(stopDaemon));
       const refusals = started.flatMap((daemon) => scanLog(daemon.logPath).map((line) => line.raw));
       if (refusals.length > 0) throw new Error(`a statement guard refused in a mock runner:\n${refusals.join('\n')}`);

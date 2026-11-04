@@ -104,8 +104,8 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   runnerDir: [DEFAULT_RUNNER_OPTIONS.runnerDir, { option: true }],
   runnerRepositories: [DEFAULT_RUNNER_OPTIONS.runnerRepositories, { option: true }],
 
-  vendorUsage: async ({}, use) => {
-    const vendor = await startVendorUsage();
+  vendorUsage: async ({ clock }, use) => {
+    const vendor = await startVendorUsage(() => clock.now());
     await use(vendor);
     await vendor.close();
   },
@@ -116,8 +116,8 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
     await checkpoint.close();
   },
 
-  runnerHostBuilder: async ({ runnerBinding, worldContext, ledger, vendorUsage }, use, testInfo) => {
-    const builder = runnerHostBuilder({ hub: runnerBinding.hub, context: worldContext, ledger, testInfo, vendor: vendorUsage });
+  runnerHostBuilder: async ({ runnerBinding, worldContext, ledger, vendorUsage, clockStack }, use, testInfo) => {
+    const builder = runnerHostBuilder({ hub: runnerBinding.hub, context: worldContext, ledger, testInfo, vendor: vendorUsage, clock: clockStack });
     await use(builder);
     await builder.disposeAll();
   },
@@ -137,7 +137,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHost: async (
-    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, coldInit },
+    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, coldInit, clockStack, clock },
     use,
     testInfo,
   ) => {
@@ -152,8 +152,8 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
         runnerBinding.admit?.();
         await runnerBinding.prepare?.();
         const context = await playwright.request.newContext();
-        const vendor = await startVendorUsage();
-        const builder = runnerHostBuilder({ hub: runnerBinding.hub, context, ledger: new Ledger(), testInfo, vendor });
+        const vendor = await startVendorUsage(() => clock.now());
+        const builder = runnerHostBuilder({ hub: runnerBinding.hub, context, ledger: new Ledger(), testInfo, vendor, clock: clockStack });
         try {
           const host = await builder.create(options);
           return {

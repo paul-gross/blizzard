@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type AuthStub, startAuthStub } from './auth-stub';
 import { uniqueName } from './base';
+import { mockClock } from './client/clock';
 import { type MockHubClient, mockHubApi } from './client/mock-hub';
+import { clockEnv, type Membership, RANK } from './clock-stack';
 import { startMockHub } from './daemons/mock-hub';
 import { isAlive, killLive, type LiveDaemon, logTail, stopDaemon, stopLive } from './daemons/process';
 import { runDir } from './env';
@@ -19,7 +21,7 @@ export interface MockHub extends MockHubClient {
   stop(): Promise<number | string>;
   /** `SIGKILL`; resolves once the process is gone. */
   kill(): Promise<void>;
-  /** Hosts the stopped mock hub again on the same URL. Its in-memory state is gone, as a restarted mock's would be. */
+  /** Hosts the stopped mock hub again on the same URL. Its in-memory state is gone, as a restarted mock's would be. A controlled one rejoins its stack, aligned before this resolves. */
   start(): Promise<void>;
   /** The file the mock hub's stdout and stderr are appended to, across restarts. */
   readonly logPath: string;
@@ -56,11 +58,26 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
   mockHubOfferIdp: [false, { option: true }],
   mockHubRelay: [false, { option: true }],
 
-  mockHub: async ({ worldContext, ledger, mockHubOfferIdp, mockHubRelay }, use, testInfo) => {
+  mockHub: async ({ worldContext, ledger, mockHubOfferIdp, mockHubRelay, clockStack }, use, testInfo) => {
     const dir = path.join(runDir(), 'mock-hubs', uniqueName(testInfo));
     fs.mkdirSync(dir, { recursive: true });
-    let daemon: LiveDaemon = await startMockHub(dir, { offerIdp: mockHubOfferIdp });
+    const env = clockEnv(clockStack.controlled);
+    let daemon: LiveDaemon = await startMockHub(dir, { offerIdp: mockHubOfferIdp, env });
     const { url, logPath } = daemon;
+    let membership: Membership | undefined;
+    const leaveClock = (): void => {
+      membership?.leave();
+      membership = undefined;
+    };
+    const joinClock = async (): Promise<void> => {
+      membership = await clockStack.join({ name: 'the mock hub', rank: RANK.hub, client: mockClock(url) });
+    };
+    try {
+      await joinClock();
+    } catch (error) {
+      await stopDaemon(daemon);
+      throw error;
+    }
     const tail = (): string => logTail(logPath);
     const relay = mockHubRelay ? await startHubRelay(Number(new URL(url).port)) : undefined;
     const clients = mockHubApi({ context: worldContext, testInfo, url, ledger, logContext: tail });
@@ -70,13 +87,18 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
         get pid() {
           return daemon.pid;
         },
-        stop: () => stopLive(daemon),
+        stop: () => {
+          leaveClock();
+          return stopLive(daemon);
+        },
         kill: async () => {
+          leaveClock();
           await killLive(daemon);
         },
         start: async () => {
           if (isAlive(daemon.pid)) throw new Error('the mock hub is running; stop() or kill() it before start()');
-          daemon = await startMockHub(dir, { port: Number(new URL(url).port), offerIdp: mockHubOfferIdp });
+          daemon = await startMockHub(dir, { port: Number(new URL(url).port), offerIdp: mockHubOfferIdp, env });
+          await joinClock();
         },
         relay,
         logPath,
@@ -90,6 +112,7 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
       });
     } finally {
       // The process now, not the one the fixture started: a `start()` replaced it.
+      leaveClock();
       await relay?.close();
       await stopDaemon(daemon);
       if (testInfo.status !== testInfo.expectedStatus) await testInfo.attach('mock hub log', { body: tail(), contentType: 'text/plain' });

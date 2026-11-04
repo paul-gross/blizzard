@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type APIRequestContext, expect, mergeTests } from '@playwright/test';
+import { clockEnv, RANK, type SessionHolder } from './clock-stack';
+import { mockClock } from './client/clock';
 import { loginThroughCli } from './login';
 import { type People, type Person, peopleFactory } from './people';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
@@ -98,6 +100,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
         level: level.served,
         ledger,
         logContext: () => testHub.logTail(tenant.id),
+        beforeRequest: () => testHub.refreshSession(),
       }),
     );
   },
@@ -106,8 +109,9 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
 
   runnerOnForge: [[], { option: true }],
 
-  people: async ({ testHub, tenantOf, ledger, level, playwright }, use, testInfo) => {
+  people: async ({ testHub, tenantOf, ledger, level, playwright, clockStack }, use, testInfo) => {
     const { people, disposeAll } = peopleFactory({
+      clock: clockStack,
       testHub,
       tenantOf,
       ledger,
@@ -143,7 +147,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await use(await people.create({ role: userRole }));
   },
 
-  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright, repository, runnerOnForge }, use, testInfo) => {
+  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright, repository, runnerOnForge, clockStack }, use, testInfo) => {
     const hub = testHub.coordinates;
     // On a hub offering an IdP, `init` runs under a logged-in operator's config home; the host's own stays empty.
     // Built only then, since the `people` fixture itself refuses a hub with authentication off.
@@ -151,6 +155,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     let disposePeople: (() => Promise<void>) | undefined;
     const operatorHome = async (): Promise<string> => {
       const made = peopleFactory({
+        clock: clockStack,
         testHub,
         tenantOf,
         ledger,
@@ -165,14 +170,33 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
       const env = daemonEnv({ BZ_HUB_URL: hub.url, BZ_HUB_TENANT: tenant.id, PYTHONUNBUFFERED: '1' }, home);
       const run = (args: string[], runEnv: NodeJS.ProcessEnv, prompt?: Prompt): Promise<CliResult> =>
         runCommand(requireBinary(binDir(), 'blizzard'), args, { env: runEnv, prompt });
+      const holder: SessionHolder = {
+        signedInAt: undefined,
+        resign: async () => {
+          await loginThroughCli({ run, env, person, hub });
+          holder.signedInAt = await clockStack.hubReading();
+        },
+      };
+      const registration = clockStack.register(holder);
       await loginThroughCli({ run, env, person, hub });
+      holder.signedInAt = await clockStack.hubReading();
+      operatorRefresh = registration.refresh;
       return home;
     };
+    let operatorRefresh: (() => Promise<void>) | undefined;
     await use({
       hub: {
         url: hub.url,
         tenantId: tenant.id,
-        operatorHome: hub.auth === undefined ? undefined : () => (operator ??= operatorHome()),
+        operatorHome:
+          hub.auth === undefined
+            ? undefined
+            : async () => {
+                const home = await (operator ??= operatorHome());
+                // `init` is the operator's next request: the login is made again if the clock has passed its window.
+                await operatorRefresh?.();
+                return home;
+              },
         forgeOrigins: hub.originsPath,
       },
       admit: () => requireOwnTenant(level.served, 'runnerHost()'),
@@ -230,12 +254,21 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await use({ ...api, ...originReads(testHub.coordinates.originsPath, daemonEnv(), TESTS_ROOT) });
   },
 
-  secondForge: async ({ testHub, ledger }, use, testInfo) => {
+  secondForge: async ({ testHub, ledger, clockStack }, use, testInfo) => {
     const dir = testInfo.outputPath('second-forge');
-    await withSecondForge(dir, async (daemon) => {
-      const api = forgeApi({ context: testHub.context, testInfo, url: daemon.url, ledger });
-      await use({ ...api, ...originReads(path.join(dir, 'origins'), daemonEnv(), TESTS_ROOT), pid: daemon.pid });
-    });
+    await withSecondForge(
+      dir,
+      async (daemon) => {
+        const api = forgeApi({ context: testHub.context, testInfo, url: daemon.url, ledger });
+        const membership = await clockStack.join({ name: 'the second forge', rank: RANK.daemon, client: mockClock(daemon.url) });
+        try {
+          await use({ ...api, ...originReads(path.join(dir, 'origins'), daemonEnv(), TESTS_ROOT), pid: daemon.pid });
+        } finally {
+          membership.leave();
+        }
+      },
+      clockEnv(clockStack.controlled),
+    );
   },
 
   openedSubscriptions: async ({}, use) => {
@@ -269,7 +302,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await use(readHubLog({ logPath: testHub.coordinates.logPath, tenantId: tenant.id, fresh: level.served === 'fresh-hub' }));
   },
 
-  cli: async ({ testHub, tenant }, use, testInfo) => {
+  cli: async ({ testHub, tenant, clockStack }, use, testInfo) => {
     const run = async (args: string[], env: NodeJS.ProcessEnv, prompt?: Prompt): Promise<CliResult> => {
       try {
         return await runCommand(requireBinary(binDir(), 'blizzard'), args, { env, prompt });
@@ -287,14 +320,29 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
       return daemonEnv({ BZ_HUB_URL: testHub.coordinates.url, BZ_HUB_TENANT: tenant.id, PYTHONUNBUFFERED: '1' }, home);
     };
     // One login per person per test, in the config home that person's later commands read.
-    const logins = new Map<string, Promise<void>>();
-    const login = (person: Person, env: NodeJS.ProcessEnv): Promise<void> => {
-      let done = logins.get(person.userId);
-      if (done === undefined) {
-        done = loginThroughCli({ run, env, person, hub: testHub.coordinates });
-        logins.set(person.userId, done);
+    const logins = new Map<string, { done: Promise<void>; refresh: () => Promise<void> }>();
+    const login = async (person: Person, env: NodeJS.ProcessEnv): Promise<void> => {
+      let entry = logins.get(person.userId);
+      if (entry === undefined) {
+        // On a controlled stack the login is made again before the next command once the clock has passed its window.
+        const holder: SessionHolder = {
+          signedInAt: undefined,
+          resign: async () => {
+            await loginThroughCli({ run, env, person, hub: testHub.coordinates });
+            holder.signedInAt = await clockStack.hubReading();
+          },
+        };
+        const registration = clockStack.register(holder);
+        entry = {
+          done: loginThroughCli({ run, env, person, hub: testHub.coordinates }).then(async () => {
+            holder.signedInAt = await clockStack.hubReading();
+          }),
+          refresh: registration.refresh,
+        };
+        logins.set(person.userId, entry);
       }
-      return done;
+      await entry.done;
+      await entry.refresh();
     };
     await use(async (args, options = {}) => {
       const person = options.as;
@@ -304,8 +352,8 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     });
   },
 
-  factoryContext: async ({ api, forge, project, level, testHub, ledger }, use, testInfo) => {
-    await use({ api, forge, project, level: level.served, testHub, ledger, unique: (prefix) => uniqueName(testInfo, prefix),
+  factoryContext: async ({ api, forge, project, level, testHub, ledger, clockStack }, use, testInfo) => {
+    await use({ api, forge, project, level: level.served, testHub, ledger, clock: clockStack, unique: (prefix) => uniqueName(testInfo, prefix),
       mockClient: (url) => mockRunnerApi({ context: testHub.context, testInfo, url, ledger }) });
   },
 

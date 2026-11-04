@@ -1,6 +1,7 @@
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { DEFAULT_PROVIDER, type Landing, requireProvider, usernameFor, walk } from './auth';
 import { type HubApi, hubApi } from './client/clients';
+import type { ClockStack, SessionHolder } from './clock-stack';
 import type { Ledger } from './client/ledger';
 import type { Role } from './client/wire/hub/types.gen';
 import type { HubCoordinates } from './hubs';
@@ -39,6 +40,8 @@ export interface People {
 }
 
 export interface PeopleContext {
+  /** The stack's clock: on a controlled one, each person's session is signed in again before their next request once its window has passed. */
+  clock: ClockStack;
   testHub: TestHub;
   /** Resolved only when a person is created: the superuser must have signed in by then. */
   tenantOf: () => Promise<Tenant>;
@@ -66,8 +69,9 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
     made.push(created);
     return created;
   };
-  const personApi = (person: APIRequestContext, tenantId: string | undefined): HubApi =>
+  const personApi = (person: APIRequestContext, tenantId: string | undefined, beforeRequest?: () => Promise<void>): HubApi =>
     hubApi({
+      beforeRequest,
       context: person,
       testInfo: context.testInfo,
       tenantId,
@@ -76,6 +80,19 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
       ledger: context.ledger,
       logContext: () => context.testHub.logTail(tenantId),
     });
+
+  /** Registers a person's context as a holder, stamped with the hub's reading now; the person signs in again as `email` with no invitation. */
+  const hold = async (own: APIRequestContext, email: string, provider: string | undefined): Promise<() => Promise<void>> => {
+    const holder: SessionHolder = {
+      signedInAt: await context.clock.hubReading(),
+      resign: async () => {
+        const landing = await walk({ context: own, hub: context.testHub.coordinates, email, provider });
+        if (!landing.session) throw new Error(`signing ${email} in again set no session; the walk landed at ${landing.status} ${landing.location ?? ''}`);
+        holder.signedInAt = await context.clock.hubReading();
+      },
+    };
+    return context.clock.register(holder).refresh;
+  };
 
   const signIn: People['signIn'] = async (email, options = {}) => {
     requireProvider(context.testHub.coordinates, options.provider ?? DEFAULT_PROVIDER);
@@ -86,7 +103,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
       await own.dispose();
       return landing;
     }
-    return { ...landing, context: own, api: personApi(own, undefined) };
+    return { ...landing, context: own, api: personApi(own, undefined, await hold(own, email, options.provider)) };
   };
 
   const create: People['create'] = async (options = {}) => {
@@ -95,7 +112,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
     // The superuser signs in on a fresh hub here, before the first call that needs its session.
     await context.testHub.superuser();
     const tenant = await context.tenantOf();
-    const admin = personApi(context.testHub.context, tenant.id);
+    const admin = personApi(context.testHub.context, tenant.id, () => context.testHub.refreshSession());
     const email = `${context.unique('')}@blizzard.test`;
     const invited = await admin.post('/api/invitations', { data: { email, role } });
     if (invited.status !== 201) throw new Error(`inviting ${email} as ${role} answered ${invited.status}: ${JSON.stringify(invited.body)}`);
@@ -106,7 +123,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
     if (!landing.session) {
       throw new Error(`signing ${email} in with their invitation set no session; the walk landed at ${landing.status} ${landing.location ?? ''}: ${landing.body.slice(0, 300)}`);
     }
-    const api = personApi(own, tenant.id);
+    const api = personApi(own, tenant.id, await hold(own, email, options.provider));
     const me = await api.unfiltered.get('/api/me');
     if (me.status !== 200) throw new Error(`GET /api/me for ${email} answered ${me.status}: ${JSON.stringify(me.body)}`);
     context.ledger.add('person', me.body.user_id as string);

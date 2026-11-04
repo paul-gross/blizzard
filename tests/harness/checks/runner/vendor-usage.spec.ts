@@ -89,7 +89,7 @@ test('the counterpart keys by bearer: an unknown token and a wrong route are ref
   const status = async (route: string, token: string): Promise<number> =>
     (await worldContext.get(`${vendorUsage.url}${route}`, { headers: { authorization: `Bearer ${token}` }, failOnStatusCode: false })).status();
   try {
-    const credential = vendorUsage.mintAnthropic(dir, defaultLevels());
+    const credential = vendorUsage.mintAnthropic(dir, defaultLevels(() => new Date()));
     expect(await status('/api/oauth/usage', 'nope')).toBe(401);
     expect(await status('/api/oauth/usage', credential.token)).toBe(200);
     expect(await status('/codex/usage', credential.token)).toBe(401);

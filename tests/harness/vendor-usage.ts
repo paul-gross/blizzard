@@ -54,12 +54,12 @@ const FAR_FUTURE_MS = Date.UTC(2099, 0, 1);
 const SHORT_WINDOW_SECONDS = 18_000;
 const LONG_WINDOW_SECONDS = 604_800;
 
-/** The levels a credential starts with: lightly used, resetting in the future. */
-export function defaultLevels(): UsageLevels {
-  const now = Math.floor(Date.now() / 1000);
+/** The levels a credential starts with: lightly used, resetting in the future of `now`, the test's `clock.now()`. */
+export function defaultLevels(now: () => Date): UsageLevels {
+  const seconds = Math.floor(now().getTime() / 1000);
   return {
-    short: { utilization: 12, resetsAt: now + SHORT_WINDOW_SECONDS },
-    long: { utilization: 34, resetsAt: now + LONG_WINDOW_SECONDS },
+    short: { utilization: 12, resetsAt: seconds + SHORT_WINDOW_SECONDS },
+    long: { utilization: 34, resetsAt: seconds + LONG_WINDOW_SECONDS },
   };
 }
 
@@ -80,7 +80,8 @@ function openaiBody(levels: UsageLevels): unknown {
   };
 }
 
-export async function startVendorUsage(): Promise<VendorUsage> {
+/** `now` is the instant source the `clock` fixture supplies: a credential's default windows reset relative to it. */
+export async function startVendorUsage(now: () => Date): Promise<VendorUsage> {
   const credentials = new Map<string, { vendor: 'anthropic' | 'openai'; levels: UsageLevels; accountId?: string }>();
   const requests: VendorRequest[] = [];
   const server = http.createServer((request, response) => {
@@ -108,14 +109,14 @@ export async function startVendorUsage(): Promise<VendorUsage> {
   };
   return {
     url: `http://127.0.0.1:${port}`,
-    mintAnthropic(dir, levels = defaultLevels()) {
+    mintAnthropic(dir, levels = defaultLevels(now)) {
       const token = `synthetic-anthropic-${crypto.randomBytes(8).toString('hex')}`;
       const file = path.join(dir, `anthropic-${token.slice(-8)}.json`);
       write(file, { claudeAiOauth: { accessToken: token, refreshToken: 'synthetic-refresh', expiresAt: FAR_FUTURE_MS } });
       credentials.set(token, { vendor: 'anthropic', levels });
       return { path: file, token };
     },
-    mintOpenAI(dir, levels = defaultLevels()) {
+    mintOpenAI(dir, levels = defaultLevels(now)) {
       const token = `synthetic-openai-${crypto.randomBytes(8).toString('hex')}`;
       const accountId = `acct-${token.slice(-8)}`;
       const file = path.join(dir, `openai-${token.slice(-8)}.json`);

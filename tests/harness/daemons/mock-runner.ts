@@ -6,7 +6,7 @@ import { type DaemonRecord, startDaemon } from './process';
  * A mock runner against `hubUrl`, under a token minted in the test's tenant. It is never started without `--token`:
  * a mock runner left to add itself would name no tenant and be refused.
  */
-export function startMockRunner(dir: string, options: { hubUrl: string; name: string; token: string }): Promise<DaemonRecord> {
+export function startMockRunner(dir: string, options: { hubUrl: string; name: string; token: string; env?: Record<string, string> }): Promise<DaemonRecord> {
   const binary = requireBinary(mockBinDir(), 'blizzard-mock-runner');
   return startDaemon({
     name: `mock-runner-${options.name}`,
@@ -18,7 +18,7 @@ export function startMockRunner(dir: string, options: { hubUrl: string; name: st
         '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile,
         '--hub-url', options.hubUrl, '--name', options.name, '--token', options.token,
       ],
-      env: daemonEnv({ BZ_HUB_URL: options.hubUrl }),
+      env: daemonEnv({ BZ_HUB_URL: options.hubUrl, ...options.env }),
     }),
   });
 }

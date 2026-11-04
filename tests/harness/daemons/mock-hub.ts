@@ -7,7 +7,7 @@ import { type LiveDaemon, startDaemon } from './process';
  * restarted mock hub answers where a runner already points. `offerIdp` serves `GET /api/auth/jwks.json` for the process's
  * life, so a runner's one probe at boot finds an IdP.
  */
-export function startMockHub(dir: string, options: { port?: number; offerIdp?: boolean } = {}): Promise<LiveDaemon> {
+export function startMockHub(dir: string, options: { port?: number; offerIdp?: boolean; env?: Record<string, string> } = {}): Promise<LiveDaemon> {
   const binary = requireBinary(mockBinDir(), 'blizzard-mock-hub');
   return startDaemon(
     {
@@ -17,7 +17,7 @@ export function startMockHub(dir: string, options: { port?: number; offerIdp?: b
       launch: (port, listeningFile) => ({
         command: binary,
         args: ['--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile, ...(options.offerIdp === true ? ['--offer-idp'] : [])],
-        env: daemonEnv(),
+        env: daemonEnv(options.env),
       }),
     },
     options.port,
