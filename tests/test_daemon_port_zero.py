@@ -50,7 +50,7 @@ def _returns_a_released_port(function: ast.FunctionDef | ast.AsyncFunctionDef) -
 
 def _python_offenders(rel: str, text: str) -> list[str]:
     """``rel``'s port choosers: a function named for one, or one returning a port it released."""
-    offenders = []
+    offenders: list[str] = []
     for node in ast.walk(ast.parse(text, filename=rel)):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) or (rel, node.name) in _ALLOWED_PY:
             continue

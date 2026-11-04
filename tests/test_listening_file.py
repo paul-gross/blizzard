@@ -10,7 +10,7 @@ import contextlib
 import dataclasses
 import threading
 import time
-from collections.abc import AsyncIterator, Callable, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
@@ -49,7 +49,7 @@ def _gated_app(release: threading.Event) -> FastAPI:
     """An app whose startup waits on ``release``, so a test can look at the world mid-startup."""
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         while not release.is_set():
             await asyncio.sleep(0.01)
         yield
@@ -98,7 +98,7 @@ def test_the_listening_file_holds_the_bound_port_and_appears_only_once_serving(t
 
 def test_a_failed_startup_publishes_no_listening_file(tmp_path: Path) -> None:
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         raise RuntimeError("startup refused")
         yield
 
