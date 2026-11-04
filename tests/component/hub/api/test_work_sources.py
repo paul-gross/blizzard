@@ -51,7 +51,7 @@ class _CountingFactsStore(ChunkFactsStore):
 
 class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads (mirrors
-    ``tests/test_list_chunks_bulk_reads.py``'s own counting store)."""
+    ``tests/component/hub/api/test_list_chunks_bulk_reads.py``'s own counting store)."""
 
     def __init__(self, store: ScopedConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)

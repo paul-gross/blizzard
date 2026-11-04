@@ -1,5 +1,5 @@
 """``hub/system_artifacts/__init__.py`` — the packaged ``ArtifactScope.SYSTEM`` set's own
-loader (unit tier), mirroring ``tests/test_graph_artifacts_loader.py``'s treatment of
+loader (unit tier), mirroring ``tests/unit/hub/graphs/test_graph_artifacts_loader.py``'s treatment of
 ``hub/graphs``: one file per name, resolved fresh on every read, a malformed derived name
 failing loudly rather than being silently skipped."""
 

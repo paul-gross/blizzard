@@ -32,7 +32,7 @@ def insert_garden_proposal_closure_row(
     """Writes one ``garden_proposal_closures`` row, on the caller's connection, inside
     the caller's transaction. Idempotent per ``proposal_id``: returns ``False`` and
     writes nothing when a closure already exists. Locks the proposal's own row before
-    reading closures (``tests/test_garden_proposal_closure_race.py::
+    reading closures (``tests/component/hub/store/test_garden_proposal_closure_race.py::
     test_insert_closure_row_locks_the_proposal_row_before_reading_closures``)."""
     stmts = statements_of(conn)
     conn.execute(

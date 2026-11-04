@@ -552,7 +552,7 @@ class TenantStores:
     """One tenant's repository set and the leaf services over it, every adapter holding the same
     :class:`ScopedConnections`. Opened through :meth:`HubCore.open`; every other hub wiring takes
     these instances from it rather than building its own copy (pinned by
-    ``tests/test_hub_core_sharing.py``)."""
+    ``tests/component/hub/test_core_sharing.py``)."""
 
     connections: ScopedConnections
     transactions: HubTransactions

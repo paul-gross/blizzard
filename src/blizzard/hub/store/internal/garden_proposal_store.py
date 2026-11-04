@@ -152,7 +152,7 @@ class GardenProposalStore:
     def is_closed(self, conn: Any, proposal_id: str) -> bool:
         """Whether `proposal_id` already carries a closure. Locks the proposal's own row
         before reading closures
-        (`tests/test_garden_proposal_closure_race.py::test_is_closed_locks_the_proposal_row_before_reading_closures`)."""
+        (`tests/component/hub/store/test_garden_proposal_closure_race.py::test_is_closed_locks_the_proposal_row_before_reading_closures`)."""
         stmts = statements_of(conn)
         conn.execute(
             stmts.update(garden_proposals)

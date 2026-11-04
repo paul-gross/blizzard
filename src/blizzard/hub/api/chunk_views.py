@@ -692,7 +692,7 @@ class ChunkHistoryView:
 
         Each edge's node ids resolve against *the graph the transition happened in*,
         keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
-        ``tests/test_transition_graph_provenance.py``)."""
+        ``tests/unit/hub/test_transition_graph_provenance.py``)."""
         return [
             TransitionView(
                 from_node_id=t.from_node_id,

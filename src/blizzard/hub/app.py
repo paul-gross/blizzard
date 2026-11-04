@@ -430,7 +430,7 @@ def _annotate_chunk(request: Request) -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
     and drive the sweeps across the app's lifetime (pinned:
-    ``tests/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
+    ``tests/unit/hub/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
     services: HubServices | None = app.state.services
     if services is not None:
         services.action_loop.start()
@@ -807,7 +807,7 @@ class OrphanedProviders:
 
     def check(self) -> None:
         """Fail boot with an actionable error (pinned:
-        ``tests/test_auth_provider_immutability.py::test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider``)."""
+        ``tests/component/hub/test_auth_provider_immutability.py::test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider``)."""
         if self.names:
             raise ConfigError(
                 "stored identities reference OAuth provider name(s) "
