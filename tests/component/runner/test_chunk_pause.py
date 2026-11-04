@@ -643,7 +643,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path: P
 def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path: Path):
     """A paused chunk nobody holds is a pure hub-side affair: given an empty queue, the
     runner produces no park, no claim, and no error path. The hub-side half is pinned in
-    ``tests/test_queue_shaping.py``."""
+    ``tests/component/hub/api/test_queue_shaping.py``."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = []  # the hub filtered the paused chunk out of the ready queue

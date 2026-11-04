@@ -1,0 +1,205 @@
+"""Review-finding delivery validation (unit tier) — the
+`record-findings` node's own shape check: a duplicate `ref`, a `deferred` entry marked
+`blocking`, and a malformed scope slug each raise `ReviewFindingsRejected`; a `deferred`
+entry missing a required field never reaches this validator, since `ReviewDelta`
+itself refuses to parse one; a clean delta returns exactly its `deferred` entries (the
+`tests/unit/hub/domain/garden/delivery/test_validation.py` shape)."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from blizzard.hub.api.garden_formats import GardenFormats
+from blizzard.hub.domain.garden.formats import DeferredReviewEntry, ReviewDelta, SettledReviewEntry
+from blizzard.hub.domain.garden.review.validation import (
+    ReviewFindingsRejected,
+    validate_review_findings,
+)
+from blizzard.wire.finding import DeferredReviewFindingEntry
+from tests.garden_artifacts import deferred_entry
+
+_FORMATS = GardenFormats()
+
+
+def _deferred(
+    ref: str = "F1",
+    *,
+    severity: str = "should-fix",
+    scope: str = "blizzard",
+    class_: str = "correctness",
+    locus: str = "a.py:1",
+    summary: str = "s",
+) -> DeferredReviewEntry:
+    return deferred_entry(
+        {
+            "ref": ref,
+            "disposition": "deferred",
+            "severity": severity,
+            "scope": scope,
+            "class": class_,
+            "locus": locus,
+            "summary": summary,
+        }
+    )
+
+
+def _fixed(ref: str = "F1") -> SettledReviewEntry:
+    return SettledReviewEntry(ref=ref)
+
+
+def _refuted(ref: str = "F1") -> SettledReviewEntry:
+    return SettledReviewEntry(ref=ref)
+
+
+def test_parse_rejects_malformed_json() -> None:
+    with pytest.raises(ReviewFindingsRejected, match="review-finding-delta"):
+        _FORMATS.review_delta("review-finding-delta", "not valid json")
+
+
+def test_parse_rejects_a_payload_with_no_entries_key() -> None:
+    """`{}` has no `entries` key at all and must be refused, not read as an
+    empty, `recorded` delta."""
+    with pytest.raises(ReviewFindingsRejected, match="review-finding-delta"):
+        _FORMATS.review_delta("review-finding-delta", "{}")
+
+
+def test_parse_rejects_a_payload_shaped_around_the_wrong_top_level_key() -> None:
+    """A differently-named top-level key (here `findings`, the sibling
+    garden format's own key) must not be silently ignored down to an empty delta."""
+    with pytest.raises(ReviewFindingsRejected, match="review-finding-delta"):
+        _FORMATS.review_delta("review-finding-delta", '{"findings": [{"bogus": 1}]}')
+
+
+def test_parse_accepts_a_well_formed_delta() -> None:
+    delta = _FORMATS.review_delta(
+        "review-finding-delta",
+        '{"entries": [{"ref": "F1", "disposition": "fixed"}]}',
+    )
+    assert delta.entries == [SettledReviewEntry(ref="F1")]
+
+
+def test_a_deferred_entry_survives_validation() -> None:
+    delta = ReviewDelta(entries=[_deferred()])
+
+    validated = validate_review_findings(delta)
+
+    assert len(validated.deferred) == 1
+    assert validated.deferred[0].ref == "F1"
+
+
+def test_fixed_and_refuted_entries_do_not_survive_validation() -> None:
+    delta = ReviewDelta(entries=[_fixed(ref="F1"), _refuted(ref="F2"), _deferred(ref="F3")])
+
+    validated = validate_review_findings(delta)
+
+    assert [e.ref for e in validated.deferred] == ["F3"]
+
+
+def test_an_empty_delta_survives_validation() -> None:
+    validated = validate_review_findings(ReviewDelta(entries=[]))
+
+    assert validated.deferred == []
+
+
+def test_a_duplicate_ref_is_rejected() -> None:
+    delta = ReviewDelta(entries=[_fixed(ref="F1"), _deferred(ref="F1")])
+
+    with pytest.raises(ReviewFindingsRejected, match="F1"):
+        validate_review_findings(delta)
+
+
+@pytest.mark.parametrize("missing", ["severity", "scope", "class", "locus", "summary"])
+def test_a_deferred_entry_missing_a_required_field_is_rejected(missing: str) -> None:
+    """The wire model itself refuses a `deferred` entry missing a
+    required field; there is no downstream domain check left to exercise."""
+    payload: dict[str, Any] = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "should-fix",
+        "scope": "blizzard",
+        "class": "correctness",
+        "locus": "a.py:1",
+        "summary": "s",
+    }
+    del payload[missing]
+
+    with pytest.raises(ValidationError):
+        DeferredReviewFindingEntry.model_validate(payload)
+
+
+def test_a_deferred_entry_marked_blocking_is_rejected() -> None:
+    delta = ReviewDelta(entries=[_deferred(severity="blocking")])
+
+    with pytest.raises(ReviewFindingsRejected, match="blocking"):
+        validate_review_findings(delta)
+
+
+def test_a_deferred_entry_with_a_severity_outside_the_vocabulary_is_rejected() -> None:
+    payload = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "nit",
+        "scope": "blizzard",
+        "class": "stale-docstring",
+        "locus": "a.py:1",
+        "summary": "s",
+    }
+
+    with pytest.raises(ValidationError):
+        DeferredReviewFindingEntry.model_validate(payload)
+
+
+def test_a_deferred_entry_naming_a_malformed_scope_slug_is_rejected() -> None:
+    delta = ReviewDelta(entries=[_deferred(scope="Not A Slug")])
+
+    with pytest.raises(ReviewFindingsRejected, match="scope"):
+        validate_review_findings(delta)
+
+
+def test_fixed_and_refuted_entries_carry_no_required_fields() -> None:
+    """`fixed`/`refuted` entries pass with only `ref` and `disposition` set — the review
+    already settled those, so validation asks nothing further of them."""
+    delta = ReviewDelta(entries=[_fixed(ref="F1"), _refuted(ref="F2")])
+
+    validated = validate_review_findings(delta)
+
+    assert validated.deferred == []
+
+
+def test_a_deferred_entry_with_an_unknown_extra_field_is_rejected() -> None:
+    """An unknown key on an otherwise well-formed entry is refused, not
+    silently dropped."""
+    payload = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "should-fix",
+        "scope": "blizzard",
+        "class": "correctness",
+        "locus": "a.py:1",
+        "summary": "s",
+        "bogus": 1,
+    }
+    with pytest.raises(ValidationError):
+        DeferredReviewFindingEntry.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", ["class", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "  "])
+def test_a_deferred_entry_with_a_blank_field_is_refused_at_parse(field: str, blank: str) -> None:
+    entry = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "should-fix",
+        "scope": "blizzard",
+        "class": "c",
+        "locus": "a.py:1",
+        "summary": "s",
+        field: blank,
+    }
+
+    with pytest.raises(ReviewFindingsRejected):
+        _FORMATS.review_delta("review-findings", json.dumps({"entries": [entry]}))

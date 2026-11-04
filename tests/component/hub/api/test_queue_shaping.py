@@ -1,0 +1,410 @@
+"""Queue shaping — ready-queue ordering and grouping, component tier.
+
+Drives the real hub over a tmp store: ``GET``/``PUT /api/queue`` read/replace the
+explicit order, and ``POST /chunks/{id}/group`` merges unacquired chunks into one
+survivor. Ordering and grouping are fact-derived; every assertion reads the derived
+surface, never a stored column."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+
+from tests.support import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
+
+
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):
+    resp = hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id})
+    assert resp.status_code == 202, resp.text
+    return resp.json()
+
+
+def _ingest_backlog(hub: HubHarness, n: int) -> str:
+    """Ingest one chunk holding a distinct pointer and leave it ``not_ready``.
+
+    A freshly ingested chunk rests in the backlog. Grouping takes it there;
+    peeking and reordering, which *are* the ready queue, need :func:`_ingest`'s promote.
+    """
+    pointer = {"source": "default", "ref": str(n)}
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
+    assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    hub.clock.advance(timedelta(seconds=1))  # distinct minted_at → deterministic FIFO
+    return chunk_id
+
+
+def _ingest(hub: HubHarness, n: int) -> str:
+    """Ingest and promote one chunk holding a distinct pointer, advancing the clock.
+
+    The ready queue is what ``GET/PUT /api/queue`` reads and reorders, so a chunk is
+    promoted out of its not-ready resting state before it can be peeked or reordered."""
+    chunk_id = _ingest_backlog(hub, n)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
+
+
+def _status(hub: HubHarness, chunk_id: str) -> str:
+    return str(hub.client.get(f"/api/chunks/{chunk_id}").json()["status"])
+
+
+def _peek_ids(hub: HubHarness) -> list[str]:
+    resp = hub.client.get("/api/queue")
+    assert resp.status_code == 200, resp.text
+    return [e["chunk_id"] for e in resp.json()["entries"]]
+
+
+def test_peek_is_fifo_by_mint_before_any_reorder(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+    assert _peek_ids(hub) == [a, b, c]
+
+
+def test_whole_order_replace_moves_a_chunk_to_top_and_to_the_bottom(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+
+    # Move c to the top — naming only c, the rest keep their relative FIFO order behind it.
+    resp = hub.client.put("/api/queue", json={"chunk_ids": [c]})
+    assert resp.status_code == 200, resp.text
+    assert [e["chunk_id"] for e in resp.json()["entries"]] == [c, a, b]
+    assert _peek_ids(hub) == [c, a, b]  # the read honours it
+
+    # Move c to the bottom — name the other two, c falls in behind them.
+    hub.client.put("/api/queue", json={"chunk_ids": [a, b]})
+    assert _peek_ids(hub) == [a, b, c]
+
+
+def _pause(tmp_path: Path, hub: HubHarness, chunk_id: str) -> None:
+    write_chunk_pause_facts(tmp_path, chunk_id, (True, hub.clock.now()))
+
+
+def test_paused_ready_chunk_is_excluded_from_the_queue(tmp_path: Path) -> None:
+    # The free win: list_ready()/peek filter on ChunkStatus.READY, so a
+    # paused chunk drops out with no queue filter at all — pinned as a property.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    _pause(tmp_path, hub, a)
+    assert _peek_ids(hub) == [b]
+
+
+def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_path: Path) -> None:
+    # Paused wins over ``running`` in the derivation precedence too — a held chunk is
+    # never READY regardless, but this pins that a live route doesn't smuggle it back in.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": a, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claim.status_code == 201, claim.text
+    _pause(tmp_path, hub, a)
+    assert _peek_ids(hub) == [b]
+    # Confirms this is the pause branch, not merely "running is already excluded":
+    # paused wins over running in the derivation precedence.
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
+
+
+# Newest-fact-wins across the store seam: reverse the ``id``-ordered
+# hydration and every resume silently becomes a no-op — the unit tier can't see that.
+
+
+def test_pause_then_resume_returns_the_chunk_to_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(tmp_path, a, (True, now), (False, now + timedelta(seconds=1)))
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "ready"
+    assert _peek_ids(hub) == [a, b]  # back in the queue, in its original FIFO slot
+
+
+def test_re_pause_after_resume_stays_out_of_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(
+        tmp_path,
+        a,
+        (True, now),
+        (False, now + timedelta(seconds=1)),
+        (True, now + timedelta(seconds=2)),
+    )
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
+    assert _peek_ids(hub) == [b]
+
+
+def test_same_instant_pause_and_resume_resolve_by_write_order(tmp_path: Path) -> None:
+    # Two facts can share a ``set_at``; append-only write order (the ``id`` hydration
+    # orders by) is the tiebreak, not ``set_at`` — the resume written second wins.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(tmp_path, a, (True, now), (False, now))
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "ready"
+    assert _peek_ids(hub) == [a, b]
+
+
+def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    survivor, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [b, c]})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["chunk_id"] == survivor
+    assert sorted(body["merged_chunk_ids"]) == sorted([b, c])
+    # The survivor carries the union of all three pointers.
+    refs = {p["ref"] for p in body["work_refs"]}
+    assert refs == {"1", "2", "3"}
+    # The merged-away chunks are ephemeral — gone from the queue and the fleet list.
+    assert _peek_ids(hub) == [survivor]
+    listed = {row["chunk_id"] for row in hub.client.get("/api/chunks").json()["chunks"]}
+    assert listed == {survivor}
+    assert hub.client.get(f"/api/chunks/{b}").status_code == 404
+
+
+def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    shared = {"source": "default", "ref": "shared"}
+    survivor = hub.client.post("/api/chunks", json={"tokens": [pointer_token(shared)]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group
+    hub.clock.advance(timedelta(seconds=1))
+    # A second chunk cannot re-ingest the same live pointer, so give it its own.
+    other = _ingest(hub, 9)
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [survivor, other]})
+    assert resp.status_code == 200, resp.text
+    # Self-reference in merge_chunk_ids is a no-op; the union has no duplicate.
+    refs = [p["ref"] for p in resp.json()["work_refs"]]
+    assert sorted(refs) == ["9", "shared"]
+
+
+def test_group_merges_backlog_chunks_without_promoting_any_of_them(tmp_path: Path) -> None:
+    # Three freshly minted chunks merge as they are — no promote, so none
+    # is claimable mid-flow, and the survivor stays in the backlog.
+    hub = build_hub(tmp_path)
+    survivor, b, c = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
+    assert [_status(hub, i) for i in (survivor, b, c)] == ["not_ready"] * 3
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [b, c]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"1", "2", "3"}
+    assert _status(hub, survivor) == "not_ready"  # the survivor keeps its own status
+    assert _peek_ids(hub) == []  # nothing was promoted into the claimable queue
+    assert hub.client.get(f"/api/chunks/{b}").status_code == 404
+
+
+def test_group_mixes_backlog_and_ready_members_and_leaves_the_survivor_alone(tmp_path: Path) -> None:
+    # The survivor's status is whatever it already was, in either direction: a ready
+    # survivor absorbing a backlog chunk stays ready, and vice versa.
+    hub = build_hub(tmp_path)
+    ready_survivor, backlog = _ingest(hub, 1), _ingest_backlog(hub, 2)
+    resp = hub.client.post(f"/api/chunks/{ready_survivor}/group", json={"merge_chunk_ids": [backlog]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"1", "2"}
+    assert _status(hub, ready_survivor) == "ready"
+    assert _peek_ids(hub) == [ready_survivor]
+
+    backlog_survivor, ready_member = _ingest_backlog(hub, 3), _ingest(hub, 4)
+    resp = hub.client.post(f"/api/chunks/{backlog_survivor}/group", json={"merge_chunk_ids": [ready_member]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"3", "4"}
+    assert _status(hub, backlog_survivor) == "not_ready"
+    # The merged-away ready chunk left the queue with it; the survivor never joined.
+    assert _peek_ids(hub) == [ready_survivor]
+
+
+def test_group_rejects_an_acquired_member(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    survivor, running = _ingest(hub, 1), _ingest(hub, 2)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": running, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [running]})
+    assert resp.status_code == 409
+    # The refusal names the actual invariant — a runner holds it — not "not ready".
+    detail = resp.json()["detail"]
+    assert running in detail
+    assert "running" in detail
+    assert "no runner holding it" in detail
+    # Nothing was merged — the running chunk is untouched, the survivor keeps one pointer.
+    assert hub.client.get(f"/api/chunks/{running}").status_code == 200
+    survivor_detail = hub.client.get(f"/api/chunks/{survivor}").json()
+    assert len(survivor_detail["work_refs"]) == 1
+
+
+def test_group_rejects_an_acquired_survivor(tmp_path: Path) -> None:
+    # The survivor is gated exactly like a merge id — the invariant is about the chunk,
+    # not about which side of the merge it is on.
+    hub = build_hub(tmp_path)
+    running, member = _ingest(hub, 1), _ingest_backlog(hub, 2)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": running, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    resp = hub.client.post(f"/api/chunks/{running}/group", json={"merge_chunk_ids": [member]})
+    assert resp.status_code == 409
+    assert len(hub.client.get(f"/api/chunks/{member}").json()["work_refs"]) == 1
+
+
+def test_group_into_unknown_survivor_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    b = _ingest(hub, 1)
+    resp = hub.client.post("/api/chunks/ch_nope/group", json={"merge_chunk_ids": [b]})
+    assert resp.status_code == 404
+
+
+def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    survivor, b = _ingest(hub, 1), _ingest(hub, 2)
+    hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [b]})
+    # b's pointer now lives on the survivor (a live chunk), so re-ingesting it is a 409
+    # naming the survivor, not the discarded chunk.
+    resp = hub.client.post(
+        "/api/chunks",
+        json={"tokens": [pointer_token({"source": "default", "ref": "2"})]},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["existing_chunk_id"] == survivor
+
+
+def test_group_refuses_a_paused_backlog_chunk_without_claiming_a_runner_holds_it(tmp_path: Path) -> None:
+    """A never-claimed backlog chunk can be paused (`PAUSED` outranks the un-promoted
+    branch in the derivation) and reads `paused` with no runner near it. Grouping still
+    refuses it, but must not claim a runner holds it."""
+    hub = build_hub(tmp_path)
+    survivor, held = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    assert hub.client.post(f"/api/chunks/{held}/pause", json={"by": "operator"}).status_code == 202
+    assert _status(hub, held) == "paused"
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [held]})
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "is paused" in detail
+    assert "no runner holds it" not in detail  # would be false: nothing ever claimed it
+    assert "not_ready or ready" in detail
+
+
+def test_group_carries_a_folded_chunks_incoming_edge_onto_the_survivor(tmp_path: Path) -> None:
+    """Something depends on the folded target; after the fold, that edge stands from the
+    dependent onto the survivor instead, never left naming the now-ephemeral target."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    x = _ingest_backlog(hub, 3)
+    _declare(hub, x, target)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    deps = hub.services.chunks.dependencies
+    assert deps.standing_edge(x, survivor) is not None
+    assert deps.standing_edge(x, target) is None
+
+
+def test_group_carries_a_folded_chunks_outgoing_edge_onto_the_survivor(tmp_path: Path) -> None:
+    """The folded target depends on something; after the fold, the survivor depends on
+    it instead."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    y = _ingest_backlog(hub, 3)
+    _declare(hub, target, y)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    deps = hub.services.chunks.dependencies
+    assert deps.standing_edge(survivor, y) is not None
+    assert deps.standing_edge(target, y) is None
+
+
+def test_group_of_a_fold_internal_edge_mints_no_self_edge(tmp_path: Path) -> None:
+    """The survivor already depends on the chunk being folded into it — both endpoints
+    collapse to the survivor, released with no self-referencing edge minted."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    _declare(hub, survivor, target)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    standing = hub.services.chunks.dependencies.list_standing_edges()
+    assert not any(e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == survivor for e in standing)
+
+
+def test_group_carrying_a_duplicate_of_a_standing_survivor_edge_mints_nothing_extra(tmp_path: Path) -> None:
+    """The target's edge to an outside chunk duplicates one the survivor already holds
+    directly — exactly one edge stands for that pair afterward, not two."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    outside = _ingest_backlog(hub, 3)
+    _declare(hub, survivor, outside)
+    _declare(hub, target, outside)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    standing = hub.services.chunks.dependencies.list_standing_edges()
+    matching = [e for e in standing if e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == outside]
+    assert len(matching) == 1
+
+
+def test_group_refuses_a_fold_that_would_close_a_cycle_and_writes_nothing(tmp_path: Path) -> None:
+    """The survivor depends (via an intermediate) on the chunk being folded in — carrying
+    that chunk's own edge back onto the survivor would close the loop, so the whole fold
+    is refused, the targets are still live, and no edge changed."""
+    hub = build_hub(tmp_path)
+    survivor, target, mid = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
+    _declare(hub, survivor, mid)
+    _declare(hub, mid, target)
+    before = hub.services.chunks.dependencies.list_standing_edges()
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+
+    assert resp.status_code == 409, resp.text
+    assert hub.services.chunks.dependencies.list_standing_edges() == before
+    assert hub.client.get(f"/api/chunks/{target}").status_code == 200
+    assert hub.client.get(f"/api/chunks/{survivor}").status_code == 200
+
+
+def test_no_standing_edge_names_a_grouped_away_chunk_after_any_fold(tmp_path: Path) -> None:
+    """A general sweep across several folds, each carrying edges: no standing edge is
+    ever left naming a chunk that grouping has folded away, in either role."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    x, y, outside = _ingest_backlog(hub, 3), _ingest_backlog(hub, 4), _ingest_backlog(hub, 5)
+    _declare(hub, x, target)
+    _declare(hub, target, y)
+    _declare(hub, survivor, outside)
+    _declare(hub, target, outside)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    grouped_away = {target}
+    for edge in hub.services.chunks.dependencies.list_standing_edges():
+        assert edge.dependent_chunk_id not in grouped_away
+        assert edge.prerequisite_chunk_id not in grouped_away
+
+
+def test_group_reads_the_fold_in_a_bounded_number_of_statements(tmp_path: Path) -> None:
+    """The fold's guard reads are one plural read each for the whole set, so the count of
+    ``SELECT`` statements the route issues is the same for 1 merge id as for 4."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+    few_ids = [_ingest(few, n) for n in range(1, 3)]
+    many_ids = [_ingest(many, n) for n in range(1, 6)]
+
+    def reads(hub: HubHarness, ids: list[str]) -> int:
+        with capture_statements(hub.engine) as statements:
+            hub.services.group.group(ids[0], ids[1:])
+        # The guard reads (record + facts) only — the fold's writes and their own
+        # bookkeeping legitimately scale with the targets.
+        return sum(
+            1
+            for statement, _ in statements
+            if statement.lstrip().upper().startswith("SELECT") and "FROM chunks" in statement
+        )
+
+    assert reads(few, few_ids) == reads(many, many_ids)

@@ -42,7 +42,7 @@ def assert_ihubclient_endpoint_table_matches_protocol() -> None:
     """The guard's own table must name exactly ``IHubClient``'s method set.
 
     Pure import + dict compare, no fleet and no network; shared with the unit-tier
-    mirror (``tests/test_ihubclient_endpoint_parity.py``) so the fast gate trips on this half."""
+    mirror (``tests/unit/runner/hub/test_ihubclient_endpoint_parity.py``) so the fast gate trips on this half."""
     actual = _protocol_method_names(IHubClient)
     declared = set(_IHUBCLIENT_ENDPOINTS)
 

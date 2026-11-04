@@ -28,7 +28,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 
 # Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
-# Pinned by tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids.
+# Pinned by tests/component/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids.
 _VERSION_TABLE_COLUMN_LENGTH = 255
 
 # The Alembic ``Config.attributes`` key a runner's clock rides under, for ``migration_clock`` to read.

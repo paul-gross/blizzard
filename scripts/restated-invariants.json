@@ -84,7 +84,7 @@
           "role": "owner"
         },
         {
-          "file": "tests/test_ingest_and_pause_verbs.py",
+          "file": "tests/unit/test_ingest_and_pause_verbs.py",
           "symbol": "test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve",
           "role": "allowed",
           "reason": "Pinning-test docstring stating what its own assertion verifies (pass-through with no local resolution or repo-tail guess); documentation of the test's own check, not a second narrative copy of the wire fact."

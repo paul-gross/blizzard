@@ -11,7 +11,7 @@
 # BASE_REF, HEAD_REF — and the mock's remote from MOCK_URL, so tests point it at a scratch
 # repository. Prints `ref=<ref>` and `sha=<commit>` on stdout; a tag resolves to the
 # commit it peels to. The decision lives here rather than in workflow YAML so it is
-# unit-testable (tests/test_resolve_mock_ref.py).
+# unit-testable (tests/guards/test_resolve_mock_ref.py).
 set -euo pipefail
 
 baseline="${BASELINE:-}"

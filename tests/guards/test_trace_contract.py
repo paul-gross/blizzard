@@ -1,0 +1,686 @@
+"""The trace contract (unit tier, blizzard:trace-contract) — ``contracts/traces/``."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from dataclasses import replace
+from datetime import UTC, datetime
+from typing import Any, cast
+
+import pytest
+
+from blizzard.foundation import cli_spans
+from blizzard.foundation import trace_attributes as shared
+from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.platform_tracing import attributes as platform_attr
+from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION, HTTP_SEMCONV_VERSION
+from blizzard.foundation.span_clock import Clock
+from blizzard.foundation.trace_ids import (
+    ChunkRole,
+    DerivedContext,
+    RunnerSpanRole,
+    SpanRole,
+    StepKey,
+    chunk_span_id,
+    chunk_trace_id,
+    instant_text,
+    lifetime_span_id,
+    lifetime_trace_id,
+    span_id,
+    trace_id,
+)
+from blizzard.foundation.trace_spans import FinishedSpan, SpanEvent, SpanLink
+from blizzard.hub.domain.chunk.model import UsageFact
+from blizzard.hub.domain.observability.tracing import attributes as attr
+from blizzard.hub.domain.observability.tracing import platform as hub_platform
+from blizzard.hub.domain.observability.tracing.assembly import assemble_step
+from blizzard.hub.domain.observability.tracing.chunk_spans import (
+    assemble_completion,
+    assemble_lifetime,
+    assemble_work,
+    chunk_end,
+    completion_instant,
+)
+from blizzard.hub.domain.observability.tracing.facts import (
+    StepFacts,
+    TracedBounce,
+    TracedChunkCompletion,
+    TracedChunkStop,
+    TracedDecision,
+    TracedDecisionResolution,
+    TracedEpochOwner,
+    TracedEscalation,
+    TracedHubPoll,
+    TracedHubTurn,
+    TracedLease,
+    TracedMigration,
+    TracedPause,
+    TracedPromotion,
+    TracedQuestion,
+    TracedRequeue,
+    TracedRestart,
+    TracedRouteCreation,
+    TracedRouteRelease,
+)
+from blizzard.hub.domain.observability.tracing.steps import LinkReason, PrecededBy, StepOutcome, identify_steps
+from blizzard.runner.tracing import attributes as runner_attr
+from blizzard.runner.tracing import platform as runner_platform
+from blizzard.runner.tracing.assembly import assemble_lease
+from blizzard.runner.tracing.facts import LeaseTraceFacts
+from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES
+from tests import runner_trace_fixtures as rfx
+from tests import trace_fixtures as fx
+from tests.repo_files import repo_root
+from tests.trace_contract_support import PARAMETERIZED_NAMES, dictionary, otlp_type, required_by_role, role_of_name
+
+_ROOT = repo_root()
+_CONTRACT_DIR = _ROOT / "contracts" / "traces"
+_GOLDEN_DIR = _CONTRACT_DIR / "golden"
+_PLATFORM_GOLDEN_DIR = _GOLDEN_DIR / "platform"
+_TRACING_DOC = _ROOT / "docs" / "deployment" / "tracing.md"
+_VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
+_REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
+_REGEN_COMMAND = f"{_REGEN_VARIABLE}=1 uv run pytest tests/guards/test_trace_contract.py"
+_ATTRIBUTE_TYPES = {"string", "int", "double", "bool", "string[]"}
+_LIFETIME_ROLES = {
+    role.value
+    for role in (
+        ChunkRole.LIFETIME,
+        ChunkRole.STEP,
+        ChunkRole.COMPLETED,
+        ChunkRole.BACKLOG,
+        ChunkRole.ESCALATION,
+        ChunkRole.PAUSE,
+    )
+}
+_ROLES: dict[str, SpanRole | RunnerSpanRole | ChunkRole] = {
+    role.value: role for role in (*SpanRole, *RunnerSpanRole, *ChunkRole)
+}
+
+
+def _graph() -> Any:
+    names = ("build", "review", "verify", "gate")
+    nodes = [fx.node("g1", n, Executor.HUB if n == "verify" else Executor.RUNNER) for n in names]
+    return replace(fx.graph("g1", *names), nodes=nodes)
+
+
+def _usage(epoch: int, at: int, **kw: Any) -> UsageFact:
+    fields: dict[str, Any] = {
+        "node_id": "g1-build",
+        "epoch": epoch,
+        "kind": "spawn",
+        "model": "claude-x",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_tokens": 1000,
+        "cache_create_tokens": 10,
+        "cost_usd": 0.5,
+        "recorded_at": fx.at(at),
+        "harness_id": "claude-code",
+        "harness_version": "2.0",
+        "estimated_cost_usd": 0.25,
+    }
+    fields.update(kw)
+    return UsageFact(**fields)
+
+
+def _journey() -> StepFacts:
+    """Every attribute, event and span name: usage, asks, a pause, a bounce, a gate, a hub step and an escalation."""
+    return StepFacts(
+        chunk_id="ch_1",
+        graphs={"g1": _graph(), "g2": fx.G2},
+        pin_graph_id="g1",
+        minted_at=fx.at(0),
+        work_refs=("acme#42",),
+        promotions=(TracedPromotion(fx.at(2)),),
+        routes_created=(TracedRouteCreation(fx.at(3)), TracedRouteCreation(fx.at(32))),
+        pauses=(
+            TracedPause("p0", True, fx.at(4)),
+            TracedPause("p0b", False, fx.at(6)),
+            TracedPause("p1", True, fx.at(12)),
+            TracedPause("p2", False, fx.at(15)),
+            TracedPause("p3", True, fx.at(135)),
+            TracedPause("p4", False, fx.at(138)),
+        ),
+        questions=(
+            TracedQuestion("q1", 1, fx.at(16), fx.at(18)),
+            TracedQuestion("q2", 1, fx.at(20), fx.at(19)),
+        ),
+        usage=(_usage(1, 14), _usage(1, 22, cost_usd=None, estimated_cost_usd=None, harness_version=None)),
+        requeues=(TracedRequeue(fx.at(56)),),
+        bounces=(TracedBounce(2, "conflict", fx.at(50)), TracedBounce(4, "checks", fx.at(126))),
+        transitions=(
+            fx.to("g1", "review", 30, 1, choice_name="pass"),
+            fx.to("g1", "build", 55, 2, choice_name="fail"),
+            fx.to("g1", "gate", 70, 3),
+            fx.to("g1", "verify", 120, 4, decision_id="d1", choice_name="approve"),
+            fx.to("g1", "build", 130, 4),
+        ),
+        decisions=(TracedDecision("d1", "g1-gate", 3, fx.at(71)),),
+        decision_resolutions=(TracedDecisionResolution("d1", fx.at(100), choice="approve"),),
+        hub_polls=(TracedHubPoll("hp1", "g1-verify", 4, fx.at(122)), TracedHubPoll("hp2", "g1-verify", 4, fx.at(124))),
+        hub_turns=(TracedHubTurn("ht1", "g1-verify", fx.at(123), fx.at(125)),),
+        escalations=(TracedEscalation(5, fx.at(150)),),
+        chunk_stopped=(TracedChunkStop(fx.at(160)),),
+        chunk_completed=(TracedChunkCompletion(fx.at(170)),),
+        epoch_owners=(
+            TracedEpochOwner(1, "r-1", fx.at(9)),
+            TracedEpochOwner(2, "r-1", fx.at(34)),
+            TracedEpochOwner(3, "r-1", fx.at(59)),
+            TracedEpochOwner(4, None, fx.at(120)),
+            TracedEpochOwner(5, "r-1", fx.at(139)),
+        ),
+        lease_facts=(
+            TracedLease(1, fx.at(10)),
+            TracedLease(2, fx.at(35)),
+            TracedLease(3, fx.at(60)),
+            TracedLease(4, fx.at(125)),
+            TracedLease(5, fx.at(140)),
+        ),
+        runner_names={"r-1": "runner-one"},
+    )
+
+
+def _link_restart() -> StepFacts:
+    return fx.make_facts(
+        transitions=(fx.to("g1", "review", 30, 1), fx.to("g1", "gate", 90, 6)),
+        restarts=(TracedRestart(5, fx.at(35), "g1", "g1-review"),),
+        epoch_owners=(
+            TracedEpochOwner(1, "r-1", fx.at(9)),
+            TracedEpochOwner(5, None, fx.at(35)),
+            TracedEpochOwner(6, "r-1", fx.at(49)),
+        ),
+        lease_facts=(TracedLease(1, fx.at(10)), TracedLease(6, fx.at(50))),
+    )
+
+
+def _link_migration() -> StepFacts:
+    return fx.make_facts(
+        migrations=(TracedMigration(1, fx.at(30), "g1", "g2", from_node_id="g1-build"),),
+        transitions=(fx.to("g1", "gate", 90, 2),),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
+    )
+
+
+def _link_retry() -> StepFacts:
+    return fx.make_facts(
+        route_released=(TracedRouteRelease(fx.at(30)),),
+        transitions=(fx.to("g1", "gate", 90, 2),),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
+    )
+
+
+SCENARIOS = {
+    "journey": _journey,
+    "link-restart": _link_restart,
+    "link-migration": _link_migration,
+    "link-retry": _link_retry,
+}
+
+
+def _runner_judged() -> LeaseTraceFacts:
+    facts = rfx.make_facts(
+        boundaries=(rfx.boundary(1, 1, "spawn", 1, 100), rfx.boundary(2, 1, "judge", 50, 100)),
+        usage=(
+            rfx.usage(1, 1, "spawn", 30),
+            rfx.usage(2, 1, "judge", 60, model="haiku", cost_usd=None, harness_id="opencode", harness_version="0.9"),
+        ),
+    )
+    return rfx.with_context(facts, session_name=None)
+
+
+def _runner_lease() -> LeaseTraceFacts:
+    facts = rfx.busy_facts()
+    return replace(facts, runner=replace(facts.runner, tenant_id="tn_bravo", tenant_name="bravo"))
+
+
+RUNNER_SCENARIOS = {
+    "runner-lease": _runner_lease,
+    "runner-judged": _runner_judged,
+}
+
+
+def _cli_payload(command: str, exit_code: int) -> dict[str, Any]:
+    """A worker command's span over a fixed clock and fixed ids, so its encoding is reproducible."""
+    parent = DerivedContext.of(StepKey.attempt("ch_1", 1), SpanRole.STEP)
+    monotonic = iter((0, 0, 250_000_000))
+    clock = Clock(wall_ns=lambda: 1_700_000_000_000_000_000, monotonic_ns=lambda: next(monotonic))
+    span = cli_spans.CliSpan.open(
+        parent, command, chunk_id="ch_1", lease_id="lease_1", clock=clock, new_span_id=lambda: 0xC11C11C11C11C11C
+    )
+    span.finish(exit_code)
+    return span.payload()
+
+
+CLI_SCENARIOS = {
+    "cli-success": lambda: _cli_payload("artifact get", 0),
+    "cli-failed-request": lambda: _cli_payload("artifact create", 1),
+}
+
+
+def _live_platform() -> dict[str, str]:
+    return {name: json.dumps(build(), indent=2, sort_keys=True) + "\n" for name, build in CLI_SCENARIOS.items()}
+
+
+def _declared_events(module: object) -> set[str]:
+    return {value for name, value in vars(module).items() if name.startswith("EVENT_")}
+
+
+def _instant(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _value(value: object) -> object:
+    if isinstance(value, tuple):
+        return list(cast("tuple[object, ...]", value))
+    return value
+
+
+def _attributes(attributes: Any) -> dict[str, object]:
+    return {key: _value(attributes[key]) for key in sorted(attributes)}
+
+
+def _event(event: SpanEvent) -> dict[str, object]:
+    return {"name": event.name, "time": _instant(event.time), "attributes": _attributes(event.attributes)}
+
+
+def _link(link: SpanLink) -> dict[str, object]:
+    ctx = link.context
+    return {
+        "trace_id": f"{ctx.trace_id:032x}",
+        "span_id": f"{ctx.span_id:016x}",
+        "attributes": _attributes(link.attributes),
+    }
+
+
+def _span(span: FinishedSpan) -> dict[str, object]:
+    return {
+        "trace_id": f"{span.context.trace_id:032x}",
+        "span_id": f"{span.context.span_id:016x}",
+        "parent_span_id": None if span.parent_span_id is None else f"{span.parent_span_id:016x}",
+        "name": span.name,
+        "service_name": span.service_name,
+        "kind": span.kind.value,
+        "status": span.status.value,
+        "start": _instant(span.start),
+        "end": _instant(span.end),
+        "attributes": _attributes(span.attributes),
+        "events": [_event(e) for e in span.events],
+        "links": [_link(link) for link in span.links],
+    }
+
+
+def _serialize(facts: StepFacts) -> str:
+    steps = [s for s in identify_steps(facts) if s.close is not None]
+    spans = [_span(span) for step in steps for span in assemble_step(facts, step, identify_steps(facts))]
+    if chunk_end(facts) is not None:
+        spans += [_span(span) for span in (*assemble_work(facts), *assemble_lifetime(facts))]
+    if completion_instant(facts) is not None:
+        spans += [_span(span) for span in assemble_completion(facts)]
+    return json.dumps(spans, indent=2, sort_keys=True) + "\n"
+
+
+def _serialize_lease(facts: LeaseTraceFacts) -> str:
+    return json.dumps([_span(span) for span in assemble_lease(facts)], indent=2, sort_keys=True) + "\n"
+
+
+def _live() -> dict[str, str]:
+    hub = {name: _serialize(build()) for name, build in SCENARIOS.items()}
+    return hub | {name: _serialize_lease(build()) for name, build in RUNNER_SCENARIOS.items()}
+
+
+def _golden() -> dict[str, list[dict[str, Any]]]:
+    return {path.stem: json.loads(path.read_text()) for path in sorted(_GOLDEN_DIR.glob("*.json"))}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _regenerate_if_asked() -> None:
+    if os.environ.get(_REGEN_VARIABLE) != "1":
+        return
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    for stale in _GOLDEN_DIR.glob("*.json"):
+        stale.unlink()
+    for name, text in _live().items():
+        (_GOLDEN_DIR / f"{name}.json").write_text(text)
+    _PLATFORM_GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    for stale in _PLATFORM_GOLDEN_DIR.glob("*.json"):
+        stale.unlink()
+    for name, text in _live_platform().items():
+        (_PLATFORM_GOLDEN_DIR / f"{name}.json").write_text(text)
+
+
+def _observed() -> tuple[set[str], set[str], set[str], set[str], set[tuple[str, str]]]:
+    names: set[str] = set()
+    events: set[str] = set()
+    reasons: set[str] = set()
+    keys: set[str] = set()
+    carried: set[tuple[str, str]] = set()
+    for spans in _golden().values():
+        for span in spans:
+            role = role_of_name(span["name"], span["attributes"])
+            names.add(PARAMETERIZED_NAMES.get(role) or span["name"])
+            for key in span["attributes"]:
+                keys.add(key)
+                carried.add((role, key))
+            for event in span["events"]:
+                events.add(event["name"])
+                for key in event["attributes"]:
+                    keys.add(key)
+                    carried.add((f"event:{event['name']}", key))
+            for link in span["links"]:
+                reasons.add(str(link["attributes"][attr.LINK_REASON]))
+                for key in link["attributes"]:
+                    keys.add(key)
+                    carried.add(("link", key))
+    return names, events, reasons, keys, carried
+
+
+def test_the_live_assembly_equals_the_golden() -> None:
+    live = _live()
+    golden = {path.stem: path.read_text() for path in sorted(_GOLDEN_DIR.glob("*.json"))}
+    assert set(live) == set(golden), f"golden scenarios differ from the seeds; regenerate with `{_REGEN_COMMAND}`"
+    drifted = sorted(name for name in live if live[name] != golden[name])
+    assert not drifted, (
+        f"the assembled spans for {drifted} have drifted from contracts/traces/golden/; if the shape change is "
+        f"intended, edit contracts/traces/dictionary.json and regenerate with `{_REGEN_COMMAND}`"
+    )
+
+
+def test_the_live_cli_span_equals_the_platform_golden() -> None:
+    live = _live_platform()
+    golden = {path.stem: path.read_text() for path in sorted(_PLATFORM_GOLDEN_DIR.glob("*.json"))}
+    assert set(live) == set(golden), (
+        f"platform golden scenarios differ from the seeds; regenerate with `{_REGEN_COMMAND}`"
+    )
+    drifted = sorted(name for name in live if live[name] != golden[name])
+    assert not drifted, (
+        f"the CLI span for {drifted} has drifted from contracts/traces/golden/platform/; if the change is "
+        f"intended, edit contracts/traces/dictionary.json and regenerate with `{_REGEN_COMMAND}`"
+    )
+
+
+def _otlp_value_type(value: dict[str, Any]) -> str:
+    (kind,) = value
+    return {"stringValue": "string", "intValue": "int", "doubleValue": "double", "boolValue": "bool"}[kind]
+
+
+def test_the_cli_golden_spans_are_the_declared_platform_shape() -> None:
+    declared = {a["name"]: a["type"] for a in dictionary()["platform"]["attributes"]}
+    golden = {path.stem: json.loads(path.read_text()) for path in sorted(_PLATFORM_GOLDEN_DIR.glob("*.json"))}
+    assert golden
+    for name, payload in golden.items():
+        for resource_spans in payload["resourceSpans"]:
+            for scope_spans in resource_spans["scopeSpans"]:
+                assert scope_spans["scope"]["name"] == cli_spans.SCOPE_NAME, name
+                assert scope_spans["spans"], name
+                for span in scope_spans["spans"]:
+                    for entry in span["attributes"]:
+                        key = entry["key"]
+                        assert key in declared, f"{name}: undeclared attribute {key}"
+                        assert _otlp_value_type(entry["value"]) == declared[key], f"{name}: {key}"
+
+
+def test_the_dictionary_names_exactly_the_attributes_the_code_declares() -> None:
+    d = dictionary()
+    named = {a["name"] for a in d["attributes"]} | {a["name"] for a in d["resource_attributes"]}
+    assert named == attr.DECLARED_ATTRIBUTES | runner_attr.DECLARED_ATTRIBUTES
+    resource = {a["name"] for a in d["resource_attributes"]}
+    assert resource == set(attr.resource_attributes({}, "0")) == set(runner_attr.resource_attributes({}, "0"))
+
+
+def test_the_dictionary_constants_equal_the_code_constants() -> None:
+    d = dictionary()
+    assert d["instrumentation_scopes"] == [
+        {"name": attr.INSTRUMENTATION_SCOPE, "version": attr.INSTRUMENTATION_SCOPE_VERSION},
+        {"name": runner_attr.INSTRUMENTATION_SCOPE, "version": runner_attr.INSTRUMENTATION_SCOPE_VERSION},
+    ]
+    assert d["schema_version"] == shared.SCHEMA_VERSION
+    assert d["genai_semconv_version"] == shared.GENAI_SEMCONV_VERSION
+    assert d["event_names"] == sorted(_declared_events(attr) | _declared_events(runner_attr))
+
+
+def test_the_dictionary_roles_are_the_code_roles() -> None:
+    d = dictionary()
+    assert {entry["role"] for entry in d["spans"]} == set(_ROLES)
+    for entry in d["spans"]:
+        hub = isinstance(_ROLES[entry["role"]], SpanRole | ChunkRole)
+        assert entry["scope"] == (attr.INSTRUMENTATION_SCOPE if hub else runner_attr.INSTRUMENTATION_SCOPE), entry[
+            "role"
+        ]
+        lifetime = entry["role"] in _LIFETIME_ROLES
+        assert entry.get("service") == (attr.CHUNK_SERVICE_NAME if lifetime else None), entry["role"]
+    for entry in d["attributes"]:
+        assert entry["type"] in _ATTRIBUTE_TYPES, entry["name"]
+        assert entry["meaning"], entry["name"]
+        assert set(entry.get("optional_on", ())) <= set(entry["on"]), entry["name"]
+
+
+def _meaning_tokens(name: str) -> set[str]:
+    meaning = next(a["meaning"] for a in dictionary()["attributes"] if a["name"] == name)
+    return set(re.findall(r"`([^`]+)`", meaning))
+
+
+def test_the_dictionary_value_sets_are_the_enums() -> None:
+    assert _meaning_tokens(attr.STEP_OUTCOME) == {m.value for m in StepOutcome}
+    assert _meaning_tokens(attr.STEP_PRECEDED_BY) == {m.value for m in PrecededBy}
+    assert _meaning_tokens(attr.LINK_REASON) == {m.value for m in LinkReason}
+    assert {entry["name"] for entry in dictionary()["link_reasons"]} == {m.value for m in LinkReason}
+
+
+def test_the_golden_shape_is_the_dictionary_shape() -> None:
+    d = dictionary()
+    names, events, reasons, keys, carried = _observed()
+    assert names == {entry["name"] for entry in d["spans"]}
+    assert events == set(d["event_names"])
+    assert reasons == {entry["name"] for entry in d["link_reasons"]}
+    assert keys == {a["name"] for a in d["attributes"]}
+    declared = {(role, a["name"]) for a in d["attributes"] for role in a["on"]}
+    assert carried <= declared
+
+
+def test_each_golden_span_leaves_under_the_service_its_dictionary_role_declares() -> None:
+    services = {entry["role"]: entry.get("service") for entry in dictionary()["spans"]}
+    for name, spans in _golden().items():
+        for span in spans:
+            role = role_of_name(span["name"], span["attributes"])
+            assert span["service_name"] == services[role], f"{name}: {span['name']} ({role})"
+
+
+def test_a_required_attribute_rides_every_span_that_carries_it() -> None:
+    required = required_by_role()
+    for spans in _golden().values():
+        for span in spans:
+            role = role_of_name(span["name"], span["attributes"])
+            for key, on in required.items():
+                if role in on:
+                    assert key in span["attributes"], f"{span['name']} lacks required {key}"
+            for event in span["events"]:
+                for key, on in required.items():
+                    if f"event:{event['name']}" in on:
+                        assert key in event["attributes"], f"{event['name']} lacks required {key}"
+
+
+def test_every_golden_value_has_its_dictionary_type() -> None:
+    types = {a["name"]: a["type"] for a in dictionary()["attributes"]}
+
+    for spans in _golden().values():
+        for span in spans:
+            bags = [span["attributes"], *(e["attributes"] for e in span["events"])]
+            bags += [link["attributes"] for link in span["links"]]
+            for bag in bags:
+                for key, value in bag.items():
+                    assert otlp_type(value) == types[key], key
+
+
+def test_the_id_vectors_reproduce_through_the_derivation() -> None:
+    ids = dictionary()["ids"]
+    assert ids["hash"] == "sha256"
+    assert ids["trace"]["bytes"] == 16
+    assert ids["span"]["bytes"] == 8
+    for vector in ids["vectors"]:
+        key = StepKey(vector["chunk_id"], vector["epoch"], vector.get("decision_id"))
+        assert key.text() == vector["key"]
+        assert f"{trace_id(key):032x}" == vector["trace_id"] == f"{chunk_trace_id(vector['chunk_id']):032x}"
+        role = _ROLES[vector["role"]]
+        assert isinstance(role, SpanRole | RunnerSpanRole)
+        assert f"{span_id(key, role, vector['discriminator']):016x}" == vector["span_id"]
+        assert DerivedContext.of(key, role, vector["discriminator"]).trace_flags == 1
+        if "parent_span_id" in vector:
+            assert vector["parent_span_id"] == f"{span_id(key, SpanRole.STEP):016x}"
+
+
+def test_the_work_root_vector_reproduces_through_the_derivation() -> None:
+    ids = dictionary()["ids"]
+    assert ids["chunk_span"]["bytes"] == 8
+    (vector,) = ids["chunk_vectors"]
+    assert ChunkRole(vector["role"]) is ChunkRole.WORK
+    assert f"{chunk_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
+    assert f"{chunk_span_id(vector['chunk_id']):016x}" == vector["span_id"]
+
+
+def test_the_lifetime_vectors_reproduce_through_the_derivation() -> None:
+    ids = dictionary()["ids"]
+    assert (ids["lifetime_trace"]["bytes"], ids["lifetime_span"]["bytes"]) == (16, 8)
+    assert ids["lifetime_vectors"]
+    for vector in ids["lifetime_vectors"]:
+        role = ChunkRole(vector["role"])
+        assert role.value in _LIFETIME_ROLES
+        assert f"{lifetime_trace_id(vector['chunk_id']):032x}" == vector["trace_id"]
+        assert f"{lifetime_span_id(vector['chunk_id'], role, vector['discriminator']):016x}" == vector["span_id"]
+        assert vector["trace_id"] != f"{chunk_trace_id(vector['chunk_id']):032x}"
+        if role in (ChunkRole.COMPLETED, ChunkRole.BACKLOG, ChunkRole.ESCALATION, ChunkRole.PAUSE):
+            at = datetime.strptime(vector["discriminator"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+            assert instant_text(at) == vector["discriminator"]
+
+
+def test_a_runner_worker_vector_parents_into_the_step_vector_of_its_attempt() -> None:
+    vectors = dictionary()["ids"]["vectors"]
+    workers = [v for v in vectors if v["role"] == RunnerSpanRole.WORKER]
+    assert workers
+    for worker in workers:
+        step = next(v for v in vectors if v["role"] == SpanRole.STEP and v["key"] == worker["key"])
+        assert (worker["trace_id"], worker["parent_span_id"]) == (step["trace_id"], step["span_id"])
+
+
+def test_the_trace_id_prefix_and_span_prefix_match_thedictionary() -> None:
+    ids = dictionary()["ids"]
+    key = StepKey.attempt("ch_x", 1)
+    assert f"{trace_id(key):032x}" == hashlib.sha256((ids["trace"]["prefix"] + "ch_x").encode()).hexdigest()[:32]
+    chunk_text = f"{ids['chunk_span']['prefix']}ch_x/chunk/"
+    assert f"{chunk_span_id('ch_x'):016x}" == hashlib.sha256(chunk_text.encode()).hexdigest()[:16]
+    lifetime = hashlib.sha256((ids["lifetime_trace"]["prefix"] + "ch_x").encode()).hexdigest()[:32]
+    assert f"{lifetime_trace_id('ch_x'):032x}" == lifetime
+    lifetime_text = f"{ids['lifetime_span']['prefix']}ch_x/chunk/lifetime/"
+    assert (
+        f"{lifetime_span_id('ch_x', ChunkRole.LIFETIME):016x}"
+        == hashlib.sha256(lifetime_text.encode()).hexdigest()[:16]
+    )
+    expected = hashlib.sha256((ids["span"]["prefix"] + "ch_x/1/step/").encode()).hexdigest()[:16]
+    assert f"{span_id(key, SpanRole.STEP):016x}" == expected
+
+
+def _table_rows(text: str, heading: str) -> list[list[str]]:
+    section = text.split(f"\n{heading}\n", 1)[1]
+    rows: list[list[str]] = []
+    for line in section.splitlines():
+        if line.startswith("|"):
+            rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+        elif rows:
+            break
+    return rows[2:]
+
+
+def _unticked(cell: str) -> str:
+    return cell.strip("`")
+
+
+def test_the_published_attribute_table_is_thedictionary() -> None:
+    rows = _table_rows(_TRACING_DOC.read_text(), "## Attributes")
+    published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
+    d = dictionary()
+    authored = [(a["name"], a["type"], a["meaning"]) for a in d["attributes"]]
+    assert published == authored
+
+
+def test_the_platform_section_is_the_code_constants() -> None:
+    platform = dictionary()["platform"]
+    assert platform["instrumentation_scopes"] == [
+        {"name": attr.PLATFORM_INSTRUMENTATION_SCOPE, "version": attr.PLATFORM_INSTRUMENTATION_SCOPE_VERSION},
+        {
+            "name": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE,
+            "version": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+        },
+        {"name": cli_spans.SCOPE_NAME, "version": "1"},
+    ]
+    assert platform["http_semconv_version"] == HTTP_SEMCONV_VERSION
+    assert platform["database_semconv_version"] == DATABASE_SEMCONV_VERSION
+    assert {a["name"] for a in platform["attributes"]} == {
+        platform_attr.CALLER,
+        shared.CHUNK_ID,
+        cli_spans.ATTR_LEASE_ID,
+        hub_platform.ACTION_CHOICE,
+        hub_platform.ACTION_NAME,
+        hub_platform.RUN_STEP_EXIT_CODE,
+        hub_platform.RUN_STEP_NAME,
+        attr.RUNNER_ID,
+        attr.RUNNER_NAME,
+        platform_attr.TENANT,
+        platform_attr.TENANT_NAME,
+        runner_platform.TICK_STEP,
+        *CLI_ATTRIBUTES,
+    }
+    assert attr.RUNNER_ID == runner_attr.RUNNER_ID
+    assert attr.RUNNER_NAME == runner_attr.RUNNER_NAME
+    declared = {a["name"]: a["type"] for a in platform["attributes"]}
+    assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
+    assert all(declared[name] == type_ for name, type_ in CLI_ATTRIBUTES.items())
+    assert all(t == "string" for n, t in declared.items() if n not in CLI_ATTRIBUTES)
+
+
+def test_a_deprecated_platform_attribute_names_the_live_attribute_that_replaces_it() -> None:
+    attributes = {a["name"]: a for a in dictionary()["platform"]["attributes"]}
+    deprecated = {name for name, a in attributes.items() if a.get("deprecated") is True}
+    assert deprecated == {hub_platform.RUN_STEP_EXIT_CODE, hub_platform.RUN_STEP_NAME}
+    for name in deprecated:
+        named = set(re.findall(r"`([^`]+)`", attributes[name]["meaning"])) & set(attributes)
+        assert named, name
+        assert all(attributes[n].get("deprecated") is not True for n in named), name
+
+
+def test_the_published_platform_attribute_table_is_thedictionary() -> None:
+    rows = _table_rows(_TRACING_DOC.read_text(), "### Platform attributes")
+    published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
+    authored = [(a["name"], a["type"], a["meaning"]) for a in dictionary()["platform"]["attributes"]]
+    assert published == authored
+
+
+def test_the_platform_section_of_the_page_states_the_dictionary_versions_and_scopes() -> None:
+    section = _TRACING_DOC.read_text().split("\n## Platform spans\n", 1)[1]
+    platform = dictionary()["platform"]
+    for scope in platform["instrumentation_scopes"]:
+        assert f"`{scope['name']}`" in section
+    assert platform["http_semconv_version"] in section
+    assert platform["database_semconv_version"] in section
+
+
+def test_the_published_resource_table_is_thedictionary() -> None:
+    rows = _table_rows(_TRACING_DOC.read_text(), "## Resource attributes")
+    published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
+    authored = [(a["name"], a["type"], a["meaning"]) for a in dictionary()["resource_attributes"]]
+    assert published == authored
+
+
+def test_the_published_span_table_is_thedictionary() -> None:
+    rows = _table_rows(_TRACING_DOC.read_text(), "## Spans")
+    published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
+    authored = [(s["name"], s["role"], s["meaning"]) for s in dictionary()["spans"]]
+    assert published == authored
+
+
+def test_versioning_names_the_trace_schema_version() -> None:
+    text = _VERSIONING_DOC.read_text()
+    assert shared.TRACE_SCHEMA_VERSION in text
+    assert re.search(r"trace contract", text, re.IGNORECASE)

@@ -241,7 +241,7 @@ def test_build_job_waits_for_each_full_suite_tier() -> None:
 
 def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     """The semver fan-out logic lives in scripts/image-tags.sh (unit-tested in
-    tests/test_image_tags.py) — the workflow step must consume its output, not
+    tests/guards/test_image_tags.py) — the workflow step must consume its output, not
     re-implement the fan-out inline."""
     steps = _build_job()["steps"]
     derive_idx = _step_index(steps, lambda s: "image-tags.sh" in str(s.get("run", "")))

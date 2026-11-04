@@ -1,5 +1,5 @@
 """``scripts/export-requirements.sh`` — turns ``uv.lock`` into the hashed requirements
-file an install hangs from. Unit-tested beside ``tests/test_image_tags.py`` because the
+file an install hangs from. Unit-tested beside ``tests/guards/test_image_tags.py`` because the
 shape of the project line and the refusal on a stale lock are what a release depends on.
 """
 

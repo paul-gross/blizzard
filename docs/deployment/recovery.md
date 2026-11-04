@@ -138,5 +138,6 @@ inside the transaction holding a pending pass's poll row and its turn's end, and
 tenant's interrupted turns and the next's at boot — is `mise run crash-sweep`, and the tag release workflow runs it in
 CI.
 
-[tests/test_systemd_units.py](../../tests/test_systemd_units.py) guards the unit files, holding their `ExecStart` to the
-real shipped entry points and asserting the `Restart=` and boot-enable directives this contract depends on.
+[tests/guards/test_systemd_units.py](../../tests/guards/test_systemd_units.py) guards the unit files, holding their
+`ExecStart` to the real shipped entry points and asserting the `Restart=` and boot-enable directives this contract
+depends on.

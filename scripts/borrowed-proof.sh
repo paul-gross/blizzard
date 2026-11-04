@@ -10,7 +10,7 @@
 #   1 — refused: a promotion `vX.Y.0` whose commit carries no green candidate run.
 # Needs `gh` and GH_TOKEN with `actions: read`; GH_REPO names the repository (default: the
 # workflow's GITHUB_REPOSITORY). Pulled out of workflow YAML so it is unit-testable
-# (tests/test_borrowed_proof.py).
+# (tests/guards/test_borrowed_proof.py).
 set -euo pipefail
 
 tag="${1:?usage: borrowed-proof.sh <v-prefixed-tag> <commit-sha>}"
