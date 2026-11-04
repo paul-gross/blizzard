@@ -116,8 +116,11 @@ def await_http(
 
 
 @contextlib.contextmanager
-def run_forge(bin_dir: Path, origins: Path) -> Generator[httpx2.Client]:
-    """The mock forge over ``origins``, on a kernel-picked port; the client's ``base_url`` is its URL."""
+def run_forge(bin_dir: Path, origins: Path, *, pinned_port: int | None = None) -> Generator[httpx2.Client]:
+    """The mock forge over ``origins``, on a kernel-picked port; the client's ``base_url`` is its URL.
+
+    ``pinned_port`` serves on that port instead and skips the listening file, for a forge binary older than
+    ``--listening-file`` (the rehearsal's baseline release)."""
     log = origins.parent / "forge.log"
     listening = origins.parent / f"forge.{LISTENING_FILE}"
     proc = subprocess.Popen(
@@ -127,14 +130,19 @@ def run_forge(bin_dir: Path, origins: Path) -> Generator[httpx2.Client]:
             str(origins),
             "--host",
             "127.0.0.1",
-            *listening_args(listening, 0),
+            *(["--port", str(pinned_port)] if pinned_port is not None else listening_args(listening, 0)),
         ],
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     try:
-        client = mock_daemon_client(await_listening_url(proc, listening, log=log))
+        url = (
+            f"http://127.0.0.1:{pinned_port}"
+            if pinned_port is not None
+            else await_listening_url(proc, listening, log=log)
+        )
+        client = mock_daemon_client(url)
     except BaseException:
         terminate(proc)
         raise

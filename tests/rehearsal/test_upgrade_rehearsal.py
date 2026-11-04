@@ -200,6 +200,12 @@ def _reflect_an_empty_postgres_store(
         raise leg.fail("postgres reflection", "the migrated store is not the committed document:\n" + "\n".join(drift))
 
 
+def _forge_publishes(mock_bin: Path) -> bool:
+    """Whether the checked-out ``blizzard-mock`` forge takes ``--listening-file`` (a baseline's own tag may not)."""
+    help_text = subprocess.run([str(mock_bin / "blizzard-mock-forge"), "--help"], capture_output=True, text=True).stdout
+    return "--listening-file" in help_text
+
+
 class _Rehearsal:
     """One leg's daemons, stores, and the facts recorded at step 1 that every later step is held to."""
 
@@ -227,7 +233,13 @@ class _Rehearsal:
     def run(self) -> None:
         world = mint_world(self.mock_bin, self.root / "scratch")
         self.workspace = world.workspace
-        self.forge = self.stack.enter_context(run_forge(self.mock_bin, world.origins))
+        self.forge = self.stack.enter_context(
+            run_forge(
+                self.mock_bin,
+                world.origins,
+                pinned_port=None if _forge_publishes(self.mock_bin) else baseline_daemon_port(),
+            )
+        )
         self.forge_api = url_of(self.forge)
         self.stack.callback(self.work.stop)
         self.stack.callback(self.hub.stop)
