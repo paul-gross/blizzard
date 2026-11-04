@@ -9,9 +9,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.unit
-
-_EXEMPLAR_ROOT = Path(__file__).parents[1] / "exemplar"
+_EXEMPLAR_ROOT = Path(__file__).parents[2] / "exemplar"
 
 #: The clock implementation every ``IClock.now()`` reaches — the one module that reads the wall clock.
 _CLOCK_MODULE = Path("foundation") / "clock.py"

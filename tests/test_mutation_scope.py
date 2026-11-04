@@ -345,6 +345,14 @@ def test_selected_test_files_leaves_out_a_file_with_no_unit_marked_test(tmp_path
     assert m.selected_test_files(scope, tests_root, tmp_path) == ["tests/test_decorated.py", "tests/test_unit.py"]
 
 
+def test_selected_test_files_selects_a_markerless_module_by_its_tier_folder(tmp_path: Path) -> None:
+    tests_root = tmp_path / "tests"
+    for folder in ("unit", "component", "guards"):
+        _write(tests_root / folder / "test_hub.py", "from blizzard.hub import domain\n")
+    scope = m.Scope(slug="fixture", only_mutate=(), test_selection_packages=("blizzard.hub",))
+    assert m.selected_test_files(scope, tests_root, tmp_path) == ["tests/guards/test_hub.py", "tests/unit/test_hub.py"]
+
+
 def test_the_selection_tier_is_the_one_pyproject_hands_mutmut() -> None:
     pyproject = tomllib.loads((_SCRIPTS.parent / "pyproject.toml").read_text())
     assert pyproject["tool"]["mutmut"]["pytest_add_cli_args"] == ["-m", m.MUTATION_TIER_MARKER]

@@ -14,6 +14,7 @@ import argparse
 import ast
 import contextlib
 import fnmatch
+import functools
 import json
 import os
 import re
@@ -67,6 +68,11 @@ def _load_module_by_path(name: str, path: Path) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@functools.cache
+def _load_tier_layout() -> ModuleType:
+    return _load_module_by_path("_mutation_tier_layout", REPO_ROOT / "tests" / "tier_layout.py")
 
 
 @dataclass(frozen=True)
@@ -228,8 +234,11 @@ def _resolved_import_names(path: Path, tests_root: Path) -> set[str]:
     return names
 
 
-def _marks_tier(path: Path, marker: str) -> bool:
-    """True when `path` applies `marker` anywhere — `pytest.mark.<marker>` or an imported `mark.<marker>`."""
+def _marks_tier(path: Path, marker: str, tests_root: Path = TESTS_ROOT) -> bool:
+    """True when `path` is in `marker`'s tier: its folder under `tests_root` gives the tier, or it applies
+    `marker` anywhere — `pytest.mark.<marker>` or an imported `mark.<marker>`."""
+    if _load_tier_layout().tier_of(path, tests_root) == marker:
+        return True
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr == marker:
@@ -302,7 +311,7 @@ def selected_test_files(scope: Scope, tests_root: Path = TESTS_ROOT, repo_root: 
         for path in tests_root.rglob("*.py")
         if "__pycache__" not in path.parts
         and _is_test_file(path)
-        and _marks_tier(path, MUTATION_TIER_MARKER)
+        and _marks_tier(path, MUTATION_TIER_MARKER, tests_root)
         and test_module_selected(path, scope.test_selection_packages, tests_root)
     )
 
