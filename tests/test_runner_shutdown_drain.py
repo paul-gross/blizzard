@@ -1,6 +1,6 @@
 """The graceful-shutdown worker drain — ``ShutdownDrain`` on its own, driven
 entirely off a virtual clock, a scripted probe, and a recording sleep. No real process:
-``tests/test_runner_process.py`` proves ``interrupt_group`` against one instead."""
+``tests/unit/runner/process/test_process_liveness.py`` proves ``interrupt_group`` against one instead."""
 
 from __future__ import annotations
 

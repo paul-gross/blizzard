@@ -841,7 +841,7 @@ def test_a_local_version_suffix_is_admitted_by_range_membership(tmp_path: Path) 
 def test_a_version_above_the_pinned_corpus_but_inside_the_range_is_admitted(tmp_path: Path) -> None:
     """`1.18.31` is above the only committed corpus but inside `ADMITTED_OPENCODE_RANGE`; the
     live gate admits it on range membership alone — reference-corpus resolution is
-    `classify_offline`'s own concern (`tests/test_runner_harness_offline_compatibility.py`)."""
+    `classify_offline`'s own concern (`tests/unit/runner/harness/test_offline_compatibility.py`)."""
     mock_opencode = _mock_opencode()
     probe, scratch = _probe(mock_opencode, tmp_path, version="1.18.31")
 
