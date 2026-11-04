@@ -24,7 +24,6 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
-from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
@@ -44,6 +43,8 @@ from tests.runner_fakes import (
 )
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
+
+
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
@@ -240,7 +241,6 @@ def _seed_exited_lease(
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-@pytest.mark.component
 def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> None:
     """Reconstructs the observed premature-exit shape: a clean exit with an
     unattached required `produces:` name is resumed, not judged — no verdict elicited, no
@@ -295,7 +295,6 @@ def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> 
     assert chunk_id == "ch_1"
 
 
-@pytest.mark.component
 def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Path) -> None:
     """A worker that attaches in response to the resume, then exits again, is judged
     normally on that second exit — completion assembly prefers the attached content over
@@ -362,7 +361,6 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     assert by_name["review-findings"].attached is True
 
 
-@pytest.mark.component
 def test_unmet_produces_resume_picks_up_a_git_commit_declared_on_the_next_exit(tmp_path: Path) -> None:
     """The mirror of the asset-only test above, but for a `git_commit` spec: a worker's
     declaration in response to the resume must fold into the next exit's completion."""
@@ -427,7 +425,6 @@ def test_unmet_produces_resume_picks_up_a_git_commit_declared_on_the_next_exit(t
     assert not any(a.kind is ArtifactKind.ASSET for a in submission.artifacts)
 
 
-@pytest.mark.component
 def test_second_premature_exit_under_the_same_lease_and_epoch_falls_through_to_judge(tmp_path: Path) -> None:
     """Past the one-resume cap, a still-stuck worker terminates: the second exit under the
     same `(lease, epoch)` with `produces:` still unmet is judged with the assessment
@@ -470,7 +467,6 @@ def test_second_premature_exit_under_the_same_lease_and_epoch_falls_through_to_j
     assert by_name["review-findings"].attached is False
 
 
-@pytest.mark.component
 def test_resume_fact_already_set_skips_a_second_resume_attempt(tmp_path: Path) -> None:
     """The durable fact is honored across recovery too — the shape a crash between the
     fired-fact write and the resume leaves behind — resuming no second time and converging
@@ -515,7 +511,6 @@ def test_resume_fact_already_set_skips_a_second_resume_attempt(tmp_path: Path) -
     assert by_name["review-findings"].attached is False
 
 
-@pytest.mark.component
 def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     """A node whose every `produces` name is already attached (or git-covered) elicits no
     resume at all — the wake is a spawn primitive, not spent when nothing is missing."""
@@ -573,7 +568,6 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     assert by_name["review-findings"].attached is True
 
 
-@pytest.mark.component
 def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_later_one_is_refused(
     tmp_path: Path,
 ) -> None:
@@ -611,25 +605,3 @@ def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_
 
     _, submission = hub.completions[0]
     assert {a.name: a.content for a in submission.artifacts}["note"] == "early"
-
-
-@pytest.mark.unit
-def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
-    """`ProducesReconciler.nudge_message` names the kind-appropriate declaration verb
-    per unmet spec, never the deprecated `attach` alias, and every rendered line is
-    `#`-prefixed so the mock harness's prompt-is-program `exec` still sees a legal no-op."""
-    missing = [
-        ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
-        ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
-    ]
-
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    message = ProducesReconciler(envelope).nudge_message(missing)
-
-    for line in message.splitlines():
-        assert line.startswith("#"), f"non-inert line in the nudge message: {line!r}"
-    assert "artifact create --name review-findings" in message
-    assert "artifact commit --repo <repo> --branch <branch> --commit <sha>" in message
-    assert "`<repo>` is its name in the environment's manifest" in message
-    assert "runner attach" not in message

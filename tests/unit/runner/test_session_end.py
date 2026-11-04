@@ -7,102 +7,13 @@ actually wires the hook.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from pathlib import Path
-
 import httpx2
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.worker_hooks import SESSION_END_HOOK_COMMAND
-from blizzard.runner.leases.model import NewLease
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 from tests.worker_http import bind_stubs
-
-_NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
-
-
-def _runner_app_with_store(tmp_path: Path):
-    """A runner app wired to a real (migrated) store — the ``host`` session-end surface."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    return create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
-
-
-def _seed_lease(store: SqlAlchemyRunnerStore, lease_id: str = "lease_1") -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
-        )
-    )
-
-
-# --------------------------------------------------------------------------- #
-# The local-API endpoint (component tier)
-
-
-@pytest.mark.component
-def test_session_end_endpoint_records_the_fact(tmp_path: Path) -> None:
-    app, store = _runner_app_with_store(tmp_path)
-    _seed_lease(store)
-    assert store.session_ended_lease_ids() == set()
-
-    with runner_client(app) as client:
-        resp = client.post("/api/leases/lease_1/session-end")
-
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"recorded": True, "lease_id": "lease_1"}
-    assert store.session_ended_lease_ids() == {"lease_1"}  # the "declared done" signal now exists
-
-
-@pytest.mark.component
-def test_session_end_endpoint_replayed_after_closure_still_records(tmp_path: Path) -> None:
-    """The closure-spanning resolution keeps tolerating a replay after the lease closed."""
-    app, store = _runner_app_with_store(tmp_path)
-    _seed_lease(store)
-    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-
-    with runner_client(app) as client:
-        resp = client.post("/api/leases/lease_1/session-end")
-
-    assert resp.status_code == 200, resp.text
-    assert store.session_ended_lease_ids() == {"lease_1"}
-
-
-@pytest.mark.component
-def test_session_end_endpoint_404_for_an_unminted_lease(tmp_path: Path) -> None:
-    """An identifier naming no lease this runner ever minted is refused, not silently recorded."""
-    app, store = _runner_app_with_store(tmp_path)
-
-    with runner_client(app) as client:
-        resp = client.post("/api/leases/lease_nonesuch/session-end")
-
-    assert resp.status_code == 404, resp.text
-    assert store.session_ended_lease_ids() == set()
-
-
-@pytest.mark.component
-def test_session_end_endpoint_503_when_store_unwired(tmp_path: Path) -> None:
-    """The store-free app (OpenAPI export / unit boot) answers 503, never pretends."""
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_runner_app(config)) as client:
-        resp = client.post("/api/leases/lease_1/session-end")
-    assert resp.status_code == 503
-
-
-# --------------------------------------------------------------------------- #
-# The `blizzard runner session-end` verb (unit tier)
 
 
 class _FakeResponse:
@@ -110,7 +21,6 @@ class _FakeResponse:
         return None
 
 
-@pytest.mark.unit
 def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads the spawn-injected identity and posts to the lease-scoped route — no args."""
     calls: list[str] = []
@@ -130,7 +40,6 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/session-end"]
 
 
-@pytest.mark.unit
 def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.MonkeyPatch) -> None:
     """A judge/nudge resume's ``SessionEnd`` fire must record no done-signal for the lease."""
     calls: list[str] = []
@@ -154,7 +63,6 @@ def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.Monkey
     assert calls == []
 
 
-@pytest.mark.unit
 def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """No identity means a clean skip: exit 0, and no post attempted."""
     posted = False
@@ -174,7 +82,6 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
     assert posted is False  # never even attempted the post
 
 
-@pytest.mark.unit
 def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unreachable runner is reported and swallowed — exit 0."""
 
@@ -192,11 +99,6 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
     assert "could not reach the runner" in result.output
 
 
-# --------------------------------------------------------------------------- #
-# The worker settings document wires the hook
-
-
-@pytest.mark.unit
 def test_worker_settings_wires_the_session_end_hook() -> None:
     """The settings file the adapter passes to ``claude -p`` fires the session-end verb on exit."""
     hooks = WorkerSettings.of().document["hooks"]

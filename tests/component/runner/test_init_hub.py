@@ -9,7 +9,6 @@ import os
 import sqlite3
 import stat
 from contextlib import closing
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -18,36 +17,22 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.bootstrap import (
-    BootstrapStop,
-    BootstrapStopped,
-    HeldToken,
-    JoinedRunner,
-    RunnerBootstrap,
-    kept_identity,
-    refuse_tokenless,
-    refuse_unplaced,
-)
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
     HostAddRefused,
     HubClientError,
-    IssuedIdentity,
-    TokenIdentity,
     TokenRefusal,
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
+from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
 from tests.host_files import load_runner_config
-from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
 from tests.runner_join import DEFAULT_TOKEN_ENV
 from tests.session_store_fakes import InMemorySessionStore
 
 _HUB = "http://hub.test:8421"
-_FROM_FILE = HeldToken("t", from_process_env=False)
 
 
 def _init(hub: FakeInitHub, root: Path, *args: str) -> Result:
@@ -66,155 +51,6 @@ def _joined(tmp_path: Path, fake_init_hub: FakeInitHub) -> tuple[Path, bytes]:
     return root, (root / ENV_FILENAME).read_bytes()
 
 
-# --- the verdict, by value -----------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_a_token_the_hub_names_is_kept() -> None:
-    identity = TokenIdentity(runner_id="rn_1", runner_name="r-claude")
-    assert kept_identity(identity, held=_FROM_FILE, allow_readd=False) == identity
-
-
-@pytest.mark.unit
-def test_an_unknown_token_stops_unless_a_readd_is_allowed() -> None:
-    unknown = TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(unknown, held=_FROM_FILE, allow_readd=False)
-    assert stopped.value.stop is BootstrapStop.UNKNOWN_TOKEN
-    assert kept_identity(unknown, held=_FROM_FILE, allow_readd=True) is None
-
-
-@pytest.mark.unit
-def test_an_unknown_token_the_environment_supplies_stops_even_with_a_readd_allowed() -> None:
-    unknown = TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(unknown, held=HeldToken("t", from_process_env=True), allow_readd=True)
-    assert stopped.value.stop is BootstrapStop.TOKEN_OVERRIDDEN
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("reason", "stop"),
-    [
-        (RunnerTokenRefusalReason.REVOKED, BootstrapStop.REVOKED_TOKEN),
-        (RunnerTokenRefusalReason.RETIRED, BootstrapStop.RETIRED_RUNNER),
-    ],
-)
-def test_a_revoked_token_or_a_retired_runner_stops_naming_the_runner_even_with_a_readd_allowed(
-    reason: RunnerTokenRefusalReason, stop: BootstrapStop
-) -> None:
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(TokenRefusal(reason=reason, runner_id="rn_1"), held=_FROM_FILE, allow_readd=True)
-    assert (stopped.value.stop, stopped.value.runner_id) == (stop, "rn_1")
-
-
-@pytest.mark.unit
-def test_a_token_the_hub_never_received_stops() -> None:
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(TokenRefusal(reason=RunnerTokenRefusalReason.MISSING), held=_FROM_FILE, allow_readd=True)
-    assert stopped.value.stop is BootstrapStop.TOKEN_NOT_RECEIVED
-
-
-@pytest.mark.unit
-def test_a_refusal_reason_this_build_does_not_know_stops_carrying_it_raw() -> None:
-    refusal = TokenRefusal(reason=Unrecognized("suspended"), runner_id="rn_1")
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(refusal, held=_FROM_FILE, allow_readd=True)
-    assert (stopped.value.stop, stopped.value.runner_id, stopped.value.reason) == (
-        BootstrapStop.TOKEN_REFUSED,
-        "rn_1",
-        "suspended",
-    )
-
-
-@pytest.mark.unit
-def test_a_token_naming_another_runner_than_the_configured_one_stops_unless_a_readd_is_allowed() -> None:
-    other = TokenIdentity(runner_id="rn_2", runner_name="r-claude", tenant_id="tn_b")
-    with pytest.raises(BootstrapStopped) as stopped:
-        kept_identity(other, held=_FROM_FILE, allow_readd=False, tenant_id="tn_a", configured_id="rn_1")
-    assert (stopped.value.stop, stopped.value.runner_id, stopped.value.held) == (
-        BootstrapStop.ANOTHER_RUNNER,
-        "rn_1",
-        other,
-    )
-    assert kept_identity(other, held=_FROM_FILE, allow_readd=True, configured_id="rn_1") == other
-    assert kept_identity(other, held=_FROM_FILE, allow_readd=False, configured_id="rn_2") == other
-
-
-@pytest.mark.unit
-def test_a_runner_serves_the_tenant_named_and_any_when_either_names_none() -> None:
-    runner = TokenIdentity(runner_id="rn_1", runner_name="r", tenant_id="tn_a")
-    assert runner.serves("tn_a") and runner.serves(None)
-    assert not runner.serves("tn_b")
-    assert TokenIdentity(runner_id="rn_1", runner_name="r").serves("tn_b")
-
-
-@pytest.mark.unit
-def test_no_token_stops_for_the_runner_the_store_names_then_the_configured_one_unless_a_readd_is_allowed() -> None:
-    with pytest.raises(BootstrapStopped) as stored:
-        refuse_tokenless(None, "rn_1", "rn_old", allow_readd=False)
-    assert (stored.value.stop, stored.value.runner_id) == (BootstrapStop.STORE_NAMES_A_RUNNER, "rn_old")
-    with pytest.raises(BootstrapStopped) as configured:
-        refuse_tokenless(None, "rn_1", None, allow_readd=False)
-    assert (configured.value.stop, configured.value.runner_id) == (BootstrapStop.TOKENLESS_CONFIGURED, "rn_1")
-    refuse_tokenless(None, "rn_1", "rn_old", allow_readd=True)
-    refuse_tokenless(_FROM_FILE, "rn_1", "rn_old", allow_readd=False)
-    refuse_tokenless(None, None, None, allow_readd=False)
-
-
-# --- the token file ------------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_the_token_file_replaces_only_the_token_line_owner_only(tmp_path: Path) -> None:
-    env = tmp_path / ENV_FILENAME
-    env.write_text(
-        f"# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\n{DEFAULT_TOKEN_ENV}=old\n{DEFAULT_TOKEN_ENV}=older\n"
-    )
-    tokens = HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV)
-    assert tokens.held() == "older"  # the last assignment wins, as systemd reads it
-    tokens.write("new")
-    assert env.read_text() == f"# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\n{DEFAULT_TOKEN_ENV}=new\n"
-    assert stat.S_IMODE(env.stat().st_mode) == 0o600
-    assert [p.name for p in tmp_path.iterdir()] == [ENV_FILENAME]
-
-
-@pytest.mark.unit
-def test_the_token_file_reads_a_quoted_token_and_holds_none_when_absent(tmp_path: Path) -> None:
-    tokens = HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV)
-    assert tokens.held() == ""
-    (tmp_path / ENV_FILENAME).write_text(f'{DEFAULT_TOKEN_ENV}="quoted"\n')
-    assert tokens.held() == "quoted"
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("", ""),
-        ("# BZ_HUB_TOKEN=commented\n; BZ_HUB_TOKEN=also\nOTHER=x\n", ""),
-        ("BZ_HUB_TOKEN=old\nBZ_HUB_TOKEN='last'\n", "last"),
-        ('  BZ_HUB_TOKEN = "spaced" \n', "spaced"),
-    ],
-)
-def test_the_token_a_text_assigns_is_its_last_unquoted_assignment(text: str, expected: str) -> None:
-    assert assigned_token(text, "BZ_HUB_TOKEN") == expected
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("", "BZ_HUB_TOKEN=new\n"),
-        ("A=1\n", "A=1\nBZ_HUB_TOKEN=new\n"),
-        ("A=1\nBZ_HUB_TOKEN=x\n# keep\nBZ_HUB_TOKEN=y\n", "A=1\nBZ_HUB_TOKEN=new\n# keep\n"),
-    ],
-)
-def test_a_text_with_the_token_replaced_keeps_every_other_line(text: str, expected: str) -> None:
-    assert with_token(text, "BZ_HUB_TOKEN", "new") == expected
-
-
-@pytest.mark.component
 def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
     fake_init_hub: FakeInitHub, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -225,10 +61,6 @@ def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
     assert load_runner_config(root).hub_token == "from-env"
 
 
-# --- init against the hub ------------------------------------------------------------------------
-
-
-@pytest.mark.component
 def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root = tmp_path / "runner"
     result = _init(fake_init_hub, root)
@@ -242,7 +74,6 @@ def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path
     assert "rn_init1" in result.output
 
 
-@pytest.mark.component
 def test_init_reuses_a_token_the_hub_accepts_and_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     result = _init(fake_init_hub, root)
@@ -252,7 +83,6 @@ def test_init_reuses_a_token_the_hub_accepts_and_adds_nothing(tmp_path: Path, fa
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
-@pytest.mark.component
 def test_init_over_a_token_added_under_another_name_than_the_scaffolded_one_adds_a_second_runner(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -267,7 +97,6 @@ def test_init_over_a_token_added_under_another_name_than_the_scaffolded_one_adds
     assert [added.runner_name for added in fake_init_hub.admin.added] == ["edge", "runner-local"]
 
 
-@pytest.mark.component
 def test_init_over_a_token_added_as_the_scaffolded_name_keeps_it_and_scaffolds_the_full_host_file(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -285,7 +114,6 @@ def test_init_over_a_token_added_as_the_scaffolded_name_keeps_it_and_scaffolds_t
     assert "projects = [" in config
 
 
-@pytest.mark.component
 def test_init_keeping_a_hand_written_token_makes_its_file_owner_only_bytes_unchanged(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -309,7 +137,6 @@ def test_init_keeping_a_hand_written_token_makes_its_file_owner_only_bytes_uncha
     assert fake_init_hub.admin.adopted == [(issued.runner_id,)]
 
 
-@pytest.mark.component
 def test_init_that_cannot_restrict_a_kept_token_file_warns_naming_it(
     tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -326,28 +153,6 @@ def test_init_that_cannot_restrict_a_kept_token_file_warns_naming_it(
     assert f"chmod 600 {root / ENV_FILENAME}" in result.output
 
 
-@pytest.mark.unit
-@pytest.mark.parametrize(("content", "mode"), [("OTEL_SERVICE_NAME=r\n", 0o644), (f"{DEFAULT_TOKEN_ENV}=t\n", 0o600)])
-def test_the_token_file_leaves_a_file_holding_no_token_or_already_owner_only_as_it_is(
-    tmp_path: Path, content: str, mode: int
-) -> None:
-    env = tmp_path / ENV_FILENAME
-    env.write_text(content)
-    env.chmod(mode)
-    assert HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).restrict() is False
-    assert stat.S_IMODE(env.stat().st_mode) == mode
-    assert HubTokenFile.of(tmp_path / "absent", DEFAULT_TOKEN_ENV).restrict() is False
-
-
-@pytest.mark.unit
-def test_the_token_file_raises_when_it_cannot_read_a_present_files_mode(tmp_path: Path) -> None:
-    """Only an absent file is nothing to restrict; one present but unreadable is reported."""
-    (tmp_path / ENV_FILENAME).symlink_to(ENV_FILENAME)  # a link to itself: present, never stat-able
-    with pytest.raises(OSError, match="symbolic links"):
-        HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).restrict()
-
-
-@pytest.mark.component
 def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
     for path in load_runner_config(root).data_dir.iterdir():
@@ -357,7 +162,6 @@ def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path
     assert len(fake_init_hub.admin.added) == 1
 
 
-@pytest.mark.component
 def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
     fake_init_hub.admin.added.clear()  # the hub's data is reset; the runtime dir survives
@@ -370,7 +174,6 @@ def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Pa
     )
 
 
-@pytest.mark.component
 def test_init_after_a_hub_reset_stops_without_allow_readd_leaving_the_env_file_as_it_was(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -385,10 +188,11 @@ def test_init_after_a_hub_reset_stops_without_allow_readd_leaving_the_env_file_a
 
 
 _ENROLL = "blizzard hub runner enroll rn_init1"
+
+
 _REINSTATE = "blizzard hub runner reinstate rn_init1"
 
 
-@pytest.mark.component
 @pytest.mark.parametrize(
     ("reason", "verbs"),
     [(RunnerTokenRefusalReason.REVOKED, [_ENROLL]), (RunnerTokenRefusalReason.RETIRED, [_REINSTATE, _ENROLL])],
@@ -409,7 +213,6 @@ def test_init_stops_on_a_revoked_token_or_a_retired_runner_naming_each_verb_and_
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
-@pytest.mark.component
 @pytest.mark.parametrize("reason", [RunnerTokenRefusalReason.REVOKED, RunnerTokenRefusalReason.RETIRED])
 def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_variable(
     tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch, reason: RunnerTokenRefusalReason
@@ -427,7 +230,6 @@ def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_v
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
-@pytest.mark.component
 def test_init_fails_and_adds_nothing_when_the_hub_is_unreachable(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     fake_init_hub.identity = FakeTokenIdentityReader(HubClientError("GET /api/fleet/identity failed: refused"))
@@ -438,7 +240,6 @@ def test_init_fails_and_adds_nothing_when_the_hub_is_unreachable(tmp_path: Path,
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
-@pytest.mark.component
 def test_init_with_no_token_fails_and_writes_nothing_when_the_add_cannot_reach_the_hub(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -448,7 +249,6 @@ def test_init_with_no_token_fails_and_writes_nothing_when_the_add_cannot_reach_t
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
 
 
-@pytest.mark.component
 def test_init_whose_runner_add_cannot_reach_the_hub_keeps_the_host_and_writes_no_runner_token(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -459,7 +259,6 @@ def test_init_whose_runner_add_cannot_reach_the_hub_keeps_the_host_and_writes_no
     assert (root / ENV_FILENAME).read_text() == f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
 
 
-@pytest.mark.component
 def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_to_retire(
     tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -478,7 +277,6 @@ def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_t
     assert f"retire it with `blizzard hub runner retire rn_init1 --hub-url {_HUB}`" in result.output
 
 
-@pytest.mark.component
 def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     fake_init_hub.admin.host_refusal = HostAddRefused(
         "POST /api/hosts -> 401", reason=HostAddRefusalReason.SIGN_IN_REQUIRED, detail="not authenticated"
@@ -489,7 +287,6 @@ def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fak
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
 
 
-@pytest.mark.component
 def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     sessions = InMemorySessionStore({_HUB: "operator-session"})
     result = init_runner(fake_init_hub, sessions=sessions).invoke(
@@ -499,7 +296,6 @@ def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, f
     assert fake_init_hub.calls[-1].operator_token == "operator-session"
 
 
-@pytest.mark.component
 def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
     reached = len(fake_init_hub.calls)
@@ -512,7 +308,6 @@ def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake
     assert load_runner_config(root).hub_url == _HUB
 
 
-@pytest.mark.component
 def test_init_stops_when_the_environment_overrides_a_token_it_must_replace(
     tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -525,7 +320,6 @@ def test_init_stops_when_the_environment_overrides_a_token_it_must_replace(
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
-@pytest.mark.component
 def test_init_adds_a_renamed_runner_under_its_name_and_writes_its_token_under_the_variable_that_name_derives(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -542,157 +336,6 @@ def test_init_adds_a_renamed_runner_under_its_name_and_writes_its_token_under_th
     )
 
 
-# --- the old runner's store on a re-add ----------------------------------------------------------
-
-
-@dataclass
-class _JoinLog:
-    """Records, in order, each store and add call a join makes."""
-
-    stored: str | None = None
-    calls: list[str] = field(default_factory=list[str])
-
-    def stored_runner_id(self) -> str | None:
-        return self.stored
-
-    def is_set_aside(self) -> bool:
-        return False
-
-    def sharing(self) -> tuple[str, ...]:
-        return ()
-
-    def set_aside(self) -> None:
-        self.calls.append("set_aside")
-
-
-@dataclass
-class _LoggedAdmin(FakeHubRunnerAdmin):
-    log: _JoinLog = field(default_factory=_JoinLog)
-
-    def add_runner(
-        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
-    ) -> IssuedIdentity:
-        self.log.calls.append("add")
-        return super().add_runner(name, tenant_id=tenant_id, projects=projects)
-
-
-class _Tokens:
-    def write(self, token: str) -> None:
-        pass
-
-
-@dataclass
-class _SharedStore(_JoinLog):
-    def sharing(self) -> tuple[str, ...]:
-        return ("r-two",)
-
-
-def _join(
-    log: _JoinLog,
-    answer: TokenIdentity | TokenRefusal,
-    *,
-    held: HeldToken | None,
-    allow_readd: bool,
-    configured_id: str | None = None,
-) -> None:
-    RunnerBootstrap(FakeTokenIdentityReader(answer), _LoggedAdmin(log=log), _Tokens(), log).join(
-        "r", held=held, allow_readd=allow_readd, configured_id=configured_id
-    )
-
-
-@pytest.mark.unit
-def test_a_join_holding_another_runners_token_stops_with_nothing_set_aside_or_added() -> None:
-    log = _JoinLog(stored="rn_1")
-    with pytest.raises(BootstrapStopped) as stopped:
-        _join(
-            log,
-            TokenIdentity(runner_id="rn_2", runner_name="r"),
-            held=_FROM_FILE,
-            allow_readd=False,
-            configured_id="rn_1",
-        )
-    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.ANOTHER_RUNNER, "rn_1")
-    assert log.calls == []
-
-
-@pytest.mark.unit
-def test_a_join_of_a_configured_runner_holding_no_token_stops_with_nothing_added() -> None:
-    log = _JoinLog()
-    with pytest.raises(BootstrapStopped) as stopped:
-        _join(
-            log,
-            TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN),
-            held=None,
-            allow_readd=False,
-            configured_id="rn_1",
-        )
-    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.TOKENLESS_CONFIGURED, "rn_1")
-    assert log.calls == []
-
-
-@pytest.mark.unit
-def test_a_re_add_over_a_store_other_runners_hold_stops_naming_them_with_nothing_added() -> None:
-    log = _SharedStore(stored="rn_old")
-    with pytest.raises(BootstrapStopped) as stopped:
-        _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
-    assert (stopped.value.stop, stopped.value.sharing) == (BootstrapStop.STORE_SHARED, ("r-two",))
-    assert log.calls == []
-
-
-@pytest.mark.unit
-def test_a_re_add_over_a_store_this_init_already_set_aside_is_not_judged_shared() -> None:
-    @dataclass
-    class _AlreadyAside(_SharedStore):
-        def is_set_aside(self) -> bool:
-            return True
-
-    log = _AlreadyAside(stored="rn_old")
-    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
-    assert log.calls == ["add"]
-
-
-@pytest.mark.unit
-def test_a_kept_runner_the_joined_host_does_not_hold_stops_naming_it() -> None:
-    kept = JoinedRunner(runner_id="rn_1", runner_name="r", added=False)
-    with pytest.raises(BootstrapStopped) as stopped:
-        refuse_unplaced(kept, ("rn_2",))
-    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.NOT_UNDER_HOST, "rn_1")
-    refuse_unplaced(kept, ("rn_1",))
-    refuse_unplaced(JoinedRunner(runner_id="rn_9", runner_name="r", added=True), ())
-
-
-@pytest.mark.unit
-def test_a_re_add_sets_the_old_store_aside_before_adding() -> None:
-    log = _JoinLog(stored="rn_old")
-    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
-    assert log.calls == ["set_aside", "add"]
-
-
-@pytest.mark.unit
-def test_a_kept_token_keeps_the_store() -> None:
-    log = _JoinLog(stored="rn_1")
-    _join(log, TokenIdentity(runner_id="rn_1", runner_name="r"), held=_FROM_FILE, allow_readd=True)
-    assert log.calls == []
-
-
-@pytest.mark.unit
-def test_no_token_over_a_store_naming_a_runner_stops_unless_a_readd_is_allowed() -> None:
-    unknown = TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
-    with pytest.raises(BootstrapStopped) as stopped:
-        _join(_JoinLog(stored="rn_old"), unknown, held=None, allow_readd=False)
-    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.STORE_NAMES_A_RUNNER, "rn_old")
-    log = _JoinLog(stored="rn_old")
-    _join(log, unknown, held=None, allow_readd=True)
-    assert log.calls == ["set_aside", "add"]
-
-
-@pytest.mark.unit
-def test_no_token_over_a_store_naming_no_runner_adds_without_setting_it_aside() -> None:
-    log = _JoinLog()
-    _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=None, allow_readd=False)
-    assert log.calls == ["add"]
-
-
 def _store_file(root: Path) -> Path:
     return sqlite_store_file(load_runner_config(root).db_url)
 
@@ -702,7 +345,6 @@ def _identity_ids(database: Path) -> list[str]:
         return [row[0] for row in conn.execute("SELECT runner_id FROM runner_identity")]
 
 
-@pytest.mark.component
 def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -720,7 +362,6 @@ def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
     assert _identity_ids(database) == ["rn_init1"]  # the fresh store holds the runner just added
 
 
-@pytest.mark.component
 def test_init_keeping_its_token_keeps_the_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
     database = _store_file(root)
@@ -732,7 +373,6 @@ def test_init_keeping_its_token_keeps_the_store(tmp_path: Path, fake_init_hub: F
     assert not [p for p in database.parent.iterdir() if p.name.startswith("host.db.")]
 
 
-@pytest.mark.component
 def test_init_with_no_token_over_a_store_naming_a_runner_stops_naming_it_and_the_reset_command(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:

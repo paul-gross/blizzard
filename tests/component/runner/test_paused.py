@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,7 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.hub.client import (
     HubClientError,
     HubQuestion,
@@ -60,23 +60,22 @@ from tests.runner_fakes import (
     claimed_outcome,
     make_context,
     make_envelope,
-    make_store,
     make_stores,
-    record_usage,
     runner_store_errors,
     serving,
     single_workspace,
 )
-
-pytestmark = pytest.mark.component
-
-_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
-_CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
-
-
-def _store(tmp_path: Path):
-    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+from tests.support_paused import (
+    _CHOICES,  # pyright: ignore[reportPrivateUsage]
+    _HANDLE,  # pyright: ignore[reportPrivateUsage]
+    _NOW,  # pyright: ignore[reportPrivateUsage]
+    _ceiling_config,  # pyright: ignore[reportPrivateUsage]
+    _pause_locally,  # pyright: ignore[reportPrivateUsage]
+    _record_usage,  # pyright: ignore[reportPrivateUsage]
+    _running_chunk,  # pyright: ignore[reportPrivateUsage]
+    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
+    _store,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 class _BlipOnceHub(FakeHub):
@@ -94,17 +93,6 @@ class _BlipOnceHub(FakeHub):
         if self.get_chunk_calls == 1:
             raise HubClientError("transient blip during the ownership check")
         return super().chunk_statuses(chunk_ids)
-
-
-def _pause_locally(store: SqlAlchemyRunnerStore, ctx: LoopContext, *, paused: bool):
-    """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write."""
-    store.record_local_pause(
-        paused=paused,
-        at=ctx.clock.now(),
-        by="operator",
-        report_kind=RUNNER_LOCALLY_PAUSED if paused else RUNNER_LOCALLY_RESUMED,
-        report_payload=json.dumps({"by": "operator"}),
-    )
 
 
 def _ctx_with_a_claimable_chunk(tmp_path: Path, *, paused: bool):
@@ -195,10 +183,6 @@ def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path: Path):
     assert hub.claims == []  # still adhering to the last directive
 
 
-# The runner's own local brake, independent of the hub's; effective paused
-# is the OR of both, each cleared only where it was set.
-
-
 def test_fill_claims_nothing_while_locally_paused(tmp_path: Path):
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     Pull(ctx).run()  # the hub's brake is off — only the local one stops this claim
@@ -258,53 +242,6 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path: Path):
     Fill(ctx).run()
     assert len(store.list_active_leases()) == 1  # untouched — only new claims stop
     assert probe.killed == []  # a live worker already running is not killed
-
-
-# The local brake reaches every spawn site, not just FILL's claim: also
-# restart-resume, answer-resume, and every ``_spawn_attempt`` caller.
-
-
-def _seed_running_lease(
-    store: SqlAlchemyRunnerStore,
-    *,
-    chunk: str = "ch_1",
-    lease: str = "lease_1",
-    pid: int = 100,
-    start: str = "start-100",
-    session: str = "sess-a",
-    epoch: int = 1,
-):
-    """A build lease spawned into env e1 with a live worker, plus its binding."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
-        )
-    )
-    store.record_spawn(
-        lease,
-        pid=pid,
-        process_start_time=start,
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
-        spawned_at=_NOW,
-        pgid=pid,
-    )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-
-
-def _running_chunk(chunk: str = "ch_1", *, runner_id: str = "r1") -> ChunkState:
-    return ChunkState(
-        chunk_id=chunk,
-        status=ChunkStatus.RUNNING,
-        latest_epoch=1,
-        route_runner_id=runner_id,
-    )
 
 
 def _seed_exited_lease(store: SqlAlchemyRunnerStore):
@@ -613,10 +550,6 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path: Path):
         assert entry["chunk_id"] == by_lease[entry["lease_id"]]["chunk_id"]
 
 
-# REAP's own guard: local_paused guards only the stall case's kill, while
-# the orphan case (no process to kill) self-defers both branches.
-
-
 def _seed_orphan_lease(
     store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", retries_max: int = 2, epoch: int = 1
 ):
@@ -766,10 +699,6 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     assert len(deferred) == 1
     assert deferred[0]["runner_name"] == "r1"
     assert deferred[0]["count"] == 1
-
-
-# The whole tick, not hand-picked steps: a bug in the hand-off
-# between two steps that are each green alone needs the composed pass to surface.
 
 
 def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path: Path):
@@ -938,10 +867,6 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     assert store.active_lease("lease_1") is None  # closed — escalated
 
 
-# Two brakes at once: the runner's own, and the hub's per-chunk pause.
-# --------------------------------------------------------------------------- #
-
-
 def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone(tmp_path: Path):
     """The two brakes are independent authorities: the chunk resumes only
     when both clear. `_kill_and_park_paused` is ungated (a kill is not a spawn);
@@ -1006,10 +931,6 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a" and lease.pid == 4321
     assert store.attempt_count("ch_1", "nd_build") == 1
-
-
-# The hub backstops the advisory brake with an outright claim denial.
-# --------------------------------------------------------------------------- #
 
 
 def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path: Path):
@@ -1090,297 +1011,6 @@ def test_fill_denial_logs_what_the_hub_refused(
     denied = [e for e in logs if e["event"] == event]
     assert len(denied) == 1
     assert {key: denied[0][key] for key in fields} == fields
-
-
-# Runner spend ceiling: the tick-level kill-switch over the same local brake.
-# --------------------------------------------------------------------------- #
-
-
-def _ceiling_config(cap: float | None, *, window_hours: float = 24.0, agents: int = 1) -> LoopConfig:
-    return LoopConfig(
-        runner_name="r1",
-        runner_id="rn_1",
-        bindings=serving(agents),
-        agents=agents,
-        runner_ceiling_usd=cap,
-        runner_ceiling_window_hours=window_hours,
-    )
-
-
-def _sample(*, cost: float | None, kind: UsageKind = "spawn") -> UsageSample:
-    return UsageSample(
-        kind=kind,
-        model="claude-x",
-        input_tokens=10,
-        output_tokens=20,
-        cache_read_tokens=0,
-        cache_create_tokens=0,
-        cost_usd=cost,
-    )
-
-
-def _record_usage(
-    store: SqlAlchemyRunnerStore,
-    *,
-    lease_id: str = "lease_1",
-    chunk_id: str = "ch_1",
-    cost: float | None,
-    recorded_at: datetime,
-) -> None:
-    record_usage(
-        store,
-        lease_id=lease_id,
-        chunk_id=chunk_id,
-        node_id="nd_build",
-        epoch=1,
-        generation=1,
-        sample=_sample(cost=cost),
-        recorded_at=recorded_at,
-    )
-
-
-@pytest.mark.unit
-def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp_path: Path):
-    """Crossing `runner_ceiling_usd` engages the SAME local pause brake `blizzard runner
-    pause` sets, and the log line names both the configured ceiling and the spend that
-    tripped it (the escalation the plan calls for)."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=7.0, recorded_at=_NOW)
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=_ceiling_config(5.0),
-    )
-
-    assert store.local_paused() is False
-    with capture_logs() as logs:
-        SpendCeiling(ctx).run()
-
-    assert store.local_paused() is True
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    assert len(reports) == 1
-    payload = json.loads(reports[0].payload)
-    assert payload["by"] == "runner-ceiling"
-    assert "5.00" in payload["reason"] and "7.00" in payload["reason"]
-    warnings = [e for e in logs if "runner locally paused" in e["event"]]
-    assert len(warnings) == 1
-    assert warnings[0]["ceiling_usd"] == 5.0
-    assert warnings[0]["spend_usd"] == 7.0
-
-
-@pytest.mark.unit
-def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path: Path):
-    """`runner_ceiling_usd` unset (today's default) never engages the brake, however much
-    this runner has spent — mirroring the per-chunk cap's identical absent-means-off rule."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=9999.0, recorded_at=_NOW)
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
-
-    SpendCeiling(ctx).run()
-
-    assert store.local_paused() is False
-    assert [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED] == []
-
-
-@pytest.mark.unit
-def test_ceiling_under_cap_does_not_engage(tmp_path: Path):
-    store = _store(tmp_path)
-    _record_usage(store, cost=1.0, recorded_at=_NOW)
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=_ceiling_config(5.0),
-    )
-
-    SpendCeiling(ctx).run()
-
-    assert store.local_paused() is False
-
-
-@pytest.mark.unit
-def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path: Path):
-    """A cost-absent row contributes tokens but $0 to the cost sum; the ceiling trips
-    on that lower bound, and both the log line and report mark the figure ``+``."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=None, recorded_at=_NOW)  # $0 lower bound, cost_partial=True
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=_ceiling_config(0.0),  # any spend at all trips it
-    )
-
-    with capture_logs() as logs:
-        SpendCeiling(ctx).run()
-
-    assert store.local_paused() is True
-    warnings = [e for e in logs if "runner locally paused" in e["event"]]
-    assert warnings[0]["cost_partial"] is True
-    assert "(spend $0.00+)" in warnings[0]["event"]
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    assert json.loads(reports[0].payload)["reason"].endswith("(spend $0.00+)")
-
-
-@pytest.mark.unit
-def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path: Path):
-    """Once engaged, a later tick's check must neither re-engage nor re-log — engaging is a
-    one-time transition, not a per-tick assertion, even while the window's sum stays over
-    the ceiling for as long as it holds (the engage-once requirement)."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=7.0, recorded_at=_NOW)
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=_ceiling_config(5.0),
-    )
-
-    SpendCeiling(ctx).run()
-    assert store.local_paused() is True
-    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
-
-    with capture_logs() as logs:
-        SpendCeiling(ctx).run()  # a second, and later a third, tick's check
-        SpendCeiling(ctx).run()
-
-    assert [e for e in logs if "runner locally paused" in e["event"]] == []  # not re-logged
-    # Still exactly one pause report ever buffered — no re-engage fact either.
-    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
-
-
-@pytest.mark.unit
-def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_cap(tmp_path: Path):
-    """Once engaged, the brake stays engaged even after the rolling window later excludes
-    the very usage fact that tripped it (the sum genuinely drops back under the cap) —
-    `blizzard runner start` is the ONLY conscious clear (the locked design)."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=7.0, recorded_at=_NOW)
-    clock = FixedClock(_NOW)
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=_ceiling_config(5.0, window_hours=1.0),
-    )
-
-    SpendCeiling(ctx).run()
-    assert store.local_paused() is True
-
-    # Move the clock two hours on — the 1h window now excludes the tripping fact entirely,
-    # so a fresh, unpaused check of the same config would find $0 spend, well under cap.
-    clock.advance(timedelta(hours=2))
-    assert store.usage_since(clock.now() - timedelta(hours=1)).cost_usd == 0.0  # confirms the rollover
-
-    SpendCeiling(ctx).run()
-
-    assert store.local_paused() is True  # still engaged — nothing lifts it automatically
-
-
-@pytest.mark.unit
-def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(tmp_path: Path):
-    """Driven as a full tick: a live worker whose runner just crossed its ceiling is left
-    running untouched, and a second, otherwise-claimable chunk is not spawned into either."""
-    store = _store(tmp_path)
-    _seed_running_lease(store)  # lease_1 / ch_1, a live worker (pid 100)
-    _record_usage(store, cost=7.0, recorded_at=_NOW)
-    hub = FakeHub()
-    hub.paused = False
-    hub.chunks["ch_1"] = _running_chunk()
-    hub.queue = [QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
-    ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
-    hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
-    hub.envelopes["ch_2"] = ch_2_env
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    probe = FakeProbe(alive={(100, "start-100")})  # the ch_1 worker is still running
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
-        harness=harness,
-        probe=probe,
-        clock=FixedClock(_NOW),
-        config=_ceiling_config(5.0, agents=2),
-    )
-
-    tick(ctx)
-
-    assert store.local_paused() is True  # the ceiling engaged this very tick
-    assert probe.killed == []  # not a drain — the live worker was left alone
-    assert harness.spawns == []  # and nothing new was spawned into the free second env either
-    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
-    assert hub.claims == []
-    lease = store.active_lease("lease_1")
-    assert lease is not None and lease.pid == 100  # untouched
-
-
-@pytest.mark.unit
-def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path: Path):
-    """`blizzard runner start` clears a ceiling-engaged brake exactly as it clears an
-    operator's own pause, with no ceiling-specific code path."""
-    store = _store(tmp_path)
-    _record_usage(store, cost=7.0, recorded_at=_NOW)
-    clock = FixedClock(_NOW)
-    hub = FakeHub()
-    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.claim_outcome = claimed_outcome("ch_1", env)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=_ceiling_config(5.0, window_hours=1.0),
-    )
-
-    SpendCeiling(ctx).run()
-    assert store.local_paused() is True
-    Fill(ctx).run()
-    assert hub.claims == []  # suppressed while engaged
-
-    # `blizzard runner start` — the exact `record_local_pause(paused=False)` write
-    # `PATCH /api/runner` makes, with no ceiling-aware code anywhere in that path.
-    _pause_locally(store, ctx, paused=False)
-    assert store.local_paused() is False
-
-    # The window has since moved past the tripping fact, so a fresh ceiling check does not
-    # immediately re-engage the brake out from under the operator's own clear.
-    clock.advance(timedelta(hours=2))
-    SpendCeiling(ctx).run()
-    assert store.local_paused() is False
-
-    Fill(ctx).run()
-
-    assert store.local_paused() is False
-    assert len(hub.claims) == 1  # FILL claims again — work resumed
-
-
-# --- Usage-limit mark ----------------------------------------
 
 
 def _limited_ctx(
@@ -1793,9 +1423,6 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path: Path):
     assert "5.00" in payload["reason"] and "7.00" in payload["reason"]
 
 
-# Interrupted-claim reclaim is a new claim, stopped by either brake.
-
-
 def _ctx_with_a_crash_left_binding(tmp_path: Path, *, route_runner_id: str | None = None):
     """A binding left by a crash between env acquire and claim, on a chunk the hub still reads READY."""
     store = _store(tmp_path)
@@ -1856,9 +1483,6 @@ def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp
     assert harness.spawns == []
     assert store.held_environment_ids() == []
     assert provider.released != []
-
-
-# --- Operator pause/start over the standing brake ------------------------
 
 
 def _local_pause_reports(store: SqlAlchemyRunnerStore):

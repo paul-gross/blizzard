@@ -7,24 +7,19 @@ Driven against a real (tmp sqlite) runner store with the seam fakes, per the tie
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopContext
-from blizzard.runner.loop.steps import Advance, Resume
+from blizzard.runner.loop.steps import Resume
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
-from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.host_files import one_workspace
 from tests.runner_fakes import (
     FakeCheckRunner,
@@ -32,69 +27,25 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
-    FakeWorktreeGit,
-    SqlAlchemyRunnerStore,
     loop_context,
     make_context,
     make_envelope,
-    make_store,
     migrated_store_at,
 )
-
-_NOW = datetime(2026, 8, 4, 12, 0, 0, tzinfo=UTC)
-_CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
-
-
-def _store(tmp_path: Path):
-    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-
-
-def _seed_running_lease(
-    store: SqlAlchemyRunnerStore,
-    *,
-    lease: str = "lease_1",
-    chunk: str = "ch_1",
-    node_id: str = "nd_build",
-    epoch: int = 1,
-) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
-        )
-    )
-    store.record_spawn(
-        lease,
-        pid=100,
-        process_start_time="start-100",
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
-        spawned_at=_NOW,
-    )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+from tests.support_pin_runner_loop import (
+    _CHOICES,  # pyright: ignore[reportPrivateUsage]
+    _HANDLE,  # pyright: ignore[reportPrivateUsage]
+    _NOW,  # pyright: ignore[reportPrivateUsage]
+    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
+    _store,  # pyright: ignore[reportPrivateUsage]
+)
 
 
-# The omitted-retries default is specifically two, not merely "whatever is configured".
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
 def test_default_retries_max_is_two() -> None:
     """``nodes.md``: an omitted `retries:` resolves to two retries specifically."""
     assert DEFAULT_RETRIES_MAX == 2
 
 
-# RESUME keys on the pause FACT, never the derived status.
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
 def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_path: Path) -> None:
     """A chunk both paused and parked on a question derives ``waiting_on_human``, so the
     ``pause`` view is the only witness that it is paused. RESUME must park it and keep the
@@ -129,11 +80,6 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
     assert provider.released == []
 
 
-# The checks re-run marker is keyed (lease, epoch) — never (chunk, node).
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
 def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_path: Path) -> None:
     """A retry mints a fresh ``(lease, epoch)`` at the same ``(chunk, node)``, so the
     marker must be unset and the checks must run again against the rebuilt tree."""
@@ -183,97 +129,6 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     assert [(r.command, r.passed) for r in results] == [("mise run lint", True)]
 
 
-# The nudge-fired guard fact lands BEFORE the resume it guards runs.
-# --------------------------------------------------------------------------- #
-
-
-class _RecordingResumeHarness(FakeHarness):
-    """Captures whether the resume-fired fact was already durable at the resume call."""
-
-    def __init__(
-        self,
-        *,
-        store: SqlAlchemyRunnerStore,
-        lease_id: str,
-        epoch: int,
-        handle: WorkerHandle,
-        verdict: str | None,
-        assessment: str = "",
-    ) -> None:
-        super().__init__(handle=handle, verdict=verdict, assessment=assessment)
-        self._store = store
-        self._lease_id = lease_id
-        self._epoch = epoch
-        self.fired_at_resume: list[bool] = []
-
-    def resume_with_message(
-        self,
-        session_cwd: str,
-        session_id: str,
-        message: str,
-        stdout_path: str = "",
-        *,
-        preamble: WorkerPreamble | None = None,
-        chunk_id: str = "",
-        model: str | None = None,
-        effort: str | None = None,
-        compaction_window: str | None = None,
-    ) -> ResumeHandle:
-        self.fired_at_resume.append(self._store.nudge_fired(self._lease_id, self._epoch))
-        return super().resume_with_message(
-            session_cwd,
-            session_id,
-            message,
-            stdout_path,
-            preamble=preamble,
-            chunk_id=chunk_id,
-            model=model,
-            effort=effort,
-            compaction_window=compaction_window,
-        )
-
-
-@pytest.mark.component
-def test_the_resume_guard_fact_is_durable_before_the_resume_runs(tmp_path: Path) -> None:
-    """ "At most one resume per (lease, epoch)" is structural only if the guard fact is
-    written first: recorded after the resume, a crash in between leaves recovery unable to
-    tell "resumed, worker ignored it" from "never resumed"."""
-    store = _store(tmp_path)
-    _seed_running_lease(store, lease="lease_r", node_id="nd_review")
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope(
-        "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
-    )
-    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
-    harness = _RecordingResumeHarness(
-        store=store,
-        lease_id="lease_r",
-        epoch=1,
-        handle=_HANDLE,
-        verdict="fail",
-        assessment="the shared assessment",
-    )
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),  # the worker exited
-        worktree_git=FakeWorktreeGit(),
-        clock=FixedClock(_NOW),
-    )
-
-    Advance(ctx).run()
-
-    assert harness.judged == [], "no verdict should be elicited on a resumed premature exit"
-    assert harness.fired_at_resume == [True], "the resume ran before its guard fact was durable"
-
-
-# The prompts are resolved by the caller and injected, never re-derived here.
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
 def test_loop_wiring_uses_the_injected_runner_prompt_and_never_re_derives_it(tmp_path: Path) -> None:
     """Re-deriving it here would raise ``ConfigError`` on a configured-but-missing prompt
     file from whatever thread this runs on — for the daemon, the background loop thread —
