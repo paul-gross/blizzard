@@ -1112,7 +1112,7 @@
     "opencode": {
       "commands": {
         "attend": {
-          "help": "Take over an OpenCode 2 session in the operator's own OpenCode.\n\nInterrupts the session's tree, best effort, replaces its rules with the attended set, and runs `opencode --session\nSESSION_ID` in its place. The runner's takeover composes this command; a later driven resume re-applies the\nunattended rules and restores the lease's model and agent.",
+          "help": "Take over a fleet OpenCode 2 session in the operator's own OpenCode.\n\nInterrupts the session's tree, best effort, replaces its rules with the attended set, switches it to --model when\nit runs another, then runs the --opencode executable on it. Refuses a session no blizzard runner minted. The\nrunner's takeover composes this; a later driven resume re-applies the unattended rules and the lease's agent.",
           "params": [
             {
               "hidden": false,
@@ -1122,6 +1122,18 @@
                 "session_id"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The lease's model as provider/model[#variant]; the session is switched to it when it runs another.",
+              "hidden": false,
+              "kind": "option",
+              "name": "model",
+              "opts": [
+                "--model"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -1139,7 +1151,7 @@
             }
           ],
           "path": "runner opencode attend",
-          "short_help": "Take over an OpenCode 2 session in the operator's own OpenCode."
+          "short_help": "Take over a fleet OpenCode 2 session in the operator's own OpenCode."
         },
         "compatibility": {
           "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.\n\nThe binary's major version selects the proof: OpenCode 1 runs in an isolated scratch home, OpenCode 2 on the\noperator's own managed service.",

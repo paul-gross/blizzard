@@ -26,6 +26,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
@@ -43,7 +44,6 @@ from blizzard.runner.process.child_processes import Stream
 _log = get_logger("blizzard.runner.harness")
 
 SESSION_ID_PREFIX = "ses"
-DEFAULT_BINARY = "opencode"
 DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 _WINDOW = re.compile(r"(?P<count>[0-9]+)(?P<thousands>[kK]?)")
@@ -72,7 +72,7 @@ class OpenCodeTwoAdapter:
         versions: VersionProbe,
         request_dir: Path,
         clock: IClock,
-        binary: str = DEFAULT_BINARY,
+        binary: str = DEFAULT_OPENCODE_BINARY,
         driver_command: Sequence[str] = ("blizzard",),
         model: str = "",
         agent: str | None = None,
@@ -323,11 +323,14 @@ class OpenCodeTwoAdapter:
         effort: str | None = None,
         attended: bool = False,
     ) -> str:
-        # Pasted or exec'd, takeover goes through `attend`: the session's tree is stopped and its rules swapped first.
-        # The operator's TUI takes their own model and agent; the next driven resume restores the lease's.
-        del model, effort, attended
+        # Pasted or exec'd, takeover goes through `attend`: the tree is stopped, the rules swapped, and the stamped
+        # model reasserted first. The TUI switches the agent to its own; the next driven resume restores the lease's.
+        del attended
         argv = [*self._driver_command, "runner", "opencode", "attend", session_id]
-        if self._binary != DEFAULT_BINARY:
+        reference = self._reference(model, effort)
+        if reference is not None:
+            argv += ["--model", model_option(reference)]
+        if self._binary != DEFAULT_OPENCODE_BINARY:
             argv += ["--opencode", self._binary]
         return f"cd {shlex.quote(session_cwd)} && {shlex.join(argv)}"
 

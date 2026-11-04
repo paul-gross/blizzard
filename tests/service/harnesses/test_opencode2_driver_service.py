@@ -361,6 +361,7 @@ def test_takeover_hands_the_session_to_the_operator_and_a_resume_takes_it_back(e
     finally:
         executor.shutdown(wait=True)
     client = engine.client()
+    client.switch_model(request.session_id, ModelReference("openai", "gpt-6.1-terra", "low"))
     attend = subprocess.Popen(
         ["/bin/sh", "-c", command],
         env=engine.env(),
@@ -383,8 +384,8 @@ def test_takeover_hands_the_session_to_the_operator_and_a_resume_takes_it_back(e
     children = [parse_session(found) for found in client.children(request.session_id)]
     assert children and all(found.outcome == "interrupted" for found in children)
     switched = [m for m in client.messages(request.session_id) if str(m["type"]).endswith("-switched")]
-    assert [m["type"] for m in switched[-2:]] == ["model-switched", "agent-switched"]
-    assert parse_session(record).model != _LUNA
+    assert [m["type"] for m in switched[-3:]] == ["model-switched", "model-switched", "agent-switched"]
+    assert parse_session(record).model == _LUNA and record["agent"] == "build"
     resumed = engine.drive(replace(request, kind=DriveKind.RESUME, prompt="text('back')"))
     assert resumed.outcome is Outcome.SUCCEEDED and resumed.text == "back"
     after = client.session(request.session_id)

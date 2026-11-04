@@ -173,17 +173,15 @@ def test_models_and_efforts_resolve_and_takeover_goes_through_attend(tmp_path: P
     assert adapter.resolve_compaction_window("auto") == "auto" and adapter.resolve_compaction_window("x") is None
     assert window_tokens("auto") is None and window_tokens("150000") == 150_000
     command = adapter.resume_command("/w", "ses_1", model="openai/gpt-6-luna", effort="high")
-    assert command == "cd /w && blizzard runner opencode attend ses_1"
-    assert (
-        adapter.resume_command("/my work", "ses_1", attended=True)
-        == "cd '/my work' && blizzard runner opencode attend ses_1"
-    )
+    assert command == "cd /w && blizzard runner opencode attend ses_1 --model 'openai/gpt-6-luna#high'"
+    attended = adapter.resume_command("/my work", "ses_1", attended=True)
+    assert attended == "cd '/my work' && blizzard runner opencode attend ses_1 --model openai/gpt-6-luna"
 
 
 def test_the_takeover_command_names_a_binary_other_than_opencode(tmp_path: Path) -> None:
     adapter, _ = _adapter(tmp_path, binary="/opt/oc 2/opencode")
     command = adapter.resume_command("/w", "ses_1")
-    assert command == "cd /w && blizzard runner opencode attend ses_1 --opencode '/opt/oc 2/opencode'"
+    assert command.endswith("attend ses_1 --model openai/gpt-6-luna --opencode '/opt/oc 2/opencode'")
 
 
 def _output(outcome: Outcome, text: str, error: TurnError | None = None) -> str:
