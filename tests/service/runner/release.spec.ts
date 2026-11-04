@@ -1,21 +1,22 @@
 import { expect, runnerTest as test } from '../../harness/fixtures';
-import type { MockChunkSpec, MockHub, RunnerHost, WorkerCheckpoint } from '../../harness/fixtures';
+import type { Clock, MockChunkSpec, MockHub, RunnerHost, WorkerCheckpoint } from '../../harness/fixtures';
 
 const FIRST = 'runner-local';
 const NEIGHBOUR = 'runner-b';
 const NAMES = [FIRST, NEIGHBOUR];
 const LINE = 95;
 const MAX_PASSES = 600;
+const SAMPLE_INTERVAL_SECONDS = 1;
 
-test.setTimeout(240_000);
+test.use({ clockMode: 'controlled' });
 
-function sample(pct: number) {
-  const now = Math.floor(Date.now() / 1000);
+function sample(clock: Clock, pct: number) {
+  const now = Math.floor(clock.now().getTime() / 1000);
   return { short: { utilization: pct, resetsAt: now + 3 * 3600 }, long: { utilization: pct, resetsAt: now + 48 * 3600 } };
 }
 
-function minuteAhead(hours: number): number {
-  return Math.floor((Date.now() / 1000 + hours * 3600) / 60) * 60;
+function minuteAhead(clock: Clock, hours: number): number {
+  return Math.floor((clock.now().getTime() / 1000 + hours * 3600) / 60) * 60;
 }
 
 function named(resetsAt: number): string {
@@ -75,12 +76,12 @@ async function declining(mockHub: MockHub, host: RunnerHost, name: string): Prom
   return (response.body as { declining: { lever: string }[] }).declining.map((reason) => reason.lever);
 }
 
-async function sampled(host: RunnerHost, slug: string, pct: number): Promise<void> {
-  await expect.poll(async () => {
-    expect((await host.stepHost()).outcome).toBe('completed');
-    const subscription = (await host.api.subscriptions()).body.items.find((item) => item.slug === slug);
-    return subscription?.ok && subscription.windows.length === 2 && subscription.windows.every((window) => window.utilization_pct === pct);
-  }, { message: `${slug} sampled at ${pct}%`, timeout: 15_000 }).toBe(true);
+async function sampled(clock: Clock, host: RunnerHost, slug: string, pct: number): Promise<void> {
+  await clock.advance(SAMPLE_INTERVAL_SECONDS);
+  expect((await host.stepHost()).outcome).toBe('completed');
+  const subscription = (await host.api.subscriptions()).body.items.find((item) => item.slug === slug);
+  expect(subscription?.ok).toBe(true);
+  expect(subscription?.windows.map((window) => window.utilization_pct)).toEqual([pct, pct]);
 }
 
 async function setup(runnerHosts: { create: (options: { runnerConfig: Record<string, unknown> }) => Promise<RunnerHost> },
@@ -94,8 +95,8 @@ async function setup(runnerHosts: { create: (options: { runnerConfig: Record<str
     runnerConfig: {
       workspace: [{ id: 'workspace-local', envs: ['e1', 'e2'], max_environments: 2n }],
       subscription: [
-        { slug: 'anthropic', credentials_path: firstPath, usage_api_base: '${usageBase}', sample_interval_seconds: 1n },
-        { slug: 'second-plan', name: 'Second plan', provider: 'anthropic', credentials_path: secondPath, usage_api_base: '${usageBase}', sample_interval_seconds: 1n },
+        { slug: 'anthropic', credentials_path: firstPath, usage_api_base: '${usageBase}', sample_interval_seconds: BigInt(SAMPLE_INTERVAL_SECONDS) },
+        { slug: 'second-plan', name: 'Second plan', provider: 'anthropic', credentials_path: secondPath, usage_api_base: '${usageBase}', sample_interval_seconds: BigInt(SAMPLE_INTERVAL_SECONDS) },
       ],
       runner: [bind(FIRST, 'anthropic'), bind(NEIGHBOUR, 'second-plan')],
     },
@@ -133,25 +134,25 @@ async function refuseBoth(mockHub: MockHub, host: RunnerHost, chunkId: string): 
   for (const name of NAMES) expect(await declining(mockHub, host, name)).toContain('utilization');
 }
 
-test('test_a_declined_next_step_is_released_to_a_neighbour_and_waits_ready_while_every_gate_declines', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint }, testInfo) => {
+test('test_a_declined_next_step_is_released_to_a_neighbour_and_waits_ready_while_every_gate_declines', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint, clock }, testInfo) => {
   const first = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-first'));
   const second = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-second'));
-  vendorUsage.set(first.token, sample(40));
-  vendorUsage.set(second.token, sample(96));
+  vendorUsage.set(first.token, sample(clock, 40));
+  vendorUsage.set(second.token, sample(clock, 96));
   const host = await setup(runnerHosts, first.path, second.path);
   expect((await host.api.runners()).body.items.map((runner) => runner.runner_id)).toEqual(expect.arrayContaining(NAMES.map((name) => host.runners[name]!.id)));
-  await sampled(host, 'anthropic', 40);
-  await sampled(host, 'second-plan', 96);
+  await sampled(clock, host, 'anthropic', 40);
+  await sampled(clock, host, 'second-plan', 96);
   const chunkId = (await mockHub.seed.chunk(twoNodes(workerCheckpoint))).body.chunk_id;
   let arrived = false;
   void workerCheckpoint.reached('build').then(() => (arrived = true));
   await until(host, () => leases(host, FIRST, chunkId), (found) => found.length === 1 && arrived);
-  vendorUsage.set(first.token, sample(96));
-  await sampled(host, 'anthropic', 96);
+  vendorUsage.set(first.token, sample(clock, 96));
+  await sampled(clock, host, 'anthropic', 96);
   const original = await releasedGate(mockHub, host, workerCheckpoint, chunkId);
   await refuseBoth(mockHub, host, chunkId);
-  vendorUsage.set(second.token, sample(40));
-  await sampled(host, 'second-plan', 40);
+  vendorUsage.set(second.token, sample(clock, 40));
+  await sampled(clock, host, 'second-plan', 40);
   const [next] = await until(host, () => leases(host, NEIGHBOUR, chunkId), (found) => found.length === 1);
   expect(next!.lease_id).not.toBe(original.lease_id);
   expect(next!.epoch).toBeGreaterThan(original.epoch);
@@ -159,24 +160,24 @@ test('test_a_declined_next_step_is_released_to_a_neighbour_and_waits_ready_while
   expect(await leases(host, FIRST, chunkId)).toHaveLength(1);
 });
 
-test('test_a_released_chunk_is_claimed_cold_by_its_first_runner_once_its_gate_reopens', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint }, testInfo) => {
+test('test_a_released_chunk_is_claimed_cold_by_its_first_runner_once_its_gate_reopens', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint, clock }, testInfo) => {
   const first = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-first'));
   const second = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-second'));
-  vendorUsage.set(first.token, sample(40));
-  vendorUsage.set(second.token, sample(96));
+  vendorUsage.set(first.token, sample(clock, 40));
+  vendorUsage.set(second.token, sample(clock, 96));
   const host = await setup(runnerHosts, first.path, second.path);
-  await sampled(host, 'anthropic', 40);
-  await sampled(host, 'second-plan', 96);
+  await sampled(clock, host, 'anthropic', 40);
+  await sampled(clock, host, 'second-plan', 96);
   const chunkId = (await mockHub.seed.chunk(twoNodes(workerCheckpoint))).body.chunk_id;
   let arrived = false;
   void workerCheckpoint.reached('build').then(() => (arrived = true));
   await until(host, () => leases(host, FIRST, chunkId), (found) => found.length === 1 && arrived);
-  vendorUsage.set(first.token, sample(96));
-  await sampled(host, 'anthropic', 96);
+  vendorUsage.set(first.token, sample(clock, 96));
+  await sampled(clock, host, 'anthropic', 96);
   const original = await releasedGate(mockHub, host, workerCheckpoint, chunkId);
   await refuseBoth(mockHub, host, chunkId);
-  vendorUsage.set(first.token, sample(40));
-  await sampled(host, 'anthropic', 40);
+  vendorUsage.set(first.token, sample(clock, 40));
+  await sampled(clock, host, 'anthropic', 40);
   const next = await until(host, () => leases(host, FIRST, chunkId), (found) => found.length === 2);
   const reclaimed = next.find((lease) => lease.lease_id !== original.lease_id)!;
   expect(reclaimed.epoch).toBeGreaterThan(original.epoch);
@@ -184,15 +185,15 @@ test('test_a_released_chunk_is_claimed_cold_by_its_first_runner_once_its_gate_re
   expect(await leases(host, NEIGHBOUR, chunkId)).toEqual([]);
 });
 
-test('test_a_usage_limited_lease_on_a_runner_set_to_release_is_claimed_elsewhere_from_its_step_s_start', async ({ mockHub, runnerHosts, vendorUsage }, testInfo) => {
+test('test_a_usage_limited_lease_on_a_runner_set_to_release_is_claimed_elsewhere_from_its_step_s_start', async ({ mockHub, runnerHosts, vendorUsage, clock }, testInfo) => {
   const first = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-first'));
   const second = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-second'));
-  const reset = minuteAhead(2);
-  vendorUsage.set(first.token, { short: { utilization: 90, resetsAt: reset }, long: sample(90).long });
-  vendorUsage.set(second.token, sample(96));
+  const reset = minuteAhead(clock, 2);
+  vendorUsage.set(first.token, { short: { utilization: 90, resetsAt: reset }, long: sample(clock, 90).long });
+  vendorUsage.set(second.token, sample(clock, 96));
   const host = await setup(runnerHosts, first.path, second.path, true);
-  await sampled(host, 'anthropic', 90);
-  await sampled(host, 'second-plan', 96);
+  await sampled(clock, host, 'anthropic', 90);
+  await sampled(clock, host, 'second-plan', 96);
   const spec: MockChunkSpec = { entry: 'build', nodes: { build: node(`usage_limited(resets_at="${named(reset)}")\n`, 'review'), review: node('pass\n', 'done') }, work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }] };
   const chunkId = (await mockHub.seed.chunk(spec)).body.chunk_id;
   const [original] = await until(host, async () => leases(host, FIRST, chunkId),
@@ -208,8 +209,8 @@ test('test_a_usage_limited_lease_on_a_runner_set_to_release_is_claimed_elsewhere
   expect((await leases(host, FIRST, chunkId)).every((lease) => lease.state === 'closed')).toBe(true);
   expect(await held(host, chunkId)).toEqual([]);
   await refuseBothUsage(mockHub, host, chunkId);
-  vendorUsage.set(second.token, sample(40));
-  await sampled(host, 'second-plan', 40);
+  vendorUsage.set(second.token, sample(clock, 40));
+  await sampled(clock, host, 'second-plan', 40);
   const [next] = await until(host, () => leases(host, NEIGHBOUR, chunkId), (found) => found.length === 1);
   expect(next!.lease_id).not.toBe(original!.lease_id);
   expect(next!.epoch).toBeGreaterThan(original!.epoch);
