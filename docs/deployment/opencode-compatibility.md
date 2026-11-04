@@ -206,8 +206,8 @@ Either way, the same four-tier proof plus this page's own live diagnostic is owe
      cleanly for the candidate (`tests/unit/runner/harness/test_offline_compatibility.py`,
      `tests/unit/runner/harness/opencode/test_compatibility.py`).
    - `blizzard:component-test` — the generic OpenCode selftest: the runner's per-harness selftest checks
-     (`tests/component/runner/test_selftest.py`) pass against the candidate's CLI surface, independent of the live compatibility
-     diagnostic above.
+     (`tests/component/runner/test_selftest.py`) pass against the candidate's CLI surface, independent of the live
+     compatibility diagnostic above.
    - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
      (`tests/service/runner/opencode.spec.ts`, `tests/service/harnesses/test_opencode_compatibility_service.py`,
      `tests/service/runner/mixed-harness-dispatch.spec.ts`).
