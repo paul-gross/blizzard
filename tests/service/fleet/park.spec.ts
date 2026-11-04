@@ -209,84 +209,108 @@ for (const parkedFirst of [true, false]) {
   });
 }
 
-test('test_second_parked_repository_has_its_own_review_clock', async ({ repository, issue, project, api, forge, runnerHosts }) => {
-  test.fixme(true, 'Waits a real hour for the park timeout; enable once a test can move the hub clock');
-  test.setTimeout(4_500_000);
-  const consumer = await repository();
-  const library = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [consumer.name]: consumer.origin!, [library.name]: library.origin! } });
-  await order(api, project.slug, library, consumer);
-  for (const [repo, hours] of [[library, 2], [consumer, 1]] as const) {
-    expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'park', park_timeout_hours: hours } })).status).toBe(200);
-  }
-  expect((await api.post('/api/graphs', { data: { definition_yaml: graph([consumer, library]) } })).status).toBe(201);
-  const { chunk } = await issue('independent park clocks', { repository: consumer });
-  const id = chunk.chunk_id;
-  expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
-  const firstHeld = await parked(host, api, id);
-  const firstAt = marker(firstHeld, library);
-  const first = await pulls(forge, library);
-  expect(first).toHaveLength(1);
-  expect(await pulls(forge, consumer, 'all')).toEqual([]);
-  await expect.poll(async () => {
-    const detail = await read(api, id);
-    expect(detail.status).toBe('delivering');
-    expect(detail.pending?.kind).toBe('awaiting-merge');
-    return Date.now() - marker(detail, library);
-  }, { timeout: 3_900_000 }).toBeGreaterThan(3_600_000);
-  const firstSha = await merge(forge, library, first[0]!.number, 'merge');
-  await expect.poll(async () => (await pulls(forge, consumer)).length, { timeout: 180_000 }).toBe(1);
-  await expect.poll(async () => {
-    const detail = await read(api, id);
-    return detail.pending?.kind === 'awaiting-merge' && detail.artifacts.some((artifact) => artifact.name.startsWith(`delivery-pr/${fullName(consumer)}/`));
-  }, { timeout: 180_000 }).toBe(true);
-  const secondHeld = await read(api, id);
-  const secondAt = marker(secondHeld, consumer);
-  expect(secondAt - firstAt).toBeGreaterThan(3_600_000);
-  expect(secondHeld.status).toBe('delivering');
-  expect(secondHeld.pending?.kind).toBe('awaiting-merge');
-  const evaluated = await waitFor(api, id, (detail) => detail.status !== 'delivering' || detail.pending?.next_poll_at !== secondHeld.pending!.next_poll_at);
-  expect(evaluated.status).toBe('delivering');
-  expect(evaluated.pending?.kind).toBe('awaiting-merge');
-  const second = await pulls(forge, consumer);
-  expect(second).toHaveLength(1);
-  const secondSha = await merge(forge, consumer, second[0]!.number, 'squash');
-  const done = await waitFor(api, id, (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status));
-  expect([done.status, done.landed]).toEqual(['done', true]);
-  expect(Object.fromEntries(done.landed_repos.map((row) => [row.repo, row.commit_hash]))).toEqual({ [fullName(library)]: firstSha, [fullName(consumer)]: secondSha });
-  expect((await landingFacts(api, id)).map(({ repo, commit_hash }) => [repo, commit_hash])).toEqual([
-    [fullName(library), firstSha], [fullName(consumer), secondSha],
-  ]);
-  await landedSubmission(api, id);
-});
+type Clock = Parameters<Parameters<typeof test>[2]>[0]['clock'];
 
-test('test_park_timeout_then_person_merge_is_adopted_on_requeue', async ({ repository, issue, api, forge, runnerHosts }) => {
-  test.fixme(true, 'Waits a real hour for the park timeout; enable once a test can move the hub clock');
-  test.setTimeout(4_500_000);
-  const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'park', park_timeout_hours: 1 } })).status).toBe(200);
-  expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo]) } })).status).toBe(201);
-  const { chunk } = await issue('park timeout', { repository: repo });
-  const id = chunk.chunk_id;
-  expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
-  const held = await parked(host, api, id);
-  expect(held.pending!.since).not.toBeNull();
-  const producedAt = marker(held, repo);
-  const opened = await pulls(forge, repo);
-  expect(opened).toHaveLength(1);
-  await expect.poll(async () => (await read(api, id)).status, { timeout: 4_000_000 }).toBe('needs_human');
-  const expired = await read(api, id);
-  expect(expired.escalation?.cause).toBe('park-timeout');
-  expect(expired.pending).toBeNull();
-  expect(Date.now() - producedAt).toBeGreaterThanOrEqual(3_600_000);
-  const sha = await merge(forge, repo, opened[0]!.number, 'squash');
-  expect((await api.post(`/api/chunks/${id}/requeues`)).status).toBe(202);
-  const done = await stepUntil(host, () => read(api, id), (detail) => detail.status === 'done', { stallPasses: 80, progress: chunkProgress });
-  expect([done.status, done.landed]).toEqual(['done', true]);
-  expect(done.landed_repos).toHaveLength(1);
-  expect(done.landed_repos[0]!.commit_hash).toBe(sha);
-  expect(done.pending).toBeNull();
-  expect(await pulls(forge, repo, 'all')).toHaveLength(1);
-  await landedSubmission(api, id);
+// The two hour-long cases run on a controlled hub, which starts no flow-driver timer: each wait is a bounded loop of the
+// runner host and one flow turn. A turn moves the stack's clock only to the pending visit's own `next_poll_at`, when that
+// lies ahead, so a parked visit is polled at its `PARK_POLL_FLOOR` cadence and the clock never overshoots a timeout.
+async function turn(api: HubApi, clock: Pick<Clock, 'now' | 'set'>, id: string): Promise<Wire.ChunkDetail> {
+  const { pending } = await read(api, id);
+  const due = pending?.next_poll_at ? Date.parse(pending.next_poll_at) : NaN;
+  if (due > clock.now().getTime()) await clock.set(new Date(due));
+  await api.flowStep();
+  return read(api, id);
+}
+
+const chunkOn = (host: RunnerHost, api: HubApi, clock: Pick<Clock, 'now' | 'set'>, id: string, reached: (detail: Wire.ChunkDetail) => boolean) =>
+  stepUntil(host, () => turn(api, clock, id), reached, { stallPasses: 80, progress: chunkProgress });
+
+async function landedOnClock(host: RunnerHost, api: HubApi, clock: Pick<Clock, 'now' | 'set'>, id: string) {
+  await stepUntil(host, async () => {
+    await turn(api, clock, id);
+    const landed = (await submissions(api, id)).some((item) => item.closure?.outcome === 'landed');
+    const history = await turns(api, id);
+    return { landed, ended: history.length > 0 && history.every((item) => item.ended_at !== null) };
+  }, (state) => state.landed && state.ended, { stallPasses: 80 });
+}
+
+test.describe('the park timeout, on the controlled clock', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  test('test_second_parked_repository_has_its_own_review_clock', async ({ repository, issue, project, api, clock, forge, runnerHosts }) => {
+    const consumer = await repository();
+    const library = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [consumer.name]: consumer.origin!, [library.name]: library.origin! } });
+    await order(api, project.slug, library, consumer);
+    for (const [repo, hours] of [[library, 2], [consumer, 1]] as const) {
+      expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'park', park_timeout_hours: hours } })).status).toBe(200);
+    }
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph([consumer, library]) } })).status).toBe(201);
+    const { chunk } = await issue('independent park clocks', { repository: consumer });
+    const id = chunk.chunk_id;
+    expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
+    const firstHeld = await chunkOn(host, api, clock, id, (detail) => detail.pending?.kind === 'awaiting-merge');
+    const firstAt = marker(firstHeld, library);
+    const first = await pulls(forge, library);
+    expect(first).toHaveLength(1);
+    expect(await pulls(forge, consumer, 'all')).toEqual([]);
+    // Past the consumer's hour, short of the library's two: the library's visit is still parked.
+    await clock.set(new Date(Math.max(firstAt + 3_600_000 + 1000, clock.now().getTime())));
+    await api.flowStep();
+    const waiting = await read(api, id);
+    expect(waiting.status).toBe('delivering');
+    expect(waiting.pending?.kind).toBe('awaiting-merge');
+    const firstSha = await merge(forge, library, first[0]!.number, 'merge');
+    const secondHeld = await chunkOn(host, api, clock, id,
+      (detail) => detail.pending?.kind === 'awaiting-merge' && detail.artifacts.some((artifact) => artifact.name.startsWith(`delivery-pr/${fullName(consumer)}/`)));
+    expect((await pulls(forge, consumer)).length).toBe(1);
+    const secondAt = marker(secondHeld, consumer);
+    expect(secondAt - firstAt).toBeGreaterThan(3_600_000);
+    expect(secondHeld.status).toBe('delivering');
+    expect(secondHeld.pending?.kind).toBe('awaiting-merge');
+    const evaluated = await turn(api, clock, id);
+    expect(evaluated.status).toBe('delivering');
+    expect(evaluated.pending?.kind).toBe('awaiting-merge');
+    const second = await pulls(forge, consumer);
+    expect(second).toHaveLength(1);
+    const secondSha = await merge(forge, consumer, second[0]!.number, 'squash');
+    const done = await chunkOn(host, api, clock, id, (detail) => ['done', 'needs_human', 'stopped'].includes(detail.status));
+    expect([done.status, done.landed]).toEqual(['done', true]);
+    expect(Object.fromEntries(done.landed_repos.map((row) => [row.repo, row.commit_hash]))).toEqual({ [fullName(library)]: firstSha, [fullName(consumer)]: secondSha });
+    expect((await landingFacts(api, id)).map(({ repo, commit_hash }) => [repo, commit_hash])).toEqual([
+      [fullName(library), firstSha], [fullName(consumer), secondSha],
+    ]);
+    await landedOnClock(host, api, clock, id);
+  });
+
+  test('test_park_timeout_then_person_merge_is_adopted_on_requeue', async ({ repository, issue, api, clock, forge, runnerHosts }) => {
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'park', park_timeout_hours: 1 } })).status).toBe(200);
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo]) } })).status).toBe(201);
+    const { chunk } = await issue('park timeout', { repository: repo });
+    const id = chunk.chunk_id;
+    expect((await api.post(`/api/chunks/${id}/promote`)).status).toBe(202);
+    const held = await chunkOn(host, api, clock, id, (detail) => detail.pending?.kind === 'awaiting-merge');
+    expect(held.pending!.since).not.toBeNull();
+    const producedAt = marker(held, repo);
+    const opened = await pulls(forge, repo);
+    expect(opened).toHaveLength(1);
+    await clock.set(new Date(Math.max(producedAt + 3_600_000, clock.now().getTime())));
+    const expired = await chunkOn(host, api, clock, id, (detail) => detail.status === 'needs_human');
+    expect(expired.escalation?.cause).toBe('park-timeout');
+    expect(expired.pending).toBeNull();
+    expect(clock.now().getTime() - producedAt).toBeGreaterThanOrEqual(3_600_000);
+    // The person merges and requeues after the escalation, at an instant of their own, not the escalation's.
+    await clock.advance(1);
+    const sha = await merge(forge, repo, opened[0]!.number, 'squash');
+    expect((await api.post(`/api/chunks/${id}/requeues`)).status).toBe(202);
+    const done = await chunkOn(host, api, clock, id, (detail) => detail.status === 'done');
+    expect([done.status, done.landed]).toEqual(['done', true]);
+    expect(done.landed_repos).toHaveLength(1);
+    expect(done.landed_repos[0]!.commit_hash).toBe(sha);
+    expect(done.pending).toBeNull();
+    expect(await pulls(forge, repo, 'all')).toHaveLength(1);
+    await landedOnClock(host, api, clock, id);
+  });
 });

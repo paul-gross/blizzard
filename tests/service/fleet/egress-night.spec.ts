@@ -6,7 +6,8 @@ import { type EgressCopy, chunkProgress, expect, stepUntil, test } from '../../h
 // it live again as Parquet into a second directory after the real `blizzard hub egress reset`, and a backfill of the
 // night's window, given as UTC instants, writes a third copy. The night runs once, on the block's one held stack, and
 // each test is one proof, reading the directories back the way a warehouse would and judging them against the hub's own
-// record. Every pass of the hub and the host is stepped.
+// record. Every pass of the hub and the host is stepped, the flow driver too, and the stack's clock is controlled: the
+// slow station is held while the clock advances, and the window closes by advancing past the next whole second.
 
 const RUN = Math.random().toString(16).slice(2, 10);
 const TERMINAL = ['done', 'stopped', 'needs_human'];
@@ -18,7 +19,10 @@ const LANE_GRAPH = `egress-night-lane-${RUN}`;
 // The station built to be the slowest, on the graph whose shape carries it: its worker holds at a checkpoint for longer
 // than any other step of the night lasts.
 const SLOW_STATION = 'assemble';
-const SLOW_HOLD_MS = 15_000;
+// Held while the stack's clock advances, so its recorded duration is this long however little real time passes. It
+// exceeds every other step's controlled duration (each pass accrues one second) and stays well under the hub's runner
+// `STALE_AFTER` (five minutes), since the host is not stepped while the worker is held.
+const SLOW_HOLD_SECONDS = 60;
 const RESOLVER = `egress-night-resolver-${RUN}`;
 const ASK_QUESTION = `EGRESS-ASK-${RUN}: which API style should the endpoint use?`;
 const ASK_ANSWER = `EGRESS-ANSWER-${RUN}`;
@@ -124,13 +128,14 @@ const zoned = (at: Date): string => at.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 type Fixtures = Pick<
   Parameters<Parameters<typeof test>[2]>[0],
-  'api' | 'cli' | 'egress' | 'forge' | 'freshHub' | 'project' | 'repository' | 'runnerHost' | 'workerCheckpoint' | 'once'
+  'api' | 'clock' | 'cli' | 'egress' | 'forge' | 'freshHub' | 'project' | 'repository' | 'runnerHost' | 'workerCheckpoint' | 'once'
 >;
 
 test.describe('the night, held on one stack', () => {
   test.describe.configure({ mode: 'default', timeout: 480_000 });
   test.use({
     isolation: 'fresh-hub',
+    clockMode: 'controlled',
     held: 'night',
     hubConfig: { egress: { directory: '${egress}', format: 'ndjson', settle_seconds: 0n, min_free_bytes: 0n } },
     runnerOnForge: [REPOSITORY],
@@ -139,7 +144,7 @@ test.describe('the night, held on one stack', () => {
 
   /** Runs the night on the held stack, once, and hands every proof what it needs to judge it. */
   const night = (fixtures: Fixtures) => {
-    const { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once } = fixtures;
+    const { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once } = fixtures;
     return once('night', async () => {
       const repo = await repository(REPOSITORY);
       const cliPath = runnerHost.cliBinary;
@@ -148,8 +153,18 @@ test.describe('the night, held on one stack', () => {
       const bodies: string[] = [];
       const planted: Record<string, string[]> = {};
       const detail = async (chunkId: string): Promise<ChunkDetail> => (await api.get(`/api/chunks/${chunkId}`)).body as unknown as ChunkDetail;
+      // The flow driver has no timer on a controlled hub, so each read steps one flow turn. The clock moves a second on
+      // every read, and to a pending `deliver` visit's own `next_poll_at` when that lies further ahead: the export
+      // tells a chunk's steps apart by the instants they ran at, so no two passes of the night may share one.
+      const turn = async (chunkId: string): Promise<ChunkDetail> => {
+        const { pending } = (await api.get(`/api/chunks/${chunkId}`)).body as { pending?: { next_poll_at?: string | null } | null };
+        const due = pending?.next_poll_at ? Date.parse(pending.next_poll_at) : NaN;
+        await clock.set(new Date(Math.max(due || 0, clock.now().getTime() + 1000)));
+        await api.flowStep();
+        return detail(chunkId);
+      };
       const stepTo = (chunkId: string, reached: (detail: ChunkDetail) => boolean = (d) => TERMINAL.includes(d.status)) =>
-        stepUntil(runnerHost, () => detail(chunkId), reached, { stallPasses: 400, progress: chunkProgress });
+        stepUntil(runnerHost, () => turn(chunkId), reached, { stallPasses: 400, progress: chunkProgress });
       const blizzard = async (args: string[]): Promise<string> => {
         const done = await cli(args);
         expect(done.code, `blizzard ${args.join(' ')} failed:\n${done.stderr}`).toBe(0);
@@ -157,6 +172,9 @@ test.describe('the night, held on one stack', () => {
       };
       /** Mints the shape's graph, files its issue and ingests it onto that graph; the chunk is ready for the runner. */
       const ingest = async (graph: string, name: string): Promise<string> => {
+        // Graph ids order by the instant they were minted, and a chunk ingests onto the newest graph of its name: two
+        // mints at one frozen instant would tie, so each shape's graph gets an instant of its own.
+        await clock.advance(1);
         const minted = await api.post('/api/graphs', { data: { definition_yaml: graph } });
         expect(minted.status, JSON.stringify(minted.body)).toBe(201);
         const title = `EGRESS-TITLE-${RUN}-${name}`;
@@ -191,7 +209,9 @@ test.describe('the night, held on one stack', () => {
 
       // The export's first pass only anchors its cursors, so it runs before any work is done.
       await exported();
-      const since = new Date(Math.floor(Date.now() / 1000) * 1000 - 5000);
+      const since = new Date(Math.floor(clock.now().getTime() / 1000) * 1000 - 5000);
+      // No fact of the night then shares the anchor's instant.
+      await clock.advance(1);
 
       // -- a plain build, whose worker is held at a checkpoint for longer than any other step of the night lasts --
       const plain = await ingest(
@@ -205,8 +225,7 @@ test.describe('the night, held on one stack', () => {
         (await runner.facts()).body.items.some((fact) => fact.kind === 'lease.minted' && fact.chunk_id === plain && fact.acked_at !== null);
       await stepUntil(runnerHost, mintedAcked, Boolean);
       await workerCheckpoint.reached('slow');
-      const holdFrom = Date.now();
-      await expect.poll(() => Date.now(), { timeout: SLOW_HOLD_MS + 15_000 }).toBeGreaterThan(holdFrom + SLOW_HOLD_MS);
+      await clock.advance(SLOW_HOLD_SECONDS);
       workerCheckpoint.release('slow');
       expect((await stepTo(plain)).status).toBe('done');
 
@@ -261,6 +280,8 @@ test.describe('the night, held on one stack', () => {
       );
       expect((await stepTo(gate, (d) => d.status === 'waiting_on_human' || TERMINAL.includes(d.status))).status).toBe('waiting_on_human');
       const decisionId = (await detail(gate)).decision.decision_id;
+      // A person acts after the worker did: at an instant of their own, never one the hub's record already holds.
+      await clock.advance(1);
       await blizzard(['hub', 'decision', 'resolve', decisionId, 'approve', '--by', RESOLVER, '--json']);
       expect((await stepTo(gate)).status).toBe('done');
       planted['gate choice description'] = [APPROVE_DESCRIPTION, REJECT_DESCRIPTION];
@@ -273,6 +294,7 @@ test.describe('the night, held on one stack', () => {
       );
       expect((await stepTo(ask, (d) => d.status === 'waiting_on_human' || TERMINAL.includes(d.status))).status).toBe('waiting_on_human');
       const questionId = (await detail(ask)).questions[0]!.question_id;
+      await clock.advance(1);
       await blizzard(['hub', 'question', 'answer', questionId, commitScript(cliPath, 'feature/night-ask', 'ASKED.md', 'resolve the ask', `# ${ASK_ANSWER}\n`), '--by', RESOLVER]);
       expect((await stepTo(ask)).status).toBe('done');
       planted['ask question'] = [ASK_QUESTION];
@@ -321,6 +343,8 @@ test.describe('the night, held on one stack', () => {
         for (const chunkId of chunkIds) total += (await detail(chunkId)).usage.length;
         return total;
       };
+      // The pass reads to the stack's instant, so it runs a second past the night's last fact and not at the same one.
+      await clock.advance(1);
       let ndjsonRows!: Record<Dataset, EgressCopy[]>;
       await expect.poll(async () => {
         await exported();
@@ -344,9 +368,8 @@ test.describe('the night, held on one stack', () => {
       }, { message: 'the live Parquet export to hold the night', timeout: 120_000 }).toBe(true);
 
       // The window closes on a whole second past every fact of the night, never in the future.
-      const mark = Date.now();
-      await expect.poll(() => Date.now(), { timeout: 15_000 }).toBeGreaterThan(mark + 1100);
-      const until = new Date(Math.floor(Date.now() / 1000) * 1000);
+      await clock.advance(1.1);
+      const until = new Date(Math.floor(clock.now().getTime() / 1000) * 1000);
       await blizzard(['hub', 'egress', 'backfill', '--since', zoned(since), '--until', zoned(until)]);
       const backfilled = { steps: await parquet.copies('steps', { files: 'backfill' }), invocations: await parquet.copies('invocations', { files: 'backfill' }) };
       const liveParquet = { steps: await parquet.copies('steps', { files: 'live' }), invocations: await parquet.copies('invocations', { files: 'live' }) };
@@ -355,15 +378,15 @@ test.describe('the night, held on one stack', () => {
     });
   };
 
-  test('test_both_live_exports_hold_the_same_newest_rows', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_both_live_exports_hold_the_same_newest_rows', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     expect(withoutExportTime(exported.parquetRows)).toEqual(withoutExportTime(exported.ndjsonRows));
     for (const dataset of DATASETS) expect(newest(exported.ndjsonRows[dataset], IDENTITY[dataset]).size, `${dataset} is empty`).toBeGreaterThan(0);
   });
 
-  test('test_both_exports_hold_the_hubs_record', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_both_exports_hold_the_hubs_record', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     const spend = new Map<string, Record<string, number>>(
       (await exported.blizzard(['hub', 'analytics', 'summary', 'spend-chunks', '--ndjson'])).split('\n').filter(Boolean).map((line) => {
@@ -392,8 +415,8 @@ test.describe('the night, held on one stack', () => {
     }
   });
 
-  test('test_both_exports_name_the_runner_by_its_minted_id_and_its_name', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_both_exports_name_the_runner_by_its_minted_id_and_its_name', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     const runner = fixtures.runnerHost.runners[RUNNER]!;
     expect(runner.id.startsWith('rn_')).toBe(true);
@@ -405,8 +428,8 @@ test.describe('the night, held on one stack', () => {
     }
   });
 
-  test('test_nothing_planted_leaves', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_nothing_planted_leaves', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     expect(Object.keys(exported.planted)).toEqual(expect.arrayContaining([
       'work item title', 'work item body', 'ask question', 'ask answer', 'gate choice description', 'resolver login',
@@ -423,15 +446,15 @@ test.describe('the night, held on one stack', () => {
     }
   });
 
-  test('test_a_backfill_of_the_window_equals_the_live_export', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_a_backfill_of_the_window_equals_the_live_export', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     expect(Object.values(exported.backfilled).some((rows) => rows.length > 0), 'the backfill wrote nothing').toBe(true);
     expect(withoutExportTime(exported.backfilled)).toEqual(withoutExportTime(exported.parquetRows));
   });
 
-  test('test_recipes_agree_with_the_hubs_analytics', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_recipes_agree_with_the_hubs_analytics', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     const spend = JSON.parse(await exported.blizzard(['hub', 'analytics', 'summary', 'spend-nodes', ...exported.window, '--json'])).spend as { key: string; cost_usd: number | null; estimated_cost_usd: number | null }[];
     const station = new Map([...newest(exported.parquetRows.steps, 'step_key').values()].map((r) => [String(r.node_id), `${r.graph_name}/${r.node_name}`]));
@@ -460,8 +483,8 @@ test.describe('the night, held on one stack', () => {
     }
   });
 
-  test('test_cost_by_node_splits_a_shared_node_name_by_graph', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_cost_by_node_splits_a_shared_node_name_by_graph', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     for (const [label, reader] of [['ndjson', fixtures.egress], ['parquet', exported.parquet]] as const) {
       const stations = (await reader.recipe('cost-by-node-by-day')).map((row) => [row.graph_name as string, row.node_name as string] as const);
@@ -472,8 +495,8 @@ test.describe('the night, held on one stack', () => {
     }
   });
 
-  test('test_published_newest_views_return_the_newest_copies', async ({ api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
-    const fixtures = { api, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
+  test('test_published_newest_views_return_the_newest_copies', async ({ api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once }) => {
+    const fixtures = { api, clock, cli, egress, forge, freshHub, project, repository, runnerHost, workerCheckpoint, once };
     const exported = await night(fixtures);
     for (const [label, reader] of [['ndjson', fixtures.egress], ['parquet', exported.parquet]] as const) {
       for (const dataset of DATASETS) {
