@@ -1,0 +1,429 @@
+"""The analytics outcomes route (component tier): the
+TRANSCRIPT_READ auth triad, the three cases kept separate — a judged failure edge, an
+attempt that recorded no transition, and a delivery kick-back (bounce) — the
+migration-derived base case's two positional variants, a no-movement failure resolving
+via the epoch's own graph, and the shared filter vocabulary."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+from typing import cast
+
+import pytest
+
+from blizzard.auth_core import Role
+from blizzard.foundation.migration_source import MigrationSource
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.forge.landing import Mergeability
+from tests.delivery_conflict_world import github_double, mint_and_claim, seed_at_deliver_with_an_unlanded_commit
+from tests.hub_request_auth import seed_enrolled
+from tests.support import (
+    FakeWorkSource,
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    claim_route,
+    pointer_token,
+    report_lease,
+    seed_session,
+    seed_user,
+)
+
+_ROUTES = ["/api/analytics/outcomes/nodes"]
+
+#: Named to match the packaged default graph's own name, so `POST /api/chunks` mints
+#: onto *this* graph — see `tests/component/hub/api/test_analytics_durations.py`'s own note.
+_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: Build it.
+    judgement:
+      prompt: Assess the build.
+      choices:
+        pass:
+          description: Complete.
+          to: review
+        fail:
+          description: Incomplete.
+          to: build
+  review:
+    executor: runner
+    prompt: Review it.
+    judgement:
+      prompt: Assess the review.
+      choices:
+        pass:
+          description: Complete.
+          to: done
+"""
+
+_OTHER_GRAPH_YAML = """
+name: outcomes-fixture-other
+entry: triage
+nodes:
+  triage:
+    executor: runner
+    prompt: Triage it.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Complete.
+          to: done
+"""
+
+
+def _cookie(token: str) -> dict[str, str]:
+    return {"Cookie": f"bz_session={token}"}
+
+
+def _bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
+    """A test-only cast: ``HubHarness.services.chunks`` is read-typed
+    (``bzh:controller-read-only``), but the live object is always the write-capable
+    seam adapter — mirrors ``tests/test_delivery_conflict_routing.py``'s own helper."""
+    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+
+
+def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
+    hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
+    admin = seed_user(hub, username="admin", role=Role.ADMIN)
+    admin_token = seed_session(hub, admin)
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token))
+    assert graph.status_code == 201, graph.text
+    graph_id = graph.json()["graph_id"]
+    nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
+
+    other = hub.client.post("/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token))
+    assert other.status_code == 201, other.text
+    other_graph_id = other.json()["graph_id"]
+    other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
+
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    return hub, token, graph_id, nodes, other_graph_id, other_nodes
+
+
+def _mint_chunk(hub: HubHarness, token: str, *, source: str = "default", ref: str = "1") -> str:
+    resp = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
+    )
+    assert resp.status_code == 201, resp.text
+    chunk_id = str(resp.json()["chunk_id"])
+    claim_route(hub, chunk_id)
+    return chunk_id
+
+
+def _complete(hub: HubHarness, chunk_id: str, *, epoch: int, from_node_id: str, choice: str) -> None:
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": choice, "epoch": epoch, "runner_id": "r1", "from_node_id": from_node_id},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+# --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_is_401_with_no_session(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    resp = hub.client.get(path)
+    assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    guest = seed_user(hub, username="grace", role=Role.GUEST)
+    token = seed_session(hub, guest)
+
+    resp = hub.client.get(path, headers=_cookie(token))
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
+    token = seed_enrolled(tmp_path, runner_id="runner-a")
+    hub = build_hub(tmp_path, auth_mode="oauth")
+
+    resp = hub.client.get(path, headers=_bearer(token))
+    assert resp.status_code == 403
+
+
+# --- The three cases, kept separate -----------------------------------------------
+
+
+def test_a_judged_failure_edge_counts_as_a_choice_not_an_attempt_failure(tmp_path: Path) -> None:
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _complete(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="fail")
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {"fail": 1}, "attempt_failures": 0}]
+
+
+def test_an_attempt_with_no_transition_counts_as_an_attempt_failure(tmp_path: Path) -> None:
+    """Also the second no-movement base case: no prior movement, so the node resolves to
+    the pinned graph's entry. Epoch 2's lease is epoch 1's positive end-of-attempt
+    evidence; epoch 2 itself, still the newest, counts as none."""
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over; itself in-flight
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+
+def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
+    """The bounced epoch must be superseded by a strictly newer
+    lease, or the unrelated in-flight guard excludes it first and this test can never
+    detect the bounce-exclusion guard being deleted."""
+    hub, token, _graph_id, _nodes, _og, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    stores = chunk_stores(hub.engine, hub.clock)
+    with stores.exclusive.locked([chunk_id]) as handle:
+        stores.escalations.record_bounce_locked(
+            handle,
+            chunk_id,
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause="conflict",
+            envelope="{}",
+            at=hub.clock.now(),
+        )
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # supersedes epoch 1, proving it's over
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcomes"] == []
+
+
+def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path) -> None:
+    """A kick-back's own routing transition shares its epoch with the bounce fact by
+    construction (`src/blizzard/hub/delivery/hub_node.py` records both). Driven through the REAL hub-node delivery
+    path, not a bare bounce write, so the excluded transition actually exists."""
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    assert hub.turn_outcome(chunk_id) == "conflict"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len(detail["bounces"]) == 1  # the kick-back landed
+    assert detail["current_node_id"] == nodes["resolve"]  # ...and so did its own transition
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes")
+
+    assert resp.status_code == 200, resp.text
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert nodes["deliver"] not in outcomes
+
+
+def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tmp_path: Path) -> None:
+    """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
+    judged choice on the SAME chunk still counts — the hub's turn claims a synthetic lease
+    at its epoch, so the runner's next lease mints strictly above it and never collides."""
+    hub = build_hub(tmp_path, forges=github_double(mergeability=Mergeability.CONFLICTING).forges)
+    chunk_id, nodes = mint_and_claim(hub)
+    seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    assert hub.turn_outcome(chunk_id) == "conflict"
+
+    envelope = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
+    assert envelope["node"]["node_name"] == "resolve"
+    next_epoch = envelope["epoch"] + 1  # what `Spawner._mint` derives, above the hub step's own
+    report_lease(hub, chunk_id, epoch=next_epoch, seq=2)
+    completed = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "resolved",
+            "epoch": next_epoch,
+            "runner_id": "r1",
+            "from_node_id": nodes["resolve"],
+            "artifacts": [],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes")
+
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert nodes["deliver"] not in outcomes  # still excluded
+    assert outcomes[nodes["resolve"]]["choice_counts"] == {"resolved": 1}  # ...and no wider
+
+
+# --- The migration-derived base case -----------------------------------------------
+
+
+def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_node(tmp_path: Path) -> None:
+    hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _writable_movement(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=other_nodes["triage"],
+        choice_name="pass",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+    )
+    claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1
+    assert nodes["build"] not in outcomes
+
+
+def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(tmp_path: Path) -> None:
+    """``landed_node_id`` null means "target entry" — must resolve via the migration's
+    own ``to_graph_id`` rather than crash on a raw ``None``."""
+    hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _writable_movement(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=None,
+        choice_name="pass",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+    )
+    claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1
+
+
+def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tmp_path: Path) -> None:
+    """The store half of the same rule the domain fold owns: a real
+    ``chunk_migrations`` row's ``from_graph_id`` must reach the fold, so an epoch that
+    crashed before ever moving is attributed to the graph it ran in, not the later pin."""
+    hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # crashed on graph A, no transition of its own
+    report_lease(hub, chunk_id, epoch=2, seq=2)
+    _writable_movement(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=other_nodes["triage"],
+        choice_name="pass",
+        model=None,
+        epoch=2,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+    )
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert outcomes[nodes["build"]]["attempt_failures"] == 1  # graph A's entry
+    assert other_nodes["triage"] not in outcomes  # never graph B's, the current pin
+
+
+# --- the shared filter vocabulary -----------------------------------------------
+
+
+def test_outcomes_honor_the_graph_id_filter_on_a_derived_attempt_failure(tmp_path: Path) -> None:
+    """`graph_id` applies to the DERIVED graph a no-movement base case resolves to as
+    well — a no-movement failure has no transition of its own to filter by, only the
+    graph it resolves to."""
+    hub, token, graph_id, nodes, other_graph_id, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over
+
+    matching = hub.client.get("/api/analytics/outcomes/nodes", params={"graph_id": graph_id}, headers=_cookie(token))
+    assert matching.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    other = hub.client.get("/api/analytics/outcomes/nodes", params={"graph_id": other_graph_id}, headers=_cookie(token))
+    assert other.json()["outcomes"] == []
+
+
+def test_outcomes_honor_the_source_filter_on_both_halves(tmp_path: Path) -> None:
+    """`source` applies to both the judged-choice half (a
+    completion) and the attempt-failure half (a no-movement crash) — durations/spend
+    each carry a dedicated `source` test, outcomes did not."""
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(
+        tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")}
+    )
+    judged_chunk = _mint_chunk(hub, token, source="default", ref="1")
+    report_lease(hub, judged_chunk, epoch=1, seq=1)
+    _complete(hub, judged_chunk, epoch=1, from_node_id=nodes["build"], choice="pass")
+
+    failed_chunk = _mint_chunk(hub, token, source="other", ref="2")
+    report_lease(hub, failed_chunk, epoch=1, seq=2)  # a crash/reap — never completed
+    report_lease(hub, failed_chunk, epoch=2, seq=3)  # proves epoch 1 is over
+
+    matching = hub.client.get("/api/analytics/outcomes/nodes", params={"source": "other"}, headers=_cookie(token))
+    assert matching.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    other = hub.client.get("/api/analytics/outcomes/nodes", params={"source": "default"}, headers=_cookie(token))
+    assert other.json()["outcomes"] == [
+        {"node_id": nodes["build"], "choice_counts": {"pass": 1}, "attempt_failures": 0}
+    ]
+
+
+def test_outcomes_honor_the_time_range_filter_at_the_lease_mints_own_boundary(tmp_path: Path) -> None:
+    """`since`/`until` window the candidate epoch's own lease MINT, not a transition's
+    timestamp — `since` inclusive of the mint instant itself, `until` exclusive."""
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    since = hub.clock.now().isoformat()  # exactly epoch 1's own mint instant
+    hub.clock.advance(timedelta(milliseconds=1))
+    until = hub.clock.now().isoformat()  # strictly after epoch 1's mint
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over
+
+    inside = hub.client.get(
+        "/api/analytics/outcomes/nodes", params={"since": since, "until": until}, headers=_cookie(token)
+    )
+    assert inside.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    outside = hub.client.get("/api/analytics/outcomes/nodes", params={"since": until}, headers=_cookie(token))
+    assert outside.json()["outcomes"] == []

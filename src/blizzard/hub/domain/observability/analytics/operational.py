@@ -389,7 +389,7 @@ class IReadOperationalAnalytics(Protocol):
         """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
         chunk that migrated attributes every usage fact it ever recorded to where it
         lives today, not to the graph it was in when the cost was incurred
-        (``tests/test_analytics_spend_api.py::test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_graph``;
+        (``tests/component/hub/api/test_analytics_spend.py::test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_graph``;
         ``docs/deployment/analytics.md`` §Interpreting the numbers)."""
         ...
 

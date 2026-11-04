@@ -18,7 +18,7 @@ from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, inge
 
 _POINTER = {"source": "default", "ref": "12"}
 
-# Mirrors tests/test_chunks_api.py's own merge graph: the deliver hub node's `pass` action
+# Mirrors tests/component/hub/api/test_chunks.py's own merge graph: the deliver hub node's `pass` action
 # completes synchronously, so one build completion carries the chunk straight to `done`.
 _MERGE_YAML = """
 name: default-delivery
