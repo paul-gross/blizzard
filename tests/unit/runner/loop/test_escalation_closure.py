@@ -1,0 +1,203 @@
+"""A local escalation the hub has since stopped (#292).
+
+An escalated lease is already closed, so ``_reconcile_leases`` never revisits it and the
+only local supersession is a later lease mint a stopped chunk never gets. ``_reconcile_escalations``
+folds into PULL to mirror the hub's terminal answer as an ``escalation_closures`` mark."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.steps import Pull
+from blizzard.runner.node_steps.chunk_state import ChunkState
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_context,
+    make_store,
+)
+
+_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
+
+
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
+    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _seed_escalated(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1, at: datetime = _NOW
+) -> None:
+    """A lease minted, spawned, then closed ``escalated`` — the parked needs-human shape,
+    with no later mint to supersede it."""
+    store.record_lease(
+        NewLease(
+            lease_id=lease,
+            chunk_id=chunk,
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=epoch,
+            retries_max=2,
+            created_at=at,
+        )
+    )
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=at,
+    )
+    store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=at)
+
+
+def _chunk(chunk: str = "ch_1", *, status: ChunkStatus) -> ChunkState:
+    return ChunkState(
+        chunk_id=chunk,
+        status=status,
+        latest_epoch=1,
+        route_runner_id="r1",
+    )
+
+
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, clock: FixedClock | None = None) -> LoopContext:
+    return make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(alive=set()),
+        clock=clock,
+    )
+
+
+def test_pull_closes_an_escalation_the_hub_stopped(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.STOPPED)
+    assert [e.chunk_id for e in store.open_escalations()] == ["ch_1"]
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+    assert store.open_escalation_for_chunk("ch_1") is None
+
+
+def test_pull_closes_an_escalation_whose_chunk_the_hub_landed(tmp_path: Path):
+    # The chunk was requeued away and landed by another runner (#293): no later lease is
+    # minted here, so `done` is the only arm that can close this box's escalation.
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.DONE)
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+def test_pull_leaves_an_escalation_the_hub_still_holds(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.NEEDS_HUMAN)
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert [e.chunk_id for e in store.open_escalations()] == ["ch_1"]
+
+
+def test_an_unreachable_hub_leaves_the_escalation_open(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.down = True
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert [e.chunk_id for e in store.open_escalations()] == ["ch_1"]
+
+
+def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path: Path):
+    # A 404 is not the hub asserting the hold is resolved — the escalation stands.
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.not_found.add("ch_1")
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert [e.chunk_id for e in store.open_escalations()] == ["ch_1"]
+
+
+def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path: Path):
+    # Requeued and not yet re-claimed by anyone: no restart, no epoch bump, no terminal
+    # status — the only signal is that the hub no longer routes it here (#396).
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1",
+        status=ChunkStatus.READY,
+        latest_epoch=1,
+        route_runner_id=None,
+    )
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        latest_epoch=2,
+        route_runner_id="r2",
+    )
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path: Path):
+    # Handed back at its own fresh epoch, still routed to this runner — the restart itself,
+    # not a route change, is the signal (#396).
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = replace(_chunk(status=ChunkStatus.WAITING_ON_HUMAN), restart_epochs=[1])
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+def test_a_re_escalation_after_a_close_reads_open_again(tmp_path: Path):
+    # The mark supersedes only escalations that precede it — strict ``>``, so a later
+    # escalation on a fresh lease is never masked by an older close.
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=_NOW + timedelta(minutes=5))
+    assert store.open_escalations() == []
+
+    _seed_escalated(store, lease="lease_2", epoch=2, at=_NOW + timedelta(minutes=10))
+
+    assert [e.lease_id for e in store.open_escalations()] == ["lease_2"]

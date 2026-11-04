@@ -1,0 +1,226 @@
+"""``FederationToken`` — signature/``kid``, audience, expiry (±30s leeway),
+and jti-replay checks. Built against a locally-minted RSA keypair, mirroring
+``tests/test_auth_oauth_providers.py``'s own JWKS-building convention — no network,
+no dependency on the hub's own ``SigningKeyService``."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any, TypedDict, Unpack
+
+import httpx2
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
+
+from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
+from blizzard.runner.auth.validate import (
+    CLOCK_SKEW_LEEWAY_SECONDS,
+    FederatedIdentity,
+    FederationToken,
+    FederationTokenError,
+)
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.schema import metadata
+from blizzard.runner.store.scoped import RunnerStoreConnections
+from tests.runner_fakes import runner_store_errors
+
+_KID = "test-kid"
+_RUNNER_ID = "runner-a"
+
+
+class _FakeJtiCache:
+    def __init__(self) -> None:
+        self.seen: set[str] = set()
+
+    def check_and_record(self, jti: str, *, aud: str, expires_at: datetime) -> bool:
+        del aud, expires_at
+        if jti in self.seen:
+            return False
+        self.seen.add(jti)
+        return True
+
+
+def _jti_repository(tmp_path: Path, clock: FixedClock) -> JtiCacheRepository:
+    """The real store-backed jti cache, so a replay case fails if its retention or pruning regresses."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    metadata.create_all(engine)
+    return JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), clock)
+
+
+def _keypair() -> tuple[rsa.RSAPrivateKey, dict[str, str]]:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+    jwk["kid"] = _KID
+    return private_key, jwk
+
+
+def _jwks_cache(jwk: dict[str, str]) -> JwksCache:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"keys": [jwk]})
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
+    return JwksCache(client, "/api/auth/jwks.json")
+
+
+class _Claims(TypedDict, total=False):
+    sub: str
+    username: str
+    email: str
+    role: str
+    aud: str
+    jti: str
+    iat: int
+    exp: int
+
+
+def _sign(private_key: rsa.RSAPrivateKey, *, claims: _Claims) -> str:
+    return jwt.encode(dict(claims), private_key, algorithm="RS256", headers={"kid": _KID})
+
+
+def _claims(**overrides: Unpack[_Claims]) -> _Claims:
+    now = datetime.now(UTC)
+    base: _Claims = {
+        "sub": "usr_1",
+        "username": "alice",
+        "email": "alice@example.com",
+        "role": "contributor",
+        "aud": _RUNNER_ID,
+        "jti": "jti-1",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=60)).timestamp()),
+    }
+    base.update(overrides)
+    return base
+
+
+def test_a_valid_token_resolves_the_claimed_identity() -> None:
+    private_key, jwk = _keypair()
+    token = _sign(private_key, claims=_claims())
+    identity = FederationToken(
+        token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+    ).identity()
+    assert identity.user_id == "usr_1"
+    assert identity.username == "alice"
+    assert identity.role == "contributor"
+
+
+def test_a_token_minted_for_a_different_runner_is_rejected() -> None:
+    private_key, jwk = _keypair()
+    token = _sign(private_key, claims=_claims(aud="runner-b"))
+    with pytest.raises(FederationTokenError):
+        FederationToken(
+            token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+        ).identity()
+
+
+def test_a_token_signed_by_an_untrusted_key_is_rejected() -> None:
+    _signing_key, _ = _keypair()
+    _other_key, other_jwk = _keypair()  # the JWKS the runner fetches carries a DIFFERENT key under the same kid
+    token = _sign(_signing_key, claims=_claims())
+    with pytest.raises(FederationTokenError):
+        FederationToken(
+            token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+        ).identity()
+
+
+def test_an_expired_token_past_the_leeway_is_rejected() -> None:
+    private_key, jwk = _keypair()
+    long_ago = datetime.now(UTC) - timedelta(minutes=5)
+    token = _sign(
+        private_key,
+        claims=_claims(iat=int(long_ago.timestamp()), exp=int((long_ago + timedelta(seconds=60)).timestamp())),
+    )
+    with pytest.raises(FederationTokenError):
+        FederationToken(
+            token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+        ).identity()
+
+
+def test_a_replayed_jti_is_rejected(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    token = _sign(private_key, claims=_claims())
+    clock = FixedClock(datetime.now(UTC))
+    jti_cache = _jti_repository(tmp_path, clock)
+    FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+    with pytest.raises(FederationTokenError, match="replay"):
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+
+
+def test_an_unknown_kid_is_rejected() -> None:
+    private_key, _jwk = _keypair()
+    _, other_jwk = _keypair()  # the fetched JWKS names a different kid entirely
+    other_jwk["kid"] = "some-other-kid"
+    token = _sign(private_key, claims=_claims())
+    with pytest.raises(FederationTokenError):
+        FederationToken(
+            token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache(), clock=SystemClock()
+        ).identity()
+
+
+def test_a_jti_is_still_refused_inside_the_leeway_after_exp(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    exp = datetime.now(UTC).replace(microsecond=0)
+    token = _sign(private_key, claims=_claims(exp=int(exp.timestamp())))
+    clock = FixedClock(exp)
+    jti_cache = _jti_repository(tmp_path, clock)
+    FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+    clock.advance(timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS - 1))
+    with pytest.raises(FederationTokenError, match="replay"):
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+
+
+def _identity_at(clock: FixedClock, claims: dict[str, Any]) -> FederatedIdentity:
+    private_key, jwk = _keypair()
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})
+    return FederationToken(
+        token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache(), clock=clock
+    ).identity()
+
+
+def _claims_at(moment: datetime, **overrides: object) -> dict[str, Any]:
+    claims: dict[str, Any] = dict(
+        _claims(iat=int(moment.timestamp()), exp=int((moment + timedelta(seconds=60)).timestamp()))
+    )
+    claims.update(overrides)
+    return claims
+
+
+def test_an_iat_at_the_leeway_edge_is_admitted_and_a_second_later_refused() -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    base = _claims(exp=int((now + timedelta(hours=1)).timestamp()))
+    edge = int((now + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS)).timestamp())
+    assert FederatedIdentity.from_claims({**base, "iat": edge}, now=now).user_id == "usr_1"
+    with pytest.raises(FederationTokenError, match="not yet valid"):
+        FederatedIdentity.from_claims({**base, "iat": edge + 1}, now=now)
+
+
+def test_a_token_minted_by_a_clock_an_hour_ahead_is_admitted_on_that_clock() -> None:
+    ahead = datetime.now(UTC) + timedelta(hours=1)
+    identity = _identity_at(FixedClock(ahead), _claims_at(ahead))
+    assert identity.user_id == "usr_1"
+
+
+def test_a_token_issued_on_the_machine_clock_is_refused_by_a_clock_an_hour_behind() -> None:
+    behind = datetime.now(UTC) - timedelta(hours=1)
+    with pytest.raises(FederationTokenError):
+        _identity_at(FixedClock(behind), _claims_at(datetime.now(UTC)))
+
+
+@pytest.mark.parametrize("iat", ["1700000000", True, 10**20, -(10**20), float("inf"), float("nan")])
+def test_an_iat_that_is_not_a_timestamp_is_refused(iat: object) -> None:
+    now = datetime.now(UTC)
+    with pytest.raises(FederationTokenError, match="issue time"):
+        FederatedIdentity.from_claims({**_claims(exp=int((now + timedelta(hours=1)).timestamp())), "iat": iat}, now=now)
+
+
+def test_a_token_with_no_iat_is_admitted() -> None:
+    now = datetime.now(UTC)
+    claims = _claims_at(now)
+    del claims["iat"]
+    assert _identity_at(FixedClock(now), claims).user_id == "usr_1"

@@ -1,0 +1,52 @@
+"""``select_renewer`` — the provider -> renewer-binding selection.
+
+An unknown provider selects ``None`` — declared, but with no renewal
+binding, which keeps today's read-only behaviour exactly."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.runner.config import SubscriptionDeclaration
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
+from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
+from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
+from blizzard.runner.subscriptions.one_shot_process import OneShotResult
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.support_child_launch import tool_env
+
+_NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
+
+
+class _UnreachableSubprocess:
+    def run(
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: ChildEnv, settle_seconds: float = 0.0
+    ) -> OneShotResult:
+        raise AssertionError("no subprocess should have been run")
+
+
+def test_anthropic_selects_an_anthropic_renewer() -> None:
+    declaration = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC)
+
+    renewer = select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env())
+    assert isinstance(renewer, AnthropicCredentialRenewer)
+
+
+def test_an_unknown_provider_selects_no_renewer() -> None:
+    declaration = SubscriptionDeclaration(slug="mystery", name="Mystery Plan", provider="some-unshipped-provider")
+
+    assert (
+        select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env()) is None
+    )
+
+
+def test_the_openai_provider_selects_an_openai_renewer_carrying_its_credentials_path() -> None:
+    declaration = SubscriptionDeclaration(
+        slug="codex", name="Codex", provider=PROVIDER_OPENAI, credentials_path="/tmp/some-auth.json"
+    )
+
+    renewer = select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env())
+    assert isinstance(renewer, OpenAICredentialRenewer)

@@ -1,5 +1,5 @@
 """The two completion predicates a node-step is judged by — one definition, shared by both daemons
-(``tests/test_produces_coverage_agreement.py``, ``tests/test_checks_gate_agreement.py``)."""
+(``tests/test_produces_coverage_agreement.py``, ``tests/component/test_checks_gate_agreement.py``)."""
 
 from __future__ import annotations
 
@@ -80,6 +80,6 @@ class ChecksGate:
     def violated(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """``True`` iff a ``requires_checks`` choice is being taken while any check is red —
         the one shared home for the predicate, guarded by
-        ``tests/test_checks_gate_agreement.py``. An ungated choice is never violated; a node
+        ``tests/component/test_checks_gate_agreement.py``. An ungated choice is never violated; a node
         with no checks records none, so the gate is vacuously satisfied."""
         return self.requires_checks and any(not r.passed for r in self.check_results)

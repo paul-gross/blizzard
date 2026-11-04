@@ -140,7 +140,7 @@ class SpendCeiling(Step):
         """Engage the local pause brake once this runner's rolling-window spend reaches
         ``cost.runner_ceiling_usd``; absent, there is no ceiling. Runs **first** in
         the tick so a crossing is visible to every later step in the same pass, engages exactly
-        once, and never lifts — only a conscious clear does (tests/test_runner_paused.py)."""
+        once, and never lifts — only a conscious clear does (tests/unit/runner/test_paused.py)."""
         ctx = self.ctx
         cap = ctx.config.runner_ceiling_usd
         if cap is None:

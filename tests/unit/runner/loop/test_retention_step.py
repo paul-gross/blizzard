@@ -1,11 +1,11 @@
 """``Retention`` — the tick's append-only-lane pruner.
 
 Each of outbound/heartbeat/external-usage-sample retention is its own store-level
-derivation, already proven against a real store in ``tests/test_runner_store.py``. This
+derivation, already proven against a real store in ``tests/component/runner/store/test_store.py``. This
 file pins only the step's own contract over that: it calls every lane once per floor, and one
 lane's prune raising never costs the others theirs. The worker-stdout lane is
 filesystem- rather than store-backed, so its own age-based sweep is proven directly here
-too, rather than in ``tests/test_runner_store.py``.
+too, rather than in ``tests/component/runner/store/test_store.py``.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def _ctx(store: SqlAlchemyRunnerStore, *, config: LoopConfig | None = None):
 
 def _seed_a_stale_and_a_pending_outbound_fact(store: SqlAlchemyRunnerStore, *, old: datetime) -> int:
     """A pending row (the floor) plus an acked, aged one below it — the ordinary
-    prunable case (mirrors ``tests/test_runner_store.py``'s own outbound retention tests)."""
+    prunable case (mirrors ``tests/component/runner/store/test_store.py``'s own outbound retention tests)."""
     stale = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old)
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old)
     store.ack_outbound(stale, acked_at=old)

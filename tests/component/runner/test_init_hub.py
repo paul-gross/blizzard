@@ -1,0 +1,390 @@
+"""``blizzard runner init``'s hub step — keep the runner a held token names, or add one and write
+its token, and stop with nothing added wherever adding could undo an operator's act or mint a runner
+at the wrong hub. Driven in-process against the autouse ``fake_init_hub``."""
+
+from __future__ import annotations
+
+import errno
+import os
+import sqlite3
+import stat
+from contextlib import closing
+from pathlib import Path
+
+import pytest
+from click.testing import Result
+
+from blizzard.cli.main import blizzard
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hub.client import (
+    HostAddRefusalReason,
+    HostAddRefused,
+    HubClientError,
+    TokenRefusal,
+)
+from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.runtime import sqlite_store_file
+from tests.host_files import load_runner_config
+from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.runner_join import DEFAULT_TOKEN_ENV
+from tests.session_store_fakes import InMemorySessionStore
+
+_HUB = "http://hub.test:8421"
+
+
+def _init(hub: FakeInitHub, root: Path, *args: str) -> Result:
+    return init_runner(hub).invoke(blizzard, ["runner", "init", str(root), "--hub", _HUB, *args])
+
+
+def _joined(tmp_path: Path, fake_init_hub: FakeInitHub) -> tuple[Path, bytes]:
+    """A runner init added at the fake hub, with an unrelated line in its ``.env`` — its runtime dir
+    and the ``.env`` bytes init left."""
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text("OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n")
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
+    return root, (root / ENV_FILENAME).read_bytes()
+
+
+def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
+    fake_init_hub: FakeInitHub, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "runner"
+    assert _init(fake_init_hub, root).exit_code == 0
+    assert load_runner_config(root).hub_token == "init-token-1"
+    monkeypatch.setenv(DEFAULT_TOKEN_ENV, "from-env")
+    assert load_runner_config(root).hub_token == "from-env"
+
+
+def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root = tmp_path / "runner"
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert [(i.runner_id, i.runner_name) for i in fake_init_hub.admin.added] == [("rn_init1", "runner-local")]
+    # The host is registered under the operator's credential first, then the runner joins under it.
+    assert [(c.hub_url, c.runner_token, c.operator_token) for c in fake_init_hub.calls] == [(_HUB, "", None)] * 2
+    env = root / ENV_FILENAME
+    assert env.read_text() == f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n{DEFAULT_TOKEN_ENV}=init-token-1\n"
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    assert "rn_init1" in result.output
+
+
+def test_init_reuses_a_token_the_hub_accepts_and_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert fake_init_hub.calls[-1].runner_token == "init-token-1"
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+def test_init_over_a_token_added_under_another_name_than_the_scaffolded_one_adds_a_second_runner(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """`hub runner add edge` prints BZ_HUB_TOKEN_EDGE, but a fresh init scaffolds `runner-local` and looks for
+    BZ_HUB_TOKEN_RUNNER_LOCAL: the token under the other variable is not found."""
+    issued = fake_init_hub.admin.add_runner("edge")
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text(f"BZ_HUB_TOKEN_EDGE={issued.token}\n")
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert [added.runner_name for added in fake_init_hub.admin.added] == ["edge", "runner-local"]
+
+
+def test_init_over_a_token_added_as_the_scaffolded_name_keeps_it_and_scaffolds_the_full_host_file(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """`hub runner add runner-local` prints the variable a fresh init looks for: init keeps the runner, writes its
+    id, and scaffolds the bindings a hand-written host file would lack."""
+    issued = fake_init_hub.admin.add_runner("runner-local")
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text(f"{DEFAULT_TOKEN_ENV}={issued.token}\n")
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.added) == 1
+    config = HostLayout(root).config_path.read_text()
+    assert f'id = "{issued.runner_id}"' in config
+    assert "projects = [" in config
+
+
+def test_init_keeping_a_hand_written_token_makes_its_file_owner_only_bytes_unchanged(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """An operator adds the runner elsewhere and pastes its token line under the default umask; the host init
+    registers adopts it, and the host token written beside it leaves the file owner-only."""
+    issued = fake_init_hub.admin.add_runner("anna-laptop")
+    root = tmp_path / "runner"
+    root.mkdir()
+    env = root / ENV_FILENAME
+    env.write_text(f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}={issued.token}\n")
+    env.chmod(0o644)
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert "keeps its token" in result.output
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    assert env.read_text() == (
+        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}={issued.token}\n"
+        f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+    )
+    assert len(fake_init_hub.admin.added) == 1
+    assert fake_init_hub.admin.adopted == [(issued.runner_id,)]
+
+
+def test_init_that_cannot_restrict_a_kept_token_file_warns_naming_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    (root / ENV_FILENAME).chmod(0o644)
+
+    def owned_by_another_account(self: HubTokenFile) -> bool:
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM), str(self.path))
+
+    monkeypatch.setattr(HubTokenFile, "restrict", owned_by_another_account)
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert f"warning: other accounts may read {root / ENV_FILENAME}" in result.output
+    assert f"chmod 600 {root / ENV_FILENAME}" in result.output
+
+
+def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    for path in load_runner_config(root).data_dir.iterdir():
+        path.unlink()
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.added) == 1
+
+
+def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    fake_init_hub.admin.added.clear()  # the hub's data is reset; the runtime dir survives
+    result = _init(fake_init_hub, root, "--allow-readd")
+    assert result.exit_code == 0, result.output
+    assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
+    assert (root / ENV_FILENAME).read_text() == (
+        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+        f"{DEFAULT_TOKEN_ENV}=init-token-1\n"
+    )
+
+
+def test_init_after_a_hub_reset_stops_without_allow_readd_leaving_the_env_file_as_it_was(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    fake_init_hub.admin.added.clear()
+    result = _init(fake_init_hub, root)
+    assert result.exit_code != 0
+    assert _HUB in result.output
+    assert "--allow-readd" in result.output
+    assert fake_init_hub.admin.added == []
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+_ENROLL = "blizzard hub runner enroll rn_init1"
+
+
+_REINSTATE = "blizzard hub runner reinstate rn_init1"
+
+
+@pytest.mark.parametrize(
+    ("reason", "verbs"),
+    [(RunnerTokenRefusalReason.REVOKED, [_ENROLL]), (RunnerTokenRefusalReason.RETIRED, [_REINSTATE, _ENROLL])],
+)
+def test_init_stops_on_a_revoked_token_or_a_retired_runner_naming_each_verb_and_where_the_new_token_goes(
+    tmp_path: Path, fake_init_hub: FakeInitHub, reason: RunnerTokenRefusalReason, verbs: list[str]
+) -> None:
+    """Retiring revokes the token, so a reinstated runner still needs a new one before init keeps it."""
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    fake_init_hub.identity = FakeTokenIdentityReader(TokenRefusal(reason=reason, runner_id="rn_init1"))
+    result = _init(fake_init_hub, root, "--allow-readd")
+    assert result.exit_code != 0
+    assert all(verb in result.output for verb in verbs)
+    assert result.output.find(verbs[0]) <= result.output.find(verbs[-1])
+    assert f"put it in {root / ENV_FILENAME} as {DEFAULT_TOKEN_ENV}" in result.output
+    assert "re-run init" not in result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+@pytest.mark.parametrize("reason", [RunnerTokenRefusalReason.REVOKED, RunnerTokenRefusalReason.RETIRED])
+def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_variable(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch, reason: RunnerTokenRefusalReason
+) -> None:
+    """A new token written to ``.env`` would go unread while the variable is set."""
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    monkeypatch.setenv(DEFAULT_TOKEN_ENV, "revoked-in-env")
+    fake_init_hub.identity = FakeTokenIdentityReader(TokenRefusal(reason=reason, runner_id="rn_init1"))
+    result = _init(fake_init_hub, root)
+    assert result.exit_code != 0
+    assert fake_init_hub.calls[-1].runner_token == "revoked-in-env"
+    assert f"replace it where init found it (${DEFAULT_TOKEN_ENV}), which overrides {root / ENV_FILENAME}" in (
+        result.output
+    )
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+def test_init_fails_and_adds_nothing_when_the_hub_is_unreachable(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    fake_init_hub.identity = FakeTokenIdentityReader(HubClientError("GET /api/fleet/identity failed: refused"))
+    result = _init(fake_init_hub, root, "--allow-readd")
+    assert result.exit_code != 0
+    assert _HUB in result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+def test_init_with_no_token_fails_and_writes_nothing_when_the_add_cannot_reach_the_hub(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    fake_init_hub.admin.host_refusal = HubClientError("POST /api/hosts -> 503")
+    result = _init(fake_init_hub, tmp_path / "runner")
+    assert result.exit_code != 0
+    assert not (tmp_path / "runner" / ENV_FILENAME).exists()
+
+
+def test_init_whose_runner_add_cannot_reach_the_hub_keeps_the_host_and_writes_no_runner_token(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    fake_init_hub.admin.refusal = HubClientError("POST /api/fleet/host/runners -> 503")
+    root = tmp_path / "runner"
+    result = _init(fake_init_hub, root)
+    assert result.exit_code != 0
+    assert (root / ENV_FILENAME).read_text() == f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+
+
+def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_to_retire(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write = HubTokenFile.write
+
+    def unwritable(self: HubTokenFile, token: str) -> None:
+        if self.token_env == HOST_TOKEN_VARIABLE:
+            write(self, token)
+            return
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(self.path))
+
+    monkeypatch.setattr(HubTokenFile, "write", unwritable)
+    result = _init(fake_init_hub, tmp_path / "runner")
+    assert result.exit_code != 0
+    assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
+    assert f"retire it with `blizzard hub runner retire rn_init1 --hub-url {_HUB}`" in result.output
+
+
+def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    fake_init_hub.admin.host_refusal = HostAddRefused(
+        "POST /api/hosts -> 401", reason=HostAddRefusalReason.SIGN_IN_REQUIRED, detail="not authenticated"
+    )
+    result = _init(fake_init_hub, tmp_path / "runner")
+    assert result.exit_code != 0
+    assert "blizzard hub login" in result.output and "to add a host" in result.output
+    assert not (tmp_path / "runner" / ENV_FILENAME).exists()
+
+
+def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    sessions = InMemorySessionStore({_HUB: "operator-session"})
+    result = init_runner(fake_init_hub, sessions=sessions).invoke(
+        blizzard, ["runner", "init", str(tmp_path / "runner"), "--hub", _HUB]
+    )
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.calls[-1].operator_token == "operator-session"
+
+
+def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    reached = len(fake_init_hub.calls)
+    result = init_runner(fake_init_hub).invoke(
+        blizzard, ["runner", "init", str(root), "--hub", "http://elsewhere:8421"]
+    )
+    assert result.exit_code != 0
+    assert "http://elsewhere:8421" in result.output
+    assert len(fake_init_hub.calls) == reached
+    assert load_runner_config(root).hub_url == _HUB
+
+
+def test_init_stops_when_the_environment_overrides_a_token_it_must_replace(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    monkeypatch.setenv(DEFAULT_TOKEN_ENV, "stale-from-env")
+    result = _init(fake_init_hub, root, "--allow-readd")
+    assert result.exit_code != 0
+    assert DEFAULT_TOKEN_ENV in result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+def test_init_adds_a_renamed_runner_under_its_name_and_writes_its_token_under_the_variable_that_name_derives(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "runner"
+    assert _init(fake_init_hub, root).exit_code == 0
+    config = HostLayout(root).config_path
+    config.write_text(config.read_text().replace('name = "runner-local"', 'name = "r-claude"'))
+    (root / ENV_FILENAME).unlink()
+    result = _init(fake_init_hub, root, "--allow-readd")  # the store still names the runner the old name had added
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.admin.added[-1].runner_name == "r-claude"
+    assert (root / ENV_FILENAME).read_text() == (
+        f"{HOST_TOKEN_VARIABLE}=init-host-token-2\nBZ_HUB_TOKEN_R_CLAUDE=init-token-2\n"
+    )
+
+
+def _store_file(root: Path) -> Path:
+    return sqlite_store_file(load_runner_config(root).db_url)
+
+
+def _identity_ids(database: Path) -> list[str]:
+    with closing(sqlite3.connect(database)) as conn:
+        return [row[0] for row in conn.execute("SELECT runner_id FROM runner_identity")]
+
+
+def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _store_file(root)
+    fake_init_hub.admin.added.clear()
+
+    result = _init(fake_init_hub, root, "--allow-readd")
+
+    assert result.exit_code == 0, result.output
+    aside = [p for p in database.parent.iterdir() if p.name.startswith("host.db.") and p.suffix != ".lock"]
+    assert len(aside) == 1
+    assert "set the old store aside as" in result.output
+    assert _identity_ids(aside[0]) == ["rn_init1"]  # the old runner's identity row stays with its store
+    assert _identity_ids(database) == ["rn_init1"]  # the fresh store holds the runner just added
+
+
+def test_init_keeping_its_token_keeps_the_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _store_file(root)
+
+    result = _init(fake_init_hub, root, "--allow-readd")
+
+    assert result.exit_code == 0, result.output
+    assert _identity_ids(database) == ["rn_init1"]
+    assert not [p for p in database.parent.iterdir() if p.name.startswith("host.db.")]
+
+
+def test_init_with_no_token_over_a_store_naming_a_runner_stops_naming_it_and_the_reset_command(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root, _ = _joined(tmp_path, fake_init_hub)
+    database = _store_file(root)
+    (root / ENV_FILENAME).write_text("")
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code != 0
+    assert "rn_init1" in result.output
+    assert "--allow-readd" in result.output
+    assert f"blizzard runner store reset {root}" in result.output
+    assert len(fake_init_hub.admin.added) == 1
+    assert _identity_ids(database) == ["rn_init1"]
