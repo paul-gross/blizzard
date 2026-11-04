@@ -22,7 +22,7 @@ class WorkStatusMarker(StrEnum):
     def of(cls, status: ChunkStatus) -> WorkStatusMarker | None:
         """The marker ``status`` projects, ``None`` for a terminal one — no live holder to show.
 
-        Pinned by ``tests/test_forge_status.py::test_marker_of_is_exhaustive_over_chunk_status``."""
+        Pinned by ``tests/unit/hub/work_sources/test_annotator.py::test_marker_of_is_exhaustive_over_chunk_status``."""
         return _MARKER_BY_STATUS[status]
 
 

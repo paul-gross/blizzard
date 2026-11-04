@@ -1,0 +1,250 @@
+"""``FindingExitService``: a blank or missing note is
+refused before the repository is ever touched, every verb records the right fact kind,
+`resolve` and `supersede` alone carry their extra field, and a multi-finding call is one
+`record_facts` batch — the `tests/unit/hub/domain/garden/proposals/test_closure.py` shape."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import cast
+
+import pytest
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.garden.findings.model import (
+    GUARD_ATTEMPTS,
+    AbsorberNotLive,
+    FactEntry,
+    Finding,
+    FindingExitService,
+    FindingNoteRequiredError,
+    FindingNotReopenable,
+    FindingWriteContended,
+    IWriteFindingRepository,
+)
+
+_PROJECT = "proj_test"
+
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _finding(finding_id: str, *, state: str = "live") -> Finding:
+    return Finding(
+        project_id=_PROJECT,
+        finding_id=finding_id,
+        routine_name="nightly",
+        scope_slug="runner",
+        class_="stale-docstring",
+        locus="src/a.py:1",
+        summary="s",
+        introduced=None,
+        introduced_at=None,
+        first_observed_at=_T0,
+        live=state == "live",
+        state=state,
+        note=None,
+        last_seen_at=_T0,
+        observed_count=0,
+    )
+
+
+@dataclass
+class _FakeFindingRepo:
+    """`conflicts` scripts each `record_facts` call's lost-guard ids (none once exhausted);
+    `get_many` answers from `reloaded`, recording the ids it was asked for."""
+
+    batches: list[list[FactEntry]] = field(default_factory=list[list[FactEntry]])
+    conflicts: list[list[str]] = field(default_factory=list[list[str]])
+    reloaded: dict[str, Finding] = field(default_factory=dict[str, Finding])
+    expects: list[dict[str, str] | None] = field(default_factory=list[dict[str, str] | None])
+    reloads: list[list[str]] = field(default_factory=list[list[str]])
+
+    def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
+        self.batches.append(list(entries))
+        self.expects.append(None if expect is None else dict(expect))
+        return self.conflicts.pop(0) if self.conflicts else []
+
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        self.reloads.append(list(finding_ids))
+        return {fid: self.reloaded[fid] for fid in finding_ids if fid in self.reloaded}
+
+
+def _as_write_repo(repo: _FakeFindingRepo) -> IWriteFindingRepository:
+    return cast(IWriteFindingRepository, repo)
+
+
+def _service(repo: _FakeFindingRepo) -> FindingExitService:
+    return FindingExitService(repo=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+
+def test_resolve_rejects_a_blank_note() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    with pytest.raises(FindingNoteRequiredError):
+        service.resolve([_finding("fin_1")], note="   ", actor="u1")
+
+    assert repo.batches == []
+
+
+def test_resolve_rejects_a_missing_note_kind_named_in_the_error() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    with pytest.raises(FindingNoteRequiredError, match="resolved"):
+        service.resolve([_finding("fin_1")], note="", actor="u1")
+
+
+def test_resolve_strips_and_records_one_fact_per_finding_in_one_batch() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.resolve([_finding("fin_1"), _finding("fin_2")], note="  fixed upstream  ", actor="u1")
+
+    assert len(repo.batches) == 1
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="resolved", at=_T0, note="fixed upstream", actor="u1"),
+        FactEntry(finding_id="fin_2", kind="resolved", at=_T0, note="fixed upstream", actor="u1"),
+    ]
+
+
+def test_resolve_carries_a_proposal_id_when_supplied() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.resolve([_finding("fin_1")], note="answered", actor="u1", proposal_id="gprop_1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="resolved", at=_T0, note="answered", actor="u1", proposal_id="gprop_1")
+    ]
+
+
+def test_deliver_strips_and_records_one_fact_per_finding_in_one_batch() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.deliver([_finding("fin_1"), _finding("fin_2")], note="  delivered by hub:42  ", actor="u1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="delivered", at=_T0, note="delivered by hub:42", actor="u1"),
+        FactEntry(finding_id="fin_2", kind="delivered", at=_T0, note="delivered by hub:42", actor="u1"),
+    ]
+
+
+def test_deliver_carries_a_proposal_id_when_supplied() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.deliver([_finding("fin_1")], note="answered", actor="u1", proposal_id="gprop_1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="delivered", at=_T0, note="answered", actor="u1", proposal_id="gprop_1")
+    ]
+
+
+def test_confirm_gone_records_gone_confirmed() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.confirm_gone([_finding("fin_1")], note="checked by hand", actor="u1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="gone-confirmed", at=_T0, note="checked by hand", actor="u1")
+    ]
+
+
+def test_wont_fix_records_wont_fix() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.wont_fix([_finding("fin_1")], note="accepted risk", actor="u1")
+
+    assert repo.batches[0] == [FactEntry(finding_id="fin_1", kind="wont-fix", at=_T0, note="accepted risk", actor="u1")]
+
+
+def test_not_a_finding_records_not_a_finding() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.not_a_finding([_finding("fin_1")], note="false positive", actor="u1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="not-a-finding", at=_T0, note="false positive", actor="u1")
+    ]
+
+
+def test_supersede_requires_the_absorbing_finding_id() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.supersede([_finding("fin_1")], _finding("fin_2"), note="folded into fin_2", actor="u1")
+
+    assert repo.batches[0] == [
+        FactEntry(
+            finding_id="fin_1", kind="superseded", at=_T0, note="folded into fin_2", actor="u1", superseded_by="fin_2"
+        )
+    ]
+
+
+def test_reopen_records_reopened() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.reopen([_finding("fin_1", state="wont-fix")], note="regressed", actor="u1")
+
+    assert repo.batches[0] == [FactEntry(finding_id="fin_1", kind="reopened", at=_T0, note="regressed", actor="u1")]
+
+
+def test_an_empty_finding_list_still_writes_an_empty_batch() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.resolve([], note="n/a", actor="u1")
+
+    assert repo.batches == [[]]
+
+
+def test_a_lost_guard_retries_guarded_on_the_reloaded_states() -> None:
+    repo = _FakeFindingRepo(conflicts=[["fin_1"]], reloaded={"fin_1": _finding("fin_1", state="delivered")})
+    service = _service(repo)
+
+    service.resolve([_finding("fin_1"), _finding("fin_2")], note="fixed", actor="u1")
+
+    assert repo.expects == [{"fin_1": "live", "fin_2": "live"}, {"fin_1": "delivered", "fin_2": "live"}]
+    assert repo.reloads == [["fin_1", "fin_2"]]
+    assert len(repo.batches) == 2
+
+
+def test_a_retry_re_asks_the_model_against_the_reloaded_batch() -> None:
+    repo = _FakeFindingRepo(conflicts=[["fin_1"]], reloaded={"fin_1": _finding("fin_1", state="live")})
+    service = _service(repo)
+
+    with pytest.raises(FindingNotReopenable):
+        service.reopen([_finding("fin_1", state="wont-fix")], note="regressed", actor="u1")
+
+    assert len(repo.batches) == 1
+
+
+def test_a_supersede_retry_reloads_and_guards_on_the_absorber() -> None:
+    repo = _FakeFindingRepo(conflicts=[["fin_2"]], reloaded={"fin_2": _finding("fin_2", state="wont-fix")})
+    service = _service(repo)
+
+    with pytest.raises(AbsorberNotLive):
+        service.supersede([_finding("fin_1")], _finding("fin_2"), note="dup", actor="u1")
+
+    assert repo.expects == [{"fin_1": "live", "fin_2": "live"}]
+    assert repo.reloads == [["fin_1", "fin_2"]]
+
+
+def test_a_guard_lost_on_every_attempt_refuses_as_contended() -> None:
+    repo = _FakeFindingRepo(conflicts=[["fin_1"]] * GUARD_ATTEMPTS)
+    service = _service(repo)
+
+    with pytest.raises(FindingWriteContended) as exc:
+        service.wont_fix([_finding("fin_1")], note="accepted risk", actor="u1")
+
+    assert exc.value.finding_ids == ["fin_1"]
+    assert len(repo.batches) == GUARD_ATTEMPTS

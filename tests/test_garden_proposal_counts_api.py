@@ -2,7 +2,7 @@
 counts per routine and class over a window, split into open/passed/accepted-with-item/
 accepted-without-item. Seeded straight through ``GardenProposalStore``/
 ``insert_garden_proposal_closure_row`` so each proposal's ``created_at`` and closure are
-pinned exactly (the ``tests/test_garden_trend_api.py`` shape)."""
+pinned exactly (the ``tests/component/hub/api/test_routines_trend.py`` shape)."""
 
 from __future__ import annotations
 

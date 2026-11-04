@@ -3,7 +3,7 @@
 `blocking`, and a malformed scope slug each raise `ReviewFindingsRejected`; a `deferred`
 entry missing a required field never reaches this validator, since `ReviewDelta`
 itself refuses to parse one; a clean delta returns exactly its `deferred` entries (the
-`tests/test_garden_delivery_domain.py` shape)."""
+`tests/unit/hub/domain/garden/delivery/test_validation.py` shape)."""
 
 from __future__ import annotations
 

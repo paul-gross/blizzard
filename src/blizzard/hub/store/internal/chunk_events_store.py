@@ -44,7 +44,7 @@ _HUB_RUNNER_ID = "hub"
 
 # --- activity_facts_since's per-source base statements: each is what `_bounded` (below)
 # adds its `WHERE ts >= :since ORDER BY ts DESC, pk DESC LIMIT :limit` to. Named and
-# module-level so `tests/test_chunk_fact_table_indexes.py` compiles the real statement —
+# module-level so `tests/component/hub/store/internal/test_chunk_fact_table_indexes.py` compiles the real statement —
 # real joins and anti-join included.
 
 

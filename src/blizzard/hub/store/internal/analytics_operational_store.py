@@ -205,7 +205,8 @@ def spend_group_stmt(stmts: ScopedStatements, criteria: OperationalCriteria, *, 
 def _node_names(stmts: ScopedStatements, node_id: Any) -> tuple[Any, Any]:
     """Scalar lookups of a node's graph name and its own name by primary key, correlated to
     ``node_id`` — null where the id no longer resolves (``usage_facts.node_id`` has no foreign
-    key). Scalar subqueries, not joins: ``tests/test_chunk_fact_table_indexes.py`` pins the plan."""
+    key). Scalar subqueries, not joins: ``tests/component/hub/store/internal/test_chunk_fact_table_indexes.py``
+    pins the plan."""
     gn, g = s.graph_nodes, s.graphs
     graph_name = (
         stmts.select(stmts.scope_join(g, gn, g.c.graph_id == gn.c.graph_id), g.c.name)
