@@ -1,0 +1,256 @@
+"""``GET /api/leases/{id}/garden/proposals`` — the lease-scoped, hub-proxying route
+(component tier). Authorization mirrors ``tests/component/runner/api/test_garden_findings.py``'s own
+shape: the hub is never consulted for an unauthorized caller. The route itself carries
+no flag naming a routine — there is nothing here for a worker to point at another
+routine's docket."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Unpack
+
+import httpx2
+from fastapi import FastAPI
+
+from blizzard.foundation.tokens import TokenHash
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.leases.model import NewLease
+from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
+from tests.runner_client import runner_client
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
+
+_NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
+_TOKEN = "the-lease-token"
+_HUB_URL = "http://hub.local:8421"
+_CHUNK = "ch_1"
+
+_DOCKET = [
+    {
+        "proposal_id": "gprop_1",
+        "project_id": None,
+        "project_slug": None,
+        "project_name": None,
+        "origin": "routine-run",
+        "routine_name": "nightly",
+        "created_by": None,
+        "class": "fix-the-source",
+        "title": "t",
+        "body": "b",
+        "findings": ["fin_1"],
+        "created_at": "2026-09-02T12:00:00Z",
+        "closure": None,
+    }
+]
+
+
+_PAGE = {"proposals": _DOCKET, "next_cursor": None}
+
+
+class _HubRouter:
+    """A late-bound handler behind the proxy's ``httpx2.Client`` — ``_app_with_store`` builds
+    the client (and the app wired to it) before a test knows how the hub should answer, so
+    ``_stub_hub`` arms this after the fact instead of monkeypatching a module-level function."""
+
+    def __init__(self) -> None:
+        self.handler: Callable[[httpx2.Request], httpx2.Response] = lambda request: httpx2.Response(
+            500, json={"detail": f"hub not stubbed for {request.url}"}
+        )
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        return self.handler(request)
+
+
+def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
+    router = _HubRouter()
+    app = create_runner_app(
+        config,
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(router)),
+        hub_retry_clock=no_retry_clock(),
+    )
+    app.state.hub_router = router
+    return app, store
+
+
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
+        "lease_id": "lease_1",
+        "chunk_id": _CHUNK,
+        "graph_id": "gr_1",
+        "node_id": "nd_reconcile",
+        "node_name": "reconcile",
+        "epoch": 1,
+        "retries_max": 2,
+        "created_at": _NOW,
+    }
+    fields.update(overrides)
+    store.record_lease(NewLease(**fields))
+    store.record_lease_token(fields["lease_id"], TokenHash(_TOKEN).hex, _NOW)
+
+
+def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] | None = None) -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if seen is not None:
+            seen.append(str(request.url))
+        return httpx2.Response(status_code, json=payload)
+
+    app.state.hub_router.handler = handler
+
+
+def test_503_when_store_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
+    with runner_client(create_runner_app(config)) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 503
+
+
+def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
+    app, _store = _app_with_store(tmp_path)
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_ghost/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 404
+
+
+def test_403_for_a_missing_token(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals")
+    assert resp.status_code == 403
+
+
+def test_403_for_a_wrong_token(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": "nope"})
+    assert resp.status_code == 403
+
+
+def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    store.record_closure(
+        lease_id="lease_1", chunk_id=_CHUNK, node_id="nd_reconcile", reason="transitioned", closed_at=_NOW
+    )
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 404
+
+
+def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> None:
+    """With the hub unwired, an authorized lease gets 503 and an unauthorized caller 403."""
+    app, store = _app_with_store(tmp_path, hub_url="")
+    _seed_lease(store)
+    with runner_client(app) as client:
+        authed = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+        unauthed = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": "nope"})
+    assert authed.status_code == 503
+    assert unauthed.status_code == 403
+
+
+def test_forwards_to_the_hub_chunks_garden_proposals_route_and_returns_the_docket(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _PAGE, seen)
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=open"]
+    assert resp.json() == _DOCKET
+
+
+def test_concatenates_the_hubs_pages_into_the_whole_docket(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    rows = [{**_DOCKET[0], "proposal_id": f"gprop_{n}"} for n in range(3)]
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(str(request.url))
+        cursor = request.url.params.get("cursor")
+        index = 0 if cursor is None else int(cursor)
+        nxt = index + 1
+        return httpx2.Response(200, json={"proposals": [rows[index]], "next_cursor": str(nxt) if nxt < 3 else None})
+
+    app.state.hub_router.handler = handler
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals?state=all", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == rows
+    assert seen == [
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all",
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all&cursor=1",
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=all&cursor=2",
+    ]
+
+
+def test_forwards_the_state_query_param(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _PAGE, seen)
+    with runner_client(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/garden/proposals?state=closed", headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals/page?state=closed"]
+
+
+def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
+    """The forward carries the runner principal's bearer in `Authorization`."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(
+        root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL, hub_token="hub-tok"
+    )
+    _seed_lease(store)
+    seen_headers: list[httpx2.Headers] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen_headers.append(request.headers)
+        return httpx2.Response(200, json=_PAGE)
+
+    hub_proxy_client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    with runner_client(
+        create_runner_app(
+            config,
+            runner_stores=make_stores(store),
+            host_stores=make_host_stores(store),
+            hub_proxy_client=hub_proxy_client,
+        )
+    ) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert seen_headers[0]["Authorization"] == "Bearer hub-tok"
+
+
+def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("refused")
+
+    app.state.hub_router.handler = handler
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 502
+
+
+def test_hub_refusal_of_a_non_routine_chunk_passes_through_verbatim(tmp_path: Path) -> None:
+    """A hub 404 (stubbed here) is forwarded as-is, detail included."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(app, 404, {"detail": f"chunk {_CHUNK} carries no run context"})
+    with runner_client(app) as client:
+        resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 404
+    assert "no run context" in resp.json()["detail"]

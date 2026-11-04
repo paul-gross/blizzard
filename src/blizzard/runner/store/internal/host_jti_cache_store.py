@@ -25,7 +25,7 @@ class JtiCacheRepository:
 
     def check_and_record(self, jti: str, *, aud: str, expires_at: datetime) -> bool:
         # A single-txn insert under the `jti` primary key IS the check-and-record;
-        # the prune ahead of it drops only expired rows (tests/test_runner_jti_cache.py).
+        # the prune ahead of it drops only expired rows (tests/unit/runner/store/internal/test_jti_cache.py).
         try:
             with self._store.begin() as conn:
                 conn.execute(jwt_jti_seen.delete().where(jwt_jti_seen.c.expires_at < self._clock.now()))

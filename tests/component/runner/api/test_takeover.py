@@ -1,0 +1,280 @@
+"""``POST``/``PATCH /chunks/{id}/takeovers``.
+
+Exercised over a real store via TestClient: the route's shape, its 409/503/404 forms,
+and the store-derivation it delegates to (:class:`TakeoverService`, pinned at the
+domain level by ``tests/component/runner/lifecycle/test_takeover.py``).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Unpack
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.takeover import TakeoverService
+from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
+from tests.runner_client import runner_client
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_store,
+    make_stores,
+    single_workspace,
+)
+
+_NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
+
+
+def _app_with_takeover(
+    tmp_path: Path,
+    *,
+    clock: FixedClock | None = None,
+    probe: FakeProbe | None = None,
+    harnesses: HarnessRegistry | None = None,
+):
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+    )
+    resolved_harnesses = (
+        harnesses
+        if harnesses is not None
+        else HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)})
+    )
+    service = TakeoverService(
+        clock or FixedClock(_NOW),
+        probe or FakeProbe(),
+        takeover=store,
+        outbound=store,
+        tokens=store,
+        elicitations=store,
+        local_api_url="http://127.0.0.1:8431",
+        workspaces=single_workspace(FakeProvider({})),
+        harnesses=resolved_harnesses,
+    )
+    return create_runner_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), takeover=service
+    ), store
+
+
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "graph_id": "gr_1",
+        "node_id": "nd_build",
+        "node_name": "build",
+        "epoch": 1,
+        "retries_max": 2,
+        "created_at": _NOW,
+    }
+    fields.update(overrides)
+    store.record_lease(NewLease(**fields))
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def test_503_when_takeover_service_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    with runner_client(create_runner_app(config)) as client:
+        assert client.post("/api/chunks/ch_1/takeovers", json={}).status_code == 503
+        assert client.patch("/api/chunks/ch_1/takeovers/tko_1").status_code == 503
+
+
+def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["command"] == "cd /ws/e1 && claude --resume sess-a"
+    assert body["workdir"] == "/ws/e1"
+    assert body["harness_id"] == "claude_code"
+    assert body["takeover_id"]
+    # The bounded takeover env rides the response — BLIZZARD_* identity
+    # plus PATH/HOME, never the daemon's full child env or the printable command.
+    assert body["env"]["BLIZZARD_CHUNK_ID"] == "ch_1"
+    assert body["env"]["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert body["env"]["BLIZZARD_SESSION_ID"] == "sess-a"
+    assert body["env"]["BLIZZARD_LEASE_TOKEN"]
+    assert body["env"]["BLIZZARD_LEASE_TOKEN"] not in body["command"]
+    assert body["env"]["PATH"] == "/daemon/venv/bin:/usr/bin"
+    assert "TERM" not in body["env"]
+    assert "FAKE_PASSTHROUGH_SECRET" not in body["env"]
+    assert store.open_takeover_for_chunk("ch_1") is not None
+
+
+def test_open_without_force_over_a_live_worker_is_409(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)  # active, not parked — a live attempt
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_unknown_recorded_owner_blocks_takeover_as_409_without_opening_one(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path, harnesses=HarnessRegistry({}))
+    _seed_lease(store)
+    with store.engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409
+    assert "unknown coding harness 'missing'" in resp.json()["detail"]
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_unavailable_recorded_owner_blocks_takeover_as_409_without_opening_one(tmp_path: Path) -> None:
+    # Registered but with no adapter — the typed 409, never an unhandled 500.
+    app, store = _app_with_takeover(tmp_path, harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding()}))
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409, resp.text
+    assert CLAUDE_CODE_HARNESS_ID in resp.json()["detail"]
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_open_with_force_over_a_live_worker_kills_it_and_fences_the_epoch(tmp_path: Path) -> None:
+    probe = FakeProbe(alive={(100, "start-100")})
+    app, store = _app_with_takeover(tmp_path, probe=probe)
+    _seed_lease(store)
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={"force": True})
+
+    assert resp.status_code == 201, resp.text
+    assert probe.killed == [100]
+    record = store.open_takeover_for_chunk("ch_1")
+    assert record is not None
+    assert record.fence_epoch == 2
+
+
+def test_open_over_a_needs_human_chunk_with_a_requeue_pending_is_409(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_requeue(chunk_id="ch_1", at=_NOW + timedelta(seconds=1))  # after the lease: not yet consumed
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_forced_open_over_a_buffered_submission_is_409(tmp_path: Path) -> None:
+    probe = FakeProbe(alive={(100, "start-100")})
+    app, store = _app_with_takeover(tmp_path, probe=probe)
+    _seed_lease(store)
+    store.enqueue_outbound(
+        kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
+
+    with runner_client(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={"force": True})
+
+    assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+    assert probe.killed == []
+
+
+def test_a_second_open_while_one_is_open_is_409(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        first = client.post("/api/chunks/ch_1/takeovers", json={})
+        assert first.status_code == 201, first.text
+        second = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert second.status_code == 409
+
+
+def test_end_marks_the_takeover_closed(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        opened = client.post("/api/chunks/ch_1/takeovers", json={}).json()
+        end = client.patch(f"/api/chunks/ch_1/takeovers/{opened['takeover_id']}")
+
+    assert end.status_code == 200, end.text
+    assert end.json() == {"takeover_id": opened["takeover_id"], "ended": True}
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_end_with_no_open_takeover_on_the_chunk_succeeds_idempotently(tmp_path: Path) -> None:
+    """Ending a takeover already ended — or never opened — is the desired state:
+    it succeeds rather than 404ing, which is what lets the CLI's own ``finally``
+    exit cleanly after ``Pull`` closes the takeover first."""
+    app, _store = _app_with_takeover(tmp_path)
+
+    with runner_client(app) as client:
+        resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"takeover_id": "tko_bogus", "ended": True}
+
+
+def test_end_with_a_different_takeover_open_on_the_chunk_is_404(tmp_path: Path) -> None:
+    """The real conflict this stays strict about: a *different* takeover genuinely holds
+    the chunk right now."""
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        client.post("/api/chunks/ch_1/takeovers", json={})
+        resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
+
+    assert resp.status_code == 404
+    assert store.open_takeover_for_chunk("ch_1") is not None
+
+
+def test_end_already_ended_by_someone_else_succeeds_idempotently(tmp_path: Path) -> None:
+    """The exact race this fixes: something else (``Pull``, or a retried end-PATCH) already
+    closed this same takeover — ending it again is a no-op, not a 404."""
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        opened = client.post("/api/chunks/ch_1/takeovers", json={}).json()
+        store.record_takeover_end(takeover_id=opened["takeover_id"], ended_at=_NOW)
+        resp = client.patch(f"/api/chunks/ch_1/takeovers/{opened['takeover_id']}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"takeover_id": opened["takeover_id"], "ended": True}

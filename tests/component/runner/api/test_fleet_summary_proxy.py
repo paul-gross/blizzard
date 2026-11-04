@@ -106,7 +106,7 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
 
 def test_proxy_unreachable_hub_line_logs_at_error(tmp_path: Path) -> None:
     """This route's own forward keeps today's ``error`` severity — only the
-    dashboard's tolerated fleet-summary call lowers it (``tests/test_dashboard_route.py``)."""
+    dashboard's tolerated fleet-summary call lowers it (``tests/component/runner/api/test_dashboard_route.py``)."""
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         raise httpx2.ConnectError("connection refused")

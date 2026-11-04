@@ -13,7 +13,7 @@ from blizzard.runner.store.scoped import RunnerStoreConnections
 _log = get_logger("blizzard.runner.store")
 
 # A mint consumes only a mark appended before it: the spawn the mark itself triggered is minted after it, at whatever
-# instant (pinned by tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark).
+# instant (pinned by tests/unit/runner/store/test_pin.py::test_a_same_instant_mint_consumes_its_requeue_mark).
 _UNCONSUMED_REQUEUE = Unsuperseded(
     leases.c.lease_id,
     (leases.c.chunk_id == requeues.c.chunk_id, leases.c.seq > requeues.c.seq),
