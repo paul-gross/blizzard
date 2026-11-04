@@ -17,6 +17,8 @@ from blizzard.runner.harness.opencode_v2.client import ModelReference, Permissio
 
 #: Blizzard's fixed denies, each session's whole rule list: the native question surface no worker may reach.
 FIXED_DENIES: tuple[PermissionRule, ...] = (PermissionRule("question", "*", PermissionEffect.DENY),)
+#: An attended session's rule list: empty, so the operator at the TUI answers under their own configuration alone.
+ATTENDED_RULES: tuple[PermissionRule, ...] = ()
 
 METADATA_KEY = "blizzard"
 
@@ -145,6 +147,7 @@ def take_request(path: Path) -> DriveRequest:
 
 
 __all__ = [
+    "ATTENDED_RULES",
     "FIXED_DENIES",
     "METADATA_KEY",
     "DriveKind",

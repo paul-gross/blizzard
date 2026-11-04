@@ -5,6 +5,7 @@ and limit is read from that driver's own result, never OpenCode's output."""
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,6 +43,7 @@ from blizzard.runner.process.child_processes import Stream
 _log = get_logger("blizzard.runner.harness")
 
 SESSION_ID_PREFIX = "ses"
+DEFAULT_BINARY = "opencode"
 DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 _WINDOW = re.compile(r"(?P<count>[0-9]+)(?P<thousands>[kK]?)")
@@ -70,7 +72,7 @@ class OpenCodeTwoAdapter:
         versions: VersionProbe,
         request_dir: Path,
         clock: IClock,
-        binary: str = "opencode",
+        binary: str = DEFAULT_BINARY,
         driver_command: Sequence[str] = ("blizzard",),
         model: str = "",
         agent: str | None = None,
@@ -321,13 +323,13 @@ class OpenCodeTwoAdapter:
         effort: str | None = None,
         attended: bool = False,
     ) -> str:
-        del attended
-        argv = [self._binary, "--session", session_id]
-        reference = self._reference(model, effort)
-        if reference is not None:
-            suffix = f"#{reference.variant}" if reference.variant else ""
-            argv += ["--model", f"{reference.provider_id}/{reference.id}{suffix}"]
-        return f"cd {session_cwd} && {' '.join(argv)}"
+        # Pasted or exec'd, takeover goes through `attend`: the session's tree is stopped and its rules swapped first.
+        # The operator's TUI takes their own model and agent; the next driven resume restores the lease's.
+        del model, effort, attended
+        argv = [*self._driver_command, "runner", "opencode", "attend", session_id]
+        if self._binary != DEFAULT_BINARY:
+            argv += ["--opencode", self._binary]
+        return f"cd {shlex.quote(session_cwd)} && {shlex.join(argv)}"
 
     # -- reading the driver's result --------------------------------------------------------------------------------
 

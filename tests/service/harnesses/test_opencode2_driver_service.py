@@ -2,7 +2,8 @@
 the managed service under each test's own isolated home (``bzh:external-cli-fake-is-service-tier``). Each prompt is
 the engine's script, run only inside its fence: the variable rides the driver's environment, which the driver applies
 to the root, and the service's own, which every child runs under; the marker sits in the session's directory. Most
-turns run the real ``blizzard runner opencode drive``; one runs through the adapter and the real launcher."""
+turns run the real ``blizzard runner opencode drive``; one runs through the adapter and the real launcher, and one is
+taken over through the adapter's composed ``attend`` command."""
 
 from __future__ import annotations
 
@@ -31,10 +32,10 @@ from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.registration import read_registration
-from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
+from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, Outcome, parse_result
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
-from blizzard.runner.harness.opencode_v2.shapes import parse_session
+from blizzard.runner.harness.opencode_v2.shapes import parse_message, parse_session
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -276,6 +277,22 @@ def test_a_service_restart_mid_turn_fails_the_turn(tmp_path: Path, engine_bin: P
         assert result.error is not None and result.error.kind is ErrorKind.SERVICE
 
 
+def _adapter(engine: Engine, executor: ThreadPoolExecutor) -> OpenCodeTwoAdapter:
+    worker_env = AllowlistedEnv.of((_FENCE_VAR,))
+    return OpenCodeTwoAdapter(
+        runner_id="run_1",
+        worker_env=worker_env,
+        launcher=ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN),
+        keeper=ServiceKeeper(str(engine.binary), worker_env, CHILDREN, UrllibServiceTransport()),
+        versions=version_probe(),
+        request_dir=engine.requests,
+        clock=SystemClock(),
+        binary=str(engine.binary),
+        driver_command=(_BLIZZARD,),
+        model="openai/gpt-6-luna",
+    )
+
+
 def test_the_adapter_launches_the_driver_through_the_real_launcher(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -285,20 +302,7 @@ def test_the_adapter_launches_the_driver_through_the_real_launcher(
         monkeypatch.delenv(name, raising=False)
     executor = ThreadPoolExecutor(max_workers=1)
     try:
-        process = LinuxProcessProbe()
-        worker_env = AllowlistedEnv.of((_FENCE_VAR,))
-        adapter = OpenCodeTwoAdapter(
-            runner_id="run_1",
-            worker_env=worker_env,
-            launcher=ProcessLauncher(process, executor=executor, children=CHILDREN),
-            keeper=ServiceKeeper(str(engine.binary), worker_env, CHILDREN, UrllibServiceTransport()),
-            versions=version_probe(),
-            request_dir=engine.requests,
-            clock=SystemClock(),
-            binary=str(engine.binary),
-            driver_command=(_BLIZZARD,),
-            model="openai/gpt-6-luna",
-        )
+        adapter = _adapter(engine, executor)
         stdout = engine.home / "worker.out"
         preamble = WorkerPreamble(
             environments=[AcquiredEnvironment(environment_id="e1", workdir=str(engine.work))],
@@ -340,3 +344,63 @@ def test_no_password_reaches_a_result(engine: Engine) -> None:
     proc = engine.start(engine.request("text('x')"))
     out, err = proc.communicate(timeout=60)
     assert registration["password"] not in out + err
+
+
+def test_takeover_hands_the_session_to_the_operator_and_a_resume_takes_it_back(engine: Engine) -> None:
+    child = "hang()"
+    request = engine.request(f"subagent({child!r}, background=True)\nhang()")
+    worker = engine.start(request)
+    time.sleep(3)
+    worker.kill()
+    worker.communicate(timeout=30)
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        command = _adapter(engine, executor).resume_command(
+            str(engine.work), request.session_id, model="openai/gpt-6-luna", effort="high", attended=True
+        )
+    finally:
+        executor.shutdown(wait=True)
+    client = engine.client()
+    attend = subprocess.Popen(
+        ["/bin/sh", "-c", command],
+        env=engine.env(),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        assert attend.stdin is not None
+        attend.stdin.write("text('ATTENDED')\n")
+        attend.stdin.flush()
+        _wait_for_text(client, request.session_id, "ATTENDED", attend)
+        record = client.session(request.session_id)
+    finally:
+        os.killpg(attend.pid, signal.SIGTERM)
+        attend.communicate(timeout=30)
+    assert record["permissions"] == []
+    children = [parse_session(found) for found in client.children(request.session_id)]
+    assert children and all(found.outcome == "interrupted" for found in children)
+    switched = [m for m in client.messages(request.session_id) if str(m["type"]).endswith("-switched")]
+    assert [m["type"] for m in switched[-2:]] == ["model-switched", "agent-switched"]
+    assert parse_session(record).model != _LUNA
+    resumed = engine.drive(replace(request, kind=DriveKind.RESUME, prompt="text('back')"))
+    assert resumed.outcome is Outcome.SUCCEEDED and resumed.text == "back"
+    after = client.session(request.session_id)
+    assert after["permissions"] == [rule.payload() for rule in FIXED_DENIES]
+    assert parse_session(after).model == _LUNA
+
+
+def _wait_for_text(
+    client: OpenCodeServiceClient, session_id: str, text: str, attend: subprocess.Popen[str], timeout: float = 60
+) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        assert attend.poll() is None, attend.communicate()[1]
+        messages = [parse_message(m) for m in client.messages(session_id)]
+        answered = [i for i, m in enumerate(messages) if m.type == "assistant" and m.final_text() == text]
+        if answered and any(m.type == "idle" for m in messages[answered[-1] :]):
+            return
+        time.sleep(0.2)
+    raise AssertionError(f"session {session_id} never answered {text!r}")

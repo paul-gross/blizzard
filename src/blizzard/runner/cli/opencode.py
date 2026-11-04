@@ -1,4 +1,4 @@
-"""Runner-owned OpenCode compatibility diagnostics."""
+"""Runner-owned OpenCode commands: compatibility diagnostics, the OpenCode 2 turn driver, and OpenCode 2 takeover."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from blizzard.runner.harness.opencode.compatibility.process import SubprocessOpe
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
+from blizzard.runner.harness.opencode_v2.attend import AttendError, SessionHandover, attended_argv
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.compatibility.corpus import (
     CorpusError,
@@ -66,8 +67,8 @@ from blizzard.runner.process.child_processes import IChildProcesses
 
 @click.group("opencode")
 def opencode_group() -> None:
-    """OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn
-    driver."""
+    """OpenCode's admitted-version compatibility diagnostics, for either major version, the OpenCode 2 turn driver, and
+    OpenCode 2 takeover."""
 
 
 @opencode_group.command("compatibility")
@@ -311,4 +312,35 @@ def opencode_drive(request_path: Path) -> None:
     driver.run()
 
 
-__all__ = ["opencode_compatibility", "opencode_drive", "opencode_group"]
+@opencode_group.command("attend")
+@click.argument("session_id")
+@click.option(
+    "--opencode",
+    "binary",
+    default="opencode",
+    show_default=True,
+    help="The OpenCode 2 executable that opens the session.",
+)
+def opencode_attend(session_id: str, binary: str) -> None:
+    """Take over an OpenCode 2 session in the operator's own OpenCode.
+
+    Interrupts the session's tree, best effort, replaces its rules with the attended set, and runs `opencode --session
+    SESSION_ID` in its place. The runner's takeover composes this command; a later driven resume re-applies the
+    unattended rules and restores the lease's model and agent."""
+    path = registration_path(os.environ)
+    try:
+        core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
+    except (ServiceNotRegisteredError, ServiceIdentityError, ServiceUnreachableError, RegistrationError) as exc:
+        raise click.ClickException(f"no OpenCode service holds the session: {exc}") from exc
+    try:
+        SessionHandover(core, warn=partial(click.echo, err=True)).prepare(session_id)
+    except AttendError as exc:
+        raise click.ClickException(str(exc)) from exc
+    argv = attended_argv(binary, session_id)
+    try:
+        os.execvp(argv[0], argv)
+    except OSError as exc:
+        raise click.ClickException(f"cannot run `{binary}`: {exc}") from exc
+
+
+__all__ = ["opencode_attend", "opencode_compatibility", "opencode_drive", "opencode_group"]
