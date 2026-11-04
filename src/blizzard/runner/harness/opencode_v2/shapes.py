@@ -242,6 +242,10 @@ def parse_part(value: JsonValue) -> Part:
     )
 
 
+#: The message types that are model steps, each carrying the tokens and cost it spent.
+STEP_TYPES = frozenset({"assistant", "compaction"})
+
+
 @domain_model
 @dataclass(frozen=True)
 class Message:
@@ -394,6 +398,7 @@ def parse_listed_model(value: JsonValue) -> ListedModel:
 
 
 __all__ = [
+    "STEP_TYPES",
     "Event",
     "FormRequest",
     "InboxItem",

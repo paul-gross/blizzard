@@ -289,8 +289,8 @@ The output has the same line shapes as the OpenCode 1 report: one line per row, 
 - `prompt_and_completion`, `judgement`, `queue_and_steer`, `transcript_read` — prompts arrive verbatim, settling is
   observed by polling alone, the final text carries `<Choice>`, `queue` and `steer` deliveries behave, and messages read
   back with stable ids.
-- `transcript_tools` — the read and skill tools record their input, the message listing pages forward through its
-  cursor to an empty last page, and a missing session answers `404`.
+- `transcript_tools` — the read and skill tools run to completion and record their input, the message listing pages
+  forward through its cursor to an empty last page, and a missing session answers `404`.
 - `interrupt`, `service_restart` — an interrupt stops a tree, its running children included, and ends their tool
   processes. A restart is recognized by its changed registration `id` and `pid`, and any turn the restarted service
   resumes is interrupted.

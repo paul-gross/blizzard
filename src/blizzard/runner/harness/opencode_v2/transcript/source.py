@@ -76,7 +76,6 @@ class _Listing:
 
 
 @adapter_model
-@adapter_model
 @dataclass
 class _SessionRead:
     """One session's share of a forward read."""
@@ -241,6 +240,7 @@ class OpenCodeTwoTranscriptSource:
             listing.raw.extend(page.items)
             if page.next is not None:
                 listing.cursor = page.next
+            # A short page is taken as the last, as the client's own listing takes it.
             if page.next is None or len(page.items) < MESSAGE_PAGE_LIMIT:
                 return listing
             if budget is not None and pages >= budget:

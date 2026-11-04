@@ -35,7 +35,7 @@ from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, parse_result
 from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceUnavailableError
-from blizzard.runner.harness.opencode_v2.shapes import Message, OpenCodeTwoShapeError, parse_message
+from blizzard.runner.harness.opencode_v2.shapes import STEP_TYPES, Message, OpenCodeTwoShapeError, parse_message
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.overload import ProviderOverload
@@ -464,14 +464,14 @@ class OpenCodeTwoAdapter:
 
 
 def _transcript_steps(lines: Sequence[str]) -> list[tuple[bool, Message]]:
-    """Each assistant step a raw transcript record carries, and whether it is the root's; unreadable records skip."""
+    """Each step a raw transcript record carries, and whether it is the root's; unreadable records skip."""
     steps: list[tuple[bool, Message]] = []
     for line in lines:
         try:
             record = decode_json(line)
             if not isinstance(record, dict) or not isinstance(raw := record.get("message"), dict):
                 continue
-            if raw.get("type") != "assistant":
+            if raw.get("type") not in STEP_TYPES:
                 continue
             message = parse_message(raw)
         except (ValueError, OpenCodeTwoShapeError):

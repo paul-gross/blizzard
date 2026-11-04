@@ -288,6 +288,7 @@ class OpenCodeServiceClient:
         """Every message of ``session_id`` in ``order``, following the service's pages to the last."""
         page = self.message_page(session_id, order=order, limit=MESSAGE_PAGE_LIMIT)
         listed = list(page.items)
+        # A page shorter than asked is taken as the last; 2.1.4 proves only that an empty page ends the listing.
         while page.next is not None and len(page.items) == MESSAGE_PAGE_LIMIT:
             page = self.message_page(session_id, cursor=page.next, limit=MESSAGE_PAGE_LIMIT)
             listed.extend(page.items)

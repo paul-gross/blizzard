@@ -299,6 +299,14 @@ def test_a_killed_turns_usage_is_recovered_from_the_root_and_every_descendant_in
     assert adapter.observed_model(lines) == "openai/gpt-6-luna"
 
 
+def test_a_compactions_usage_is_recovered_with_the_steps(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    compaction = _step("msg_k", "openai/gpt-6-luna", cost=0.5) | {"type": "compaction", "summary": "so far"}
+    lines = [_record("ses_r", None, _step("msg_1", "openai/gpt-6-luna")), _record("ses_r", None, compaction)]
+    sample = adapter.sum_transcript_usage(lines, "spawn")
+    assert (sample.input_tokens, sample.output_tokens, sample.cost_usd) == (20, 6, 0.5)
+
+
 def test_a_reported_cost_in_the_records_is_summed(tmp_path: Path) -> None:
     adapter, _ = _adapter(tmp_path)
     lines = [_record("ses_r", None, _step("msg_1", "openai/gpt-6-luna", cost=0.25))] * 2
