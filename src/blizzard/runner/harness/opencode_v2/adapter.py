@@ -5,6 +5,7 @@ and limit is read from that driver's own result, never OpenCode's output."""
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
@@ -70,7 +72,7 @@ class OpenCodeTwoAdapter:
         versions: VersionProbe,
         request_dir: Path,
         clock: IClock,
-        binary: str = "opencode",
+        binary: str = DEFAULT_OPENCODE_BINARY,
         driver_command: Sequence[str] = ("blizzard",),
         model: str = "",
         agent: str | None = None,
@@ -321,13 +323,16 @@ class OpenCodeTwoAdapter:
         effort: str | None = None,
         attended: bool = False,
     ) -> str:
+        # Pasted or exec'd, takeover goes through `attend`: the tree is stopped, the rules swapped, and the stamped
+        # model reasserted first. The TUI switches the agent to its own; the next driven resume restores the lease's.
         del attended
-        argv = [self._binary, "--session", session_id]
+        argv = [*self._driver_command, "runner", "opencode", "attend", session_id]
         reference = self._reference(model, effort)
         if reference is not None:
-            suffix = f"#{reference.variant}" if reference.variant else ""
-            argv += ["--model", f"{reference.provider_id}/{reference.id}{suffix}"]
-        return f"cd {session_cwd} && {' '.join(argv)}"
+            argv += ["--model", model_option(reference)]
+        if self._binary != DEFAULT_OPENCODE_BINARY:
+            argv += ["--opencode", self._binary]
+        return f"cd {shlex.quote(session_cwd)} && {shlex.join(argv)}"
 
     # -- reading the driver's result --------------------------------------------------------------------------------
 

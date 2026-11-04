@@ -1111,6 +1111,48 @@
     },
     "opencode": {
       "commands": {
+        "attend": {
+          "help": "Take over a fleet OpenCode 2 session in the operator's own OpenCode.\n\nInterrupts the session's tree, best effort, replaces its rules with the attended set, switches it to --model when\nit runs another, then runs the --opencode executable on it. Refuses a session no blizzard runner minted. The\nrunner's takeover composes this; a later driven resume re-applies the unattended rules and the lease's agent.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "session_id",
+              "opts": [
+                "session_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The lease's model as provider/model[#variant]; the session is switched to it when it runs another.",
+              "hidden": false,
+              "kind": "option",
+              "name": "model",
+              "opts": [
+                "--model"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The OpenCode 2 executable that opens the session.",
+              "hidden": false,
+              "kind": "option",
+              "name": "binary",
+              "opts": [
+                "--opencode"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner opencode attend",
+          "short_help": "Take over a fleet OpenCode 2 session in the operator's own OpenCode."
+        },
         "compatibility": {
           "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.\n\nThe binary's major version selects the proof: OpenCode 1 runs in an isolated scratch home, OpenCode 2 on the\noperator's own managed service.",
           "params": [
@@ -1223,10 +1265,10 @@
           "short_help": "Worker: drive one OpenCode 2 turn on the operator's managed service and print its result."
         }
       },
-      "help": "OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn\ndriver.",
+      "help": "OpenCode's admitted-version compatibility diagnostics, for either major version, the OpenCode 2 turn driver, and\nOpenCode 2 takeover.",
       "params": [],
       "path": "runner opencode",
-      "short_help": "OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn driver."
+      "short_help": "OpenCode's admitted-version compatibility diagnostics, for either major version, the OpenCode 2 turn driver, and OpenCode 2 takeover."
     },
     "pause": {
       "help": "Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub\nunreachable. Running workers are left alone \u2014 this is not a drain \u2014 but while paused a stalled worker is not\nkilled and an exhausted retry budget does not escalate. Separate from a pause set at the hub; each is cleared\nwhere it was set.",

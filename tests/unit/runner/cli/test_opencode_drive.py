@@ -1,5 +1,5 @@
-"""``blizzard runner opencode drive``: with no managed service registered it still writes a ``failed`` result naming
-the service, and a request it cannot read fails the command without one."""
+"""``blizzard runner opencode drive`` and ``attend`` with no managed service: ``drive`` still writes a ``failed``
+result naming the service, and a request it cannot read fails it without one; ``attend`` fails and opens nothing."""
 
 from __future__ import annotations
 
@@ -40,3 +40,21 @@ def test_an_unreadable_request_fails_the_command(tmp_path: Path) -> None:
     answer = CliRunner().invoke(runner_group, ["opencode", "drive", "--request", str(tmp_path / "absent.json")])
     assert answer.exit_code != 0
     assert parse_result(answer.output) is None
+
+
+def test_attend_with_no_registered_service_fails_before_opening_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    opened: list[list[str]] = []
+
+    def execvp(file: str, argv: list[str]) -> None:
+        del file
+        opened.append(argv)
+
+    monkeypatch.setattr("os.execvp", execvp)
+    answer = CliRunner().invoke(runner_group, ["opencode", "attend", "ses_1"])
+    assert answer.exit_code != 0
+    assert "no OpenCode service holds the session" in answer.output
+    assert opened == []
