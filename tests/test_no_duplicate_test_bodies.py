@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import ast
 import collections
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_TESTS = Path(__file__).resolve().parent
+_TESTS = repo_root() / "tests"
 _ROOT = _TESTS.parent
 
 #: Bodies duplicated on purpose, keyed by test name — the parity guard's endpoint-table

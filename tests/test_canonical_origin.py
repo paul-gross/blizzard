@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from blizzard.hub.domain.config.forges import OriginRefused, canonical_origin
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
 _CASES: list[dict[str, Any]] = json.loads(
-    (Path(__file__).parent / "fixtures" / "canonical_origin_cases.json").read_text()
+    (repo_root() / "tests" / "fixtures" / "canonical_origin_cases.json").read_text()
 )
 
 

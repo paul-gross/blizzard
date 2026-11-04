@@ -41,10 +41,11 @@ from tests.config_inputs import (
     load_hub_config,
 )
 from tests.host_files import write_minimal_host
+from tests.repo_files import repo_root
 from tests.support import build_hub
 
-_SRC = Path(__file__).resolve().parent.parent / "src" / "blizzard"
-_WEB = Path(__file__).resolve().parent.parent / "web" / "projects"
+_SRC = repo_root() / "src" / "blizzard"
+_WEB = repo_root() / "web" / "projects"
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 
 #: One live flag of each scope, and a tombstone.

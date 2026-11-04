@@ -16,6 +16,7 @@ from blizzard.foundation.flags.registry import FlagRegistry
 from blizzard.tools.compat.releases import parse_release
 from blizzard.tools.flag_lifecycle import main
 from blizzard.tools.flag_lifecycle_domain import Mode, Snapshot, derive
+from tests.repo_files import repo_root
 
 _PATH = "src/blizzard/foundation/flags/registry.toml"
 
@@ -309,7 +310,7 @@ def test_no_tagged_registry_and_malformed_tag(tmp_path: Path, monkeypatch: pytes
 
 @pytest.mark.unit
 def test_workflow_flag_gate() -> None:
-    workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github/workflows/gate.yml").read_text())
+    workflow = yaml.safe_load((repo_root() / ".github/workflows/gate.yml").read_text())
     job = workflow["jobs"]["repo-checks"]
     assert job["steps"][0]["with"]["fetch-depth"] == 0
     (step,) = [step for step in job["steps"] if step.get("name") == "flag lifecycle (cut on a release cut, else pr)"]

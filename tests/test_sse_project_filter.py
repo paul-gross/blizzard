@@ -23,6 +23,7 @@ from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.api.events import events_stream
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.events.broker import EventBroker
+from tests.repo_files import repo_root
 from tests.support import build_hub, default_project, emitted_events, ingest
 
 pytestmark = pytest.mark.component
@@ -208,7 +209,7 @@ _CHUNK_SCOPED = frozenset(
 
 
 def test_every_chunk_scoped_publish_site_stamps_the_chunks_project() -> None:
-    root = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "hub"
+    root = repo_root() / "src" / "blizzard" / "hub"
     unstamped: list[str] = []
     sites = 0
     for path in sorted(root.rglob("*.py")):
