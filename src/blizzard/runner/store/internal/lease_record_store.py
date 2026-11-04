@@ -40,7 +40,7 @@ from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 
-# Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's
+# Pinned by tests/unit/runner/store/test_pin.py::test_a_rebind_after_a_release_reads_as_held's
 # sibling lease cases.
 _OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 

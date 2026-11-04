@@ -1,0 +1,377 @@
+"""``blizzard runner takeover``.
+
+Driven against a live daemon on a real unix socket: a real server, a real store, and
+the CLI wired together. the runner carrier hands in a launcher whose foreground entry is a fake, so the interactive exec
+never shells out — the point is the CLI's own protocol (open, exec, mark ended).
+"""
+
+from __future__ import annotations
+
+import shlex
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Protocol
+from urllib.parse import urlsplit
+
+import httpx2
+import pytest
+from click.testing import CliRunner
+
+from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.children import RunnerCliCollaborators
+from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.takeover import TakeoverCommand
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import ShellCommand
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+from tests.runner_cli_home import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
+from tests.runner_fakes import SqlAlchemyRunnerStore
+from tests.worker_http import bind_local_only
+
+_NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
+
+
+class _ForegroundCall(Protocol):
+    """The foreground launch a test scripts: the command, cwd and resolved env it is handed."""
+
+    def __call__(
+        self, command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int: ...
+
+
+class _Launcher(SubprocessChildProcesses):
+    """The launch seam with its foreground entry replaced by ``call``, so the interactive exec never shells out."""
+
+    def __init__(self, call: _ForegroundCall) -> None:
+        self._call = call
+
+    def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
+        return self._call(command.script, shell=True, cwd=str(cwd), env=env.variables)
+
+
+def _foreground(call: _ForegroundCall) -> CliRunner:
+    """A runner of in-process commands that reaches only the local API and launches through ``call``, which sees
+    the command, cwd and resolved env."""
+    local = bind_local_only().collaborators
+    carrier = RunnerCliCollaborators.extending(local)
+    carrier = replace(carrier, children=_Launcher(call))
+    return _CarrierRunner(carrier)
+
+
+class _CarrierRunner(CliRunner):
+    def __init__(self, carrier: RunnerCliCollaborators) -> None:
+        super().__init__()
+        self._carrier = carrier
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("obj", self._carrier)
+        return super().invoke(*args, **kwargs)
+
+
+def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+
+def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
+    """A closed reference lease — the needs-human shape a real bug reproduced
+    against: every ``blizzard runner`` worker verb 404s once its lease is closed."""
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+
+def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end proof, over the real live socket: the resumed session's
+    forwarded env authorizes a worker verb against the SAME closed reference lease the
+    parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_escalated_lease(store)
+    assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
+
+    reached: dict[str, httpx2.Response] = {}
+    # `BLIZZARD_RUNNER_URL`'s host is unreachable here (`port=0` ephemeral binding), so this reaches the daemon over
+    # the UDS socket `--dir` names, at the runner prefix the forwarded URL carries.
+    transport = httpx2.HTTPTransport(uds=str(HostLayout(root).socket_path))
+
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        assert env is not None
+        with httpx2.Client(transport=transport, base_url="http://runner", timeout=5.0) as client:
+            reached["attachments"] = client.get(
+                f"{urlsplit(env['BLIZZARD_RUNNER_URL']).path}/api/leases/{env['BLIZZARD_LEASE_ID']}/attachments",
+                headers={"X-Blizzard-Lease-Token": env["BLIZZARD_LEASE_TOKEN"]},
+            )
+        return 0
+
+    runner = _foreground(fake_call)
+
+    with serve_local_api(root):
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert reached["attachments"].status_code == 200, reached["attachments"].text
+    assert reached["attachments"].json() == []
+    # list_active_leases() is unaffected — no FILL slot consumed, no fresh mint.
+    assert store.list_active_leases() == []
+    assert store.open_takeover_for_chunk("ch_1") is None  # marked ended once the child exited
+
+
+def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_parked_lease(store)
+
+    calls: list[tuple[str, bool, str]] = []
+    child_envs: list[dict[str, str]] = []
+
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        assert cwd is not None
+        assert env is not None
+        calls.append((command, shell, cwd))
+        child_envs.append(env)
+        return 0
+
+    runner = _foreground(fake_call)
+    # A sentinel terminal var: the identity env must layer OVER the operator's env,
+    # not replace it, so the exec'd child still sees this.
+    monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
+
+    with serve_local_api(root):
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    # The composed command reasserts the daemon's permission mode — so
+    # the taken-over session does not drop to per-tool approval prompts.
+    assert calls == [("cd /ws/e1 && claude --resume sess-a --permission-mode bypassPermissions", True, "/ws/e1")]
+    assert "taking over chunk ch_1 in /ws/e1" in result.output
+    # The lease's worker identity rides the exec env, layered over the
+    # terminal env, so the session's `blizzard runner` verbs and heartbeat hook work.
+    (child_env,) = child_envs
+    assert child_env["OPERATOR_TERMINAL_SENTINEL"] == "still-here"
+    assert child_env["BLIZZARD_CHUNK_ID"] == "ch_1"
+    assert child_env["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert child_env["BLIZZARD_SESSION_ID"] == "sess-a"
+    assert child_env["BLIZZARD_ENV_IDS"] == "e1"
+    assert child_env["BLIZZARD_RUNNER_URL"].startswith("http://")
+    lease_token = child_env["BLIZZARD_LEASE_TOKEN"]
+    assert lease_token  # re-minted for the takeover — plaintext travels only in the env
+    # The token never reaches a printable surface: not the CLI's output, not the command.
+    assert lease_token not in result.output
+    assert all(lease_token not in command for command, _, _ in calls)
+    assert store.open_takeover_for_chunk("ch_1") is None  # marked ended once the child exited
+
+
+def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_parked_lease(store)
+
+    def exits_seven(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        return 7
+
+    runner = _foreground(exits_seven)
+
+    with serve_local_api(root):
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code == 7
+    assert store.open_takeover_for_chunk("ch_1") is None  # still marked ended despite the nonzero exit
+
+
+def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrupt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``Ctrl-C`` into the interactive session must not strand the takeover open —
+    the end-PATCH runs in a ``finally`` around the child, firing even for the
+    ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx2.HTTPError` handler misses."""
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_parked_lease(store)
+
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        raise KeyboardInterrupt
+
+    runner = _foreground(fake_call)
+
+    with serve_local_api(root):
+        # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
+        # assert the exit code, not the exception; the end-PATCH must fire before that.
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code == 1
+    assert store.open_takeover_for_chunk("ch_1") is None  # ended despite the interrupt — no stranded hold
+
+
+def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    calls: list[str] = []
+
+    def record_command(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        calls.append(command)
+        return 0
+
+    runner = _foreground(record_command)
+
+    with serve_local_api(root):
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "live worker attempt" in result.output
+    assert calls == []  # never exec'd — the live worker was never superseded
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+def test_pasting_the_composed_command_on_a_host_of_several_runners_reaches_the_named_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    host_of(TWO_RUNNERS, monkeypatch, paths)
+    argv = shlex.split(TakeoverCommand("ch_1", str(tmp_path), "beta").wrapped)[3:]
+
+    CliRunner().invoke(runner_group, ["takeover", *argv])
+
+    assert "holds several runners" not in paths and paths[0] == "/api/host/runners"
+    assert all(p.startswith("/runners/rn_b/") for p in paths[1:]) and len(paths) > 1
+
+
+def _open_stranded_takeover(store: SqlAlchemyRunnerStore) -> None:
+    """The dropped-SSH shape: a takeover fact opened with no session behind it."""
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+    )
+
+
+def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_escalated_lease(store)
+    _open_stranded_takeover(store)
+    calls: list[str] = []
+
+    def record_command(
+        command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> int:
+        calls.append(command)
+        return 0
+
+    runner = _foreground(record_command)
+
+    with serve_local_api(root):
+        first = runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+        again = runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+
+    assert first.exit_code == 0, first.output
+    assert "ended takeover tko_1" in first.output
+    assert store.open_takeover_for_chunk("ch_1") is None
+    assert calls == []
+    assert again.exit_code == 0, again.output
+    assert "no open takeover for chunk ch_1" in again.output
+
+
+def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PATCH 404 is a clear message, not the generic could-not-reach-the-runner failure."""
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    _seed_escalated_lease(store)
+    _open_stranded_takeover(store)
+    real_get = RunnerDaemon.get
+
+    def stale_list(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx2.Response:
+        resp = real_get(self, path, params=params)
+        if path == "/api/takeovers":
+            body = resp.json()
+            body["items"][0]["takeover_id"] = "tko_gone"
+            return httpx2.Response(200, json=body)
+        return resp
+
+    monkeypatch.setattr(RunnerDaemon, "get", stale_list)
+
+    def exits_zero(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        return 0
+
+    runner = _foreground(exits_zero)
+
+    with serve_local_api(root):
+        result = runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "already ended elsewhere" in result.output
+    assert "could not reach" not in result.output

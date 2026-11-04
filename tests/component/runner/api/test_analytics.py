@@ -1,0 +1,290 @@
+"""``GET /api/leases/{id}/analytics/...`` — the lease-scoped, hub-proxying reads of the
+six counts/spend summaries (component tier). Authorization mirrors
+``tests/component/runner/api/test_garden_findings.py``'s own shape: the hub is never consulted for
+an unauthorized caller. The proxy forwards the window params unvalidated and returns the
+hub body verbatim, including a non-routine chunk's own 404."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Unpack
+
+import httpx2
+import pytest
+from fastapi import FastAPI
+
+from blizzard.foundation.tokens import TokenHash
+from blizzard.runner.api.analytics import ANALYTICS_HUB_TIMEOUT
+from blizzard.runner.api.hub_proxy import HUB_TIMEOUT
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.leases.model import NewLease
+from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
+from tests.runner_client import runner_client
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
+
+_NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
+_TOKEN = "the-lease-token"
+_HUB_URL = "http://hub.local:8421"
+_CHUNK = "ch_1"
+
+_COUNTS_ROUTES = [
+    "counts/files",
+    "counts/skills",
+    "counts/agent-types",
+    "counts/nodes",
+]
+_SPEND_ROUTES = ["spend/nodes", "spend/graphs"]
+_ROUTES = _COUNTS_ROUTES + _SPEND_ROUTES
+
+_HUB_SUFFIX = {
+    "counts/files": "analytics/counts/files",
+    "counts/skills": "analytics/counts/skills",
+    "counts/agent-types": "analytics/counts/agent-types",
+    "counts/nodes": "analytics/counts/nodes",
+    "spend/nodes": "analytics/spend/nodes",
+    "spend/graphs": "analytics/spend/graphs",
+}
+
+_COUNTS_BODY = {"counts": [{"key": "a.py", "count": 3, "graph_name": None, "node_name": None}]}
+_SPEND_BODY = {
+    "spend": [
+        {
+            "key": "nd_build",
+            "graph_name": "default-delivery",
+            "node_name": "build",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_tokens": 10,
+            "cache_create_tokens": 5,
+            "cost_usd": 0.1,
+            "cost_partial": False,
+            "estimated_cost_usd": 0.02,
+        }
+    ]
+}
+
+
+def _body_for(suffix: str) -> dict[str, Any]:
+    return _COUNTS_BODY if suffix.startswith("counts/") else _SPEND_BODY
+
+
+class _HubRouter:
+    def __init__(self) -> None:
+        self.handler: Callable[[httpx2.Request], httpx2.Response] = lambda request: httpx2.Response(
+            500, json={"detail": f"hub not stubbed for {request.url}"}
+        )
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        return self.handler(request)
+
+
+def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
+    router = _HubRouter()
+    app = create_runner_app(
+        config,
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(router)),
+        hub_retry_clock=no_retry_clock(),
+    )
+    app.state.hub_router = router
+    return app, store
+
+
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
+        "lease_id": "lease_1",
+        "chunk_id": _CHUNK,
+        "graph_id": "gr_1",
+        "node_id": "nd_reconcile",
+        "node_name": "reconcile",
+        "epoch": 1,
+        "retries_max": 2,
+        "created_at": _NOW,
+    }
+    fields.update(overrides)
+    store.record_lease(NewLease(**fields))
+    store.record_lease_token(fields["lease_id"], TokenHash(_TOKEN).hex, _NOW)
+
+
+def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] | None = None) -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if seen is not None:
+            seen.append(str(request.url))
+        return httpx2.Response(status_code, json=payload)
+
+    app.state.hub_router.handler = handler
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_503_when_store_unwired(tmp_path: Path, suffix: str) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
+    with runner_client(create_runner_app(config)) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 503
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_404_for_an_unknown_lease(tmp_path: Path, suffix: str) -> None:
+    app, _store = _app_with_store(tmp_path)
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_ghost/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_403_for_a_missing_token(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.get(f"/api/leases/lease_1/analytics/{suffix}", params={"since": "2020-01-01T00:00:00Z"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_403_for_a_wrong_token(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": "nope"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path, suffix: str) -> None:
+    """Authorization is resolved before the hub is consulted, so an unauthorized caller
+    never learns the hub-wiring state — mirrors the garden-findings proxy."""
+    app, store = _app_with_store(tmp_path, hub_url="")
+    _seed_lease(store)
+    with runner_client(app) as client:
+        authed = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+        unauthed = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": "nope"},
+        )
+    assert authed.status_code == 503
+    assert unauthed.status_code == 403
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_forwards_the_window_params_and_returns_the_hub_body(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    body = _body_for(suffix)
+    _stub_hub(app, 200, body, seen)
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/{_HUB_SUFFIX[suffix]}"
+        f"?since=2020-01-01T00%3A00%3A00Z&until=2030-01-01T00%3A00%3A00Z"
+    ]
+    assert resp.json() == body
+
+
+@pytest.mark.parametrize("suffix", ["counts/nodes", "spend/nodes", "spend/graphs"])
+def test_forwards_by_name_to_the_hub(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _body_for(suffix), seen)
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z", "by_name": "true"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [
+        f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/{_HUB_SUFFIX[suffix]}?since=2020-01-01T00%3A00%3A00Z&by_name=true"
+    ]
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_a_scan_that_runs_the_whole_attempt_is_not_retried(tmp_path: Path, suffix: str) -> None:
+    """The forward's whole budget is one attempt's worth, not the proxy's multi-retry
+    ceiling: a scan that consumes the full per-attempt bound has no budget left, so the
+    forward makes one attempt and answers 502."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    clock = app.state.hub_retry_clock
+    attempts = 0
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        nonlocal attempts
+        attempts += 1
+        clock.advance(request.extensions["timeout"]["pool"])
+        raise httpx2.ReadTimeout("the scan ran the whole attempt")
+
+    app.state.hub_router.handler = handler
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 502, resp.text
+    assert attempts == 1
+    assert ANALYTICS_HUB_TIMEOUT == HUB_TIMEOUT
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_502_when_the_hub_is_unreachable(tmp_path: Path, suffix: str) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("refused")
+
+    app.state.hub_router.handler = handler
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 502
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_hub_refusal_of_a_non_routine_chunk_passes_through_verbatim(tmp_path: Path, suffix: str) -> None:
+    """A lease on a chunk that is not a routine run gets a legible refusal, not an empty
+    bucket — the hub's own 404 forwarded as-is."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(app, 404, {"detail": f"chunk {_CHUNK} carries no run context"})
+    with runner_client(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 404
+    assert "no run context" in resp.json()["detail"]

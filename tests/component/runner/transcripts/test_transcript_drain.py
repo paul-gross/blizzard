@@ -1,0 +1,970 @@
+"""The transcript lane's drain (component tier) — break-on-error, ack-on-capped,
+ack-on-already-applied, and the per-run bound."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
+
+from structlog.testing import capture_logs
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
+from blizzard.runner.hub.client import TranscriptPush, TranscriptPushAck
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.transcripts import transcript_drain as transcript_drain_module
+from blizzard.runner.transcripts.ledger import (
+    BufferedTranscriptDelta,
+    IWriteTranscriptLedgerRepository,
+    TranscriptSegmentState,
+)
+from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    FakeTranscriptSource,
+    make_context,
+    make_store,
+)
+
+_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+@dataclass
+class _SteppingClock(FixedClock):
+    """Returns ``instant`` on the first call, ``instant`` pushed by ``step`` on every call
+    after — simulates real wall-clock elapsing across one ``run()`` without monkeypatching a
+    process-wide module: the drain's deadline flows through the injected clock, so a test
+    substitutes by type instead of reaching into the stdlib ``time`` module."""
+
+    step: timedelta = timedelta(seconds=0)
+    calls: int = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        return self.instant if self.calls == 1 else self.instant + self.step
+
+
+def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None) -> LoopContext:
+    store = make_store("sqlite://")
+    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
+    return make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(
+            runner_name="r1",
+            runner_id="rn_1",
+            transcripts_ship=False,
+            transcript_record_max_bytes=record_max_bytes,
+        ),
+        clock=clock,
+    )
+
+
+def _spawn_one_segment(ctx: LoopContext) -> str:
+    ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    ctx.stores.lease_record.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+            resolved_model="claude-sonnet-5",
+            resolved_effort="high",
+        )
+    )
+    ctx.stores.liveness.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        spawn_cwd="/ws",
+    )
+    return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
+
+
+def _enqueue_delta(ctx: LoopContext, segment_id: str, *, cursor: str) -> int:
+    payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 0,
+            "final": False,
+            "normalizer_version": "fake/1",
+            "harness_version": None,
+            "turns": [],
+        }
+    )
+    (seq,) = ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=cursor,
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payloads=[payload],
+        created_at=_NOW,
+    )
+    return seq
+
+
+def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shipping_on() -> None:
+    """No other case drives the real composition (pump then flush, ON) — a
+    mutation probe confirmed a no-op pump left the whole suite green. Asserts the hub
+    received the pump's own turns, not a hand-built stand-in."""
+    hub = FakeHub()
+    store = make_store("sqlite://")
+    turn = NormalizedTurn(
+        index=0,
+        kind="asst",
+        timestamp=_NOW,
+        text="hello from the real pump",
+        tool=None,
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+    source = FakeTranscriptSource(
+        batches_by_session={
+            "sess-a": TranscriptBatch(
+                session_id="sess-a",
+                available=True,
+                reason=None,
+                turns=[turn],
+                unlinked_sidechains=[],
+                next_position=TranscriptPosition("pos-1"),
+                complete=True,
+                truncated=False,
+                sidechain_truncated=False,
+                normalizer_version="fake/1",
+                harness_version=None,
+            )
+        }
+    )
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptDrain(ctx).run()
+
+    assert [r.segment_id for r in hub.transcripts_pushed] == [segment_id]
+    pushed = hub.transcripts_pushed[0]
+    assert pushed.final is False
+    assert [t.text for t in pushed.turns] == ["hello from the real pump"]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"  # the pump's own cursor advance landed too
+
+
+def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_payload() -> None:
+    """The store buffers only a minimal marker row — the wire-shaped record
+    renders here, straight from the segment's own frozen ledger row, not a second
+    independently-built copy."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    content_payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 2,
+            "final": False,
+            "normalizer_version": "claude-code/1.2",
+            "harness_version": "1.2.3",
+            "turns": [],
+        }
+    )
+    ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=3,
+        normalizer_version="claude-code/1.2",
+        harness_version="1.2.3",
+        payloads=[content_payload],
+        created_at=_NOW,
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    final = final_pushes[0]
+    assert final.segment_id == segment_id
+    assert final.chunk_id == "ch_1"
+    assert final.node_id == "nd_build"
+    assert (final.epoch, final.spawn_generation) == (1, 1)
+    assert (final.turn_range_start, final.turn_range_end) == (3, 2)  # empty — claims no new turns
+    assert (final.normalizer_version, final.harness_version) == ("claude-code/1.2", "1.2.3")
+    assert (final.model, final.effort) == ("claude-sonnet-5", "high")
+    assert final.spawn_cwd == "/ws"
+    assert final.turns == []
+    assert final.record_truncated is False
+
+
+def test_drain_renders_a_final_marker_as_truncated_when_the_segment_carries_a_reason() -> None:
+    """A segment whose only hub row ends up being the final marker (e.g. a sibling segment
+    already exhausted the chunk budget) must still report `record_truncated: true` — not
+    the hardcoded `False` a genuinely clean segment gets."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    assert final_pushes[0].record_truncated is True
+
+
+def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alone() -> None:
+    """The other half of `_final_record`'s disjunction, which fails independently: a segment
+    that shipped fine but had a record truncated (cap, unshippable, source-read, hub cap)
+    latches `truncated_reason` WITHOUT ever latching `shipping_stopped_reason`."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ctx.stores.transcript_ledger.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason is None  # only the record-truncation half is set
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    assert final_pushes[0].record_truncated is True
+
+
+def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_ran() -> None:
+    """A segment that closes with no pump read ever having run still carries its
+    normalizer-version sentinel on the ledger row (``bzh``'s "never ran" convention) —
+    the drain's rendering must surface exactly that, not a null or a crash."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    _spawn_one_segment(ctx)
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    assert final_pushes[0].normalizer_version == ""  # the sentinel, never learned from a real read
+    assert final_pushes[0].harness_version is None
+
+
+def test_drain_delivers_pending_records_in_fifo_order_and_acks_them() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    _enqueue_delta(ctx, segment_id, cursor="pos-2")
+
+    TranscriptDrain(ctx).run()
+
+    assert [r.segment_id for r in hub.transcripts_pushed] == [segment_id, segment_id]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_stops_on_a_transport_failure_and_retries_the_backlog_next_tick() -> None:
+    hub = FakeHub()
+    hub.down = True
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    _enqueue_delta(ctx, segment_id, cursor="pos-2")
+
+    TranscriptDrain(ctx).run()
+
+    assert hub.transcripts_pushed == []  # never even reached the hub
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 2  # nothing acked — stays buffered
+
+    hub.down = False
+    TranscriptDrain(ctx).run()
+    assert len(hub.transcripts_pushed) == 2
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
+    """A cap rejection (oversized/over-budget/over-rate reject) is
+    not idempotency — the drain must still ack it and move on, never retry it forever."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    ok_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    hub.reject_transcript_seqs = {capped_seq}
+
+    TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # both acked — rejection is not a wedge
+    assert [f.seq for f in hub.transcripts_pushed] == [ok_seq]  # the rejected one never applied
+
+
+def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
+    """Never silent — the segment's own field records it and the fact lane
+    carries a warning event, the same two-channel pattern the pump's own paths use."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.reject_transcript_seqs = {capped_seq}
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_capped"
+    fact_events = ctx.stores.outbound.pending_outbound()
+    assert len(fact_events) == 1
+    payload = json.loads(fact_events[0].payload)
+    assert payload["kind"] == "transcript-truncated"
+    assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_capped"}
+
+
+def test_drain_acks_a_hub_refused_record_with_a_warning() -> None:
+    """A record whose (chunk, epoch) the hub owns elsewhere is acked so the FIFO moves on, and logged."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    refused_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.refuse_transcript_seqs = {refused_seq}
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert hub.transcripts_pushed == []
+    warned = [e for e in logs if e["event"].startswith("hub refused buffered transcript record")]
+    assert [(e["seq"], e["segment_id"], e["log_level"]) for e in warned] == [(refused_seq, segment_id, "warning")]
+
+
+def test_drain_marks_a_hub_refused_record_truncated_with_one_fact() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    first = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    second = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    hub.refuse_transcript_seqs = {first, second}
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_refused"
+    fact_events = ctx.stores.outbound.pending_outbound()
+    assert len(fact_events) == 1  # the second refusal changes nothing, so sends no second fact
+    payload = json.loads(fact_events[0].payload)
+    assert payload["kind"] == "transcript-truncated"
+    assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_refused"}
+
+
+def test_drain_displays_hub_refused_over_hub_capped_on_one_segment() -> None:
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    refused_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    hub.reject_transcript_seqs = {capped_seq}
+    hub.refuse_transcript_seqs = {refused_seq}
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_refused"
+
+
+def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
+    """A crash in the after-submit.before-ack window (`_CP_AFTER_SUBMIT`) must not read
+    the retry's ack as ordinary idempotency — the hub's replay response must still
+    report `capped`, so the segment still gets marked and warned, not silently skipped."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.reject_transcript_seqs = {seq}
+    # The hub side of a first delivery attempt completing durably, with no local
+    # post-ack work ever running — the exact window `_CP_AFTER_SUBMIT` names.
+    delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
+    hub.push_transcripts([TranscriptPush(seq=delta.seq, body=json.loads(delta.payload))])
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason is None  # not marked yet — the crash pre-empted it
+
+    TranscriptDrain(ctx).run()  # the retry
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # finally cleared locally
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_capped"
+    fact_events = ctx.stores.outbound.pending_outbound()
+    assert len(fact_events) == 1
+    assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
+
+
+def test_drain_acks_an_already_applied_record_without_redelivering() -> None:
+    """A replayed batch past the hub's own high-water mark reports already_applied — the
+    drain still clears it locally rather than treating it as pending forever."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.transcript_high_water["r1"] = seq  # the hub has already seen this seq
+
+    TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert hub.transcripts_pushed == []  # never re-applied
+
+
+def test_drain_bounds_its_own_per_run_record_count() -> None:
+    """An unbounded drain would clear an entire backlog in one tick. Enforced
+    entirely by the query's own clause, no redundant loop-level guard."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    total = transcript_drain_module.MAX_RECORDS_PER_RUN + 5
+    for i in range(total):
+        _enqueue_delta(ctx, segment_id, cursor=f"pos-{i}")
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.transcripts_pushed) == transcript_drain_module.MAX_RECORDS_PER_RUN
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 5  # the rest waits for the next tick
+
+
+def test_drain_ships_a_full_ticks_worth_of_records_in_one_request() -> None:
+    """A tick with a full `MAX_RECORDS_PER_RUN` backlog makes exactly one
+    `push_transcripts` call, not one per record."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    for i in range(transcript_drain_module.MAX_RECORDS_PER_RUN):
+        _enqueue_delta(ctx, segment_id, cursor=f"pos-{i}")
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert len(hub.push_transcripts_calls[0]) == transcript_drain_module.MAX_RECORDS_PER_RUN
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_splits_a_batch_when_accumulated_payload_exceeds_the_byte_cap() -> None:
+    """Records are packed FIFO into as few requests as fit under the byte cap — split only
+    when the next record would push the accumulated batch over it, never mid-batch."""
+    hub = FakeHub()
+    ctx = _ctx(hub, record_max_bytes=900)
+    segment_id = _spawn_one_segment(ctx)
+    seqs = [_enqueue_delta(ctx, segment_id, cursor=f"pos-{i}") for i in range(5)]
+
+    TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert len(hub.push_transcripts_calls) > 1  # split across more than one request
+    assert [seq for call in hub.push_transcripts_calls for seq in call] == seqs  # FIFO, nothing dropped or reordered
+    for call in hub.push_transcripts_calls:
+        assert len(call) >= 1  # never an empty batch
+
+
+def test_drain_ships_a_single_oversized_record_alone_rather_than_blocking() -> None:
+    """A record that alone exceeds the byte cap still ships, alone, rather than wedging
+    the drain forever waiting for a batch that could never fit."""
+    hub = FakeHub()
+    ctx = _ctx(hub, record_max_bytes=1)
+    segment_id = _spawn_one_segment(ctx)
+    seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+
+    TranscriptDrain(ctx).run()
+
+    assert hub.push_transcripts_calls == [[seq]]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_reflects_an_earlier_batchs_cap_on_a_later_batchs_final_marker() -> None:
+    """A delta capped in one batch must still read `record_truncated: true` on a same-run
+    final marker rendered afterward, in a later batch — each batch renders only once the
+    one ahead of it already delivered, never the whole slice up front."""
+    hub = FakeHub()
+    ctx = _ctx(hub, record_max_bytes=1)  # forces every record into its own batch
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.reject_transcript_seqs = {capped_seq}
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 2  # the delta and the final, each its own batch
+    final = next(r for r in hub.transcripts_pushed if r.final)
+    assert final.record_truncated is True
+
+
+def test_drain_acks_a_batch_mixing_applied_and_capped_records() -> None:
+    """A capped record inside an otherwise-applied batch is acked and marked truncated
+    alongside its batch-mates landing normally — the per-record ack loop over one shared
+    request, not one request per record."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ok_seq_1 = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    ok_seq_2 = _enqueue_delta(ctx, segment_id, cursor="pos-3")
+    hub.reject_transcript_seqs = {capped_seq}
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert hub.push_transcripts_calls[0] == [ok_seq_1, capped_seq, ok_seq_2]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # every seq acked, capped included
+    assert [f.seq for f in hub.transcripts_pushed] == [ok_seq_1, ok_seq_2]  # the capped one never actually applied
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_capped"
+
+
+def test_drain_makes_one_request_against_a_slow_hub_and_stays_within_the_tick_budget() -> None:
+    """A slow-but-healthy hub costs one round-trip's latency for the whole tick's backlog,
+    not one per record — a hub that advances the injected clock on every `push_transcripts`
+    call still lands ten records in one call, well inside the run's own wall-clock budget."""
+
+    class _SlowHub(FakeHub):
+        def __init__(self, clock: FixedClock, step: timedelta) -> None:
+            super().__init__()
+            self._clock = clock
+            self._step = step
+
+        def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+            ack = super().push_transcripts(records)
+            self._clock.advance(self._step)
+            return ack
+
+    clock = FixedClock(_NOW)
+    hub = _SlowHub(clock, timedelta(seconds=3))
+    ctx = _ctx(hub, clock=clock)
+    segment_id = _spawn_one_segment(ctx)
+    seqs = [_enqueue_delta(ctx, segment_id, cursor=f"pos-{i}") for i in range(10)]
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert hub.push_transcripts_calls[0] == seqs
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert clock.now() < _NOW + timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN)
+
+
+def test_drain_bounds_its_own_per_run_wall_clock() -> None:
+    """A SLOW but healthy hub (not a `HubClientError`) must still yield to the next tick.
+    The stepping clock reports the deadline already elapsed on its second call, so the
+    first record is never even attempted."""
+    hub = FakeHub()
+    step = timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN + 1)
+    ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    _enqueue_delta(ctx, segment_id, cursor="pos-2")
+
+    TranscriptDrain(ctx).run()
+
+    assert hub.transcripts_pushed == []  # the wall-clock bound was already past on the first check
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 2
+
+
+def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline() -> None:
+    """Even capped at its own share of the budget, the pump can still exhaust the
+    RUN's own deadline outright — the flush must check the deadline before its own (up
+    to 50-row) query, not just inside its loop after already paying for it."""
+    hub = FakeHub()
+    step = timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN + 1)
+    ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+
+    calls = 0
+    real_pending = ctx.stores.transcript_ledger.pending_transcript_outbound
+
+    def _counting_pending(*, limit: int | None = None) -> list[BufferedTranscriptDelta]:
+        nonlocal calls
+        calls += 1
+        return real_pending(limit=limit)
+
+    ctx.stores.transcript_ledger.pending_transcript_outbound = _counting_pending
+
+    TranscriptDrain(ctx).run()
+
+    assert calls == 0  # the query itself is never reached
+    assert hub.transcripts_pushed == []
+
+
+def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> None:
+    """Handed the run's full deadline, a slow-but-not-wedged pump starves the flush every tick.
+    Pins that the pump gets a strictly smaller deadline than the run's own."""
+    hub = FakeHub()
+    ctx = _ctx(hub, clock=FixedClock(instant=_NOW))
+    captured: dict[str, object] = {}
+    original_run = transcript_drain_module.TranscriptPump.run
+
+    def _capturing_run(self: TranscriptPump, *, deadline: datetime | None = None) -> None:
+        captured["deadline"] = deadline
+        return original_run(self, deadline=deadline)
+
+    with patch.object(transcript_drain_module.TranscriptPump, "run", _capturing_run):
+        TranscriptDrain(ctx).run()
+
+    full_deadline = _NOW + timedelta(seconds=transcript_drain_module.MAX_SECONDS_PER_RUN)
+    expected_pump_deadline = _NOW + timedelta(
+        seconds=transcript_drain_module.MAX_SECONDS_PER_RUN * transcript_drain_module.PUMP_BUDGET_FRACTION
+    )
+    pump_deadline = captured["deadline"]
+    assert isinstance(pump_deadline, datetime)
+    assert pump_deadline == expected_pump_deadline
+    assert pump_deadline < full_deadline  # the pump never gets the WHOLE run budget
+
+
+class _RaisingTranscriptSource:
+    """A `turns_since` that always raises — the isolation case no scripted
+    :class:`FakeTranscriptSource` batch can trigger."""
+
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):
+        raise RuntimeError("transcript source unavailable (scripted)")
+
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
+    """One segment's `turns_since` raising does not propagate out of `TranscriptDrain.run`:
+    it is logged once at the pump's per-segment level, the buffered flush proceeds in the
+    same run, and the next healthy run recovers."""
+    hub = FakeHub()
+    store = make_store("sqlite://")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=_RaisingTranscriptSource(),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+    # A buffered record with nothing to do with this tick's own (failing) pump read.
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()  # must not raise
+
+    pump_failures = [e for e in logs if "failed to pump segment" in e["event"]]
+    assert len(pump_failures) == 1  # isolated at the pump's own per-segment level
+    drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
+    assert drain_failures == []  # never reaches the outer, whole-tick catch
+    assert hub.transcripts_pushed != []  # the pre-existing buffered delta still flushed, same run
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+    # The condition ending (a healthy tick) recovers on the very next run — nothing wedged.
+    healthy_source = FakeTranscriptSource()
+    healthy_ctx = replace(
+        ctx,
+        transcripts_wired=True,
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=healthy_source)}
+        ),
+    )
+    TranscriptDrain(healthy_ctx).run()  # must not raise either
+
+
+class _RaisingOpenSegmentsStore:
+    """Wraps a real store, but makes `open_transcript_segments` raise — the failure
+    OUTSIDE `TranscriptPump`'s own per-segment loop,
+    which no per-segment try/except can isolate."""
+
+    def __init__(self, inner: IWriteTranscriptLedgerRepository) -> None:
+        self._inner = inner
+
+    def open_transcript_segments(self) -> list[TranscriptSegmentState]:
+        raise RuntimeError("store unavailable (scripted)")
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def test_drain_run_survives_the_pump_itself_raising_outside_the_segment_loop() -> None:
+    """A failure before `TranscriptPump.run`'s segment loop starts is out of reach of the
+    per-segment try/except, so `_run_unsafe` must wrap the pump call itself too."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    ctx = replace(ctx, config=replace(ctx.config, transcripts_ship=True))
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    ctx = replace(
+        ctx, stores=replace(ctx.stores, transcript_ledger=_RaisingOpenSegmentsStore(ctx.stores.transcript_ledger))
+    )
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()  # must not raise
+
+    pump_failures = [e for e in logs if "transcript pump failed" in e["event"]]
+    assert len(pump_failures) == 1
+    drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
+    assert drain_failures == []  # caught at the pump-call site, not the outer whole-tick catch
+    assert hub.transcripts_pushed != []  # the buffered flush still ran despite the pump's own raise
+
+
+def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_final_records() -> None:
+    """`_batches` sizes from the delta's own stored fields alone, never a render — this pins
+    that the estimate never under-counts what `_deliver_batch` actually renders, for both a
+    content delta and a final marker."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    content_payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 2,
+            "final": False,
+            "harness_id": CLAUDE_CODE_HARNESS_ID,
+            "normalizer_version": "claude-code/1.2",
+            "harness_version": "1.2.3",
+            "model": "claude-sonnet-5",
+            "effort": "high",
+            "record_truncated": False,
+            "supersedes": None,
+            "turns": [
+                {
+                    "index": 0,
+                    "kind": "asst",
+                    "timestamp": None,
+                    "text": "a real turn of reasonable length " * 20,
+                    "tool": None,
+                    "thinking_redacted": False,
+                    "sidechain": None,
+                    "truncated": False,
+                }
+            ],
+        }
+    )
+    ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=1,
+        normalizer_version="claude-code/1.2",
+        harness_version="1.2.3",
+        payloads=[content_payload],
+        created_at=_NOW,
+    )
+    drain = TranscriptDrain(ctx)
+    content_delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
+    rendered = drain.render(content_delta, {})
+    assert drain.estimated_size(content_delta) >= len(_wire_json(rendered).encode("utf-8"))
+
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    final_delta = next(d for d in ctx.stores.transcript_ledger.pending_transcript_outbound() if d.final)
+    final_segments = ctx.stores.transcript_ledger.transcript_segments([final_delta.segment_id])
+    final_rendered = drain.render(final_delta, final_segments)
+    assert drain.estimated_size(final_delta) >= len(_wire_json(final_rendered).encode("utf-8"))
+
+
+def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() -> None:
+    """Two final markers landing in the SAME batch read their segment rows through one
+    `transcript_segments(ids)` call, not one `transcript_segment` each."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_1 = _spawn_one_segment(ctx)
+    ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    ctx.stores.lease_record.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_2",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.stores.liveness.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
+    segment_2 = next(
+        s.segment_id for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.chunk_id == "ch_2"
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    assert {d.segment_id for d in ctx.stores.transcript_ledger.pending_transcript_outbound()} == {segment_1, segment_2}
+
+    real_transcript_segments = ctx.stores.transcript_ledger.transcript_segments
+    calls: list[list[str]] = []
+
+    def _counting_transcript_segments(segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
+        calls.append(list(segment_ids))
+        return real_transcript_segments(segment_ids)
+
+    ctx.stores.transcript_ledger.transcript_segments = _counting_transcript_segments
+
+    delivered = TranscriptDrain(ctx).flush(limit=50, deadline=None)
+
+    assert delivered == 2
+    assert len(calls) == 1  # both finals batched together, read through one call
+    assert set(calls[0]) == {segment_1, segment_2}
+
+
+def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -> None:
+    """A harness preview truncated mid-surrogate-pair stores a lone surrogate, which the
+    hub client's UTF-8 body encoding rejects — the drain must still deliver the record."""
+    hub = FakeHub()
+    batches: list[TranscriptSegmentBatch] = []
+    push = hub.push_transcripts
+
+    def capture(records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+        shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
+        batches.append(TranscriptSegmentBatch(records=shipped))
+        return push(records)
+
+    hub.push_transcripts = capture
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    turn = {
+        "index": 0,
+        "kind": "asst",
+        "timestamp": None,
+        "text": "ok \U0001f642 cut \ud83d\n...",
+        "tool": None,
+        "thinking_redacted": False,
+        "sidechain": None,
+        "truncated": False,
+    }
+    payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 1,
+            "final": False,
+            "normalizer_version": "fake/1",
+            "harness_version": None,
+            "turns": [turn],
+        }
+    )
+    ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="pos-1",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payloads=[payload],
+        created_at=_NOW,
+    )
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.transcripts_pushed) == 1
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    text = hub.transcripts_pushed[0].turns[0].text
+    assert "�" in text
+    assert "\U0001f642" in text
+    assert not any("\ud800" <= ch <= "\udfff" for ch in text)
+    json.dumps(batches[0].model_dump(mode="json"), ensure_ascii=False).encode("utf-8")
+
+
+def _wire_json(push: TranscriptPush) -> str:
+    """The record as the hub client ships it — the size the drain's estimate must bound."""
+    return TranscriptSegmentRecord.model_validate({"seq": push.seq, **push.body}).model_dump_json()

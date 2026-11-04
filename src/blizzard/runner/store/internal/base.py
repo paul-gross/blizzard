@@ -76,7 +76,7 @@ class Unclosed:
 
 
 # A release closes only a bind appended before it; pinned by
-# tests/test_pin_runner_store.py::test_a_same_instant_rebind_after_a_release_reads_as_held.
+# tests/unit/runner/store/test_pin.py::test_a_same_instant_rebind_after_a_release_reads_as_held.
 HELD_BINDING = Unsuperseded(
     binding_releases.c.id,
     (
@@ -129,7 +129,7 @@ LIVE_ESCALATION = Unsuperseded(
 )
 
 # Strict ``>``, not ``>=`` (#292) — pinned by
-# tests/test_pin_runner_store.py::test_a_same_instant_escalation_closure_does_not_mask_its_escalation.
+# tests/unit/runner/store/test_pin.py::test_a_same_instant_escalation_closure_does_not_mask_its_escalation.
 UNRESOLVED_ESCALATION = Unsuperseded(
     escalation_closures.c.id,
     (
