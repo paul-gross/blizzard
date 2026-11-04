@@ -17,7 +17,8 @@ from urllib.parse import quote
 
 import httpx2
 from fastapi import APIRouter, Depends, FastAPI, Request, params
-from fastapi.exceptions import HTTPException
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import Engine
 from starlette.datastructures import State
@@ -521,6 +522,13 @@ def create_app(
         app.state.session_secret = secrets.token_bytes(32)
 
     app.add_exception_handler(FlagOffError, refuse_flag_off)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError) -> Response:
+        if request.url.path == "/api/host/clock":
+            detail = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
+            return JSONResponse(status_code=422, content={"detail": detail})
+        return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(NeedsFederationBounce)
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:

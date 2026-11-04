@@ -93,9 +93,8 @@ kind or field additive. A surface's deprecation mark is how a removal becomes on
 `deprecated` list in the scope's `manifest.json` naming a `<kind>` or `<kind>.<field>`.
 
 A release carries a surface whether or not a feature flag has it on, so it is held to these rules from that release on.
-
-A route or variable that exists only behind a test fence is not part of any supported surface and may change in any
-release.
+A route or environment variable that exists only behind a test fence is not part of any supported surface and may change
+in any release.
 
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.

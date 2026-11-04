@@ -23,8 +23,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.routing import Route
 
 from blizzard import __version__
+from blizzard.foundation.clock import ControlledClock, resolve_clock
 from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
@@ -52,6 +54,7 @@ from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.api.chunks import router as chunks_router
+from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
@@ -97,7 +100,7 @@ from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
 from blizzard.hub.api.sweeps import router as sweeps_router
-from blizzard.hub.api.test_flow_control import flow_control_router
+from blizzard.hub.api.test_flow_control import controlled_flow_router, flow_control_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
@@ -412,6 +415,9 @@ def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: Tenant
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     """The framework's 422, unless :func:`sanitized_validation_response` answers instead."""
     assert isinstance(exc, RequestValidationError)
+    if request.url.path == "/api/admin/clock":
+        detail = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": detail})
     return sanitized_validation_response(request, exc) or await request_validation_exception_handler(request, exc)
 
 
@@ -451,6 +457,7 @@ def create_app(
     platform_tracing: IPlatformTracing | None = None,
     flags: Flags,
     test_flow_router: APIRouter | None = None,
+    controlled_clock_router: APIRouter | None = None,
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
@@ -532,6 +539,8 @@ def create_app(
     app.include_router(admin_sweeps_router)
     if test_flow_router is not None:
         app.include_router(test_flow_router)
+    if controlled_clock_router is not None:
+        app.include_router(controlled_clock_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(forges_router)
@@ -550,6 +559,13 @@ def create_app(
     # The claim route is the other `/api/fleet` path outside that gate's retirement refusal.
     app.include_router(fleet_claim_router)
 
+    async def missing_test_control(request: Request) -> JSONResponse:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    app.router.routes.extend(
+        Route(path, missing_test_control, methods=["GET", "POST"])
+        for path in ("/api/admin/clock", "/api/admin/test-flow", "/api/admin/test-flow/{path:path}")
+    )
     Frontend.embedded("hub", app_name="blizzard-hub").mount(app)
     install_schema_components(app, HUB_SCHEMA_COMPONENTS.models, HUB_SCHEMA_COMPONENTS.enums)
 
@@ -581,6 +597,12 @@ def build_hosted_app(
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
     instrumented through it. ``version_window`` judges each registering runner's version."""
+    resolved_clock = resolve_clock(os.environ)
+    controlled = isinstance(resolved_clock, ControlledClock)
+    stepped = os.environ.get("BLIZZARD_TEST_FLOW_STEP") == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
+    if controlled and stepped:
+        raise ConfigError("BLIZZARD_TEST_FLOW_STEP and BLIZZARD_CLOCK cannot both select a clock")
+    test_clock = build_stepped_clock() if stepped else None
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -594,9 +616,7 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    stepped = os.environ.get("BLIZZARD_TEST_FLOW_STEP") == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
-    test_clock = build_stepped_clock() if stepped else None
-    core = build_hub_core(engine, clock=test_clock) if test_clock is not None else build_process_core(engine)
+    core = build_hub_core(engine, clock=test_clock if test_clock is not None else resolved_clock)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
 
@@ -700,18 +720,30 @@ def build_hosted_app(
         _announce_started(expected, services)
         announce_rejected_tracing(tracing, services)
         announce_rejected_egress(config.egress, services)
+    control_lock = asyncio.Lock() if controlled else None
     app = create_app(
         config,
         readiness=readiness,
         services=services,
         platform_tracing=platform_tracing,
         flags=build_hub_flags(config),
-        test_flow_router=(flow_control_router(flow_driver, test_clock) if flow_driver and test_clock else None),
+        test_flow_router=(
+            controlled_flow_router(flow_driver, resolved_clock, control_lock)
+            if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver
+            else flow_control_router(flow_driver, test_clock)
+            if flow_driver and test_clock
+            else None
+        ),
+        controlled_clock_router=(
+            clock_router(resolved_clock, control_lock)
+            if isinstance(resolved_clock, ControlledClock) and control_lock is not None
+            else None
+        ),
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
-    app.state.flow_driver = None if stepped else flow_driver
+    app.state.flow_driver = None if stepped or controlled else flow_driver
     return app
 
 

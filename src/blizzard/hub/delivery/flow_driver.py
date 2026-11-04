@@ -1,6 +1,6 @@
 """The flow driver — the one hub lane that is not a ``Sweep``, taking every hub step as a turn on its flows. Its
-coroutine steps :meth:`FlowDriver.tick` through ``asyncio.to_thread`` every two seconds beside the sweeps, gating each
-tenant's reconcile on one hub-wide probe and a floor (``bzh:probe-gated-pass``) and catching each tenant on its own
+timed coroutine steps :meth:`FlowDriver.tick` through ``asyncio.to_thread`` every two seconds beside the sweeps, gating
+each tenant's reconcile on one hub-wide probe and a floor (``bzh:probe-gated-pass``) and catching each tenant on its own
 (``bzh:pass-isolates-tenants``), then runs each turn the tick started as a task of its own. It serves one hub process,
 and only ``build_hosted_app`` builds it, so no CLI or test build over a live hub's store takes that hub's turns."""
 
