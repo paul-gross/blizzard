@@ -6,11 +6,15 @@ const stub = {
 };
 const second = { ...stub, name: 'oidc-b', display_name: 'Stub B' };
 
-// Provider configuration and key rotation are hub-wide, and the runner declares its public origin before it first boots.
+// Provider configuration and key rotation are hub-wide, and the runner declares its public origin before its first pass.
 test.use({ isolation: 'fresh-hub', runnerStarted: false });
 
 // Booted once the test has made its people, so no hub call that mutates waits across the boot on an idle connection.
+// The first boot publishes the host's URL; the restart pinned to it declares that URL as its public origin before
+// any pass reaches the hub.
 async function boot(runnerHost: RunnerHost): Promise<void> {
+  await runnerHost.restart();
+  await runnerHost.stop();
   runnerHost.reconfigure({ public_url: runnerHost.url });
   await runnerHost.restart();
 }

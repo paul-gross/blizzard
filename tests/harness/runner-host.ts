@@ -7,7 +7,7 @@ import { parse, stringify } from 'smol-toml';
 import { type CliResult, runCommand } from './cli';
 import { type HostSocketClient, hostSocketApi, type RunnerClient, type RunnerHostClient, runnerHostApi, type TickPass } from './client/runner';
 import type { Ledger } from './client/ledger';
-import { type LiveDaemon, freePort, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
+import { type LiveDaemon, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
 import { startRunnerHost } from './daemons/runner-host';
 import { BLIZZARD_ROOT, binDir, daemonEnv, mockBinDir, readContract, requireBinary } from './env';
 import { runnerStoreTemplate, RUNNER_STORE } from './init-templates';
@@ -514,7 +514,6 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       }
 
       // The overlay: the fixture's baseline first, then the profile, over the file the CLI wrote.
-      let port = await freePort();
       const written = readHostFile(dir);
       // `init` scaffolds the `anthropic` subscription and has each runner name it; a host declaring none starts without both.
       if (!options.runnerSubscribed) {
@@ -524,7 +523,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const bound = options.runnerRepositories;
       const baseline: TomlTable = {
         host: '127.0.0.1',
-        port,
+        // The system gives the first boot its port; a restart pins the one it published.
+        port: 0,
         workspace: [
           {
             id: 'workspace-local',
@@ -576,28 +576,21 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       });
       const sessionsDir = options.runnerEnv.BLIZZARD_MOCK_HARNESS_STATE_DIR ?? path.join(workspace, '.blizzard-mock-harness', 'sessions');
 
+      let url: string | undefined;
       const boot = async (): Promise<void> => {
         const begun = Date.now();
+        const port = url === undefined ? undefined : Number(new URL(url).port);
         daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: hostEnv() });
+        url = daemon.url;
         timings.bootMs = Date.now() - begun;
       };
-      if (options.runnerStarted) {
-        try {
-          await boot();
-        } catch (error) {
-          // The port was free when chosen; another process may have taken it before the first bind. Nothing has been
-          // handed to the test yet, so the host file can name another.
-          if (!/could not take port/.test(String(error))) throw error;
-          port = await freePort();
-          const file = readHostFile(dir);
-          file.port = port;
-          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
-          await boot();
-        }
-      }
-      const url = `http://127.0.0.1:${port}`;
+      if (options.runnerStarted) await boot();
+      const hostUrl = (): string => {
+        if (url === undefined) throw new Error('the host was never started, so it has no URL yet; restart() boots it');
+        return url;
+      };
 
-      const api = runnerHostApi({ context: ctx.context, testInfo, url, ledger: ctx.ledger, logContext: () => logTail(logPath) });
+      const api = runnerHostApi({ context: ctx.context, testInfo, url: hostUrl, ledger: ctx.ledger, logContext: () => logTail(logPath) });
       const sock = hostSocketApi({ socket, logContext: () => logTail(logPath) });
       const runners: RunnerHost['runners'] = {};
       for (const entry of entries) runners[entry.name] = { ...api.runner(entry.id), id: entry.id, name: entry.name };
@@ -607,7 +600,9 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         ...reads,
         dir,
         workspace,
-        url,
+        get url() {
+          return hostUrl();
+        },
         socket,
         home,
         initHostFile,

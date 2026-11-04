@@ -158,7 +158,8 @@ export interface RunnerHostClient extends HostRoutes {
 export function runnerHostApi(options: {
   context: APIRequestContext;
   testInfo: TestInfo;
-  url: string;
+  /** The host's URL, or how to read it at each call, for a host whose first boot is still to come. */
+  url: string | (() => string);
   ledger: Ledger;
   logContext: LogContext;
   headers?: Record<string, string>;
@@ -173,14 +174,17 @@ export function runnerHostApi(options: {
     logContext: options.logContext,
     logName: 'runner host',
   };
+  const url = (): string => (typeof options.url === 'string' ? options.url : options.url());
   const under = (prefix: string): Verbs => {
     const inner = options.expected === undefined ? verbs(engine, false) : expecting(engine, false, options.expected);
-    const at = (verb: keyof Verbs): Verbs[typeof verb] => ((route, callOptions) => inner[verb](`${options.url}${prefix}${route}`, callOptions)) as Verbs[typeof verb];
+    const at = (verb: keyof Verbs): Verbs[typeof verb] => ((route, callOptions) => inner[verb](`${url()}${prefix}${route}`, callOptions)) as Verbs[typeof verb];
     return { get: at('get'), post: at('post'), put: at('put'), patch: at('patch'), delete: at('delete') };
   };
   const host = under('');
   return {
-    url: options.url,
+    get url() {
+      return url();
+    },
     health: (params) => host.get('/api/health', params === undefined ? {} : { params }),
     exportTelemetry: (runnerId, signal, telemetry) =>
       host.post(`/runners/${encodeURIComponent(runnerId)}/v1/${signal}`, {

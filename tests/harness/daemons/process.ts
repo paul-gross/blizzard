@@ -1,13 +1,12 @@
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as net from 'node:net';
 import * as path from 'node:path';
 
 const START_TIMEOUT_MS = 40_000;
 const STOP_GRACE_MS = 10_000;
 const POLL_MS = 150;
 
-/** What a daemon's start needs: the binary, its arguments for the port it was given, and its environment. */
+/** What a daemon's start needs: the binary, its arguments, and its environment. */
 export interface Launch {
   command: string;
   args: string[];
@@ -20,9 +19,8 @@ export interface DaemonSpec {
   cwd: string;
   /** The one file its stdout and stderr are appended to. */
   logPath: string;
-  /** The route answering `200` once the daemon is ready. */
-  healthPath: string;
-  launch: (port: number) => Launch;
+  /** Its command for `--port <port>`, publishing its URL to `listeningFile` once it serves. */
+  launch: (port: number, listeningFile: string) => Launch;
   /** Signal the daemon's whole process group, so whatever it spawned dies with it. */
   group?: boolean;
 }
@@ -52,18 +50,6 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** A port taken by binding `0` on loopback, reading the port the system gave, and closing the socket. */
-export function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address() as net.AddressInfo;
-      server.close(() => resolve(port));
-    });
-  });
-}
-
 export function logTail(logPath: string, lines = 40): string {
   try {
     return fs.readFileSync(logPath, 'utf8').split('\n').slice(-lines).join('\n');
@@ -86,78 +72,21 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-async function answers(url: string): Promise<boolean> {
+/** The URL a daemon published to `file`; `undefined` until it is there. The daemon renames it into place whole. */
+function published(file: string): string | undefined {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });
-    await response.arrayBuffer();
-    return response.status === 200;
-  } catch {
-    return false;
-  }
-}
-
-class AddressInUse extends Error {}
-
-/** The socket inodes listening on loopback or any address at `port`, from the kernel's TCP tables. */
-function listeningInodes(port: number): Set<string> {
-  const inodes = new Set<string>();
-  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
-    for (const line of fs.readFileSync(table, 'utf8').split('\n').slice(1)) {
-      // local_address is `<hex address>:<hex port>`; state `0A` is LISTEN.
-      const [, local, , state, , , , , , inode] = line.trim().split(/\s+/);
-      if (local === undefined || inode === undefined || state !== '0A') continue;
-      if (Number.parseInt(local.slice(local.lastIndexOf(':') + 1), 16) === port) inodes.add(inode);
-    }
-  }
-  return inodes;
-}
-
-/** The pids in process group `pgid`: a detached daemon leads its own group, and what it spawns stays in it. */
-function groupMembers(pgid: number): number[] {
-  const members: number[] = [];
-  for (const entry of fs.readdirSync('/proc')) {
-    if (!/^\d+$/.test(entry)) continue;
-    try {
-      const stat = fs.readFileSync(`/proc/${entry}/stat`, 'utf8');
-      // After the parenthesised command name: state, ppid, pgrp.
-      if (Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]) === pgid) members.push(Number(entry));
-    } catch {
-      // The process exited while the table was read.
-    }
-  }
-  return members;
-}
-
-/**
- * Whether the process group the daemon `pid` leads holds the socket listening on `port`; `undefined` where the
- * kernel's tables cannot be read, outside Linux. A free port is chosen before the daemon binds it, so another
- * worker's daemon can take it first and answer the health route in this one's place.
- */
-function holdsPort(pid: number, port: number): boolean | undefined {
-  try {
-    const inodes = listeningInodes(port);
-    return groupMembers(pid).some((member) => {
-      try {
-        return fs.readdirSync(`/proc/${member}/fd`).some((fd) => {
-          try {
-            const target = fs.readlinkSync(`/proc/${member}/fd/${fd}`);
-            return target.startsWith('socket:[') && inodes.has(target.slice(8, -1));
-          } catch {
-            return false;
-          }
-        });
-      } catch {
-        return false;
-      }
-    });
+    const url = fs.readFileSync(file, 'utf8').trim();
+    return url === '' ? undefined : url;
   } catch {
     return undefined;
   }
 }
 
-async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaemon> {
-  const port = fixedPort ?? (await freePort());
-  const launch = spec.launch(port);
+/**
+ * Spawns the daemon detached, its output appended to its log, and polls `ready` until it yields the daemon's URL. An
+ * exit first fails the start with the log's tail; a timeout stops the daemon before failing.
+ */
+export async function startDaemonUntil(spec: Omit<DaemonSpec, 'launch'>, launch: Launch, ready: () => Promise<string | undefined>): Promise<LiveDaemon> {
   fs.mkdirSync(spec.cwd, { recursive: true });
   fs.mkdirSync(path.dirname(spec.logPath), { recursive: true });
   const log = fs.openSync(spec.logPath, 'a');
@@ -181,43 +110,31 @@ async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaem
     });
   });
   child.unref();
-  const url = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (exited !== null) {
-      const tail = logTail(spec.logPath);
-      const message = `${spec.name} exited early (${exited}):\n${tail}`;
-      throw /address already in use|Errno 98/i.test(tail) ? new AddressInUse(message) : new Error(message);
-    }
-    // An answer from another holder of the port is not this daemon's: wait for it to answer, or to exit in use.
-    if ((await answers(`${url}${spec.healthPath}`)) && holdsPort(child.pid as number, port) !== false) {
-      return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended, group: spec.group };
-    }
+    if (exited !== null) throw new Error(`${spec.name} exited early (${exited}):\n${logTail(spec.logPath)}`);
+    const url = await ready();
+    if (url !== undefined) return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended, group: spec.group };
     await sleep(POLL_MS);
   }
   await stopDaemon({ pid: child.pid as number, group: spec.group, exited: ended });
-  throw new Error(`${spec.name} did not answer ${spec.healthPath} within ${START_TIMEOUT_MS / 1000}s:\n${logTail(spec.logPath)}`);
+  throw new Error(`${spec.name} was not ready within ${START_TIMEOUT_MS / 1000}s:\n${logTail(spec.logPath)}`);
 }
 
 /**
- * Starts a daemon and returns once it answers its health route. A free-port start retries an address-in-use exit once
- * on a new port; a fixed `port` is never moved, since whatever holds the daemon's URL holds that port.
+ * Starts a daemon on `port`, or on a port the system gives it when there is none, and returns once it publishes its
+ * URL to its listening file. The file is deleted first, so one left by an earlier run is never read as this start's.
+ * A pinned `port` is a URL the daemon held before; whatever holds it now fails the start.
  */
-export async function startDaemon(spec: DaemonSpec, port?: number): Promise<LiveDaemon> {
-  if (port !== undefined) {
-    try {
-      return await startOnce(spec, port);
-    } catch (error) {
-      if (error instanceof AddressInUse) throw new Error(`${spec.name} could not take port ${port}: ${error.message}`, { cause: error });
-      throw error;
-    }
-  }
-  try {
-    return await startOnce(spec);
-  } catch (error) {
-    if (!(error instanceof AddressInUse)) throw error;
-    return startOnce(spec);
-  }
+export function startDaemon(spec: DaemonSpec, port = 0): Promise<LiveDaemon> {
+  const file = listeningFile(spec);
+  fs.rmSync(file, { force: true });
+  return startDaemonUntil(spec, spec.launch(port, file), async () => published(file));
+}
+
+/** Where a daemon publishes its URL: beside its log, one per log. */
+export function listeningFile(spec: DaemonSpec): string {
+  return `${spec.logPath}.listening`;
 }
 
 /** `SIGTERM`, then `SIGKILL` after the grace; resolves with how the daemon exited. */

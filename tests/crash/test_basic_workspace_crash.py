@@ -17,7 +17,7 @@ from tests.crash.test_kill9_sweep import abandon_graph_yaml, await_marker, lease
 from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub
 from tests.fleet_world import REPO_NAME, bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.runner_fakes import daemon_store
-from tests.support import free_port
+from tests.support import url_of
 from tests.support_child_launch import workspace_launch
 
 pytestmark = pytest.mark.crash_sweep
@@ -36,8 +36,7 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
     workspace = tmp_path / "ordinary-workspace"
     workspace.mkdir()
     (workspace / ".blizzard-mock-harness-fence").write_text("basic crash sweep\n")
-    forge_port, hub_port = free_port(), free_port()
-    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, bare.parent) as forge, run_hub(tmp_path / "hub", url_of(forge)) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": basic_graph_yaml()})
         assert minted.status_code == 201, minted.text
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": point, "body": "recover and deliver"})
@@ -48,7 +47,7 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         runner_dir = tmp_path / "runner"
-        config = basic_config(runner_dir, workspace, bin_dir, hub_port, bare)
+        config = basic_config(runner_dir, workspace, bin_dir, url_of(hub), bare)
         runner_proc = start_runner(runner_dir, crash_point=point)
         try:
             assert wait_death(runner_proc) == -9, f"runner did not reach {point}"
@@ -93,8 +92,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
     marker = tmp_path / "hang-once.marker"
     landed_file = "LANDED.md"
     graph = yaml.safe_load(abandon_graph_yaml(landed_file, marker))
-    forge_port, hub_port = free_port(), free_port()
-    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, bare.parent) as forge, run_hub(tmp_path / "hub", url_of(forge)) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
         assert minted.status_code == 201, minted.text
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "basic release", "body": "recover and deliver"})
@@ -105,7 +103,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         runner_dir = tmp_path / "runner"
-        config = basic_config(runner_dir, workspace, bin_dir, hub_port, bare)
+        config = basic_config(runner_dir, workspace, bin_dir, url_of(hub), bare)
         point = "abandon.after-release.before-closure"
         runner_proc = start_runner(runner_dir, crash_point=point)
         try:

@@ -35,7 +35,7 @@ from tests.mock_fleet_support import (
 )
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
-from tests.support import free_port
+from tests.support import url_of
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -53,8 +53,7 @@ def _seed(hub: httpx2.Client) -> str:
 
 def test_chunk_statuses_reads_a_seeded_chunk_and_omits_an_unknown_one() -> None:
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+    with mock_hub(bin_dir) as hub, http_hub_client(url_of(hub)) as client:
         chunk_id = _seed(hub)
 
         found = client.chunk_statuses([chunk_id, "ch_unseeded"])
@@ -72,8 +71,7 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
     is gone). Real ingest is pinned by ``tests/test_store_and_forward.py``
     and ``tests/test_runner_loop.py``."""
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+    with mock_hub(bin_dir) as hub, http_hub_client(url_of(hub)) as client:
         chunk_id = _seed(hub)
 
         ack = client.push_facts(
@@ -108,8 +106,7 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
 
 def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+    with mock_hub(bin_dir) as hub, http_hub_client(url_of(hub)) as client:
         chunk_id = _seed(hub)
         question_id = f"parity-question-{uuid.uuid4().hex[:24]}"
 
@@ -154,8 +151,7 @@ def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -
     :class:`~blizzard.wire.envelope.NodeConfig`; this proves ``session_harnesses`` parses
     off that reply rather than only that the mock's own JSON carries the key."""
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+    with mock_hub(bin_dir) as hub, http_hub_client(url_of(hub)) as client:
         spec = mock_hub_chunk_spec(_WORK_REF_URL)
         spec["nodes"]["build"]["session_model"] = ["blizzard:basic"]
         spec["nodes"]["build"]["session_harnesses"] = ["claude", "codex"]
@@ -217,10 +213,9 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
         chunk_id = _seed(hub)
-        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, url_of(hub))
 
         # Drive until ADVANCE has buffered the build completion but PULL has not yet
         # flushed it — the runner still holds a live lease and bound environment.

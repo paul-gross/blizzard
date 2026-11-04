@@ -66,10 +66,9 @@ export function hostHub(dir: string, options: { env?: Record<string, string>; po
       name: 'hub',
       cwd: dir,
       logPath: path.join(dir, 'hub.log'),
-      healthPath: '/api/health',
-      launch: (port) => ({
+      launch: (port, listeningFile) => ({
         command: binary,
-        args: ['host', '--dir', hubDir, '--host', '127.0.0.1', '--port', String(port)],
+        args: ['host', '--dir', hubDir, '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile],
         env: daemonEnv({ BLIZZARD_TEST_IDP_SECRET: IDP_SECRET, ...options.env }),
       }),
     },

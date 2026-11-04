@@ -104,16 +104,31 @@ class Tcp:
         return sock
 
 
+@collaborator
+@dataclass(frozen=True)
+class AdoptedTcp:
+    """A TCP listener its composer bound before the host was built — so a port the kernel picked is the port
+    every derivation of the daemon's URL sees. ``bound()`` hands back that socket rather than binding one."""
+
+    sock: socket.socket
+
+    def bound(self) -> socket.socket:
+        return self.sock
+
+
 @dataclass(frozen=True)
 class Listeners:
     """Both always-on doors onto the one ASGI app, over the same route table."""
 
     uds: Uds
-    tcp: Tcp
+    tcp: Tcp | AdoptedTcp
 
     @classmethod
-    def of(cls, config: RunnerConfig) -> Listeners:
-        return cls(Uds(config.socket_path), Tcp(config.host, config.port))
+    def of(cls, config: RunnerConfig, *, tcp: socket.socket | None = None) -> Listeners:
+        """The listeners for CONFIG; TCP, when given, is the already-bound TCP socket to adopt — its port must be
+        CONFIG's."""
+        door = Tcp(config.host, config.port) if tcp is None else AdoptedTcp(tcp)
+        return cls(Uds(config.socket_path), door)
 
     def bound(self) -> list[socket.socket]:
         """Bind both for ``uvicorn.Server.run(sockets=...)``, before the daemon serves — so a

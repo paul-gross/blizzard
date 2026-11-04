@@ -23,7 +23,14 @@ from tests.fleet_launchers import await_http, terminate
 from tests.mock_fleet_support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.runner_store_sql import select, utc_text
-from tests.support import daemon_log_sink, free_port, read_daemon_log
+from tests.support import (
+    LISTENING_FILE,
+    await_listening_url,
+    daemon_log_sink,
+    listening_args,
+    read_daemon_log,
+    url_of,
+)
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -35,9 +42,10 @@ _ACKED = 3
 _BACKLOG = 3
 
 
-def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
+def _pre_host_directory(root: Path, *, hub_url: str) -> None:
     """Leave ``root`` as a pre-host runner left it: its store at ``data/runner.db`` at the oldest supported revision,
-    its flat ``blizzard-runner.toml``, and its token under the unsuffixed variable."""
+    its flat ``blizzard-runner.toml`` (at ``port = 0``, for the host's ``--port`` to choose), and its token under the
+    unsuffixed variable."""
     config = init_host(root)
     migration_runner(config).downgrade(_PARENT)
     _seed_store(HostLayout(root).store_path)
@@ -47,7 +55,7 @@ def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
     layout.legacy_config_path.write_text(
         f'db_url = "sqlite:///{layout.legacy_store_path}"\n'
         'host = "127.0.0.1"\n'
-        f"port = {port}\n"
+        "port = 0\n"
         f'hub_url = "{hub_url}"\n'
         f'token_env = "{_PRE_HOST_TOKEN_ENV}"\n'
         f'name = "{_RUNNER.runner_name}"\n'
@@ -185,10 +193,9 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
     tmp_path: Path,
 ) -> None:
     bin_dir = require_mock_fleet()
-    hub_port, port = free_port(), free_port()
-    hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "runner"
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
+        hub_url = url_of(hub)
         assert hub.post("/_seed/projects", json={"slug": "web", "name": "Web"}).status_code == 201
         seed_pinned_runner(hub, _RUNNER)
         delivered = [
@@ -198,7 +205,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
         assert hub.post("/api/fleet/events", json={"facts": delivered}, headers=_RUNNER.bearer).status_code == 200
         assert _hub_mark(hub) == _ACKED
 
-        _pre_host_directory(root, hub_url=hub_url, port=port)
+        _pre_host_directory(root, hub_url=hub_url)
         _graduate(root)
         migrated = subprocess.run(
             [str(RUNNER_BIN), "migrate", "--dir", str(root)],
@@ -211,16 +218,17 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
         layout = HostLayout(root)
         assert layout.store_path.is_file() and not layout.legacy_store_path.exists()
 
-        log = root / "daemon.log"
+        log, listening = root / "daemon.log", root / LISTENING_FILE
         proc = subprocess.Popen(
-            [str(RUNNER_BIN), "host", "--dir", str(root)],
+            [str(RUNNER_BIN), "host", "--dir", str(root), *listening_args(listening, 0)],
             env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
             stdout=daemon_log_sink(log),
             stderr=subprocess.STDOUT,
             text=True,
         )
-        local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+        local = None
         try:
+            local = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=10.0)
             await_http(proc, local, "/api/health", log=log)
             assert poll_until(lambda: _hub_mark(hub) >= _ACKED + _BACKLOG, timeout=30.0), read_daemon_log(log)
 
@@ -237,7 +245,8 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
             assert poll_until(lambda: "reaping unspawned lease" in read_daemon_log(log)), read_daemon_log(log)
             assert poll_until(lambda: "park resumed" in read_daemon_log(log)), read_daemon_log(log)
         finally:
-            local.close()
+            if local is not None:
+                local.close()
             terminate(proc)
 
     rows = select(layout.store_path, "outbound_buffer", ["runner_id", "seq", "acked_at"], order_by="seq")

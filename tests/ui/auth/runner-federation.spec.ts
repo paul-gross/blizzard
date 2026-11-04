@@ -19,6 +19,9 @@ const bounceStateCookie = (id: string): string => `bz_runner_bounce_state_${id}`
 
 /** A runner the operator minted at the hub, adopted by a host that is booted, whose adopted runner a pass registers. */
 async function adopt(host: RunnerHost): Promise<void> {
+  // The first boot publishes the host's URL; the restart pinned to it declares that URL as its public origin.
+  await host.restart();
+  await host.stop();
   host.reconfigure({ public_url: host.url });
   await host.restart();
   // The pass answers once the hub has answered the runner's registration, which is what offers sign-in.
@@ -126,6 +129,8 @@ test.describe('a registered host of two runners', () => {
   test.use({ runnerConfig: { runner: [{ name: 'runner-local' }, { name: 'runner-two' }] } });
 
   test('test_one_sign_in_at_a_registered_host_reaches_both_runners_pages', async ({ page, api, idp, runnerHost }) => {
+    await runnerHost.restart();
+    await runnerHost.stop();
     runnerHost.reconfigure({ public_url: runnerHost.url });
     await runnerHost.restart();
     // The host signs in as itself only once the hub has answered its report.

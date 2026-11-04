@@ -9,10 +9,9 @@ export function startIdp(dir: string): Promise<DaemonRecord> {
     name: 'idp',
     cwd: dir,
     logPath: path.join(dir, 'idp.log'),
-    healthPath: '/healthz',
-    launch: (port) => ({
+    launch: (port, listeningFile) => ({
       command: binary,
-      args: ['--host', '127.0.0.1', '--port', String(port)],
+      args: ['--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile],
       env: daemonEnv(),
     }),
   });

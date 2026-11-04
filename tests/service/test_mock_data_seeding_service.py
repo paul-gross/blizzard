@@ -20,7 +20,7 @@ import pytest
 
 from tests.fleet_launchers import await_http, terminate
 from tests.mock_fleet_support import require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, free_port
+from tests.support import LISTENING_FILE, await_listening_url, daemon_log_sink, listening_args
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -43,26 +43,28 @@ def _require_mock_data_binary() -> Path:
 
 
 @contextlib.contextmanager
-def _zero_work_source_hub(hub_dir: Path, port: int) -> Generator[httpx2.Client]:
+def _zero_work_source_hub(hub_dir: Path) -> Generator[httpx2.Client]:
     """Host a real hub with **zero** configured work sources.
 
     Mirrors ``tests.fleet_launchers.run_hub`` minus ``create_work_sources`` — every
     chunk here is seeded directly, never ingested, so no work source is needed."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    log = hub_dir / "daemon.log"
+    log, listening = hub_dir / "daemon.log", hub_dir / LISTENING_FILE
     proc = subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, 0)],
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        await_http(proc, client, "/api/health", log=log)
-        yield client
+        client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=30.0)
+        try:
+            await_http(proc, client, "/api/health", log=log)
+            yield client
+        finally:
+            client.close()
     finally:
-        client.close()
         terminate(proc)
 
 
@@ -105,9 +107,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
 ) -> None:
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = free_port()
-
-    with _zero_work_source_hub(hub_dir, port) as hub:
+    with _zero_work_source_hub(hub_dir) as hub:
         # --- 1. seed via the real hub's own runtime dir, live, no restart ------------ #
         board_stdout = _mock_data(bin_dir, "scenario", "board", "--chunks", "9", "--stress", "--dir", str(hub_dir))
         intended = _parse_scenario_chunks(board_stdout)
@@ -240,10 +240,8 @@ def test_create_runner_seeds_a_declared_roster_that_reads_back_through_the_real_
     with no restart: one member per declared slug, the undeclared slug absent."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = free_port()
     runner_id = "runner-roster-seed"
-
-    with _zero_work_source_hub(hub_dir, port) as hub:
+    with _zero_work_source_hub(hub_dir) as hub:
         _mock_data(
             bin_dir,
             "create",
@@ -303,9 +301,7 @@ def test_create_garden_proposal_seeds_a_proposal_citing_no_findings(tmp_path: Pa
     that shape without a hand-built API call."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = free_port()
-
-    with _zero_work_source_hub(hub_dir, port) as hub:
+    with _zero_work_source_hub(hub_dir) as hub:
         proposal_id = _mock_data(
             bin_dir,
             "create",

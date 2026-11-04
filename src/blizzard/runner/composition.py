@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
+import socket
 from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -542,6 +543,7 @@ def build_host_process(
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
     trace_platform: bool = False,
+    tcp_socket: socket.socket | None = None,
 ) -> HostProcess:
     """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
     configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
@@ -550,7 +552,8 @@ def build_host_process(
     ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
     otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id."""
+    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id. ``tcp_socket``
+    is a TCP listener already bound at ``host``'s port, adopted rather than bound again."""
     graph = _build_host_graph(
         host.host_view(),
         subscriptions=host.subscriptions,
@@ -560,6 +563,7 @@ def build_host_process(
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
         host_token=host.host_token.value,
+        tcp_socket=tcp_socket,
     )
     try:
         for built in runners:
@@ -671,6 +675,7 @@ def _build_host_graph(
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
     host_token: str = "",
+    tcp_socket: socket.socket | None = None,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
     workspaces, its hub — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
@@ -732,7 +737,7 @@ def _build_host_graph(
             readiness=readiness,
             connections=connections,
             host_stores=host_stores,
-            listeners=Listeners.of(config),
+            listeners=Listeners.of(config, tcp=tcp_socket),
             workspaces=workspaces,
             events=events,
             clock=clock,

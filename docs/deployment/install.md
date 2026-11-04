@@ -59,6 +59,13 @@ flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_
 override variables unset leaves the resolved config byte-identical to a toml-only load; a malformed `BZ_HUB_PORT` fails
 with a `ConfigError` naming the variable, from `hub init` and from every later load alike.
 
+`hub host` and `runner host` each take `--listening-file PATH` beside `--port`. Once the daemon is serving it writes its
+URL — `http://<host>:<port>` and a newline, the port the daemon actually bound — to `PATH`, replacing the file
+atomically so a reader never sees part of one. The file appears only after the daemon accepts requests, so a supervisor
+or test harness can wait for it as the daemon's readiness signal. With `--port 0` the kernel picks a free port and the
+file is where to read it; the serving line on stdout names the same port. The daemon does not remove the file when it
+stops.
+
 `action_pass_seconds` (default 300) in `blizzard-hub.toml` bounds one pass of a hub node's action, and the environment
 does not override it. A pass that overruns it is cancelled at its next wait, answers `pending` where its action can wait
 and its failure choice where it cannot, and records `hub-action-overran` ([observability.md](./observability.md)); the

@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -34,12 +35,15 @@ from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, sampler_without_credentials
 from tests.runner_join import join_runner
 from tests.support import (
+    LISTENING_FILE,
+    await_listening_url,
     create_repositories,
     create_work_sources,
     daemon_log_sink,
     fixture_repositories,
     fixture_work_source,
-    free_port,
+    listening_args,
+    published_port,
     read_daemon_log,
     write_mock_harness_credentials,
 )
@@ -83,15 +87,13 @@ def git_bare(bare: Path, *args: str) -> str:
     return subprocess.run(["git", "--git-dir", str(bare), *args], check=True, capture_output=True, text=True).stdout
 
 
-def mock_daemon_client(port: int) -> httpx2.Client:
+def mock_daemon_client(url: str) -> httpx2.Client:
     """A client for a ``blizzard-mock`` uvicorn daemon that pools no idle connection.
 
     uvicorn closes an idle connection once its keep-alive timeout lapses, and a pooled
     reuse racing that close fails with ``RemoteProtocolError``, so none is held idle.
     """
-    return httpx2.Client(
-        base_url=f"http://127.0.0.1:{port}", timeout=15.0, limits=httpx2.Limits(max_keepalive_connections=0)
-    )
+    return httpx2.Client(base_url=url, timeout=15.0, limits=httpx2.Limits(max_keepalive_connections=0))
 
 
 def await_http(
@@ -114,15 +116,36 @@ def await_http(
 
 
 @contextlib.contextmanager
-def run_forge(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Client]:
+def run_forge(bin_dir: Path, origins: Path, *, pinned_port: int | None = None) -> Generator[httpx2.Client]:
+    """The mock forge over ``origins``, on a kernel-picked port; the client's ``base_url`` is its URL.
+
+    ``pinned_port`` serves on that port instead and skips the listening file, for a forge binary older than
+    ``--listening-file`` (the rehearsal's baseline release)."""
     log = origins.parent / "forge.log"
+    listening = origins.parent / f"forge.{LISTENING_FILE}"
     proc = subprocess.Popen(
-        [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
+        [
+            str(bin_dir / "blizzard-mock-forge"),
+            "--repos-dir",
+            str(origins),
+            "--host",
+            "127.0.0.1",
+            *(["--port", str(pinned_port)] if pinned_port is not None else listening_args(listening, 0)),
+        ],
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = mock_daemon_client(port)
+    try:
+        url = (
+            f"http://127.0.0.1:{pinned_port}"
+            if pinned_port is not None
+            else await_listening_url(proc, listening, log=log)
+        )
+        client = mock_daemon_client(url)
+    except BaseException:
+        terminate(proc)
+        raise
     try:
         await_http(proc, client, "/healthz", log=log)
         yield client
@@ -134,8 +157,7 @@ def run_forge(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Clien
 @contextlib.contextmanager
 def run_hub(
     hub_dir: Path,
-    forge_port: int,
-    port: int,
+    forge_url: str,
     *,
     annotate: bool = False,
     annotation_interval_seconds: int | None = None,
@@ -144,7 +166,8 @@ def run_hub(
     rehost: bool = False,
     test_actions: bool = True,
 ) -> Generator[httpx2.Client]:
-    """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
+    """A hub daemon over ``hub_dir``; the client's ``base_url`` is its URL. A first start binds a kernel-picked
+    port; a start over a directory a former hub published from pins that hub's port. ``rehost`` hosts a directory an earlier hub already holds, record and all,
     instead of initializing it; ``egress`` replaces the ``[egress]`` block. The test actions are admitted behind both
     of their fences unless ``test_actions`` is off, and with no crash point armed the crash fence never kills. Every
     inherited ``OTEL_*`` is stripped so a developer's own endpoint never receives test spans."""
@@ -170,22 +193,27 @@ def run_hub(
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"
+    listening = hub_dir / LISTENING_FILE
+    port = published_port(listening)
     proc = subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, port)],
         env=env,
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    try:
+        client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=30.0)
+    except BaseException:
+        terminate(proc)
+        raise
     try:
         await_http(proc, client, "/api/health", log=log)
         if not rehost:
             # The one work source every scenario ingests against.
-            forge_api = f"http://127.0.0.1:{forge_port}"
-            sources = [fixture_work_source(REPO_NAME, REPO, forge_api, annotate=annotate)]
+            sources = [fixture_work_source(REPO_NAME, REPO, forge_url, annotate=annotate)]
             create_work_sources(client, sources)
-            create_repositories(client, fixture_repositories(sources, forge_api))
+            create_repositories(client, fixture_repositories(sources, forge_url))
         yield client
     finally:
         client.close()
@@ -205,24 +233,31 @@ def terminate(proc: subprocess.Popen[str]) -> None:
 
 
 def runner_config(
-    runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, *, join: bool = True
+    runner_dir: Path,
+    workspace: Path,
+    bin_dir: Path,
+    hub_url: str,
+    api_socket: socket.socket | None = None,
+    *,
+    join: bool = True,
 ) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
-    ``host``/``port`` bind to a free port rather than the base config's default, which
-    can collide with this machine's live dogfood runner. Both mock
+    ``port`` is ``api_socket``'s — a held :func:`~tests.support.bound_socket` that :func:`runner_api`
+    serves on — or, with none, ``0`` for a runner daemon's ``--port`` to choose; never the base
+    config's default, which can collide with this machine's live dogfood runner. Both mock
     harness binaries are always wired: harness selection is per-node, never this function, so a
     scenario opts in to OpenCode by naming ``opencode``. ``join`` first adds the runner at the hub
-    on ``hub_port`` through ``runner init``, so the config carries the token it wrote to
+    at ``hub_url`` through ``runner init``, so the config carries the token it wrote to
     ``runner_dir/.env``; a scenario whose hub is not up yet passes ``join=False`` and joins later."""
     if join:
-        join_runner(runner_dir, f"http://127.0.0.1:{hub_port}")
+        join_runner(runner_dir, hub_url)
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     return dataclasses.replace(
         base,
         host="127.0.0.1",
-        port=free_port(),
-        hub_url=f"http://127.0.0.1:{hub_port}",
+        port=api_socket.getsockname()[1] if api_socket is not None else 0,
+        hub_url=hub_url,
         workspaces=(basic_workspace(workspace),),
         harness_sections=sections(
             # The mock façade rejects any ``--permission-mode``; both health probes read a fixture credential file.
@@ -243,6 +278,7 @@ def runner_config(
 
 def drive_until_done(
     config: RunnerConfig,
+    api_socket: socket.socket,
     hub: httpx2.Client,
     chunk_id: str,
     fenced_env: dict[str, str],
@@ -254,12 +290,13 @@ def drive_until_done(
 
     Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass, interleaved with short
     waits so the asynchronously spawned mock worker can commit before ADVANCE judges it.
-    ``process`` is one traced graph the ticks and the local API share.
+    ``process`` is one traced graph the ticks and the local API share; the local API serves on
+    ``api_socket``, the held socket ``config`` took its port from.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
     try:
-        with runner_api(config, process=process):
+        with runner_api(config, api_socket, process=process):
             deadline = time.monotonic() + timeout
             status = "ready"
             while time.monotonic() < deadline:
@@ -278,16 +315,20 @@ def drive_until_done(
 
 @contextlib.contextmanager
 def runner_api(
-    config: RunnerConfig, *, events: EventBroker | None = None, process: RunnerProcess | None = None
+    config: RunnerConfig,
+    api_socket: socket.socket,
+    *,
+    events: EventBroker | None = None,
+    process: RunnerProcess | None = None,
 ) -> Generator[None]:
-    """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
+    """Serve the runner's local API in a thread on ``api_socket`` — the daemon the worker's verbs POST/GET to.
 
     Touches no store, so it runs alongside the tick without contention. ``events``
     threads a broker in, for a scenario proving the stream route too; ``process`` serves the app over a traced
     graph the scenario's ticks share."""
     app = build_hosted_app(config, events=events, process_graph=process).app
-    server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
-    thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [api_socket]}, name="runner-local-api", daemon=True)
     thread.start()
     client = httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
     try:

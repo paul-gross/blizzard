@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import os
 import signal
+import socket
 import types
 from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
 from pathlib import Path
@@ -18,7 +19,15 @@ import click
 from blizzard.cli.collaborators import CliCollaborators, ClientFactory, ConnectError, HTTPError
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
-from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
+from blizzard.cli.runtime import (
+    bound_port,
+    bound_tcp,
+    build_early_shutdown_server,
+    click_exception_on,
+    listening_file_option,
+    run_init,
+    run_migrate,
+)
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
@@ -885,6 +894,7 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
     help="Run every check a start would — the host file, the store's revision, each runner's token resolved to its "
     "id — report each error, and start nothing.",
 )
+@listening_file_option
 @click.pass_context
 def host(
     ctx: click.Context,
@@ -894,6 +904,7 @@ def host(
     port: int | None,
     loop: str | None,
     check: bool,
+    listening_file: Path | None,
 ) -> None:
     """Run the blizzard host until stopped: each runner works its chunks, and its local API answers `runner` verbs.
 
@@ -906,34 +917,52 @@ def host(
         _check(ctx, Path(directory), host=host_, port=port, loop=loop_mode)
         return
     config = load_host(directory, host=host_, port=port, loop=loop_mode)
-    for warning in config.warnings:
-        click.echo(f"warning: {warning}")
-    projections = config.projections()
-    runners = [built for built in projections if isinstance(built, BuiltRunner)]
-    halted = [runner for runner in projections if isinstance(runner, HaltedRunner)]
-    ours = tuple(entry.id for entry in config.runners if entry.id is not None)
-    with store_write_guard(
-        config,
-        action="start the host",
-        door=Door.of(ctx),
-        clock=CliCollaborators.of(ctx).wall_clock,
-        runners={built.id: built.config.name for built in runners},
-        configured=ours,
-        refuse_foreign=False,
-    ) as foreign:
-        kept = [built for built in runners if built.id not in foreign]
-        halted += [
-            HaltedRunner(name=built.config.name, id=built.id, errors=(foreign[built.id],))
-            for built in runners
-            if built.id in foreign
-        ]
-        start(config, kept, halted, InitCollaborators.of(ctx))
+    # Bound before anything is built, so every derivation of the local API's URL sees the port actually bound.
+    with bound_tcp(config.host, config.port) as sock:
+        config = replace(config, port=bound_port(sock))
+        for warning in config.warnings:
+            click.echo(f"warning: {warning}")
+        projections = config.projections()
+        runners = [built for built in projections if isinstance(built, BuiltRunner)]
+        halted = [runner for runner in projections if isinstance(runner, HaltedRunner)]
+        ours = tuple(entry.id for entry in config.runners if entry.id is not None)
+        with store_write_guard(
+            config,
+            action="start the host",
+            door=Door.of(ctx),
+            clock=CliCollaborators.of(ctx).wall_clock,
+            runners={built.id: built.config.name for built in runners},
+            configured=ours,
+            refuse_foreign=False,
+        ) as foreign:
+            kept = [built for built in runners if built.id not in foreign]
+            halted += [
+                HaltedRunner(name=built.config.name, id=built.id, errors=(foreign[built.id],))
+                for built in runners
+                if built.id in foreign
+            ]
+            start(
+                config,
+                kept,
+                halted,
+                InitCollaborators.of(ctx),
+                tcp_socket=sock,
+                listening_file=listening_file,
+            )
 
 
 def start(
-    config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[HaltedRunner], collaborators: InitCollaborators
+    config: HostConfig,
+    runners: Sequence[BuiltRunner],
+    halted: Sequence[HaltedRunner],
+    collaborators: InitCollaborators,
+    *,
+    tcp_socket: socket.socket | None = None,
+    listening_file: Path | None = None,
 ) -> None:
-    """Start the host over its built runners, reporting each halted one; returns when the host has stopped."""
+    """Start the host over its built runners, reporting each halted one; returns when the host has stopped.
+    ``tcp_socket`` is the TCP listener already bound at ``config``'s port; ``listening_file`` receives the local
+    API's URL once the host is serving."""
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
     for built in runners:
@@ -954,7 +983,13 @@ def start(
     # served app and the ticked loops, so every writer and the stream route share it.
     broker = EventBroker()
     process = collaborators.build_host_process(
-        config, runners, halted=halted, events=broker, bundles=bundles, trace_platform=True
+        config,
+        runners,
+        halted=halted,
+        events=broker,
+        bundles=bundles,
+        trace_platform=True,
+        tcp_socket=tcp_socket,
     )
     try:
         shared = runners[0].config if runners else config.host_view()
@@ -962,7 +997,7 @@ def start(
         with click_exception_on(ConfigError):
             hosted = build_hosted_app(shared, process)
         try:
-            _serve_host(shared, process, hosted, loop=config.loop)
+            _serve_host(shared, process, hosted, loop=config.loop, listening_file=listening_file)
         finally:
             hosted.close()
     finally:
@@ -1073,7 +1108,9 @@ def _runner_threads(runner: RunnerProcess, stepper: RunnerStepper, *, interval: 
     return _RunnerThreads(runner, driver, _pass_drivers(runner, stepper))
 
 
-def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, loop: LoopMode) -> None:
+def _serve_host(
+    config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, loop: LoopMode, listening_file: Path | None = None
+) -> None:
     """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer; a ``stepped`` one starts
     none, and a pass runs only when requested through its stepper."""
     app = hosted.app
@@ -1107,7 +1144,11 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, l
     reconciled = False
     try:
         server = build_early_shutdown_server(
-            app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown
+            app,
+            host=config.host,
+            port=config.port,
+            shutdown_signal=app.state.shutdown,
+            listening_file=listening_file,
         )
 
         # Installed before `server.run()`'s own `capture_signals()` window opens.

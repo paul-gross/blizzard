@@ -32,7 +32,7 @@ from tests.rehearsal.comparison import (
     row_losses,
     view_mismatches,
 )
-from tests.rehearsal.installation import Host, Hub, Leg, shape_host_file
+from tests.rehearsal.installation import Host, Hub, Leg, baseline_daemon_port, shape_host_file
 from tests.rehearsal.stores import (
     baseline_contract,
     baseline_openapi,
@@ -42,7 +42,7 @@ from tests.rehearsal.stores import (
     seeded_only,
 )
 from tests.repo_files import repo_root
-from tests.support import ensure_fixture_secret, fixture_repositories, fixture_work_source, free_port
+from tests.support import ensure_fixture_secret, fixture_repositories, fixture_work_source, url_of
 
 _GATE = "BLIZZARD_REHEARSAL"
 _BASELINE = "BLIZZARD_REHEARSAL_BASELINE"
@@ -193,11 +193,17 @@ def _reflect_an_empty_postgres_store(
 ) -> None:
     """The candidate's migrations on an empty Postgres store reflect to the committed hub document."""
     url = stack.enter_context(postgres_database(server_url))
-    Hub(root / "empty-hub", free_port(), url).init(candidate)
+    Hub(root / "empty-hub", url).init(candidate)
     committed = json.loads((repo_root() / "contracts" / "store" / "hub.json").read_text())
     drift = reflection_drift(reflect(url, "hub"), committed)
     if drift:
         raise leg.fail("postgres reflection", "the migrated store is not the committed document:\n" + "\n".join(drift))
+
+
+def _forge_publishes(mock_bin: Path) -> bool:
+    """Whether the checked-out ``blizzard-mock`` forge takes ``--listening-file`` (a baseline's own tag may not)."""
+    help_text = subprocess.run([str(mock_bin / "blizzard-mock-forge"), "--help"], capture_output=True, text=True).stdout
+    return "--listening-file" in help_text
 
 
 class _Rehearsal:
@@ -215,9 +221,10 @@ class _Rehearsal:
     ) -> None:
         self.leg, self.baseline, self.candidate, self.mock_bin, self.root = leg, baseline, candidate, mock_bin, root
         self.stack = stack
-        self.hub = Hub(root / "hub", free_port(), db_url)
-        self.work = Host(root / "host", free_port())
-        self.seed = Host(root / "seed", free_port())
+        # The hub and the work host first start under the baseline, which cannot bind ``--port 0``.
+        self.hub = Hub(root / "hub", db_url, baseline_daemon_port())
+        self.work = Host(root / "host", baseline_daemon_port())
+        self.seed = Host(root / "seed")
         self.hub_contract = baseline_contract(repo_root(), leg.baseline, "hub")
         self.runner_contract = baseline_contract(repo_root(), leg.baseline, "runner")
         self.openapi = baseline_openapi(repo_root(), leg.baseline)
@@ -226,9 +233,14 @@ class _Rehearsal:
     def run(self) -> None:
         world = mint_world(self.mock_bin, self.root / "scratch")
         self.workspace = world.workspace
-        forge_port = free_port()
-        self.forge = self.stack.enter_context(run_forge(self.mock_bin, world.origins, forge_port))
-        self.forge_api = f"http://127.0.0.1:{forge_port}"
+        self.forge = self.stack.enter_context(
+            run_forge(
+                self.mock_bin,
+                world.origins,
+                pinned_port=None if _forge_publishes(self.mock_bin) else baseline_daemon_port(),
+            )
+        )
+        self.forge_api = url_of(self.forge)
         self.stack.callback(self.work.stop)
         self.stack.callback(self.hub.stop)
         self.seed_the_baseline()

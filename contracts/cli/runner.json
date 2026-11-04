@@ -917,6 +917,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "boolean"
+        },
+        {
+          "help": "Once serving, write the daemon's URL (http://HOST:PORT, the port actually bound) to this file, atomically. Pair with --port 0 to let the kernel pick a free port.",
+          "hidden": false,
+          "kind": "option",
+          "name": "listening_file",
+          "opts": [
+            "--listening-file"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "file"
         }
       ],
       "path": "runner host",

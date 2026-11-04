@@ -31,6 +31,14 @@ from tests.config_inputs import (
     migrate_host,
     migrate_hub,
 )
+from tests.support import refused_address
+
+
+@pytest.fixture
+def refused_url() -> Iterator[str]:
+    """An ``http://127.0.0.1:PORT`` URL nothing listens on — a connect is refused — held for the test."""
+    with refused_address() as url:
+        yield url
 
 
 @pytest.fixture(scope="session")

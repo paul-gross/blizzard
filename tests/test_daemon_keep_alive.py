@@ -15,7 +15,7 @@ import httpx2
 import pytest
 
 from blizzard.cli.runtime import build_early_shutdown_server
-from tests.support import free_port
+from tests.support import bound_socket
 
 pytestmark = pytest.mark.component
 
@@ -34,19 +34,23 @@ async def _answering(scope: dict[str, Any], receive: Any, send: Any) -> None:
 
 
 @contextmanager
-def _serving(port: int) -> Generator[None]:
+def _serving() -> Generator[int]:
+    """Serve on a held socket bound to a kernel-picked port; yield the port."""
+    sock = bound_socket()
+    port = sock.getsockname()[1]
     server = build_early_shutdown_server(_answering, host="127.0.0.1", port=port, shutdown_signal=asyncio.Event())
-    thread = threading.Thread(target=server.run, daemon=True)
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
     deadline = time.monotonic() + 10.0
     while not server.started:
         assert time.monotonic() < deadline, "the daemon never started serving"
         time.sleep(0.05)
     try:
-        yield
+        yield port
     finally:
         server.should_exit = True
         thread.join(10.0)
+        sock.close()
 
 
 def _answer(conn: socket.socket) -> bytes:
@@ -62,8 +66,7 @@ def _answer(conn: socket.socket) -> bytes:
 
 def test_a_connection_idle_past_a_pooled_clients_reuse_still_answers() -> None:
     idle = httpx2.Limits().keepalive_expiry or 0.0
-    port = free_port()
-    with _serving(port), socket.create_connection(("127.0.0.1", port), timeout=5.0) as conn:
+    with _serving() as port, socket.create_connection(("127.0.0.1", port), timeout=5.0) as conn:
         assert _answer(conn).startswith(b"HTTP/1.1 200")
         time.sleep(idle + 1.0)
 

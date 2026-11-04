@@ -9,10 +9,9 @@ export function startForge(dir: string): Promise<DaemonRecord> {
     name: 'forge',
     cwd: dir,
     logPath: path.join(dir, 'forge.log'),
-    healthPath: '/healthz',
-    launch: (port) => ({
+    launch: (port, listeningFile) => ({
       command: binary,
-      args: ['--repos-dir', path.join(dir, 'origins'), '--host', '127.0.0.1', '--port', String(port)],
+      args: ['--repos-dir', path.join(dir, 'origins'), '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile],
       env: daemonEnv(),
     }),
   });

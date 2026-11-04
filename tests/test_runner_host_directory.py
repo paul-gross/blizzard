@@ -304,12 +304,12 @@ def test_host_refuses_to_start_while_the_directory_is_held_or_a_pre_host_daemon_
     root = _host(tmp_path)
 
     with HostLock.acquire(HostLayout(root)):
-        held = CliRunner().invoke(blizzard, ["runner", "host", "--dir", str(root)])
+        held = CliRunner().invoke(blizzard, ["runner", "host", "--dir", str(root), "--port", "0"])
     assert held.exit_code != 0 and f"pid {os.getpid()}" in held.output
 
     server = _answering(root)
     try:
-        answered = CliRunner().invoke(blizzard, ["runner", "host", "--dir", str(root)])
+        answered = CliRunner().invoke(blizzard, ["runner", "host", "--dir", str(root), "--port", "0"])
     finally:
         server.close()
     assert answered.exit_code != 0 and str(HostLayout(root).legacy_socket_path) in answered.output

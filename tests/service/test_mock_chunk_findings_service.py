@@ -13,7 +13,6 @@ import pytest
 
 from tests.mock_fleet_support import MockChunkSpec, mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
 from tests.runner_join import fleet_headers
-from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -37,9 +36,7 @@ def _answered_chunk_spec(work_ref: str) -> MockChunkSpec:
 
 def test_the_mock_hub_serves_the_chunk_findings_list_and_get_routes(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
         seeded = hub.post("/_seed/chunk", json=_answered_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
@@ -55,9 +52,7 @@ def test_the_mock_hub_serves_the_chunk_findings_list_and_get_routes(tmp_path: Pa
 
 def test_the_mock_hub_404s_a_chunk_answering_no_proposal(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = free_port()
-
-    with mock_hub(bin_dir, hub_port) as hub:
+    with mock_hub(bin_dir) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))  # no garden_answered_findings
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
