@@ -1,0 +1,221 @@
+"""``POST /api/fleet/queue/peek`` — the matched fleet peek (component tier).
+
+At most one ready entry, the first the calling principal can both work (capability
+eligibility) and claim (not dependency-blocked), with the request's hold-or-pass-over
+policy applied to both. The legacy ``GET`` is untouched (covered by
+``tests/component/hub/api/test_fleet_auth_partition.py``), so this file only proves the new verb."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from tests.hub_request_auth import bearer, enroll_runner, register_runner
+from tests.support import HubHarness, build_hub, count_queries
+
+
+def _token(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
+    register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
+    return enroll_runner(hub, runner_id)
+
+
+def _ingest(hub: HubHarness, ref: str, *, default_harnesses: list[str] | None = None, promote: bool = True) -> str:
+    resp = hub.client.post("/api/chunks", json={"tokens": [f"default:{ref}"]})
+    assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    if default_harnesses is not None:
+        patched = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": default_harnesses})
+        assert patched.status_code == 202, patched.text
+    if promote:
+        promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
+        assert promoted.status_code == 202, promoted.text
+    return chunk_id
+
+
+#: A capability set that satisfies any chunk with no declared harness preference (a default binding).
+_DEFAULT_CAPABILITY = [{"harness_id": "claude", "default": True}]
+
+
+def test_pass_over_skips_an_incompatible_head_and_returns_the_first_workable_entry(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    incompatible = _ingest(hub, "1", default_harnesses=["special-harness"])
+    workable = _ingest(hub, "2")
+
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()["entries"]
+    assert [e["chunk_id"] for e in entries] == [workable]
+    # The skip is silent and the order is never reshaped: `workable` keeps its own
+    # position (1), it is not renumbered to 0.
+    assert entries[0]["position"] == 1
+
+    # The legacy verb, alongside it, still serves the full unfiltered order.
+    legacy = hub.client.get("/api/fleet/queue/peek")
+    assert [e["chunk_id"] for e in legacy.json()["entries"]] == [incompatible, workable]
+
+
+def test_hold_yields_nothing_when_the_head_is_unusable_and_examines_no_later_entry(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    _ingest(hub, "1", default_harnesses=["special-harness"])  # incompatible head
+    _ingest(hub, "2")  # would be usable, but never reached under hold
+
+    resp = hub.client.post(
+        "/api/fleet/queue/peek",
+        json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"},
+        headers=bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == []
+
+
+def test_hold_returns_a_usable_head_normally(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    workable = _ingest(hub, "1")
+
+    resp = hub.client.post(
+        "/api/fleet/queue/peek",
+        json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"},
+        headers=bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert [e["chunk_id"] for e in resp.json()["entries"]] == [workable]
+
+
+def test_an_unavailable_default_capability_is_treated_as_incompatible(tmp_path: Path) -> None:
+    """A capability health has withdrawn (``available=False``) satisfies no
+    lineage on the peek path either — mirroring the claim path's own denial."""
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    unavailable = _ingest(hub, "1")  # no declared preference — would need the default binding alone
+    workable = _ingest(hub, "2", default_harnesses=["special-harness"])
+
+    capabilities = [
+        {"harness_id": "claude", "default": True, "available": False},
+        {"harness_id": "special-harness", "tiers": ["blizzard:frontier"]},
+    ]
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": capabilities}, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()["entries"]
+    assert [e["chunk_id"] for e in entries] == [workable]
+    assert unavailable not in [e["chunk_id"] for e in entries]
+
+
+def test_no_capabilities_asserted_gets_no_entry(tmp_path: Path) -> None:
+    """An empty ``capabilities`` — an unenrolled snapshot, or a request declaring none —
+    is eligible for nothing: no entry comes back, whatever the ready chunks declare."""
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    _ingest(hub, "1", default_harnesses=["special-harness"])
+    _ingest(hub, "2")
+
+    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == []
+
+
+@pytest.mark.parametrize(
+    ("policy", "passes_over"),
+    [("hold", False), ("pass-over", True), ("some-future-value", True)],
+    ids=["hold", "pass-over", "unrecognized"],
+)
+def test_a_peek_policy_holds_at_an_unusable_head_and_every_other_value_passes_over(
+    tmp_path: Path, policy: str, passes_over: bool
+) -> None:
+    """``hold`` stops at an unusable head; ``pass-over`` and a value this build does not know pass over it — never a 422."""
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    incompatible = _ingest(hub, "1", default_harnesses=["special-harness"])
+    workable = _ingest(hub, "2")
+
+    resp = hub.client.post(
+        "/api/fleet/queue/peek",
+        json={"capabilities": _DEFAULT_CAPABILITY, "policy": policy},
+        headers=bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert [e["chunk_id"] for e in resp.json()["entries"]] == ([workable] if passes_over else [])
+    assert incompatible  # sanity: the head really was minted first
+
+
+def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    # `dependent` is minted first, so it is the ready head; declaring it against a
+    # never-completing prerequisite marks it blocked without changing status/position.
+    dependent = _ingest(hub, "1")
+    prerequisite = _ingest(hub, "2")
+    declared = hub.client.post(f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite})
+    assert declared.status_code == 202, declared.text
+
+    # Pass-over (the default): the blocked head is skipped in favor of `prerequisite`,
+    # itself unblocked and capability-unfiltered — never renumbered from its own position.
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()["entries"]
+    assert [e["chunk_id"] for e in entries] == [prerequisite]
+    assert entries[0]["position"] == 1
+
+    # Hold: the blocked head yields nothing, and `prerequisite` is never examined.
+    resp = hub.client.post(
+        "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, "policy": "hold"}, headers=bearer(token)
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == []
+
+
+@pytest.mark.parametrize("auth_mode", ["none", "oauth"])
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer never-issued"}], ids=["no-token", "unknown-token"])
+def test_refuses_401_without_a_resolvable_principal_under_every_configuration(
+    tmp_path: Path, auth_mode: str, headers: dict[str, str]
+) -> None:
+    hub = build_hub(tmp_path, auth_mode=auth_mode)
+    assert hub.app is not None
+    resp = TestClient(hub.app).post("/api/fleet/queue/peek", json={}, headers=headers)
+    assert resp.status_code == 401, resp.text
+
+
+def test_succeeds_with_a_valid_token(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    resp = hub.client.post("/api/fleet/queue/peek", json={}, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{}, {"policy": "hold", "projects": ["default"]}, {"policy": "hold", "projects": []}],
+    ids=["pass-over", "per-project-hold", "no-projects"],
+)
+def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, extra: dict[str, object]) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small")
+    small_token = _token(small)
+    for i in range(3):
+        _ingest(small, str(i))
+    large = build_hub(tmp_path / "large")
+    large_token = _token(large)
+    for i in range(9):  # 3x the small fleet, sharing the same default graph
+        _ingest(large, str(i))
+
+    results: dict[str, int] = {}
+
+    def call(hub: HubHarness, key: str, token: str) -> None:
+        resp = hub.client.post(
+            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, **extra}, headers=bearer(token)
+        )
+        assert resp.status_code == 200, resp.text
+        results[key] = len(resp.json()["entries"])
+
+    small_count = count_queries(small.engine, lambda: call(small, "small", small_token))
+    large_count = count_queries(large.engine, lambda: call(large, "large", large_token))
+
+    # Every request returns at most one entry regardless of fleet size — the assertion
+    # that matters here is the query count, not the entry count.
+    assert results == ({"small": 0, "large": 0} if extra.get("projects") == [] else {"small": 1, "large": 1})
+    assert small_count == large_count

@@ -12,7 +12,7 @@
 # is ignored; with none, the tag is vacuously the highest.
 #
 # Pulled out of workflow YAML so the logic deciding whether `latest` moves is
-# unit-testable (tests/test_image_tags.py) instead of buried in
+# unit-testable (tests/guards/test_image_tags.py) instead of buried in
 # .github/workflows/release.yml. This script decides *what* to tag; the workflow
 # still owns the registry/repository prefix (ghcr.io/paul-gross/blizzard-hub).
 set -euo pipefail

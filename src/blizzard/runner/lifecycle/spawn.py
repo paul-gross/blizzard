@@ -260,7 +260,7 @@ class Spawner:
         """True — and logged once — when :meth:`suppression` finds a cause.
 
         Which call sites must consult it, each naming its ``start``, is held mechanically by
-        ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
+        ``tests/guards/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
         return self.suppression(start=start, via=via, chunk_id=chunk_id, lease_id=lease_id, brakes=brakes) is not None
 
     def suppression(

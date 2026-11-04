@@ -11,7 +11,7 @@
 #   - a cut: a `Release-Cut: <X.Y.Z>` trailer.
 # Merge commits are classified like any other. Prints each commit that is none of them and
 # exits 1; the trailers are read as git trailers, not free text.
-# Pulled out of workflow YAML so it is unit-testable (tests/test_check_line_provenance.py).
+# Pulled out of workflow YAML so it is unit-testable (tests/guards/test_check_line_provenance.py).
 set -euo pipefail
 
 base="${1:?usage: check-line-provenance.sh <base> <head>}"

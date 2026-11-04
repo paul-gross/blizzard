@@ -26,8 +26,8 @@ Conventions for the `prompts/` tree are owned by the
   writes (`blizzard runner artifact create`). The `survey` asset is specified as an envelope — scope, revisions,
   measurement, candidates — because `reconcile` enters on a cold session and the delta it delivers needs all three
   run-level facts.
-- **`survey.md` is condensed** to the packaged 4,000-byte node-prompt bar (`tests/test_prompt_byte_bars.py`); every rule
-  survives, some rationale does not.
+- **`survey.md` is condensed** to the packaged 4,000-byte node-prompt bar (`tests/guards/test_prompt_byte_bars.py`);
+  every rule survives, some rationale does not.
 - **`survey` fans out before it bails.** An over-large sweep is split across at most 10 subagent batches before the
   survey may choose `excessive`.
 - **`deliver` authors an `invalid-proposals` edge.** The plan's single `invalid` answer sent every rejection to

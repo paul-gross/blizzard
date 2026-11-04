@@ -135,7 +135,7 @@ function delayArgument(source, open) {
 /**
  * Specs the `test` target actually runs — every project's `test` target excludes
  * `*.shell-sweep.spec.ts` (asserted by `test_every_test_target_excludes_the_shell_sweep_specs` in
- * `tests/test_web_test_targets.py`, since a project missing that exclude would run a real-Chromium
+ * `tests/guards/test_web_test_targets.py`, since a project missing that exclude would run a real-Chromium
  * spec inside the merge gate *and* be exempt here at the same time). Those specs run
  * under `web:shell-sweep`, where a real frame wait is the method rather than a smell.
  *

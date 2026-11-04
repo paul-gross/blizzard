@@ -11,7 +11,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _installed_version
 
 #: The version of the *installed* distribution (pinned by
-#: tests/test_pin_foundation.py::test_version_tracks_the_installed_distribution_metadata).
+#: tests/unit/test_pin_foundation.py::test_version_tracks_the_installed_distribution_metadata).
 try:
     __version__ = _installed_version("blizzard")
 except PackageNotFoundError:  # pragma: no cover — an uninstalled source tree

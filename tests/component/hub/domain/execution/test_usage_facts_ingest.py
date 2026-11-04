@@ -300,7 +300,7 @@ def test_usage_fact_lands_per_step_and_derives_the_chunk_total(tmp_path: Path) -
 
 def test_usage_ingest_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
     """A replayed buffered usage fact lands once — the exact idempotency guarantee
-    ``lease.minted`` already relies on (``tests/test_store_and_forward.py``)."""
+    ``lease.minted`` already relies on (``tests/component/test_store_and_forward.py``)."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)

@@ -526,5 +526,5 @@ class RunnerInvariants:
             if after_recovery:
                 violations.extend(ActiveLeaseProcessIsLive(conn, self.process).run())
             # NOT checked, deliberately: "a pause-parked lease has no closure" — it is
-            # false on a legal history; pinned by tests/test_pin_foundation.py.
+            # false on a legal history; pinned by tests/component/test_pin_foundation.py.
         return violations

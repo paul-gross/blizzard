@@ -2,7 +2,7 @@
 
 Ingest, the default-graph mint, and promote each read their guard on the connection they
 write on, under a lock (``bzh:store-exclusive-write``). The interleavings pause the first
-writer inside its locked transaction, following ``tests/test_stop_claim_race.py``. Tests run
+writer inside its locked transaction, following ``tests/component/hub/api/test_stop_claim_race.py``. Tests run
 on SQLite, whose one writer lock serializes every writer — per-key non-serialization is
 asserted structurally, on the lock rows written."""
 

@@ -1,0 +1,192 @@
+"""Escalation at the hub — needs_human and its supersession (component tier) — MVP criterion 6.
+
+Pins what ``escalation.recorded`` drives at the hub: the chunk derives needs_human, the
+open escalation surfaces a resumable takeover command, and a later lease mint closes it
+by supersession — no resolution fact — flipping the chunk back off needs_human."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_escalation, report_lease
+
+_POINTER = {"source": "default", "ref": "9"}
+_TAKEOVER = "cd /ws/e1 && mock-claude-code --resume sess-abc"
+
+
+def _wrapped_takeover(chunk_id: str) -> str:
+    """The composed shape (``blizzard runner takeover <chunk_id> --dir <runner_dir>``)
+    — ``--dir`` names the runner's flat runtime dir, not a per-chunk one."""
+    return f"blizzard runner takeover {chunk_id} --dir /var/lib/blizzard/runner"
+
+
+_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+        fail:
+          description: Incomplete.
+          to: build
+    retries:
+      max: 2
+      exhausted: escalate
+  deliver:
+    executor: hub
+    action: pass
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+"""
+
+
+def _claim(hub: HubHarness) -> str:
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    make_ready(hub, chunk_id)
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claim.status_code == 201, claim.text
+    return chunk_id
+
+
+def test_escalation_derives_needs_human_and_surfaces_takeover(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+
+    hub.clock.advance(timedelta(minutes=5))  # the escalation lands after the claim's lease
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert detail["escalation"] is not None
+    assert detail["escalation"]["epoch"] == 1
+    assert detail["escalation"]["takeover_command"] == _TAKEOVER
+
+
+def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+    # A requeue mints a fresh lease AFTER the escalation — supersession, no resolution.
+    hub.clock.advance(timedelta(minutes=5))
+    assert report_lease(hub, chunk_id, epoch=2, seq=2)["applied"] == [2]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "running"  # back on the route, escalation closed
+    assert detail["escalation"] is None
+
+
+def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
+    """A runner new enough to compose the wrapped takeover command has it round-trip
+    onto chunk detail alongside the raw one."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    ack = report_escalation(
+        hub,
+        chunk_id,
+        epoch=1,
+        seq=1,
+        takeover_command=_TAKEOVER,
+        wrapped_takeover_command=_wrapped_takeover(chunk_id),
+    )
+    assert ack["applied"] == [1], ack
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["escalation"] is not None
+    assert detail["escalation"]["takeover_command"] == _TAKEOVER
+    assert detail["escalation"]["wrapped_takeover_command"] == _wrapped_takeover(chunk_id)
+
+
+def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
+    """A runner too old to know about ``wrapped_takeover_command`` omits it entirely —
+    the field reads back empty while the raw ``takeover_command`` stays intact."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    assert report_escalation(hub, chunk_id, epoch=1, seq=1, takeover_command=_TAKEOVER)["applied"] == [1]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["escalation"] is not None
+    assert detail["escalation"]["takeover_command"] == _TAKEOVER
+    assert detail["escalation"]["wrapped_takeover_command"] == ""
+    assert detail["escalation"]["cause"] is None
+    assert detail["escalation"]["detail"] is None
+
+
+def test_escalation_cause_and_detail_round_trip(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    ack = report_escalation(
+        hub,
+        chunk_id,
+        epoch=1,
+        seq=1,
+        takeover_command=_TAKEOVER,
+        cause="retries-exhausted",
+        detail="retries 2 of 2 used; last failure: exited",
+    )
+    assert ack["applied"] == [1], ack
+
+    escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
+    assert escalation["cause"] == "retries-exhausted"
+    assert escalation["detail"] == "retries 2 of 2 used; last failure: exited"
+
+
+def test_escalation_fact_carries_cause_and_detail_and_keeps_an_unknown_cause_verbatim(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "escalation.recorded",
+                    "payload": {
+                        "chunk_id": chunk_id,
+                        "epoch": 1,
+                        "takeover_command": _TAKEOVER,
+                        "cause": "a-future-cause",
+                        "detail": "something new",
+                    },
+                }
+            ],
+        },
+    )
+    assert resp.json()["applied"] == [1], resp.text
+
+    escalation = hub.client.get(f"/api/chunks/{chunk_id}").json()["escalation"]
+    assert escalation["cause"] == "a-future-cause"
+    assert escalation["detail"] == "something new"

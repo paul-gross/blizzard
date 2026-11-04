@@ -493,7 +493,8 @@ class SessionDecl:
             raise TypeError("session keys must be strings")
         unknown = sorted(key for key in unknown_keys if isinstance(key, str))
         if unknown:
-            # Pinned by tests/test_graph_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
+            # Pinned by
+            # tests/unit/hub/domain/graph/test_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
             raise GraphParseError(
                 f"session {name!r}: unknown key(s) {', '.join(unknown)} — this hub "
                 f"(blizzard {HUB_VERSION}) recognizes only {sorted(SESSION_KNOWN_KEYS)}"

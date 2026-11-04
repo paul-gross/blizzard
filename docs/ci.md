@@ -22,8 +22,8 @@ composition, story render, generated-client drift), and the Vale prose lint
 `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml`, `styles/Blizzard/ShortFormPointer.yml`,
 `styles/Blizzard/RouteClause.yml` and `styles/Blizzard/UiSurface.yml` against `.vale.ini`). The
 `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and web TypeScript/CSS, then
-runs `tests/test_route_clause_rule.py`, which holds `RouteClause` to `src/blizzard/hub/cli/` and
-`src/blizzard/runner/cli/`, and `tests/test_ui_surface_rule.py`, which holds `UiSurface` to
+runs `tests/component/test_route_clause_rule.py`, which holds `RouteClause` to `src/blizzard/hub/cli/` and
+`src/blizzard/runner/cli/`, and `tests/component/test_ui_surface_rule.py`, which holds `UiSurface` to
 `src/blizzard/{wire,foundation,auth_core}`; both fail, rather than skips, when Vale is absent; generated API clients are
 excluded and `.html` templates are outside Vale's configured extensions. The change-history rule flags the
 change-history phrases its own token list names, which is the one statement of what it catches. Every gate check is
@@ -297,11 +297,11 @@ annotation rather than recomputing it. Unlike the release fan-out, the dev tags 
 `dev-image` job — no branching logic to unit-test — and `tests/guards/test_push_workflow.py` pins the job.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) opens with `proof`, which asks
-[`scripts/borrowed-proof.sh`](../scripts/borrowed-proof.sh), unit-tested by `tests/test_borrowed_proof.py`, whether the
-tag's commit already carries a successful `release` run of a `vX.Y.Z-rc.K` tag of the same version. If it does, the
-proof is *borrowed*: `gate`, `upper-tiers`, and `isolation-cross-check` are skipped and the run goes on to build. A
-promotion `vX.Y.0` with no such run is refused, failing the run before anything is built; a patch `vX.Y.P` has no
-candidate to borrow from, so it runs the full suite; a candidate never borrows. `proof` is the only job holding
+[`scripts/borrowed-proof.sh`](../scripts/borrowed-proof.sh), unit-tested by `tests/guards/test_borrowed_proof.py`,
+whether the tag's commit already carries a successful `release` run of a `vX.Y.Z-rc.K` tag of the same version. If it
+does, the proof is *borrowed*: `gate`, `upper-tiers`, and `isolation-cross-check` are skipped and the run goes on to
+build. A promotion `vX.Y.0` with no such run is refused, failing the run before anything is built; a patch `vX.Y.P` has
+no candidate to borrow from, so it runs the full suite; a candidate never borrows. `proof` is the only job holding
 `actions: read`, with `contents: read` and nothing else. `wheel` checks out full history so `check-version-tag.sh` can
 hold the commit to `origin/release/X.Y`. Unless the proof is borrowed, the run executes the full suite — gate, the
 `compat` backstop, and `upper-tiers` called with `full_suite: true` and the **full** crash sweep (service tier, crash
@@ -340,10 +340,10 @@ opening a major live in the workspace's
 and [Versioning](./versioning.md#the-train) states what they promise.
 
 The release tag fan-out (`vX.Y.Z` → exact + minor, plus `latest` only when no higher stable tag exists; `vX.Y.Z-rc.*` →
-exact only) lives in [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py` —
-`build` hands it the repository's tags and `publish` creates the GitHub Release with `--latest=false` unless `latest`
-moved — and the attached set's assembly in `scripts/release-inventory.sh`, unit-tested by
-`tests/guards/test_release_inventory.py`, and its post-publish proof in `scripts/verify-release.sh`, unit-tested by
+exact only) lives in [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by
+`tests/guards/test_image_tags.py` — `build` hands it the repository's tags and `publish` creates the GitHub Release with
+`--latest=false` unless `latest` moved — and the attached set's assembly in `scripts/release-inventory.sh`, unit-tested
+by `tests/guards/test_release_inventory.py`, and its post-publish proof in `scripts/verify-release.sh`, unit-tested by
 `tests/guards/test_verify_release.py` — never inline in workflow YAML.
 
 The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope.

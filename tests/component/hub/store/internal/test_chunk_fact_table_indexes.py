@@ -1,6 +1,6 @@
 """Fact-table ``chunk_id`` indexes, hot-path indexes, and spend range, over a migrated-to-head sqlite-on-disk store.
 
-Pins *which named index* each plan uses (narrower than ``tests/test_store_read_index_gate.py``'s scan-avoidance gate):
+Pins *which named index* each plan uses (narrower than ``tests/component/test_store_read_index_gate.py``'s scan-avoidance gate):
 ``ChunkFactsStore.load_facts``/``_route_of_conn`` must plan a tenant-and-chunk search through ``ix_<table>_tenant_chunk_id``,
 over the
 ``20260829_1930_fact_tables_chunk_id_index`` table set plus hot-path reads."""
