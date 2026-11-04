@@ -1,5 +1,6 @@
 import importlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -9,7 +10,9 @@ from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsSer
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
+from blizzard.runner.harness.opencode.permissions.permission_resolver import OpenCodeEffectivePermissions
 from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.process.child_env import ChildEnv
 
 compaction = importlib.import_module("scripts.probe_opencode_compaction_window")
 bundle = importlib.import_module("scripts.probe_opencode_operator_bundle")
@@ -136,3 +139,46 @@ def test_compaction_requires_scratch_and_absolute_binary(tmp_path: Path, monkeyp
     with pytest.raises(ValueError, match="absolute"):
         compaction.main()
     assert not (tmp_path / "evidence").exists()
+
+
+@pytest.mark.parametrize("window", ["8k", "auto", None])
+def test_compaction_cell_composes_evidence_and_real_launch(
+    window: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    resolver_envs: list[dict[str, str]] = []
+    launches: list[dict[str, str]] = []
+
+    class StopLaunch(Exception):
+        pass
+
+    def resolve(self: object, *, cwd: str, env: ChildEnv) -> OpenCodeEffectivePermissions:
+        variables = env.variables
+        assert cwd == str(tmp_path / (window or "none") / "project")
+        resolver_envs.append(variables)
+        return OpenCodeEffectivePermissions(
+            merged_config=json.loads(variables["OPENCODE_CONFIG_CONTENT"]), agent_rulesets={}
+        )
+
+    def launch(self: object, cmd: object, *, cwd: str, env: ChildEnv, **kwargs: object) -> None:
+        launches.append(env.variables)
+        raise StopLaunch
+
+    for name in ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"):
+        monkeypatch.setenv(name, "original")
+    monkeypatch.setenv("SECRET_FOR_TEST", "hidden")
+    monkeypatch.setattr(compaction.SubprocessOpenCodePermissionResolver, "resolve", resolve)
+    monkeypatch.setattr(compaction.ProcessLauncher, "launch", launch)
+    with ThreadPoolExecutor(max_workers=1) as executor, pytest.raises(StopLaunch):
+        compaction._cell(tmp_path, "/unused/opencode", window, executor)
+
+    cell = tmp_path / (window or "none")
+    inline = json.loads((cell / "inline-config.json").read_text())
+    assert json.loads((cell / "effective-config.json").read_text()) == inline
+    assert json.loads(launches[0]["OPENCODE_CONFIG_CONTENT"]) == inline
+    limits = inline["provider"]["stub"]["models"]["stub"]["limit"]
+    assert limits == (
+        {"context": 32000, "output": 1000, "input": 9000} if window == "8k" else {"context": 32000, "output": 1000}
+    )
+    assert all(env["HOME"] == str(cell / "home") and "SECRET_FOR_TEST" not in env for env in resolver_envs)
+    assert all(not any(key.startswith("BLIZZARD_") for key in env) for env in resolver_envs)
+    assert launches[0]["OPENCODE_CONFIG"] == str(cell / "bundle.json")
