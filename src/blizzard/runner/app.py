@@ -24,7 +24,7 @@ from starlette.datastructures import State
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
+from blizzard.foundation.clock import ControlledClock, IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
@@ -41,6 +41,7 @@ from blizzard.runner.api.attachments import router as attachments_router
 from blizzard.runner.api.chunk_asks import router as chunk_asks_router
 from blizzard.runner.api.chunk_detail import router as chunk_detail_router
 from blizzard.runner.api.chunk_notes import router as chunk_notes_router
+from blizzard.runner.api.clock import host_clock_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.dashboard import router as dashboard_router
 from blizzard.runner.api.escalations import router as escalations_router
@@ -557,6 +558,9 @@ def create_app(
     # API routers first, so the API always wins over the web mount at /.
     Lane((), _HOST_UNGATED).mount(app)
     Lane(_HUMAN_GATE, _HOST_HUMAN).mount(app)
+    if isinstance(clock, ControlledClock):
+        # Mounted only on a fenced host (`bzh:injected-clock`); any other host has no such route and answers 404.
+        Lane(_HUMAN_GATE, (host_clock_router,)).mount(app)
     Lane((), _RUNNER_UNGATED, per_runner=True).mount(app)
     Lane(_HUMAN_GATE, _RUNNER_HUMAN, per_runner=True).mount(app)
 

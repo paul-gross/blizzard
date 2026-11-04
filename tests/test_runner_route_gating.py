@@ -17,6 +17,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from starlette.datastructures import State
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
@@ -299,3 +300,44 @@ def test_an_unwired_readiness_service_degrades_to_none_rather_than_refusing() ->
     wired = State()
     wired.readiness = sentinel = object()
     assert RunnerWiring(wired).maybe_readiness() is sentinel
+
+
+# --- The fenced clock routes ---------------------------------------------------------------
+
+
+class _SocketPeer:
+    """The app as a unix-socket peer reaches it: an ASGI scope whose ``client`` is ``None``."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self._app({**scope, "client": None}, receive, send)
+
+
+def _fenced_oauth_client() -> TestClient:
+    from blizzard.foundation.clock import ControlledClock
+
+    config = RunnerConfig(
+        root=Path("/tmp/runner-gating-guard"),
+        db_url="sqlite://",
+        name="runner-guard",
+        hub_url="http://hub.example",
+        public_urls=("https://runner-guard.example",),
+    )
+    app = create_runner_app(
+        config,
+        hub_http_client=_oauth_hub_client(),
+        identity=registered_identity(),
+        clock=ControlledClock(_GATE_NOW),
+    )
+    return TestClient(app)
+
+
+def test_the_fenced_clock_routes_are_human_lane_gated_over_tcp_and_open_to_the_socket_peer() -> None:
+    client = _fenced_oauth_client()
+    assert client.get("/api/host/clock").status_code == 401
+    assert client.post("/api/host/clock", json={"advance_seconds": 1}).status_code == 401
+    # A socket peer carries no client address (`host.sock`): the gate lets it through to the handler.
+    socket_peer = TestClient(_SocketPeer(client.app))
+    assert socket_peer.get("/api/host/clock").status_code == 200

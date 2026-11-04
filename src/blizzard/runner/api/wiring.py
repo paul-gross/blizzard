@@ -16,7 +16,7 @@ from fastapi import Path, Request, status
 from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
 
-from blizzard.foundation.clock import IClock, IMonotonicClock
+from blizzard.foundation.clock import ControlledClock, IClock, IMonotonicClock
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
@@ -169,6 +169,11 @@ class RunnerWiring:
     def clock(self) -> IClock:
         clock: IClock | None = self._seam("clock")
         return clock if clock is not None else self._refuse(_STORE)
+
+    def controlled_clock(self) -> ControlledClock:
+        """The wired clock, narrowed to the controllable one; refused when the host runs on any other."""
+        clock = self.clock()
+        return clock if isinstance(clock, ControlledClock) else self._refuse("controlled clock")
 
     def federation(self) -> FederationSettings:
         settings: FederationSettings | None = self._seam("federation")
