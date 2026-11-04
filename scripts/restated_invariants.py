@@ -30,6 +30,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 import prose_spans
 from prose_spans import ProseSpan
@@ -51,6 +52,36 @@ _OWNER_KINDS = {"domain", "wire", "seam", "module", "test", "doc-section"}
 _ROLES = {"owner", "allowed"}
 
 SiteKey = tuple[str, str]
+
+
+class Site(TypedDict):
+    file: str
+    symbol: str
+    role: str
+    reason: NotRequired[str | None]
+
+
+class OwnerAssert(TypedDict, total=False):
+    quote: str
+    anchor: bool
+    reason: str
+
+
+class Fact(TypedDict):
+    id: str
+    statement: str
+    owner: str
+    owner_kind: str
+    owner_assert: OwnerAssert
+    markers: list[str]
+    sites: list[Site]
+    min_markers: NotRequired[int]
+    marker_acknowledgments: NotRequired[dict[str, str]]
+
+
+class Registry(TypedDict):
+    version: int
+    facts: list[Fact]
 
 
 class RegistryError(Exception):
@@ -191,7 +222,7 @@ def _marker_count(markers: list[str], normalized_text: str) -> int:
     return sum(1 for m in markers if re.search(m, normalized_text))
 
 
-def site_matches_fact(fact: dict, span_text: str) -> bool:
+def site_matches_fact(fact: Fact, span_text: str) -> bool:
     normalized = normalize(span_text)
     min_markers = fact.get("min_markers", 1)
     return _marker_count(fact["markers"], normalized) >= min_markers
@@ -202,19 +233,23 @@ def site_matches_fact(fact: dict, span_text: str) -> bool:
 # --------------------------------------------------------------------------
 
 
-def validate_registry(registry: dict) -> None:
+def validate_registry(registry: Registry) -> None:
+    # The decoded registry may violate its declared shape; validate before consuming it.
+    def has_type(value: object, expected: type) -> bool:
+        return isinstance(value, expected)
+
     if registry.get("version") != 1:
         raise RegistryError("registry 'version' must be 1")
     facts = registry.get("facts")
-    if not isinstance(facts, list):
+    if not has_type(facts, list):
         raise RegistryError("registry 'facts' must be a list")
 
     seen_ids: set[str] = set()
     for fact in facts:
-        if not isinstance(fact, dict):
+        if not has_type(fact, dict):
             raise RegistryError(f"malformed fact entry: {fact!r}")
         fid = fact.get("id")
-        if not fid or not isinstance(fid, str):
+        if not fid or not has_type(fid, str):
             raise RegistryError(f"every fact needs a string 'id', got {fid!r}")
         if fid in seen_ids:
             raise RegistryError(f"duplicate fact id: {fid}")
@@ -228,10 +263,10 @@ def validate_registry(registry: dict) -> None:
             raise RegistryError(f"{fid}: 'owner_kind' must be one of {sorted(_OWNER_KINDS)}")
 
         owner_assert = fact.get("owner_assert")
-        if not isinstance(owner_assert, dict):
+        if not has_type(owner_assert, dict):
             raise RegistryError(f"{fid}: missing 'owner_assert'")
         if "quote" in owner_assert:
-            if not owner_assert["quote"] or not isinstance(owner_assert["quote"], str):
+            if not owner_assert["quote"] or not has_type(owner_assert["quote"], str):
                 raise RegistryError(f"{fid}: owner_assert.quote must be a non-empty string")
         elif owner_assert.get("anchor") is True:
             if not owner_assert.get("reason"):
@@ -240,19 +275,19 @@ def validate_registry(registry: dict) -> None:
             raise RegistryError(f"{fid}: owner_assert must carry 'quote' or 'anchor'")
 
         markers = fact.get("markers")
-        if not isinstance(markers, list) or not markers:
+        if not has_type(markers, list) or not markers:
             raise RegistryError(f"{fid}: needs a non-empty 'markers' list")
         marker_acks = fact.get("marker_acknowledgments", {})
-        if not isinstance(marker_acks, dict):
+        if not has_type(marker_acks, dict):
             raise RegistryError(f"{fid}: 'marker_acknowledgments' must be an object")
         for marker in markers:
-            if not isinstance(marker, str):
+            if not has_type(marker, str):
                 raise RegistryError(f"{fid}: marker {marker!r} must be a string")
             illegality = _marker_illegality_reason(marker)
             if illegality is not None:
                 raise RegistryError(f"{fid}: marker {marker!r} is not legal — {illegality}")
             ack_reason = marker_acks.get(marker)
-            if ack_reason is not None and (not isinstance(ack_reason, str) or not ack_reason):
+            if ack_reason is not None and (not has_type(ack_reason, str) or not ack_reason):
                 raise RegistryError(f"{fid}: marker_acknowledgments[{marker!r}] must be a non-empty string")
             warning = _marker_word_count_warning(fid, marker, ack_reason)
             if warning is not None:
@@ -264,11 +299,11 @@ def validate_registry(registry: dict) -> None:
                 )
 
         sites = fact.get("sites")
-        if not isinstance(sites, list):
+        if not has_type(sites, list):
             raise RegistryError(f"{fid}: 'sites' must be a list")
         owner_path, has_anchor, owner_symbol = fact["owner"].partition("#")
         for site in sites:
-            if not isinstance(site, dict) or not {"file", "symbol", "role"} <= site.keys():
+            if not has_type(site, dict) or not {"file", "symbol", "role"} <= site.keys():
                 raise RegistryError(f"{fid}: malformed site entry {site!r}")
             if site["role"] not in _ROLES:
                 raise RegistryError(f"{fid}: site role must be one of {sorted(_ROLES)}")
@@ -289,13 +324,13 @@ def validate_registry(registry: dict) -> None:
 # --------------------------------------------------------------------------
 
 
-def _site_key(site: dict) -> SiteKey:
+def _site_key(site: Site) -> SiteKey:
     return site["file"], site["symbol"]
 
 
 def check(
     roots: list[str],
-    registry: dict,
+    registry: Registry,
     *,
     strict: bool = False,
     owners: bool = False,
@@ -382,7 +417,7 @@ def _resolve_owner_scope(owner: str, context_root: str | None) -> str:
     return scope
 
 
-def _check_owner(fact: dict, context_root: str | None) -> None:
+def _check_owner(fact: Fact, context_root: str | None) -> None:
     scope = _resolve_owner_scope(fact["owner"], context_root)
     owner_assert = fact["owner_assert"]
     if "quote" in owner_assert and normalize(owner_assert["quote"]) not in normalize(scope):
@@ -394,7 +429,7 @@ def _check_owner(fact: dict, context_root: str | None) -> None:
 # --------------------------------------------------------------------------
 
 
-def measure(roots: list[str], registry: dict) -> tuple[dict[str, set[SiteKey]], int]:
+def measure(roots: list[str], registry: Registry) -> tuple[dict[str, set[SiteKey]], int]:
     """Per-fact observed non-owner site inventory over the current tree, plus the
     skipped-file count `--write-sites` refuses to act on blind (see `main`)."""
     all_spans, skipped = collect_spans(roots)
@@ -412,7 +447,7 @@ def measure(roots: list[str], registry: dict) -> tuple[dict[str, set[SiteKey]], 
     return observed, skipped
 
 
-def apply_write_sites(registry: dict, observed: dict[str, set[SiteKey]]) -> dict:
+def apply_write_sites(registry: Registry, observed: dict[str, set[SiteKey]]) -> Registry:
     """The `--write-sites` preservation contract: an `owner` site is never touched
     or removed; a still-observed declared site keeps its `role`/`reason` verbatim;
     a newly observed site arrives `allowed`/`None`; a declared `allowed` site no
@@ -420,7 +455,7 @@ def apply_write_sites(registry: dict, observed: dict[str, set[SiteKey]]) -> dict
     for fact in registry["facts"]:
         found = observed[fact["id"]]
         declared = {_site_key(s): s for s in fact["sites"]}
-        new_sites: list[dict] = []
+        new_sites: list[Site] = []
         for key, site in declared.items():
             if site["role"] == "owner" or key in found:
                 new_sites.append(site)
@@ -430,7 +465,7 @@ def apply_write_sites(registry: dict, observed: dict[str, set[SiteKey]]) -> dict
     return registry
 
 
-def render_census_markdown(registry: dict, observed: dict[str, set[SiteKey]]) -> str:
+def render_census_markdown(registry: Registry, observed: dict[str, set[SiteKey]]) -> str:
     lines = ["# Restated-invariant census", ""]
     for fact in registry["facts"]:
         lines.append(f"## {fact['id']}")
@@ -460,7 +495,7 @@ def discover_pointer(spans: list[ProseSpan]) -> list[ProseSpan]:
     """Spans citing an owner-shaped path/id and carrying more than one line of
     other prose — the highest-precision detector, since these sites have already
     declared an owner."""
-    hits = []
+    hits: list[ProseSpan] = []
     for span in spans:
         text_lines = [ln for ln in span.text.splitlines() if ln.strip()]
         if not any(_CITATION_RE.search(ln) for ln in text_lines):
@@ -535,9 +570,9 @@ def _wire_and_protocol_names(roots: list[str]) -> set[str]:
 _DETECTORS = ("pointer", "symbol", "shingle", "citation")
 
 
-def discover(roots: list[str], detector: str | None = None) -> dict[str, object]:
+def discover(roots: list[str], detector: str | None = None) -> dict[str, list[str] | dict[str, list[str]]]:
     spans, _skipped = collect_spans(roots)
-    results: dict[str, object] = {}
+    results: dict[str, list[str] | dict[str, list[str]]] = {}
     detectors = [detector] if detector else list(_DETECTORS)
     if "pointer" in detectors:
         results["pointer"] = [f"{s.file}:{s.symbol}" for s in discover_pointer(spans)]
@@ -551,7 +586,7 @@ def discover(roots: list[str], detector: str | None = None) -> dict[str, object]
     return results
 
 
-def render_discover_markdown(candidates: dict[str, object]) -> str:
+def render_discover_markdown(candidates: dict[str, list[str] | dict[str, list[str]]]) -> str:
     lines = ["# Restated-invariant discovery", ""]
     for detector_name, hits in candidates.items():
         lines.append(f"## {detector_name}")
@@ -571,7 +606,7 @@ def render_discover_markdown(candidates: dict[str, object]) -> str:
 # --------------------------------------------------------------------------
 
 
-def _load_registry() -> dict:
+def _load_registry() -> Registry:
     return json.loads(REGISTRY.read_text(encoding="utf-8"))
 
 

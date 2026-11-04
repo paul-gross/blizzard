@@ -70,7 +70,7 @@ def _extract_py_spans(path: Path, *, inline_comments: bool = False) -> tuple[lis
 
 
 def _py_docstring_spans(tree: ast.Module, rel: str) -> list[ProseSpan]:
-    spans = []
+    spans: list[ProseSpan] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             continue
@@ -84,7 +84,9 @@ def _py_docstring_spans(tree: ast.Module, rel: str) -> list[ProseSpan]:
             continue
         doc = body[0].value
         symbol = MODULE_SYMBOL if isinstance(node, ast.Module) else node.name
-        spans.append(ProseSpan(file=rel, symbol=symbol, start_line=doc.lineno, text=doc.value))
+        text = doc.value
+        assert isinstance(text, str)
+        spans.append(ProseSpan(file=rel, symbol=symbol, start_line=doc.lineno, text=text))
     return spans
 
 
@@ -117,7 +119,8 @@ def _py_comment_spans(src: str, scopes: list[tuple[int, int, str]], rel: str) ->
             full_comment_lines.add(tok.start[0])
 
     spans: list[ProseSpan] = []
-    start = prev = None
+    start: int | None = None
+    prev = 0
     for n in sorted(full_comment_lines):
         if start is None or n != prev + 1:
             if start is not None:

@@ -41,13 +41,18 @@ Unset, the variable keeps the whole suite; the local commands below run unsharde
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
 
+Pyright checks repository-owned Python in strict mode, including root scripts and colocated migration tests; dependency,
+cache, dot-directory and generated build output are excluded. The structural gate applies the suppression rule across
+the same owned scope. `mise run unused-ignores` is a separate, local-only check for inert suppressions in tests and the
+two store migration test trees by default; pass paths to select a different scope.
+
 ```bash
 uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
 mise run process-ref-lint
-uv run ast-grep scan --error=unused-suppression .
+mise run structural-gate
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"

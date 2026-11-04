@@ -76,7 +76,7 @@ run = "web/scripts/exemplar-check.sh"
 
 [tasks.structural-gate]
 description = "blizzard:structural-gate — the ast-grep structural channel (contracts/ast-grep/), gated on a reintroduced violation, a stale `# ast-grep-ignore`, and a rule-tests fixture regression alike"
-run = "uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test"
+run = "uv run ast-grep scan --error=unused-suppression --no-ignore vcs --no-ignore dot --no-ignore exclude --no-ignore global --no-ignore parent --globs '!**/node_modules/**' --globs '!**/__pycache__/**' --globs '!/mutants/**' --globs '!/build/**' --globs '!/dist/**' --globs '!/web/dist/**' --globs '!/web/tmp/**' --globs '!/web/out-tsc/**' --globs '!/web/bazel-out/**' --globs '!/web/coverage/**' --globs '!/web/typings/**' --globs '!/src/blizzard/static/hub/**' --globs '!/src/blizzard/static/runner/**' . && uv run ast-grep test"
 
 [tasks.lint]
 description = "Lint with ruff"

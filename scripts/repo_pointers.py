@@ -27,6 +27,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
 
 import prose_spans
 
@@ -57,6 +58,14 @@ _SYMBOL_SUFFIX_RE = re.compile(r"^(.*\.(?:py|ts|md|json|toml|ya?ml|sh|sql|txt))\
 _GLOB_CHARS = ("*", "?", "{", "<")
 
 SiteKey = tuple[str, str, str]
+
+
+def _object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict)
 
 
 class PointerCheckError(Exception):
@@ -105,7 +114,8 @@ def normalize(token: str) -> str:
 
 
 def _glob_regex(pattern: str) -> re.Pattern[str]:
-    out, i = [], 0
+    out: list[str] = []
+    i = 0
     while i < len(pattern):
         c = pattern[i]
         if pattern.startswith("**", i):
@@ -157,16 +167,20 @@ def pointers(root: Path, files: list[str]) -> list[Pointer]:
 
 def load_exemptions(path: Path) -> dict[SiteKey, int]:
     try:
-        entries = json.loads(path.read_text(encoding="utf-8"))
+        entries: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise PointerCheckError(f"{path}: {exc}") from exc
-    if not isinstance(entries, list):
+    if not _object_list(entries):
         raise PointerCheckError(f"{path}: expected a list of entries")
     exempt: dict[SiteKey, int] = {}
     for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != _ENTRY_KEYS:
+        if not _object_dict(entry) or set(entry) != _ENTRY_KEYS:
             raise PointerCheckError(f"{path}: entry must carry exactly {sorted(_ENTRY_KEYS)}: {entry}")
-        key = (entry["file"], entry["symbol"], entry["target"])
+        file, symbol, target = entry["file"], entry["symbol"], entry["target"]
+        if not all(isinstance(value, str) for value in (file, symbol, target)):
+            raise PointerCheckError(f"{path}: file, symbol and target must be strings")
+        assert isinstance(file, str) and isinstance(symbol, str) and isinstance(target, str)
+        key = (file, symbol, target)
         if entry["kind"] not in _KINDS:
             raise PointerCheckError(f"{path}: {key}: kind must be one of {sorted(_KINDS)}")
         if not (isinstance(entry["count"], int) and entry["count"] >= 1):

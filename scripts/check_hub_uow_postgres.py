@@ -7,8 +7,8 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
@@ -43,7 +43,7 @@ class _CompatibleGuard(ScopedConnections):
 
 
 def _pid(conn: Connection) -> int:
-    return int(conn.connection.driver_connection.info.backend_pid)
+    return int(conn.execute(sa.text("SELECT pg_backend_pid()")).scalar_one())
 
 
 def _wait_for_block(engine: Engine, waiting: int, holder: int) -> None:
@@ -73,7 +73,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
     failures: list[BaseException] = []
     original_chunk, original_keys = tx.lock_chunk_row, tx.lock_keys
 
-    def observe(conn: Connection, name: str, operation: Any) -> None:
+    def observe(conn: Connection, name: str, operation: Callable[[], None]) -> None:
         worker = threading.current_thread().name
         pids[worker] = _pid(conn)
         if worker == "second":
@@ -85,10 +85,10 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
             if not release.wait(_TIMEOUT):
                 raise TimeoutError("first writer was not released")
 
-    def chunk_lock(conn: Connection, chunk: str) -> None:
-        observe(conn, chunk, lambda: original_chunk(conn, chunk))
+    def chunk_lock(conn: Connection, chunk_id: str) -> None:
+        observe(conn, chunk_id, lambda: original_chunk(conn, chunk_id))
 
-    def key_lock(conn: Connection, namespace: str, keys: Any) -> None:
+    def key_lock(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
         observe(conn, f"{namespace}/{keys[0]}", lambda: original_keys(conn, namespace, keys))
 
     def writer(reverse: bool) -> None:

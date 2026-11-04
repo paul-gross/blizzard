@@ -31,7 +31,7 @@ def _constant_comment_lines(tree: ast.Module) -> set[int]:
 
 def _docstring_blocks(tree: ast.Module) -> list[tuple[int, str, int]]:
     """Each docstring as (lineno, kind, line count); kind keys `_DOCSTRING_CAPS`."""
-    blocks = []
+    blocks: list[tuple[int, str, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             body = node.body
@@ -55,14 +55,16 @@ def _docstring_blocks(tree: ast.Module) -> list[tuple[int, str, int]]:
 def _comment_runs(src: str) -> list[tuple[int, int]]:
     """Each run of consecutive full-line `#` comments as (start line, line count)."""
     lines = src.splitlines()
-    full = set()
+    full: set[int] = set()
     try:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
             if tok.type == tokenize.COMMENT and lines[tok.start[0] - 1].lstrip().startswith("#"):
                 full.add(tok.start[0])
-    except tokenize.TokenizeError:
+    except tokenize.TokenError:
         pass
-    runs, start, prev = [], None, None
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    prev = 0
     for n in sorted(full):
         if start is None or n != prev + 1:
             if start is not None:
@@ -76,7 +78,7 @@ def _comment_runs(src: str) -> list[tuple[int, int]]:
 
 def over_cap_blocks(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
-    violations = []
+    violations: list[str] = []
     constant_lines: set[int] = set()
     try:
         tree = ast.parse(src)

@@ -27,11 +27,13 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
+from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.wire.envelope import NodeConfig, NodeEnvelope
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.wire.graph import SessionMode
 
 _TIMEOUT_SECONDS = 120
@@ -62,11 +64,11 @@ class _Stub(BaseHTTPRequestHandler):
             finish = "stop"
         else:
             name, arguments = self.tool
-            call = {"index": 0, "id": "call_probe", "type": "function"}
+            call: dict[str, object] = {"index": 0, "id": "call_probe", "type": "function"}
             call["function"] = {"name": name, "arguments": json.dumps(arguments)}
             delta = {"role": "assistant", "tool_calls": [call]}
             finish = "tool_calls"
-        chunks = [
+        chunks: list[dict[str, object]] = [
             {"id": "c", "object": "chat.completion.chunk", "model": "stub", "choices": [{"index": 0, "delta": delta}]},
             {
                 "id": "c",
@@ -134,14 +136,14 @@ def _spawn(
         stderr_path=str(err),
         lease_token="token-probe",
     )
-    node = NodeConfig(
+    node = EnvelopeNode(
         node_id="nd_probe",
         node_name="build",
         executor=Executor.RUNNER,
         session=SessionMode.FRESH,
         judged_by=JudgedBy.WORKER,
     )
-    envelope = NodeEnvelope(
+    envelope = Envelope(
         chunk_id="ch_probe",
         graph_id="gr_probe",
         epoch=1,
@@ -167,14 +169,17 @@ def _opencode_cell(autonomy: Autonomy, source: str, root: Path, binary: str, exe
         home, project, bundle = _opencode_project(cell, server.server_port)
         os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), XDG_DATA_HOME=str(home / ".data"))
         process = LinuxProcessProbe()
+        children = SubprocessChildProcesses()
+        env = AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"))
         adapter = OpenCodeAdapter(
             binary=binary,
-            worker_env=AllowlistedEnv.of(("XDG_CONFIG_HOME", "XDG_DATA_HOME")),
+            worker_env=env,
             worker_config_path=str(bundle),
             autonomy=autonomy,
-            permission_resolver=SubprocessOpenCodePermissionResolver(binary),
+            permission_resolver=SubprocessOpenCodePermissionResolver(binary, children=children),
             process=process,
-            launcher=ProcessLauncher(process, executor=executor),
+            launcher=ProcessLauncher(process, executor=executor, children=children),
+            versions=VersionProbe(children, env.tool()),
         )
         out, err = cell / "out.jsonl", cell / "err.log"
         outcome = _spawn(adapter, project, out, err, "stub/stub", "Use the one tool you are asked to, then report.")
@@ -202,6 +207,7 @@ def _opencode_cell(autonomy: Autonomy, source: str, root: Path, binary: str, exe
         return "ok resolved without a prompt" if ok else f"FAIL finished={finished} error={errors[:80]!r}"
     finally:
         server.shutdown()
+        server.server_close()
 
 
 def _claude_cell(autonomy: Autonomy, root: Path, binary: str, model: str, executor: ThreadPoolExecutor) -> str:
@@ -211,23 +217,28 @@ def _claude_cell(autonomy: Autonomy, root: Path, binary: str, model: str, execut
     settings = cell / "settings.json"
     settings.write_text(json.dumps({"permissions": {"ask": ["Bash(echo blizzard-probe-ask*)"]}}))
     process = LinuxProcessProbe()
+    children = SubprocessChildProcesses()
+    env = AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"))
     adapter = ClaudeCodeAdapter(
         binary,
         settings_path=str(settings),
         autonomy=autonomy,
-        worker_env=AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME")),
+        worker_env=env,
         process=process,
-        launcher=ProcessLauncher(process, executor=executor),
+        launcher=ProcessLauncher(process, executor=executor, children=children),
+        versions=VersionProbe(children, env.tool()),
     )
     out, err = cell / "out.jsonl", cell / "err.log"
     outcome = _spawn(
         adapter, project, out, err, model, "Run exactly this with the Bash tool, then report: echo blizzard-probe-ask"
     )
-    records = [json.loads(line) for line in out.read_text().splitlines() if line.startswith("{")]
-    result = next((r for r in reversed(records) if r.get("type") == "result"), {})
-    denied = result.get("permission_denials") or []
+    records: list[dict[str, object]] = [
+        json.loads(line) for line in out.read_text().splitlines() if line.startswith("{")
+    ]
+    result = next((r for r in reversed(records) if r.get("type") == "result"), None)
     if outcome != "exit 0" or not result:
         return f"FAIL {outcome}"
+    denied = result.get("permission_denials")
     return "ok refused as a tool error, turn completed" if denied else "FAIL no permission_denials entry"
 
 

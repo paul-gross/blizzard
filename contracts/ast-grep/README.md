@@ -5,9 +5,10 @@ Python syntax rather than text. `rules/` holds one YAML file per rule; `rule-tes
 negative shape with `ast-grep test`'s own `valid:`/`invalid:` fixtures and snapshots.
 
 `sgconfig.yml` at the repo root points here (`ruleDirs`/`testConfigs`); `mise run structural-gate` and
-`scripts/ci-gate.sh` both run `ast-grep scan --error=unused-suppression .` — the `--error=unused-suppression` flag is
+`scripts/ci-gate.sh` both run the scan defined by `mise run structural-gate` — the `--error=unused-suppression` flag is
 load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported instead of failing the gate — then
-`ast-grep test`, so a `rule-tests/` fixture or snapshot regression fails the same gate as a live violation.
+`ast-grep test`, so a `rule-tests/` fixture or snapshot regression fails the same gate as a live violation. The scan
+disregards ignore files, as pyright does, and prunes pyright's generated and dependency trees explicitly.
 
 ## Rules
 
@@ -101,7 +102,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
 - **`bzh:strict-types`** (`rules/strict-types.yml`) — every Python tree keeps every strict diagnostic visible. The
   rule's own prose home is `blizzard-context:/standards/python.md#strict-types-bzhstrict-types`; this file states none
   of that prose, only what the rule mechanically checks.
-  - Scoped to `src/**`, `tests/**`, and `exemplars/python/**`, the colocated `store/migrations/tests/**` trees included.
+  - Scoped to repository-owned Python, including root scripts, exemplars and colocated migration tests; dependency,
+    cache, dot-directory and generated build output are excluded.
   - Matches a comment containing `type: ignore`, bracketed or bare, and a comment that is a `# pyright: basic` or
     `# pyright: standard` file header. A rule-named `# pyright: ignore[<rule>]` and a `# pyright: <rule>=false` header
     are unmatched.

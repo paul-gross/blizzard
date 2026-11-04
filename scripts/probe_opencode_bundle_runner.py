@@ -19,10 +19,62 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
+from dataclasses import replace
 from pathlib import Path
+from typing import TypedDict, TypeVar
+from unittest.mock import patch
+
+from blizzard.runner.host_config import HostConfig
 
 
-def _request(url: str, body: object | None = None) -> dict:
+class Chunk(TypedDict):
+    status: str
+    graph_id: str
+    work_refs: list[object]
+    blocked: object
+    project_id: str | None
+    project_slug: str | None
+    project_name: str | None
+
+
+class Health(TypedDict):
+    status: str
+
+
+class Runner(TypedDict):
+    state: str
+    runner_id: str
+
+
+class Runners(TypedDict):
+    items: list[Runner]
+
+
+class Lease(TypedDict):
+    chunk_id: str
+    lease_id: str
+    pid: int
+    harness_id: str
+    last_heartbeat_at: str | None
+
+
+class Leases(TypedDict):
+    items: list[Lease]
+
+
+class DashboardRunner(TypedDict):
+    last_tick_at: str | None
+
+
+class Dashboard(TypedDict):
+    runner: DashboardRunner
+
+
+T = TypeVar("T")
+
+
+def _request[T](url: str, response_type: type[T], body: object | None = None) -> T:
     request = urllib.request.Request(
         url,
         data=json.dumps(body).encode() if body is not None else None,
@@ -30,6 +82,24 @@ def _request(url: str, body: object | None = None) -> dict:
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.load(response)
+
+
+def _selected_queue(chunk_id: str, selected: Chunk) -> dict[str, list[dict[str, object]]]:
+    entries: list[dict[str, object]] = []
+    if selected["status"] == "ready":
+        entries.append(
+            {
+                "chunk_id": chunk_id,
+                "graph_id": selected["graph_id"],
+                "position": 0,
+                "work_refs": selected.get("work_refs", []),
+                "blocked": selected.get("blocked"),
+                "project_id": selected["project_id"],
+                "project_slug": selected["project_slug"],
+                "project_name": selected["project_name"],
+            }
+        )
+    return {"entries": entries}
 
 
 def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer:
@@ -52,19 +122,8 @@ def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer
             path = self.path.split("?", 1)[0]
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             if path == "/api/fleet/queue/peek" and self.command in {"GET", "POST"}:
-                selected = _request(f"{hub_url}/api/chunks/{chunk_id}")
-                entries = []
-                if selected["status"] == "ready":
-                    entries = [
-                        {
-                            "chunk_id": chunk_id,
-                            "graph_id": selected["graph_id"],
-                            "position": 0,
-                            "work_refs": selected.get("work_refs", []),
-                            "blocked": selected.get("blocked"),
-                        }
-                    ]
-                self._reply(200, json.dumps({"entries": entries}).encode())
+                selected = _request(f"{hub_url}/api/chunks/{chunk_id}", Chunk)
+                self._reply(200, json.dumps(_selected_queue(chunk_id, selected)).encode())
                 return
             if path == "/api/fleet/routes" and self.command == "POST" and json.loads(body).get("chunk_id") != chunk_id:
                 self._reply(409, b'{"detail":"probe refuses a foreign chunk claim"}')
@@ -138,8 +197,14 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
     # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
     # standing runner's from the shell exports.
-    for name in [name for name in env if name.startswith("BZ_HUB_TOKEN")]:
+    for name in [name for name in env if name.startswith("BZ_HUB_TOKEN") or name == "BZ_HOST_TOKEN"]:
         del env[name]
+    with patch.dict(os.environ, env, clear=True):
+        scaffold = HostConfig.scaffold(root, hub_url=env["BZ_HUB_URL"])
+    (runner,) = scaffold.runners
+    scaffold = replace(scaffold, runners=(replace(runner, name=f"bundle-probe-{uuid.uuid4().hex}"),))
+    config = root / "blizzard-host.toml"
+    config.write_text(scaffold.to_toml())
     subprocess.run(
         ["uv", "run", "blizzard", "runner", "init", str(root), "--hub", env["BZ_HUB_URL"]],
         env=env,
@@ -148,12 +213,7 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     )
     auth = root / "auth.json"
     auth.write_text('{"mock":"present"}')
-    config = root / "blizzard-host.toml"
     text = config.read_text()
-    text = text.replace('name = "runner-local"', 'name = "runner-bundle-probe"')
-    # The token variable follows the runner's name, so the token init wrote follows the rename.
-    dotenv = root / ".env"
-    dotenv.write_text(dotenv.read_text().replace("BZ_HUB_TOKEN_RUNNER_LOCAL=", "BZ_HUB_TOKEN_RUNNER_BUNDLE_PROBE="))
     text = text.replace("[runner.claude_code]\nenabled = true", "[runner.claude_code]\nenabled = false")
     text = text.replace(
         '[runner.opencode]\nenabled = true\nbinary = "opencode"',
@@ -180,11 +240,13 @@ def main() -> None:
     hub_url = os.environ.get("BZ_HUB_URL")
     if not scratch_path or not hub_url or not os.environ.get("BZ_WORKSPACE_ROOT"):
         raise RuntimeError("BLIZZARD_TMPDIR and `winter env <env>` exports are required")
-    hub_chunk = _request(f"{hub_url}/api/chunks/{args.chunk_id}")
+    hub_chunk = _request(f"{hub_url}/api/chunks/{args.chunk_id}", Chunk)
     if hub_chunk["status"] != "ready":
         raise RuntimeError(f"chunk {args.chunk_id} must be ready, got {hub_chunk['status']}")
     scratch = Path(scratch_path) / "bundle-runner-probe"
     root = Path.cwd().parent / ".winter" / "bundle-probe"
+    if scratch.exists():
+        raise RuntimeError(f"disposable probe scratch already exists: {scratch}")
     if root.exists():
         raise RuntimeError(f"disposable runner runtime already exists: {root}")
     root.mkdir()
@@ -201,7 +263,7 @@ def main() -> None:
     lease_pid: int | None = None
     try:
         try:
-            _request(proxy_url + "/api/fleet/routes", {"chunk_id": "__foreign_probe__"})
+            _request(proxy_url + "/api/fleet/routes", dict[str, object], {"chunk_id": "__foreign_probe__"})
         except urllib.error.HTTPError as exc:
             assert exc.code == 409
         else:
@@ -219,14 +281,16 @@ def main() -> None:
             if process.poll() is not None:
                 raise RuntimeError(f"runner exited before readiness: {log.read_text()[-2500:]}")
             try:
-                health = _request(base + "/api/health")
+                health = _request(base + "/api/health", Health)
                 break
             except (OSError, urllib.error.URLError):
                 time.sleep(0.25)
         else:
             raise RuntimeError("runner did not become healthy")
         assert health["status"] == "ok"
-        (served,) = [item for item in _request(base + "/api/host/runners")["items"] if item["state"] == "serving"]
+        (served,) = [
+            item for item in _request(base + "/api/host/runners", Runners)["items"] if item["state"] == "serving"
+        ]
         runner = f"{base}/runners/{served['runner_id']}"
         bundle_status = subprocess.run(
             ["uv", "run", "blizzard", "runner", "harness", "status", "--dir", str(root)],
@@ -237,7 +301,9 @@ def main() -> None:
         ).stdout
         assert "opencode: source" in bundle_status and "snapshot:" in bundle_status
         for _ in range(120):
-            matches = [item for item in _request(runner + "/api/leases")["items"] if item["chunk_id"] == args.chunk_id]
+            matches = [
+                item for item in _request(runner + "/api/leases", Leases)["items"] if item["chunk_id"] == args.chunk_id
+            ]
             if matches:
                 break
             time.sleep(0.25)
@@ -247,13 +313,15 @@ def main() -> None:
         routed = True
         lease_pid = lease["pid"]
         assert lease["harness_id"] == "opencode"
-        ack = _request(runner + "/api/heartbeat", {"lease_id": lease["lease_id"]})
+        ack = _request(runner + "/api/heartbeat", dict[str, object], {"lease_id": lease["lease_id"]})
         assert ack == {"recorded": True, "lease_id": lease["lease_id"]}
-        before = _request(runner + "/api/dashboard")["runner"]["last_tick_at"]
+        before = _request(runner + "/api/dashboard", Dashboard)["runner"]["last_tick_at"]
         for _ in range(100):
-            dashboard = _request(runner + "/api/dashboard")
+            dashboard = _request(runner + "/api/dashboard", Dashboard)
             current = next(
-                item for item in _request(runner + "/api/leases")["items"] if item["lease_id"] == lease["lease_id"]
+                item
+                for item in _request(runner + "/api/leases", Leases)["items"]
+                if item["lease_id"] == lease["lease_id"]
             )
             if dashboard["runner"]["last_tick_at"] != before and current["last_heartbeat_at"]:
                 break
@@ -299,7 +367,7 @@ def main() -> None:
             process.wait(timeout=20)
         if routed:
             try:
-                _request(f"{hub_url}/api/chunks/{args.chunk_id}/detach", {})
+                _request(f"{hub_url}/api/chunks/{args.chunk_id}/detach", dict[str, object], {})
             except urllib.error.HTTPError as exc:
                 if exc.code != 409:
                     raise
