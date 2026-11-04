@@ -258,7 +258,8 @@ class FindingStore:
 
     def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
-        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. ``expect`` is the
+        `tests/component/hub/store/internal/test_finding_store.py::test_record_facts_is_all_or_nothing`.
+        ``expect`` is the
         port's compare-and-set (``src/blizzard/hub/domain/garden/findings/model.py``); each named
         finding is re-derived under its row lock first (`lock_findings`)."""
         for entry in entries:

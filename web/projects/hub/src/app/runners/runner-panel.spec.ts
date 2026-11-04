@@ -54,7 +54,7 @@ const RUNNERS = {
 //
 // The done row (`runner_id: null` / `environment_count: 0`) takes the same unrouted
 // branch `ch_01idle…` covers; the hub's terminal-chunk shape is pinned by
-// `tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted`.
+// `tests/component/hub/api/test_fleet_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted`.
 const CHUNKS = [
   {
     chunk_id: 'ch_01claim000000000000000000000',

@@ -1,7 +1,7 @@
 """The hub denies a claim on an unmet dependency, under the row lock (component
 tier).
 
-Mirrors the terminal denial's shape (``tests/test_route_claim.py``): a distinct 409 body,
+Mirrors the terminal denial's shape (``tests/component/hub/api/test_fleet_route_claim.py``): a distinct 409 body,
 refused outright rather than lost to a race, re-derived fresh under the shared row lock
 so a peek-then-claim window can never slip a blocked chunk through."""
 

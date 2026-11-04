@@ -1,6 +1,6 @@
 """The group/claim race is atomic (component tier).
 
-Mirrors ``tests/test_delete_claim_race.py``'s own interleaving pattern: ``GroupService``
+Mirrors ``tests/component/hub/api/test_chunks_delete_claim_race.py``'s own interleaving pattern: ``GroupService``
 holds the row lock over the survivor and every named merge id
 (``bzh:store-exclusive-write``) across its whole fold, so a claim landing on the survivor
 mid-fold can't interleave with the fold's own guard-check-then-write."""

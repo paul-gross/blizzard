@@ -501,7 +501,8 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
 
     def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
-        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. ``expect`` maps a
+        `tests/component/hub/store/internal/test_finding_store.py::test_record_facts_is_all_or_nothing`.
+        ``expect`` maps a
         finding id to the state its facts were built from; when any named finding has moved off
         it by the time the write lands, nothing is written and those ids are returned."""
         ...

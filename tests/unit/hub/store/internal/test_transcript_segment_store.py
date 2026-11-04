@@ -1,0 +1,472 @@
+"""Transcript-segment store: dialect-portable DDL, the codec round-trip, and the
+natural-key uniqueness the schema enforces (unit tier)."""
+
+from __future__ import annotations
+
+import ast
+import json
+import os
+import zlib
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Unpack
+
+import pytest
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.sql import ClauseElement, visitors
+from sqlalchemy.sql.elements import TextClause
+
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
+from blizzard.hub.domain.observability.transcripts import (
+    TranscriptSlice,
+    transcript_chunk_lock,
+    transcript_lane_lock,
+)
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal import transcript_segment_store as store_module
+from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.factory_fields import TranscriptSliceFields
+from tests.support import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
+
+_NOW = datetime(2026, 8, 9, tzinfo=UTC)
+
+
+def _record(**overrides: Unpack[TranscriptSliceFields]) -> TranscriptSlice:
+    values: TranscriptSliceFields = {
+        "segment_id": "sg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "spawn_generation": 1,
+        "runner_id": "r1",
+        "turn_range_start": 0,
+        "turn_range_end": 9,
+        "final": True,
+        "normalizer_version": "v1",
+        "harness_version": "claude-code-1.0",
+        "record_truncated": False,
+        "turns_json": '[{"index": 0, "kind": "asst"}]',
+    }
+    values.update(overrides)
+    return TranscriptSlice(**values)
+
+
+def _migrated_engine(tmp_path: Path):
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migrated_hub_at(db_url)
+    return create_engine_from_url(db_url)
+
+
+# --- dialect-portable DDL and the statements the store itself executes -------
+
+
+def _executed_statements() -> dict[str, ClauseElement]:
+    """The store's OWN statements — a look-alike re-declared here would keep compiling
+    while the product's drifted off the portable surface."""
+    record = _record()
+    m = store_module
+    return {
+        "segments_for_chunk_stmt": m.segments_for_chunk_stmt(_STMTS, "ch_1"),
+        "records_for_segment_stmt": m.records_for_segment_stmt(_STMTS, "ch_1", "sg_1"),
+        "lease_runner_ids_stmt": m.lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
+        "records_for_lease_stmt": m.records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
+        "high_water_stmt": m.high_water_stmt(_STMTS, "r1"),
+        "high_water_owner_stmt": m.high_water_owner_stmt(_STMTS, "r1"),
+        "natural_key_state_stmt": m.natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "epoch_owners_stmt": m.epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
+        "chunk_stored_bytes_stmt": m.chunk_stored_bytes_stmt(_STMTS, "ch_1"),
+        "runner_window_bytes_stmt": m.runner_window_bytes_stmt(_STMTS, "r1", _NOW),
+        "insert_high_water_stmt": m.insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "update_high_water_stmt": m.update_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "insert_accepted_stmt": m.insert_accepted_stmt(
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+        ),
+        "insert_rejected_stmt": m.insert_rejected_stmt(
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
+        ),
+        "update_to_accepted_stmt": m.update_to_accepted_stmt(
+            _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+        ),
+        "update_still_rejected_stmt": m.update_still_rejected_stmt(
+            _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
+        ),
+    }
+
+
+def test_transcript_segments_ddl_compiles_under_both_dialects() -> None:
+    from sqlalchemy.schema import CreateTable
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(CreateTable(s.transcript_segments).compile(dialect=dialect))
+        assert "transcript_segments" in sql
+
+
+def test_transcript_high_water_ddl_compiles_under_both_dialects() -> None:
+    from sqlalchemy.schema import CreateTable
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(CreateTable(s.transcript_high_water).compile(dialect=dialect))
+        assert "transcript_high_water" in sql
+
+
+def test_index_projection_keeps_harness_identity_distinct_from_its_versions(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record(harness_id="claude_code", harness_version="2.1", normalizer_version="normalizer/3")
+
+    store.insert_accepted(record, byte_count=10, at=_NOW)
+
+    [index] = store.segments_for_chunk(record.chunk_id)
+    assert index.harness_id == "claude_code"
+    assert index.harness_version == "2.1"
+    assert index.normalizer_version == "normalizer/3"
+
+
+def test_index_projection_accepts_an_opencode_harness_id_and_a_missing_one_alike(tmp_path: Path) -> None:
+    """An OpenCode record's `harness_id` survives the round trip untouched, and an
+    older runner's record shipping none lands as unknown origin, not rejected."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    opencode_record = _record(segment_id="sg_opencode", harness_id="opencode", harness_version="1.18.25")
+    skewed_record = _record(segment_id="sg_skewed", harness_id=None)
+
+    store.insert_accepted(opencode_record, byte_count=10, at=_NOW)
+    store.insert_accepted(skewed_record, byte_count=10, at=_NOW)
+
+    by_segment = {row.segment_id: row for row in store.segments_for_chunk(opencode_record.chunk_id)}
+    assert by_segment["sg_opencode"].harness_id == "opencode"
+    assert by_segment["sg_skewed"].harness_id is None
+
+
+def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
+    for name, stmt in _executed_statements().items():
+        for dialect in (postgresql.dialect(), sqlite.dialect()):
+            sql = str(stmt.compile(dialect=dialect))
+            assert "transcript_" in sql or "epoch_owners" in sql, name
+
+
+def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
+    """`bzh:sql-portable`'s two escape hatches a both-dialects compile cannot see: raw
+    `text()` SQL (opaque to every compiler) and a dialect-namespaced construct."""
+    for name, stmt in _executed_statements().items():
+        assert type(stmt).__module__.startswith("sqlalchemy.sql."), name
+        assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)], name
+
+
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reads store_module.__file__'s own source; under mutmut that file also carries every "
+    "generated mutant body, which this sweep would wrongly hold to the same pattern",
+)
+def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
+    builders = {name for name in vars(store_module) if name.endswith("_stmt")}
+    assert builders == set(_executed_statements())
+
+    source = ast.parse(Path(store_module.__file__ or "").read_text())
+    executed = [
+        node.args[0]
+        for node in ast.walk(source)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
+    ]
+    assert len(executed) == len(builders)
+    for arg in executed:
+        built_by_a_builder = (
+            isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")
+        )
+        assert built_by_a_builder, ast.unparse(arg)
+
+
+# --- codec round-trip ---------------------------------------------------------
+
+
+def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+
+    store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), at=_NOW)
+
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.turns_json == record.turns_json
+    with engine.connect() as conn:
+        row = conn.execute(
+            hub_store_connections(engine).select(s.transcript_segments, s.transcript_segments.c.codec)
+        ).one()
+    assert row.codec == "zlib"
+
+
+def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Path) -> None:
+    """The round-trip above cannot tell zlib from a no-op codec, so this reads
+    the raw column — highly compressible turns must land far under their plaintext."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    turns = [{"index": i, "kind": "asst", "text": "the same sentence, over and over. " * 40} for i in range(64)]
+    plaintext = json.dumps(turns).encode("utf-8")
+    record = _record(turns_json=plaintext.decode("utf-8"))
+
+    store.insert_accepted(record, byte_count=len(plaintext), at=_NOW)
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            hub_store_connections(engine).select(s.transcript_segments, s.transcript_segments.c.content)
+        ).one()
+    assert row.content != plaintext
+    assert zlib.decompress(row.content) == plaintext
+    assert len(row.content) * 10 < len(plaintext)
+
+
+def test_a_rejected_record_stores_no_content_or_codec(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+
+    with engine.connect() as conn:
+        row = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).one()
+    assert row.content is None
+    assert row.codec is None
+    assert row.rejected is True
+    assert row.rejection_reason == "record_too_large"
+    assert row.byte_count == 999
+
+
+# --- natural key ---------------------------------------------------------------
+
+
+def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
+    """``(segment_id, turn_range_start)`` is a schema-level unique constraint —
+    a second insert at the same key must fail even if a caller forgot to check first."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+    store.insert_accepted(record, byte_count=10, at=_NOW)
+
+    with pytest.raises(HubStoreError):
+        store.insert_accepted(record, byte_count=10, at=_NOW)
+
+
+@pytest.mark.parametrize(
+    "locks",
+    [
+        [transcript_lane_lock("r1")],
+        [transcript_chunk_lock("ch_1")],
+        [transcript_lane_lock("r2"), transcript_chunk_lock("ch_1")],
+    ],
+    ids=["lane only", "chunk only", "another runner's lane"],
+)
+def test_a_segment_write_is_refused_by_a_unit_not_locking_its_chunk_and_its_runners_lane(
+    tmp_path: Path, locks: list[tuple[str, str]]
+) -> None:
+    connections = hub_store_connections(_migrated_engine(tmp_path))
+    store = TranscriptSegmentStore(connections)
+
+    with HubTransactions(connections).begin() as transaction:
+        locked = transaction.lock_set(keys=locks)
+        with pytest.raises(TransactionMisuse):
+            store.insert_accepted(
+                _record(), turns=store.encode_turns(_record()), byte_count=10, at=_NOW, transaction=locked
+            )
+
+    assert store.natural_key_state("sg_1", 0) == "absent"
+
+
+def test_a_high_water_write_is_refused_by_a_unit_not_locking_its_runners_lane(tmp_path: Path) -> None:
+    connections = hub_store_connections(_migrated_engine(tmp_path))
+    store = TranscriptSegmentStore(connections)
+
+    with HubTransactions(connections).begin() as transaction:
+        locked = transaction.lock_set(keys=[transcript_lane_lock("r2"), transcript_chunk_lock("ch_1")])
+        with pytest.raises(TransactionMisuse):
+            store.set_high_water("r1", seq=3, at=_NOW, transaction=locked)
+
+    assert store.high_water("r1") == 0
+
+
+def test_natural_key_state_is_absent_then_accepted_for_a_stored_pair(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    assert store.natural_key_state("sg_1", 0) == "absent"
+
+    store.insert_accepted(_record(), byte_count=10, at=_NOW)
+
+    assert store.natural_key_state("sg_1", 0) == "accepted"
+    assert store.natural_key_state("sg_1", 5) == "absent"
+
+
+def test_natural_key_state_is_rejected_for_a_cap_rejected_pair(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    store.insert_rejected(_record(), byte_count=999, reason="record_too_large", at=_NOW)
+
+    assert store.natural_key_state("sg_1", 0) == "rejected"
+
+
+def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+
+    store.update_to_accepted(record, byte_count=10, at=_NOW)
+
+    assert store.natural_key_state("sg_1", 0) == "accepted"
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.rejected is False
+    assert content.turns_json == record.turns_json
+    with engine.connect() as conn:
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).all()
+    assert len(rows) == 1
+
+
+def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: Path) -> None:
+    """A natural-key re-offer must not keep the FIRST offer's flag — the worse,
+    later offer's own truth wins, not a stale one."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    first = _record(record_truncated=True)
+    store.insert_rejected(first, byte_count=999, reason="record_too_large", at=_NOW)
+
+    store.update_to_accepted(_record(record_truncated=False), byte_count=10, at=_NOW)
+
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.record_truncated is False
+
+
+# --- lease reads -----------------------------------------------
+
+
+def test_runner_id_for_lease_is_none_when_the_lease_holds_no_segments(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+
+    assert store.runner_id_for_lease("ch_1", "nd_build", 1) is None
+
+
+def test_runner_id_for_lease_resolves_to_the_shipping_runner(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    store.insert_accepted(_record(), byte_count=10, at=_NOW)
+
+    assert store.runner_id_for_lease("ch_1", "nd_build", 1) == "r1"
+
+
+def test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key(tmp_path: Path) -> None:
+    """The query's own safety rests on an invariant (a genuine requeue bumps the fencing
+    epoch) it neither states nor enforces — a violation must surface as an error, never
+    as an arbitrary pick between the two runners' rows."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    store.insert_accepted(_record(segment_id="sg_1", runner_id="r1"), byte_count=10, at=_NOW)
+    store.insert_accepted(_record(segment_id="sg_2", runner_id="r2"), byte_count=10, at=_NOW)
+
+    with pytest.raises(RuntimeError, match="multiple runners"):
+        store.runner_id_for_lease("ch_1", "nd_build", 1)
+
+
+def test_records_for_lease_spans_every_spawn_generation_but_not_other_leases(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    first_spawn = _record(segment_id="sg_1", spawn_generation=1, turn_range_start=0, turn_range_end=0)
+    second_spawn = _record(segment_id="sg_2", spawn_generation=2, turn_range_start=1, turn_range_end=1)
+    other_epoch = _record(segment_id="sg_3", epoch=2, turn_range_start=0, turn_range_end=0)
+    other_node = _record(segment_id="sg_4", node_id="nd_other", turn_range_start=0, turn_range_end=0)
+    other_runner = _record(segment_id="sg_5", runner_id="r2", turn_range_start=0, turn_range_end=0)
+    for record in (first_spawn, second_spawn, other_epoch, other_node, other_runner):
+        store.insert_accepted(record, byte_count=10, at=_NOW)
+
+    records = store.records_for_lease("ch_1", "nd_build", 1, "r1")
+
+    assert [r.turn_range_start for r in records] == [0, 1]
+
+
+def test_records_for_lease_drops_a_segment_another_one_supersedes(tmp_path: Path) -> None:
+    """A re-ship reuses its source's whole lease key, and this read is keyed on the lease —
+    so without the pointer it concatenates both copies and renders the conversation twice."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    original = _record(segment_id="sg_old", turn_range_start=0, turn_range_end=0, record_truncated=True)
+    reship = _record(segment_id="sg_new", turn_range_start=0, turn_range_end=0, supersedes="sg_old")
+    for record in (original, reship):
+        store.insert_accepted(record, byte_count=10, at=_NOW)
+
+    records = store.records_for_lease("ch_1", "nd_build", 1, "r1")
+
+    assert len(records) == 1  # the superseded copy is gone, not merely ordered after
+    assert records[0].record_truncated is False  # and its truncation no longer taints the read
+
+
+def test_records_for_lease_keeps_a_segment_superseded_only_on_a_different_lease(tmp_path: Path) -> None:
+    """The pointer is scoped to its own lease: a same-named segment under another node or
+    epoch must not vanish because an unrelated lease named that id."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    store.insert_accepted(_record(segment_id="sg_old"), byte_count=10, at=_NOW)
+    elsewhere = _record(segment_id="sg_new", node_id="nd_other", supersedes="sg_old")
+    store.insert_accepted(elsewhere, byte_count=10, at=_NOW)
+
+    assert len(store.records_for_lease("ch_1", "nd_build", 1, "r1")) == 1
+
+
+def test_records_for_lease_confines_to_the_declared_runner(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    store.insert_accepted(_record(), byte_count=10, at=_NOW)
+
+    assert store.records_for_lease("ch_1", "nd_build", 1, "r2") == []
+
+
+def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    later = _NOW.replace(hour=12)
+
+    store.update_still_rejected(_record(record_truncated=True), byte_count=1200, reason="record_too_large", at=later)
+
+    with engine.connect() as conn:
+        rows = conn.execute(hub_store_connections(engine).select(s.transcript_segments)).all()
+    assert len(rows) == 1
+    assert rows[0].content is None
+    assert rows[0].byte_count == 1200
+    assert rows[0].received_at == later
+    assert rows[0].record_truncated is True  # The re-offer's own flag, not the first's
+
+
+def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the_window(tmp_path: Path) -> None:
+    """`byte_count` replaces rather than accumulates — accumulating would double-count
+    against `chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
+    still-rejected offer must not leave the first's bytes in the runner's daily-rate window."""
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    assert store.runner_window_bytes("r1", since=_NOW) == 999
+
+    store.update_still_rejected(record, byte_count=1200, reason="record_too_large", at=_NOW)
+
+    assert store.runner_window_bytes("r1", since=_NOW) == 1200
+
+
+def test_spawn_cwd_round_trips_and_is_null_when_absent(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = SeedingTranscriptSegmentStore(hub_store_connections(engine))
+    with_cwd = _record(segment_id="sg_a", spawn_cwd="/ws")
+    without = _record(segment_id="sg_b")
+
+    for record in (with_cwd, without):
+        store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), at=_NOW)
+
+    with engine.connect() as conn:
+        rows = {
+            r.segment_id: r.spawn_cwd for r in conn.execute(hub_store_connections(engine).select(s.transcript_segments))
+        }
+    assert rows == {"sg_a": "/ws", "sg_b": None}
