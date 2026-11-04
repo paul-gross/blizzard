@@ -2,7 +2,7 @@
 
 The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter,
 asserted by
-``tests/test_layering.py::test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter``
+``tests/guards/test_layering.py::test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter``
 — every other collaborator takes a Protocol seam or the
 :class:`~blizzard.runner.stores.RunnerStores` bundle this builds."""
 

@@ -15,8 +15,6 @@ from tests.revision_age import (
     decide_colocated,
 )
 
-pytestmark = pytest.mark.unit
-
 _TODAY = date(2026, 10, 16)
 
 

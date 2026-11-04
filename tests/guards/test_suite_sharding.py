@@ -6,8 +6,6 @@ import pytest
 
 from tests.suite_plugin import parse_shard, shard_of
 
-pytestmark = pytest.mark.unit
-
 _NODEIDS = [f"tests/test_mod_{m}.py::test_case[{p}]" for m in range(40) for p in range(25)]
 
 

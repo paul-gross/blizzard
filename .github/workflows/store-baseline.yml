@@ -4,7 +4,7 @@
 # `release.yml` on a candidate or patch tag, never on a stable promotion. It builds the store a
 # folded baseline revision builds and the store the floor release's own published history builds,
 # and fails on any difference in schema or rows. What it asserts is owned by the test,
-# `tests/test_store_baseline.py`. Until a tree declares a `BASELINE_FLOOR` it skips and says so.
+# `tests/store_baseline/test_store_baseline.py`. Until a tree declares a `BASELINE_FLOOR` it skips and says so.
 # `pr.yml` reports it through an always-running result job, which is the required branch-protection check.
 name: store-baseline
 
@@ -49,4 +49,4 @@ jobs:
           BLIZZARD_STORE_BASELINE_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: uv run --extra postgres pytest -m store_baseline tests/test_store_baseline.py -v
+        run: uv run --extra postgres pytest -m store_baseline tests/store_baseline/test_store_baseline.py -v

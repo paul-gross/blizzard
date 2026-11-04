@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 import yaml
 
 from tests.repo_files import repo_root
-
-pytestmark = pytest.mark.unit
 
 _WORKFLOW_PATH = repo_root() / ".github" / "workflows" / "gate.yml"
 

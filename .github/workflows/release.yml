@@ -223,7 +223,7 @@ jobs:
     # merging with it — every unlisted scope becomes `none`. This job pushes to GHCR,
     # mints the OIDC identity the signature and attestations carry, and stores them;
     # it cannot write the Release, which `publish` alone does.
-    # tests/test_release_workflow.py pins the exact scopes.
+    # tests/guards/test_release_workflow.py pins the exact scopes.
     permissions:
       contents: read
       packages: write

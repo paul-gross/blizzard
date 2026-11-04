@@ -1,5 +1,5 @@
 """The OpenCode binding's declaration — the one approved site constructing
-:class:`OpenCodeAdapter` and its health probe (``tests/test_layering.py``)."""
+:class:`OpenCodeAdapter` and its health probe (``tests/guards/test_layering.py``)."""
 
 from __future__ import annotations
 

@@ -16,7 +16,6 @@ from tests.repo_files import repo_root
 from tests.support import hub_migration_prototype, migrate_to
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("tree, helper", [("hub", "migrated_hub_at"), ("runner", "migrated_store_at")])
 def test_an_ordinary_test_cannot_replay_from_empty(tmp_path: Path, tree: str, helper: str) -> None:
     url = f"sqlite:///{tmp_path / 'store.db'}"
@@ -30,7 +29,6 @@ def test_an_ordinary_test_cannot_replay_from_empty(tmp_path: Path, tree: str, he
     assert runner.current_revision() is None
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("folder", ["unit", "component", "guards", "unit/hub"])
 def test_a_module_under_a_tier_folder_cannot_replay_from_empty(tmp_path: Path, folder: str) -> None:
     url = f"sqlite:///{tmp_path / 'store.db'}"
@@ -41,14 +39,12 @@ def test_a_module_under_a_tier_folder_cannot_replay_from_empty(tmp_path: Path, f
         exec(compile("runner.upgrade('head')", str(module_file), "exec"), namespace)
 
 
-@pytest.mark.unit
 def test_a_frame_resolving_to_the_tests_dir_itself_is_not_a_test_module(tmp_path: Path) -> None:
     from tests.head_replay_guard import _in_test_tree  # pyright: ignore[reportPrivateUsage]
 
     assert not _in_test_tree(tmp_path, tmp_path)
 
 
-@pytest.mark.unit
 def test_a_runner_named_ancestor_does_not_turn_a_hub_tree_into_a_runner_tree(tmp_path: Path) -> None:
     url = f"sqlite:///{tmp_path / 'store.db'}"
     runner = replace(
@@ -59,26 +55,6 @@ def test_a_runner_named_ancestor_does_not_turn_a_hub_tree_into_a_runner_tree(tmp
         runner.upgrade("head")
 
 
-@pytest.mark.component
-def test_a_tail_upgrade_and_a_migration_module_replay_pass(tmp_path: Path) -> None:
-    runner, engine = migrate_to(tmp_path, "head")
-    assert runner.current_revision() == runner.script_head()
-    engine.dispose()
-    runner.downgrade("-1")
-    assert runner.current_revision() != runner.script_head()
-    runner.upgrade("head")
-    assert runner.current_revision() == runner.script_head()
-    fresh = tmp_path / "fresh"
-    fresh.mkdir()
-    # A migration-named test module's from-empty replay is what the guard lets through: run the replay from a
-    # caller whose module file is one, without importing a test module.
-    replaying = hub_migration_runner(HubConfig(root=fresh, db_url=f"sqlite:///{fresh / 'fresh-hub.db'}"))
-    module_file = str(repo_root() / "tests" / "test_migration_replay.py")
-    exec(compile("runner.upgrade('head')", module_file, "exec"), {"__file__": module_file, "runner": replaying})
-    assert replaying.current_revision() == replaying.script_head()
-
-
-@pytest.mark.unit
 def test_migrate_to_copies_a_fresh_head_store_without_replaying(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -104,7 +80,6 @@ def test_migrate_to_copies_a_fresh_head_store_without_replaying(
     assert runner.current_revision() == runner.script_head()
 
 
-@pytest.mark.unit
 def test_migrate_to_preserves_an_existing_store(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, "head")
     engine.dispose()

@@ -516,7 +516,7 @@ class RunnerLiveness:
 class ExternalSubscriptionUsageWindow:
     """One rate-limit window's utilization, read back off ``runner_external_usage``,
     kept import-free of the runner's shape (``bzh:domain-core``;
-    ``tests/test_layering.py::test_hub_does_not_import_runner``)."""
+    ``tests/guards/test_layering.py::test_hub_does_not_import_runner``)."""
 
     window: str
     utilization_pct: float

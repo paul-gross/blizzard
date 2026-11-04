@@ -5,12 +5,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
-
-pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

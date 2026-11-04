@@ -71,7 +71,7 @@ describe('parseFindingDelta', () => {
         measurement: '225 Python files swept',
         ground_swept: 'src/blizzard/runner/',
         method: 'Per-rule mechanical detection',
-        gates_treated_as_out_of_range: 'tests/test_layering.py',
+        gates_treated_as_out_of_range: 'tests/guards/test_layering.py',
         swept_clean: 'bzh:domain-core',
         notes_for_reconcile: 'CR-20260829 convergence',
         candidates: [{ ref: 'F1', class: 'wide-seam', locus: 'a.py:1', summary: 'seam too wide' }],
