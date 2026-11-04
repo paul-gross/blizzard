@@ -1,0 +1,155 @@
+"""``WorkItemStore.create_run_with_chunk`` — a routine run's own one-act mint
+(component tier). Mirrors ``tests/component/hub/store/internal/test_work_item_store.py``'s shape; the chunk lands
+``not_ready``, with no promote fact and no queue position."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from sqlalchemy import Engine
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal.run_context_store import RunContextStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from tests.support import (
+    chunk_stores,
+    default_project,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_chunk,
+    seed_graph,
+    seed_scope,
+)
+
+_NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore, Engine]:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migrated_hub_at(db_url)
+    engine = create_engine_from_url(db_url)
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_NOW)
+    conns = hub_store_connections(engine)
+    seed_scope(conns, "blizzard", at=_NOW)
+    return WorkItemStore(conns), chunk_stores(engine, FixedClock(_NOW)), RunContextStore(conns), engine
+
+
+def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
+    items, _chunks, run_context, engine = _stores(tmp_path)
+    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
+
+    items.create_run_with_chunk(
+        project_id=default_project(engine),
+        pointer=pointer,
+        title="gardening run (full)",
+        body="Routine: gardening (graph: default)",
+        author=WorkItemAuthor.user("usr_1"),
+        routine_name="gardening",
+        scope_slug="blizzard",
+        run_mode="full",
+        at=_NOW,
+        chunk=chunk,
+    )
+
+    fetched = items.get("hub", pointer.ref)
+    assert fetched is not None
+    assert fetched.routine_name == "gardening"
+    assert fetched.scope_slug == "blizzard"
+    assert fetched.run_mode == "full"
+    assert fetched.closed_at is None
+
+    run = run_context.for_chunk(chunk)
+    assert run is not None
+    assert run.routine_name == "gardening"
+    assert run.scope_slug == "blizzard"
+    assert run.mode == "full"
+
+
+def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
+    items, chunks, _run_context, engine = _stores(tmp_path)
+    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
+    chunk = mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        default_model=["opus"],
+        default_effort="high",
+    )
+
+    items.create_run_with_chunk(
+        project_id=default_project(engine),
+        pointer=pointer,
+        title="t",
+        body="b",
+        author=WorkItemAuthor.user("usr_1"),
+        routine_name="gardening",
+        scope_slug="blizzard",
+        run_mode="full",
+        at=_NOW,
+        chunk=chunk,
+    )
+
+    minted = chunks.record.get(chunk.chunk_id)
+    assert minted is not None
+    assert minted.default_model == ["opus"]
+    assert minted.default_effort == "high"
+    facts = chunks.facts.load_facts(chunk.chunk_id)
+    assert facts is not None
+    assert facts.status() == ChunkStatus.NOT_READY
+    assert not facts.promoted
+    assert chunks.queue.queue_positions([chunk.chunk_id]) == {}
+
+
+def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
+    """No window at all (``blizzard-context:/architecture/crash-correctness/hub.md``):
+    a ``chunk_id`` collision fails the chunk-rows insert partway through the one
+    transaction, and the item row it landed ahead of must not survive either."""
+    items, chunks, run_context, engine = _stores(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_collide", graph_id="gr_1", at=_NOW)
+    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
+    colliding_chunk = Chunk(
+        chunk_id="ch_collide",
+        graph_id="gr_1",
+        work_refs=[pointer],
+        minted_at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+    )
+
+    with pytest.raises(HubStoreError):
+        items.create_run_with_chunk(
+            project_id=default_project(engine),
+            pointer=pointer,
+            title="t",
+            body="b",
+            author=WorkItemAuthor.user("usr_1"),
+            routine_name="gardening",
+            scope_slug="blizzard",
+            run_mode="full",
+            at=_NOW,
+            chunk=colliding_chunk,
+        )
+
+    assert items.get("hub", pointer.ref) is None
+    collided = chunks.facts.load_facts("ch_collide")
+    assert collided is not None
+    assert not collided.promoted
+    assert run_context.for_chunk(colliding_chunk) is None

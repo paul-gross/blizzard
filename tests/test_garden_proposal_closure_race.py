@@ -3,7 +3,7 @@ proposal (component tier). Both sides gate on
 ``garden_proposal_closures`` — a table neither one's own row-write otherwise touches —
 so a bare check-then-act would race a concurrent commit landing in the gap. Proves the
 portable no-op-``UPDATE`` lock ``next_route_seq`` uses for the same shape of hazard
-(``tests/test_route_seq_concurrency.py``) closes it here too."""
+(``tests/unit/hub/store/internal/test_chunk_rows_route_seq_concurrency.py``) closes it here too."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ _NOW = datetime(2026, 7, 16, tzinfo=UTC)
 class _CapturingConn:
     """A fake ``Connection`` recording every statement instead of running it, so the
     lock statement can be compiled against a dialect that never touches this process
-    (postgres) — the ``tests/test_route_seq_concurrency.py`` shape. It carries the scope
+    (postgres) — the ``tests/unit/hub/store/internal/test_chunk_rows_route_seq_concurrency.py`` shape. It carries the scope
     of a real scoped connection, which the statements recover their builders from."""
 
     def __init__(self, scoped: Connection) -> None:

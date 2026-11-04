@@ -1,0 +1,298 @@
+"""``GraphStore``'s narrow projections — ``load_graph_summaries``, ``load_node_names``,
+``list_summaries``, and ``graph_id_of_enabled_name`` (component tier).
+
+Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/``get_many``)
+across two minted graphs, one retired; the two batch methods are also proven correct
+across a lowered ``BATCH_SIZE`` boundary."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from sqlalchemy import Engine
+
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.store import batching as batching_module
+from blizzard.hub.domain.graph.model import Graph, Node
+from blizzard.hub.store.internal.graph_store import GraphStore
+from tests.support import count_queries, hub_store_connections, migrate_to
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _store(tmp_path: Path) -> tuple[GraphStore, Engine]:
+    _, engine = migrate_to(tmp_path, "head")
+    return GraphStore(hub_store_connections(engine)), engine
+
+
+def _node(node_id: str, name: str, *, graph_id: str) -> Node:
+    return Node(
+        node_id=node_id,
+        graph_id=graph_id,
+        name=name,
+        executor=Executor.RUNNER,
+        prompt="p",
+        checks=[],
+        produces=[],
+        session=SessionMode.FRESH,
+        judged_by=JudgedBy.WORKER,
+        retries_max=None,
+        retries_exhausted=None,
+    )
+
+
+def _mint(
+    store: GraphStore, graph_id: str, name: str, *, node_names: list[str] | None = None, created_at: datetime
+) -> Graph:
+    nodes = [_node(f"{graph_id}_nd_{i}", node_name, graph_id=graph_id) for i, node_name in enumerate(node_names or [])]
+    graph = Graph(
+        graph_id=graph_id,
+        name=name,
+        entry_node_id=nodes[0].node_id if nodes else "nd_missing",
+        nodes=nodes,
+        edges=[],
+        created_at=created_at,
+    )
+    store.mint(graph, definition_yaml="", at=created_at)
+    return graph
+
+
+# --- load_graph_summaries ------------------------------------------------------ #
+
+
+def test_load_graph_summaries_matches_get_across_two_graphs_including_a_retired_one(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    alpha = _mint(store, "gr_1", "alpha", created_at=_T0)
+    beta = _mint(store, "gr_2", "beta", created_at=_T0)
+    store.record_lifecycle(beta.graph_id, retired=True, at=_T0, by="op")
+
+    result = store.load_graph_summaries([alpha.graph_id, beta.graph_id, "gr_never_minted"])
+
+    # Graphs are immutable/insert-only — retirement does not exclude a graph here.
+    assert {gid: s.name for gid, s in result.items()} == {alpha.graph_id: alpha.name, beta.graph_id: beta.name}
+    for graph_id, summary in result.items():
+        loaded = store.get(graph_id)
+        assert loaded is not None
+        assert loaded.name == summary.name
+        assert loaded.entry_node_id == summary.entry_node_id
+        assert loaded.created_at == summary.created_at
+
+
+def test_load_graph_summaries_of_no_ids_is_empty(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    assert store.load_graph_summaries([]) == {}
+
+
+def test_load_graph_summaries_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, _ = _store(tmp_path)
+    graphs = [_mint(store, f"gr_batch_{i}", f"name_{i}", created_at=_T0) for i in range(7)]
+
+    result = store.load_graph_summaries([g.graph_id for g in graphs])
+
+    assert {gid: s.name for gid, s in result.items()} == {g.graph_id: g.name for g in graphs}
+
+
+# --- load_node_names ----------------------------------------------------------- #
+
+
+def test_load_node_names_matches_node_by_id_across_two_graphs(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    alpha = _mint(store, "gr_1", "alpha", node_names=["build", "review"], created_at=_T0)
+    beta = _mint(store, "gr_2", "beta", node_names=["deploy"], created_at=_T0)
+
+    result = store.load_node_names([alpha.graph_id, beta.graph_id])
+
+    assert result == {
+        alpha.graph_id: {n.node_id: n.name for n in alpha.nodes},
+        beta.graph_id: {n.node_id: n.name for n in beta.nodes},
+    }
+    loaded_alpha = store.get(alpha.graph_id)
+    assert loaded_alpha is not None
+    for node in alpha.nodes:
+        found = loaded_alpha.node_by_id(node.node_id)
+        assert found is not None
+        assert found.name == result[alpha.graph_id][node.node_id]
+
+
+def test_load_node_names_keys_a_shared_node_id_per_graph_so_the_wrong_graph_misses(tmp_path: Path) -> None:
+    """A node id looked up against a graph that doesn't hold it must not fall back to
+    another graph's node of the same id."""
+    store, _ = _store(tmp_path)
+    alpha = _mint(store, "gr_1", "alpha", node_names=["build"], created_at=_T0)
+    beta = _mint(store, "gr_2", "beta", node_names=["deploy"], created_at=_T0)
+
+    result = store.load_node_names([alpha.graph_id, beta.graph_id])
+
+    assert result[alpha.graph_id][alpha.nodes[0].node_id] == "build"
+    assert result[beta.graph_id].get(alpha.nodes[0].node_id) is None
+
+
+def test_load_node_names_of_no_ids_is_empty(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    assert store.load_node_names([]) == {}
+
+
+def test_load_node_names_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, _ = _store(tmp_path)
+    graphs = [_mint(store, f"gr_batch_{i}", f"name_{i}", node_names=[f"node_{i}"], created_at=_T0) for i in range(7)]
+
+    result = store.load_node_names([g.graph_id for g in graphs])
+
+    assert result == {g.graph_id: {g.nodes[0].node_id: g.nodes[0].name} for g in graphs}
+
+
+# --- list_summaries ------------------------------------------------------------- #
+
+
+def test_list_summaries_agrees_with_get_many_newest_first(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _mint(store, "gr_1", "alpha", created_at=_T0)
+    _mint(store, "gr_2", "beta", created_at=_T0.replace(hour=1))
+
+    summaries = store.list_summaries()
+    assert [s.graph_id for s in summaries] == ["gr_2", "gr_1"]
+
+    graphs = store.get_many([s.graph_id for s in summaries])
+    for summary in summaries:
+        graph = graphs[summary.graph_id]
+        assert summary.name == graph.name
+        assert summary.entry_node_id == graph.entry_node_id
+        assert summary.created_at == graph.created_at
+
+
+# --- _reify choice batching ------------------------------------------------------ #
+
+
+def test_reify_returns_equal_choices_and_its_query_count_does_not_grow_with_node_count(tmp_path: Path) -> None:
+    """``get``'s reification batches its ``graph_choices`` read across every node id —
+    proves both that ``get`` still returns the same choices and that its query count
+    stays flat as node count grows."""
+    store, engine = _store(tmp_path)
+    few = _mint(store, "gr_few", "few", node_names=["a", "b"], created_at=_T0)
+    many = _mint(store, "gr_many", "many", node_names=[f"n{i}" for i in range(8)], created_at=_T0)
+
+    few_count = count_queries(engine, lambda: store.get(few.graph_id))
+    many_count = count_queries(engine, lambda: store.get(many.graph_id))
+    assert few_count == many_count
+
+    reloaded = store.get(many.graph_id)
+    assert reloaded is not None
+    assert [n.node_id for n in reloaded.nodes] == [n.node_id for n in many.nodes]
+    reloaded_by_id = {n.node_id: n for n in reloaded.nodes}
+    assert all(reloaded_by_id[n.node_id].choices == n.choices for n in many.nodes)
+
+
+# --- graph_id_of_enabled_name ---------------------------------------------------- #
+
+
+def test_graph_id_of_enabled_name_matches_get_enabled_by_name(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _mint(store, "gr_old", "shared", created_at=_T0)
+    new = _mint(store, "gr_new", "shared", created_at=_T0.replace(hour=1))
+
+    assert store.graph_id_of_enabled_name("shared") == new.graph_id
+    enabled = store.get_enabled_by_name("shared")
+    assert enabled is not None
+    assert enabled.graph_id == new.graph_id
+
+
+def test_graph_id_of_enabled_name_skips_a_retired_newest_mint_and_returns_the_next_newest_live_one(
+    tmp_path: Path,
+) -> None:
+    store, _ = _store(tmp_path)
+    old = _mint(store, "gr_old", "shared", created_at=_T0)
+    new = _mint(store, "gr_new", "shared", created_at=_T0.replace(hour=1))
+    store.record_lifecycle(new.graph_id, retired=True, at=_T0, by="op")
+
+    assert store.graph_id_of_enabled_name("shared") == old.graph_id
+    enabled = store.get_enabled_by_name("shared")
+    assert enabled is not None
+    assert enabled.graph_id == old.graph_id
+
+
+def test_graph_id_of_enabled_name_is_none_when_every_mint_of_the_name_is_retired(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    only = _mint(store, "gr_1", "shared", created_at=_T0)
+    store.record_lifecycle(only.graph_id, retired=True, at=_T0, by="op")
+
+    assert store.graph_id_of_enabled_name("shared") is None
+    assert store.get_enabled_by_name("shared") is None
+
+
+def test_graph_id_of_enabled_name_is_none_for_a_name_never_minted(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    assert store.graph_id_of_enabled_name("ghost") is None
+
+
+def test_get_enabled_by_name_query_count_does_not_grow_with_retired_newer_mint_count(tmp_path: Path) -> None:
+    """The retirement filter reads its own candidates in one batched query, not one
+    ``_is_retired`` call per candidate — a name with many retired mints newer than its
+    enabled one must not cost more queries than a name with few."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few_store, few_engine = _store(tmp_path / "few")
+    many_store, many_engine = _store(tmp_path / "many")
+
+    few_old = _mint(few_store, "gr_old", "shared", created_at=_T0)
+    for i in range(2):
+        newer = _mint(few_store, f"gr_newer_{i}", "shared", created_at=_T0.replace(hour=1 + i))
+        few_store.record_lifecycle(newer.graph_id, retired=True, at=_T0, by="op")
+
+    many_old = _mint(many_store, "gr_old", "shared", created_at=_T0)
+    for i in range(20):
+        newer = _mint(many_store, f"gr_newer_{i}", "shared", created_at=_T0.replace(hour=1 + i))
+        many_store.record_lifecycle(newer.graph_id, retired=True, at=_T0, by="op")
+
+    few_count = count_queries(few_engine, lambda: few_store.get_enabled_by_name("shared"))
+    many_count = count_queries(many_engine, lambda: many_store.get_enabled_by_name("shared"))
+    assert few_count == many_count
+
+    few_id_count = count_queries(few_engine, lambda: few_store.graph_id_of_enabled_name("shared"))
+    many_id_count = count_queries(many_engine, lambda: many_store.graph_id_of_enabled_name("shared"))
+    assert few_id_count == many_id_count
+
+    few_enabled = few_store.get_enabled_by_name("shared")
+    many_enabled = many_store.get_enabled_by_name("shared")
+    assert few_enabled is not None and few_enabled.graph_id == few_old.graph_id
+    assert many_enabled is not None and many_enabled.graph_id == many_old.graph_id
+    assert few_store.graph_id_of_enabled_name("shared") == few_old.graph_id
+    assert many_store.graph_id_of_enabled_name("shared") == many_old.graph_id
+
+
+# --- executors_by_node_name ---------------------------------------------------- #
+
+
+def _mint_hub_node(store: GraphStore, graph_id: str, name: str, node_name: str) -> None:
+    node = replace(_node(f"{graph_id}_nd_0", node_name, graph_id=graph_id), executor=Executor.HUB)
+    graph = Graph(graph_id=graph_id, name=name, entry_node_id=node.node_id, nodes=[node], edges=[], created_at=_T0)
+    store.mint(graph, definition_yaml="", at=_T0)
+
+
+def test_executors_by_node_name_spans_non_retired_graphs_and_ignores_retired_ones(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _mint(store, "gr_1", "alpha", node_names=["build", "shared"], created_at=_T0)
+    _mint_hub_node(store, "gr_2", "beta", "deliver")
+    _mint_hub_node(store, "gr_3", "gamma", "shared")
+    retired = _mint(store, "gr_4", "delta", node_names=["retired-only"], created_at=_T0)
+    store.record_lifecycle(retired.graph_id, retired=True, at=_T0, by="op")
+
+    found = store.executors_by_node_name()
+
+    assert found == {
+        "build": frozenset({Executor.RUNNER}),
+        "deliver": frozenset({Executor.HUB}),
+        "shared": frozenset({Executor.RUNNER, Executor.HUB}),
+    }
+
+
+def test_executors_by_node_name_is_one_statement(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    for i in range(3):
+        _mint(store, f"gr_{i}", f"g{i}", node_names=["a", "b"], created_at=_T0)
+
+    assert count_queries(engine, store.executors_by_node_name) == 1

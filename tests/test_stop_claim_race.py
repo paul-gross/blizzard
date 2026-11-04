@@ -1,6 +1,6 @@
 """The stop/claim race is atomic (component tier).
 
-Mirrors ``tests/test_delete_claim_race.py``'s own interleaving pattern: ``StopService``
+Mirrors ``tests/component/hub/api/test_chunks_delete_claim_race.py``'s own interleaving pattern: ``StopService``
 takes the row lock as the first statement of its own write (``bzh:store-exclusive-write``),
 before it releases any live route — a claim landing on the same chunk can't interleave
 with that check-then-act."""

@@ -225,7 +225,7 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) ->
 
 class _CountingFactsStore(ChunkFactsStore):
     """Counts calls to the bulk and per-chunk facts reads, so a test can pin which shape
-    `list_chunks` actually reaches — mirrors `test_load_all_facts_store`'s own
+    `list_chunks` actually reaches — mirrors `test_chunk_facts_store_load_all_facts`'s own
     `_CountingFactsStore`."""
 
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
@@ -513,7 +513,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     live_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
     make_ready(hub, live_holder_id)
 
-    # (b) a separate dependent/prerequisite pair (the `tests/test_blocked_marking_api.py` shape).
+    # (b) a separate dependent/prerequisite pair (the `tests/component/hub/api/test_chunks_blocked_marking.py` shape).
     hub.clock.advance(timedelta(seconds=1))
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
     hub.clock.advance(timedelta(seconds=1))

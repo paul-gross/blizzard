@@ -2,7 +2,7 @@
 refused, an already-closed proposal refuses either verb naming it, and a declining
 accept records `declined` without touching ``WorkItemEditService``. The
 accept-with-mint path is component-tested against a real store instead
-(``tests/test_garden_proposal_closure_store.py``, ``…_api.py``)."""
+(``tests/component/hub/store/internal/test_garden_proposal_closure_store.py``, ``…_api.py``)."""
 
 from __future__ import annotations
 
