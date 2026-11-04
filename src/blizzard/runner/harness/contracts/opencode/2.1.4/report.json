@@ -1,0 +1,433 @@
+{
+  "admissible": true,
+  "admitted_range": ">=2.0,<3.0",
+  "classification": "degraded",
+  "declared_degradations": [
+    {
+      "row": "permission_rules",
+      "summary": "a subagent takes its agent's configured permissions until the driver applies the session's rules to it"
+    },
+    {
+      "row": "session_environment",
+      "summary": "a subagent's tools run without the lease's environment or identity, which the driver never applies to a child"
+    }
+  ],
+  "observed_version": "2.1.4",
+  "rows": [
+    {
+      "classification": "supported",
+      "evidence": [
+        "managed_service"
+      ],
+      "facts": {
+        "already_running": true,
+        "info_matches_registration": true,
+        "registered": true,
+        "start_exit_code": 0,
+        "start_returned": true,
+        "status_exit_code": 0
+      },
+      "name": "managed_service",
+      "state": "observed",
+      "summary": "`service start` returned at once, the service registered itself, and this client found it through the registration and authenticated with its password"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "caller_named_session"
+      ],
+      "facts": {
+        "children": 0,
+        "id": true,
+        "metadata": true,
+        "model_variant": true
+      },
+      "name": "caller_named_session",
+      "state": "observed",
+      "summary": "a runner-minted id, location, model with variant, rules, and metadata read back unchanged"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "environment_root_messages",
+        "environment_child_messages"
+      ],
+      "facts": {
+        "child_inherits": false,
+        "child_ran": true,
+        "invisible_to_other_session": true,
+        "reaches_shell": true,
+        "replaces": true
+      },
+      "name": "session_environment",
+      "state": "observed",
+      "summary": "the environment reaches shell tools, replaces rather than merges, and no other session sees it; a child does not inherit it"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "prompt_messages"
+      ],
+      "facts": {
+        "settled_by_polling": true,
+        "verbatim": true
+      },
+      "name": "prompt_and_completion",
+      "state": "observed",
+      "summary": "a prompt with newlines and quotes reached the model verbatim, and the settled tree was observed by polling alone with no event stream open"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "restart_messages"
+      ],
+      "facts": {
+        "environment_survived": false,
+        "identity_changed": true,
+        "interrupted_tool_marked": true,
+        "prompted_after": true,
+        "recognized_by_identity": true,
+        "restart_exit_code": 0,
+        "service_resumed_turn": false
+      },
+      "name": "service_restart",
+      "state": "observed",
+      "summary": "a restart changed the registration id and pid, the driver core recognized it by identity, the service did not resume the turn, and the session was prompted normally afterward; its environment did not survive"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "concurrent_permission_requests",
+        "concurrent_denied_tool"
+      ],
+      "facts": {
+        "a_saw_own_env": true,
+        "ask_listed_under_a_only": true,
+        "b_denied_without_ending": true,
+        "b_saw_own_env": true,
+        "operator_saw_none": true
+      },
+      "name": "concurrent_sessions",
+      "state": "observed",
+      "summary": "two fleet sessions and an operator session ran at once with no environment, rule, or permission request crossing between them"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "interrupt_root_session",
+        "interrupt_root_messages"
+      ],
+      "facts": {
+        "child_outcomes": [
+          "interrupted"
+        ],
+        "child_tool_process_ended": true,
+        "parent_outcome": "interrupted",
+        "root_outcome": "interrupted",
+        "root_tool_process_ended": true
+      },
+      "name": "interrupt",
+      "state": "observed",
+      "summary": "an interrupt stopped a turn mid-tool, ended the tool's process, and recorded `interrupted`; interrupting a running child before its root settled both"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "judgement_messages"
+      ],
+      "facts": {
+        "choice": "pass",
+        "free_of_tool_output": true
+      },
+      "name": "judgement",
+      "state": "observed",
+      "summary": "a resumed session's final root assistant text carries `<Choice>` and the assessment, apart from tool output"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "steer_messages"
+      ],
+      "facts": {
+        "queue_started_turn": true,
+        "steer_landed": true
+      },
+      "name": "queue_and_steer",
+      "state": "observed",
+      "summary": "a `queue` prompt to an idle session started a turn, and a `steer` prompt to a running one landed at its next step boundary"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "usage_root_session",
+        "usage_child_sessions"
+      ],
+      "facts": {
+        "child_usage_separate": true,
+        "cost_nonzero": false,
+        "message_usage": true,
+        "model_and_variant_recorded": true,
+        "session_usage": true
+      },
+      "name": "usage_and_cost",
+      "state": "observed",
+      "summary": "session and message records carry tokens and cost, for the root and each child apart; cost was zero on this model"
+    },
+    {
+      "classification": "degraded",
+      "evidence": [
+        "model_listing"
+      ],
+      "name": "pricing",
+      "state": "absent",
+      "summary": "the model listing carries no prices for this model, so cost cannot be estimated when a step reports none; OpenCode withholds them for a model a subscription login covers"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "error_unknown_model",
+        "error_unknown_variant",
+        "error_shapes_from_source"
+      ],
+      "name": "errors_and_limits",
+      "state": "observed",
+      "summary": "unknown model and unknown variant fail live as `provider.no-route`; provider refusal, usage limit with its reset, and overload are distinguishable structured errors in 2.1.4's error mapping"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "permission_denied_parts",
+        "permission_deny_tool_messages"
+      ],
+      "facts": {
+        "mcp_rule_stored": true,
+        "rules_replaced_by_update": true,
+        "shell_pattern_denied": true,
+        "tool_withheld": true,
+        "turn_continued": true
+      },
+      "name": "permission_rules",
+      "state": "observed",
+      "summary": "a shell-pattern deny failed its call with `permission.rejected` and the turn went on; a tool denied for every resource, as an MCP server's tools are, is withheld from the model and never runs; an update replaces a session's rules"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "permission_request",
+        "form_request"
+      ],
+      "facts": {
+        "ask_waited": true,
+        "form_pending_until_cancelled": true,
+        "once_took_effect": true,
+        "reject_held": true
+      },
+      "name": "permission_requests",
+      "state": "observed",
+      "summary": "an `ask` raised a request that held the turn until `session.permission.reply` answered it, each reply took effect, and a form waited until it was cancelled"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "events"
+      ],
+      "facts": {
+        "child": 22,
+        "session_events": 52,
+        "tagged": 52
+      },
+      "name": "events",
+      "state": "observed",
+      "summary": "every `session.*` event carries its session id, for the root and its child alike"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "child_spawn_parts",
+        "child_sessions",
+        "background_root_messages"
+      ],
+      "facts": {
+        "background_woke_root": true,
+        "id_on_tool_part": true,
+        "parent_id": true
+      },
+      "name": "child_agents",
+      "state": "observed",
+      "summary": "a `subagent` call created a child whose `parentID` is the root and whose id the spawning tool part records; a finished background child woke its root through the inbox"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "transcript_live",
+        "transcript_after"
+      ],
+      "facts": {
+        "desc_reverses_asc": true,
+        "ids_stable": true,
+        "reread_completed": true,
+        "tool_states_seen_live": [
+          "running"
+        ]
+      },
+      "name": "transcript_read",
+      "state": "observed",
+      "summary": "messages read in order live and after completion keep their ids, and an in-progress message read again by id is complete; tool states seen live: running"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "compaction_messages"
+      ],
+      "name": "compaction",
+      "state": "observed",
+      "summary": "a requested compaction produced a `compaction` message distinct from retained history"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "model_session"
+      ],
+      "facts": {
+        "assistant_models": [
+          {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          }
+        ],
+        "listing_names_variant": true,
+        "session_model": {
+          "id": "gpt-6-luna",
+          "providerID": "openai",
+          "variant": "high"
+        }
+      },
+      "name": "model_and_variant",
+      "state": "observed",
+      "summary": "the model and variant held across fresh mint, resume, and judgement, and the listing names the variant"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "takeover_messages"
+      ],
+      "facts": {
+        "answered": true,
+        "prompt_recorded": true,
+        "switches": [
+          "agent-switched"
+        ]
+      },
+      "name": "takeover",
+      "state": "observed",
+      "summary": "`opencode --session <id>` opened the session after its rules were replaced and continued it on the same session; it recorded agent-switched"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "version",
+        "service_info"
+      ],
+      "name": "version",
+      "state": "observed",
+      "summary": "`--version` normalizes to 2.1.4 and `GET /api/info` reports the same"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "store_migration"
+      ],
+      "facts": {
+        "added_tables": [
+          "instruction_blob",
+          "instruction_entry",
+          "instruction_state",
+          "kv",
+          "session_inbox",
+          "session_pending",
+          "session_v2",
+          "worktree"
+        ],
+        "counts_after": {
+          "account": 0,
+          "account_state": 0,
+          "control_account": 0,
+          "credential": 0,
+          "event": 0,
+          "event_sequence": 1,
+          "instruction_blob": 0,
+          "instruction_entry": 0,
+          "instruction_state": 0,
+          "kv": 1,
+          "message": 2,
+          "migration": 50,
+          "part": 4,
+          "permission": 0,
+          "project": 1,
+          "project_directory": 0,
+          "session": 1,
+          "session_inbox": 0,
+          "session_message": 0,
+          "session_pending": 0,
+          "session_share": 0,
+          "session_v2": 0,
+          "todo": 0,
+          "workspace": 0,
+          "worktree": 0
+        },
+        "counts_before": {
+          "account": 0,
+          "account_state": 0,
+          "control_account": 0,
+          "credential": 0,
+          "data_migration": 0,
+          "event": 16,
+          "event_sequence": 1,
+          "message": 2,
+          "migration": 38,
+          "part": 4,
+          "permission": 0,
+          "project": 1,
+          "project_directory": 0,
+          "session": 1,
+          "session_context_epoch": 0,
+          "session_input": 0,
+          "session_message": 0,
+          "session_share": 0,
+          "todo": 0,
+          "workspace": 0
+        },
+        "dropped_tables": [
+          "data_migration",
+          "session_context_epoch",
+          "session_input"
+        ],
+        "opencode1_exports_after": true,
+        "opencode1_lists_after": true,
+        "opencode1_version": "1.18.33",
+        "opened_exit_code": 0,
+        "same_file": true,
+        "signal": {
+          "migration.v1-v2": {
+            "phase": "sessions"
+          }
+        },
+        "v1_tables_unchanged": true
+      },
+      "name": "store_migration",
+      "state": "observed",
+      "summary": "OpenCode 2 migrated the 1.18.33 store in place and marked it with `kv` `migration.v1-v2`; OpenCode 1 still lists and exports it"
+    }
+  ]
+}

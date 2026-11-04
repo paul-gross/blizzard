@@ -1,0 +1,226 @@
+[
+  {
+    "id": "msg_1a3e9987a001D1RakYCITfvu8d",
+    "text": "Use the subagent tool exactly once, with background set to true, to launch a `general` subagent whose instructions are: use the shell tool exactly once to run `sleep 8; echo BACKGROUND-DONE` and report its output. Do not wait for it; reply STARTED immediately.",
+    "time": {
+      "created": 1793751357584
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "rs_0f5965062425c97b016aea793e7ff887d28e573f1d5eccd1e8",
+          "reasoningEncryptedContent": "gAAAAABq6nlAzG_jEH7o2V0an7doC0blZJ2-BkAnHvVUFDZSfCdVOQ79e45ApGAOzFceeBzGXZqNVv73DjIH-fXgf8Sq5xMQYyiF2FklXSPp2VwARVpEK1G9szZb7iPmz-OGlwLbURJsfz4Fxclk8AY4WAHgZload3-XQJHuTXbHdUzSL1YSvSzLEN2ptSgCwt81pHU5PnIbBuUUT90Ee0CPjRB0jGD_AwaKgtJ_wvcz9Gsdcv8yPcyIepPc1rSlxRGioGwmdqHOtmnhMYAhJFCkbNMTRW574PL13Xd8EyaOfS5_RiuoTy072snVYownhVJQXQntZMKEExjds33wgWnvZp-RPvaGjJAu2PYs7JSzEG3b-ShNVVngbyaRjUUuedLS-y2Ue5ITk-wfDYadpSZbrSR8QZQHX51f2UcKeBUutGJTIIHkBrJgwEgUhsrwARyL8ou7pqsv_kGgE1mHrmDfJp1TmemfWVvx7f3ul5IygRAFR-F9bYt70FgHibVyKCAp7s8c8dcMONM7LY_29udvKIQgIJoW3nPHlt34KmN-znnqRm1hOxzYXcHhqwMZtrGKXIq0I5D9rVWqn25Io8r6L1PSAn5GEUUVSwP5OovGg6Iw_LnII5zwmx6I-nTMZCU0UM_8xfAugzeEwgP_4-Jt4yTAJF9QTAPkFEYSG6PlIhUWTUlsVflu6ZxYAvsMPtoA2TE3_a8JDdwzhktlWvHORUFQFOL1qKfN1LMKXk3ryqxvw94d0bzG9fqgm8IZ2hxdQNYSOwl9w08tf_zwxOJ_x9yv_fMFyDpX520w8GtmXj1aDG_HKLzUf_BRbUjSi1Hi_hAPFxGNyF7u5VMC6p2NMLPg8Lu8fkecwUrxz0vuiohZQg5RQZgVoQnUU2eFxchdDm4PR5i5UKaquQQrtfnYDwn4oH9pqiDiUmnPYWNAqzHDdeiEcI2r-qj5G8Hv9_mRFuX-R5l5qYbMCaWwVbir7xHxDdgGjG2twAceWfVpVy_5QRDkrFugtnoFqyDinmlmmQXJ_4a1lSpP_TcyGTKl2XO8XHBtIhUppuwrEW1-tlxf8lYq7cFofk0m4p8zckeG3o3p6ciZII0aE3iiOyNN1UpgkSYKr7w_zgwhG6Nj4J3WRHIVlxG0eT03zojC1DRxxBSbifDKOfU4oH3sEzZj2efCWfTXOr0_ZckjXPn5y5EBl1rndconbOliPjUAIYpfKtE8Hd2yStokznd88z2uGCtdQMolVVYqNI-h_lWVkKPEC1Wv7HoaKIk-3KzEe3YyCygKTA9MllqWOh4znvhG8yx0DxVDL_15MCy2ULpRk2JsVpr79gvZQ34urW1Olx8SXn-3ZP1-UTDDRog0J_K4vdW_bWDo2Bh4K2cdICy_UhnUc4dFfybDGMerdtULb8kWcg8JsvZZHshBisFUgPAA0bbPkh5jLBT1OVcakud85b_aaJ22iJc5PDQPnwpGDt76hrrp-LvqOJYJ-fp0wwG2S5d_CMW8IktW-57TsGgms97r_vka_Vr-kievYVJQ-Uz5zIdGyr7vX7EsqO96fjtrsEppaIKMNEWMQxgKUbxP3ItelnqF5MbPQX_ocnIJKLrqUVvjnuAi4rR-sGzyGoALwjLxsjmgFsP_FBcO-6G7I0CnMEw4NY9QUGZt0u1OzqaG7CidhuU99lCvZ4-NIVHvqwR3dKOdIR7JoZLe4rp3lk0YnKBGs417ZqQE0QsZM8Wx79YhLtcX3gFP-R7CF0qNxZy9Is8C3CHoSghP8fKuV55uXgS0nVEpg5C1qxG_0UBF3XYegt8K"
+        },
+        "text": "",
+        "time": {
+          "completed": 1793751360524,
+          "created": 1793751358583
+        },
+        "type": "reasoning"
+      },
+      {
+        "executed": false,
+        "id": "call_45104e43561845e0957c7a3b3af73088",
+        "name": "subagent",
+        "native": {
+          "itemId": "fc_0f5965062425c97b016aea79406bf087d2989346f9ee03102a"
+        },
+        "state": {
+          "content": [
+            {
+              "text": "The subagent is working in the background (sessionID: ses_e5c165bcdffe8XwaKjU1amIBx6). You will be notified automatically when it finishes.\nDO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.\nWork on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+              "type": "text"
+            }
+          ],
+          "input": {
+            "agent": "general",
+            "background": true,
+            "description": "Run background shell once",
+            "prompt": "Use the shell tool exactly once to run `sleep 8; echo BACKGROUND-DONE` and report its output."
+          },
+          "metadata": {
+            "sessionID": "ses_e5c165bcdffe8XwaKjU1amIBx6",
+            "status": "running",
+            "truncated": false
+          },
+          "status": "completed"
+        },
+        "time": {
+          "completed": 1793751360594,
+          "created": 1793751360530,
+          "ran": 1793751360547
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3e9989c00124i2R3Kp8XbKut",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_0f5965062425c97b016aea793e1e4487d29d7d41d099c91499",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751360663,
+      "created": 1793751357614,
+      "streamed": 1793751360555
+    },
+    "tokens": {
+      "cache": {
+        "read": 0,
+        "write": 0
+      },
+      "input": 6593,
+      "output": 57,
+      "reasoning": 21
+    },
+    "type": "assistant"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_0f5965062425c97b016aea79412d9887d2950c18108f1be830",
+          "phase": "final_answer"
+        },
+        "text": "STARTED",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e9a4a6001zmrEx5oGxHt3RM",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_0f5965062425c97b016aea7940ea9087d28536dc98a940c5e7",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751361281,
+      "created": 1793751360689,
+      "streamed": 1793751361270
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 378,
+      "output": 6,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e9a709001CtmGXyJ8qh3BR8",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751361289
+    },
+    "type": "idle"
+  },
+  {
+    "description": "Run background shell once",
+    "id": "msg_1a3e9a451001gd2n7CMMeZaQIn",
+    "metadata": {
+      "agent": "General",
+      "childID": "ses_e5c165bcdffe8XwaKjU1amIBx6",
+      "source": "subagent",
+      "state": "completed"
+    },
+    "text": "<subagent sessionID=\"ses_e5c165bcdffe8XwaKjU1amIBx6\" state=\"completed\" description=\"Run background shell once\">\nBACKGROUND-DONE\n</subagent>",
+    "time": {
+      "created": 1793751371040
+    },
+    "type": "synthetic"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "rs_0f5965062425c97b016aea794baf8887d2ac902dc9770241ef",
+          "reasoningEncryptedContent": "gAAAAABq6nlOMQ7faihvZGR4a4qMmt8NQwbTxthoEN_VuUNF0w8VIwG3cQ3y8zStIOyh4ovzzKcOEQvMBoWfbyTv1Qway10VM5RVggRJknz8R1kwC3vhhrlzkropFQEZuuzAvUrjAZzNWVts6DOgSWpsrFS-wJEaH_87e1xN4bNriOzpMeRjgKGPkXudXAJYwqQEhV-eCxhsT1P5lSVynQgz2TKZIui0Bw3uPMflIKMx_RnKa8VSJRLZUtG0jLpCnw_WqRji5PfQvuLSLASRjuADJVIUohbTs9v4NMWbnrpl4uQg9VK525x_PO4J4h01VspIAyr9ZGMAiZJyrwZI7xIO28kucKcIH4sPSn12v2IC_Xoj5f0tihZFPL8BIyQeZGuaqihsbPKPrEuodWuRvc78iNMsbzmEuY9eOpl3iJskNt3KOkOR1yGHzt1FKBsy85iLcY3S-9x25qMDldtiRIsrVKxrNqWlFmvfC6gDDxhpaHPH6aXOr-90eceNsjPEFvoHRtLVk3gwTAmHg4tFkltBm6noHsiqomRN0KmPT0pPcPNKvdt_pFoMBC6px9no3n8VqbM74Bzz8raySO28L9to5yTAzDxF3SukfDgw-eNJy0buccTIjtWZ_EdmZHuSWSgr8GoHy7F5btWjU7GaPJcVZHALwNui4sE5FzASTEDX_yXfDK03uKD1oP9YL6EI41vN_LfKvnq9ryVeatbftSu33e5e9HjSqbJNw_bjfV9MSilrY2yPq8ZB_f7B61Bvb7d29_hC7U6elMwAxM_8XT5EXu7IILj_GB1k4tfMMN8gdv-nxNJ9JbCNbkZOAGuVJ8C8r5J6coLnhpAdZ1IGKSJQoFC67q6K8UiZSP9kPwdeg-8WRJVe2mhX_Ez4VdusgCSOQIlFM9j5n19QApgUyeSVzqss_50TfufkLyCM_MoyPGjLduii6gNxjYWlfHHx7o04sJ6t7aHYxXLWs15HbiRQN_H3L7nD97nbSOvMkFvCPCr5jor_ZXa4ZWhLty_P0yZGZ0J0sb24OdPan3HDgkac2BA6SLKbdHQIyavHrf87t-LzK9ypj_jFTsIsDhgvT2P3vHvEQ6vl8svLWBvj9r1XIeF4XyY5WMtk_fHTMJhYEGZ7KuK46IJe6HdCna1NjEKWXNht42J6B6AGBkOgZWoIOekJfVpo_WoIKXij_hcexbfee7KBKv4a7TF1KxfI4r0BL6ETF0RkKNgLdCWdscWW30Baxp_VcI6nu2EQzV5ShH6XVzNAo3m3gguxvzl_59sDpi0L5BDMpByxpifMDmbKtkHqUEQvknjgysWr0XA76aX-8sZgC0s3TW1EcvvPv3PX7z3J3zm2v_Trk1HX7pSrzWH_1W50wAeEHGhRqwCd6cKKP1JdTb-r2Ut0_OgFdGtp20DFasxTHHg1dOh9vIM2W5oMvHufPyemKbnGpQJgwOj6D1yWKw8Vsg8Kso_F0YxWc6sCqu_gpm6JPOoN9CLFITkhPYKKNuea8G7fACof3D7Dq8OvhXCzgkoOcmjRMlJ4Q3ZP6-ANJ3_QfjJsn9aIGK-BA5bDEz9Jm8VXYZVXFRpd9GkN3sDd4flIkRMfrD40M58q-XStajckudtfYDCjkOUc5-3-aVbRV02DEle3l1nfuF40ovim5FIvYhqmlSzS0bBOLUCrfdCX7VWWeHGWSSAZrYbZh-S3VoChlhodJNKCYMxoXtNN0VXMiwQyDOWyoi6BBfpwqfJdoJ-hNI6sNIAVOG_XR201_a2Dqjd8hHCPU6JmfyYvjLe-eFh_O-poBOm93uRC58cBe2F1Ch-_-1DuC1VnYQ=="
+        },
+        "text": "",
+        "time": {
+          "completed": 1793751374246,
+          "created": 1793751371791
+        },
+        "type": "reasoning"
+      },
+      {
+        "native": {
+          "itemId": "msg_0f5965062425c97b016aea794e27e487d2a10c4d07e38e8c73",
+          "phase": "final_answer"
+        },
+        "text": "BACKGROUND-DONE",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e9cd2c0015w7ZMjxtNODjH0",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_0f5965062425c97b016aea794b4a9487d2b68d5f9aaecef092",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751374282,
+      "created": 1793751371068,
+      "streamed": 1793751374266
+    },
+    "tokens": {
+      "cache": {
+        "read": 6656,
+        "write": 0
+      },
+      "input": 179,
+      "output": 9,
+      "reasoning": 22
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e9d9d1001CzPjqSoOqmQYhv",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751374289
+    },
+    "type": "idle"
+  }
+]

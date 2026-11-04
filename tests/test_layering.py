@@ -1508,7 +1508,9 @@ def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, impo
 
 #: The harness binding ids, in the catalog's order — the one roster every other binding list derives from.
 _HARNESS_IDS = tuple(kind.harness_id for kind in HARNESS_SECTION_KINDS)
-_ADAPTER_PACKAGES = _HARNESS_IDS
+#: The binding packages a harness id's binary version selects, beside the package named by that id.
+_VERSION_BINDING_PACKAGES = ("opencode_v2",)
+_ADAPTER_PACKAGES = (*_HARNESS_IDS, *_VERSION_BINDING_PACKAGES)
 _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
 _LINUX_PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "internal" / "linux_process_probe.py"
 
@@ -1931,7 +1933,8 @@ _DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
 _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
 
 #: The harness binding nodes: adapters, held to the framework imports only; a binding without a layer row fails the gate.
-_HARNESS_BINDING_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNESS_IDS)
+_HARNESS_BINDING_NODES = tuple(f"harness/{package}" for package in _ADAPTER_PACKAGES)
+_HARNESS_ID_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNESS_IDS)
 
 #: Runner module -> the stdlib driver packages admitted for it, each a reasoned exception; an entry that
 #: admits a package its module no longer imports is stale and fails the gate.
@@ -2919,7 +2922,8 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
     "harness/opencode": frozenset({"config_table", "harness", "node_steps", "process"}),
-    "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_BINDING_NODES}),
+    "harness/opencode_v2": frozenset({"harness", "process"}),
+    "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_ID_NODES}),
     "stores": frozenset(
         {
             "auth",

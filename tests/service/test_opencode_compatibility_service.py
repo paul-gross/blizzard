@@ -934,7 +934,7 @@ def test_cli_requires_explicit_live_provider_opt_in_and_prints_one_result_per_pr
     assert PROVIDER_SECRET not in result.output
 
 
-def test_version_mismatch_is_reported_as_blocking_and_exits_nonzero(tmp_path: Path) -> None:
+def test_a_version_outside_every_range_is_refused_before_any_probe_and_exits_nonzero(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
     evidence = tmp_path / "evidence"
     binary = _fake_binary(mock_opencode, tmp_path / "bin", version="1.18.24")
@@ -943,13 +943,10 @@ def test_version_mismatch_is_reported_as_blocking_and_exits_nonzero(tmp_path: Pa
 
     assert result.exit_code == 1
     assert "OpenCode version: 1.18.24" in result.output
-    assert result.output.count("compatibility: blocking") == 1
+    assert result.output.count("compatibility: blocking — outside every admitted range") == 1
     for probe in PROBE_ROSTER:
-        assert result.output.count(f"{probe.value}: ") == 1
-    report = json.loads((evidence / "report.json").read_text())
-    assert report["classification"] == "blocking"
-    assert report["complete"] is True
-    assert report["admissible"] is False
+        assert f"{probe.value}: " not in result.output
+    assert not evidence.exists()
 
 
 def test_permission_request_without_denial_exits_nonzero_and_retains_complete_report(tmp_path: Path) -> None:

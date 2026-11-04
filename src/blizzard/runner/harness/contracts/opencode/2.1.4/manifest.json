@@ -1,0 +1,331 @@
+{
+  "admitted_range": ">=2.0,<3.0",
+  "declared_degradations": [
+    {
+      "row": "permission_rules",
+      "summary": "a subagent takes its agent's configured permissions until the driver applies the session's rules to it"
+    },
+    {
+      "row": "session_environment",
+      "summary": "a subagent's tools run without the lease's environment or identity, which the driver never applies to a child"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "background_root_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "caller_named_session.json",
+      "source": "live"
+    },
+    {
+      "path": "child_sessions.json",
+      "source": "live"
+    },
+    {
+      "path": "child_spawn_parts.json",
+      "source": "live"
+    },
+    {
+      "path": "compaction_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "concurrent_denied_tool.json",
+      "source": "live"
+    },
+    {
+      "path": "concurrent_permission_requests.json",
+      "source": "live"
+    },
+    {
+      "path": "environment_child_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "environment_root_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "error_shapes_from_source.json",
+      "source": "source"
+    },
+    {
+      "path": "error_unknown_model.json",
+      "source": "live"
+    },
+    {
+      "path": "error_unknown_variant.json",
+      "source": "live"
+    },
+    {
+      "path": "error_usage_limit.json",
+      "source": "live"
+    },
+    {
+      "path": "events.json",
+      "source": "live"
+    },
+    {
+      "path": "form_request.json",
+      "source": "live"
+    },
+    {
+      "path": "interrupt_root_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "interrupt_root_session.json",
+      "source": "live"
+    },
+    {
+      "path": "judgement_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "managed_service.json",
+      "source": "live"
+    },
+    {
+      "path": "model_listing.json",
+      "source": "live"
+    },
+    {
+      "path": "model_session.json",
+      "source": "live"
+    },
+    {
+      "path": "permission_denied_parts.json",
+      "source": "live"
+    },
+    {
+      "path": "permission_deny_tool_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "permission_request.json",
+      "source": "live"
+    },
+    {
+      "path": "prompt_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "restart_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "service_info.json",
+      "source": "live"
+    },
+    {
+      "path": "steer_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "takeover_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "transcript_after.json",
+      "source": "live"
+    },
+    {
+      "path": "transcript_live.json",
+      "source": "live"
+    },
+    {
+      "path": "usage_child_sessions.json",
+      "source": "live"
+    },
+    {
+      "path": "usage_root_session.json",
+      "source": "live"
+    },
+    {
+      "path": "version.json",
+      "source": "live"
+    }
+  ],
+  "harness": "opencode",
+  "live_evidence": {
+    "admissible": true,
+    "classification": "degraded",
+    "sanitized": true,
+    "version": "2.1.4"
+  },
+  "major_version": 2,
+  "model": "openai/gpt-6-luna#high",
+  "rows": [
+    {
+      "classification": "supported",
+      "evidence": [
+        "managed_service"
+      ],
+      "name": "managed_service"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "caller_named_session"
+      ],
+      "name": "caller_named_session"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "environment_root_messages",
+        "environment_child_messages"
+      ],
+      "name": "session_environment"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "prompt_messages"
+      ],
+      "name": "prompt_and_completion"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "restart_messages"
+      ],
+      "name": "service_restart"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "concurrent_permission_requests",
+        "concurrent_denied_tool"
+      ],
+      "name": "concurrent_sessions"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "interrupt_root_session",
+        "interrupt_root_messages"
+      ],
+      "name": "interrupt"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "judgement_messages"
+      ],
+      "name": "judgement"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "steer_messages"
+      ],
+      "name": "queue_and_steer"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "usage_root_session",
+        "usage_child_sessions"
+      ],
+      "name": "usage_and_cost"
+    },
+    {
+      "classification": "degraded",
+      "evidence": [
+        "model_listing"
+      ],
+      "name": "pricing"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "error_unknown_model",
+        "error_unknown_variant",
+        "error_shapes_from_source",
+        "error_usage_limit"
+      ],
+      "name": "errors_and_limits"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "permission_denied_parts",
+        "permission_deny_tool_messages"
+      ],
+      "name": "permission_rules"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "permission_request",
+        "form_request"
+      ],
+      "name": "permission_requests"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "events"
+      ],
+      "name": "events"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "child_spawn_parts",
+        "child_sessions",
+        "background_root_messages"
+      ],
+      "name": "child_agents"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "transcript_live",
+        "transcript_after"
+      ],
+      "name": "transcript_read"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "compaction_messages"
+      ],
+      "name": "compaction"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "model_session"
+      ],
+      "name": "model_and_variant"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "takeover_messages"
+      ],
+      "name": "takeover"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "version",
+        "service_info"
+      ],
+      "name": "version"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "store_migration"
+      ],
+      "name": "store_migration"
+    }
+  ],
+  "sanitized": true,
+  "version": "2.1.4"
+}

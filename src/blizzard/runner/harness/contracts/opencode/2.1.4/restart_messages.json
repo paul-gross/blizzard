@@ -1,0 +1,95 @@
+[
+  {
+    "id": "msg_1a3eba290001L3I3iIM9GI9lFR",
+    "text": "Use the shell tool exactly once to run `sleep 20; echo RESTART-SURVIVED` and wait for it. Then reply DONE.",
+    "time": {
+      "created": 1793751491245
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "executed": false,
+        "id": "call_1c94b46c431a4e1d920d437c2af9f51e",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_05c076ac7ab90cdd016aea79c4897087d2af1fa578dcb08e2a"
+        },
+        "state": {
+          "error": {
+            "message": "Command cancelled",
+            "type": "unknown"
+          },
+          "input": {
+            "command": "sleep 20; echo RESTART-SURVIVED",
+            "timeout": 30000
+          },
+          "metadata": {
+            "shellID": "sh_1a3eba942001IqS5ABvdzPieJp"
+          },
+          "status": "error"
+        },
+        "time": {
+          "completed": 1793751493466,
+          "created": 1793751492622,
+          "ran": 1793751492927
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3eba2b9001gB7LSvfrrU9hVQ",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_05c076ac7ab90cdd016aea79c3ed0c87d29fb87515c2630b8a",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751493507,
+      "created": 1793751491279,
+      "streamed": 1793751492940
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 162,
+      "output": 32,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "description": "Continuing after restart",
+    "id": "msg_1a3ebad39001Hj99l3518t0MeY",
+    "metadata": {
+      "notice": "restart"
+    },
+    "text": "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+    "time": {
+      "created": 1793751493946
+    },
+    "type": "synthetic"
+  },
+  {
+    "id": "msg_1a3ebae3d001PvtitbGGdksmSp",
+    "outcome": "interrupted",
+    "time": {
+      "created": 1793751494205
+    },
+    "type": "idle"
+  }
+]

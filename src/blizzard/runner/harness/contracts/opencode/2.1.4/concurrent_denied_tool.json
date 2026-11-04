@@ -1,0 +1,26 @@
+[
+  {
+    "executed": false,
+    "id": "call_a96ca0de65704441ad43c1faae0d440c",
+    "name": "shell",
+    "native": {
+      "itemId": "fc_0c39e6a21163064f016aea78bb7ae087d2973f494a1d1f6f4f"
+    },
+    "state": {
+      "error": {
+        "message": "Permission denied: shell",
+        "type": "permission.rejected"
+      },
+      "input": {
+        "command": "touch proof-lane-$BLZ_PROOF_ENV"
+      },
+      "status": "error"
+    },
+    "time": {
+      "completed": 1793751227759,
+      "created": 1793751227502,
+      "ran": 1793751227751
+    },
+    "type": "tool"
+  }
+]

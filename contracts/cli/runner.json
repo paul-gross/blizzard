@@ -1100,7 +1100,7 @@
     "opencode": {
       "commands": {
         "compatibility": {
-          "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.",
+          "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.\n\nThe binary's major version selects the proof: OpenCode 1 runs in an isolated scratch home, OpenCode 2 on the\noperator's own managed service.",
           "params": [
             {
               "help": "Explicit OpenCode executable to probe.",
@@ -1162,16 +1162,40 @@
               "required": true,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "OpenCode 2 only: an OpenCode 1 executable that seeds the disposable store the migration row opens.",
+              "hidden": false,
+              "kind": "option",
+              "name": "opencode1_binary",
+              "opts": [
+                "--opencode1-binary"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "help": "OpenCode 2 only: the provider/model OpenCode 1 seeds that store with.",
+              "hidden": false,
+              "kind": "option",
+              "name": "opencode1_model",
+              "opts": [
+                "--opencode1-model"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner opencode compatibility",
           "short_help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."
         }
       },
-      "help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract.",
+      "help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version.",
       "params": [],
       "path": "runner opencode",
-      "short_help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract."
+      "short_help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version."
     },
     "pause": {
       "help": "Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub\nunreachable. Running workers are left alone \u2014 this is not a drain \u2014 but while paused a stalled worker is not\nkilled and an exhausted retry budget does not escalate. Separate from a pause set at the hub; each is cleared\nwhere it was set.",

@@ -1,0 +1,28 @@
+{
+  "denied_tool": {
+    "type": "permission.rejected"
+  },
+  "overload": {
+    "type": "provider.internal"
+  },
+  "provider_refusal": {
+    "type": "provider.content-filter"
+  },
+  "schema": "Session.StructuredError {type, message, status?, response?.body?, retryAfterMs?}",
+  "source": "opencode v2.1.4 packages/core/src/session/to-session-error.ts",
+  "unknown_model_or_variant": {
+    "type": "provider.no-route"
+  },
+  "usage_limit": [
+    {
+      "retryAfterMs": "the provider's reset, when it sends one",
+      "type": "provider.rate-limit"
+    },
+    {
+      "type": "provider.quota"
+    },
+    {
+      "type": "provider.free-limit"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+[
+  {
+    "agent": "general",
+    "cost": 0,
+    "id": "ses_e5c171a4effettEb6KdGaAa3f4",
+    "location": {
+      "directory": "<scratch>/repo"
+    },
+    "metadata": {
+      "blizzard": {
+        "proof": "compatibility",
+        "row": "usage",
+        "run": "df12f60f"
+      }
+    },
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "outcome": "succeeded",
+    "parentID": "ses_7ac87e51ae6a33cd2979cda5b0",
+    "permissions": [
+      {
+        "action": "question",
+        "effect": "deny",
+        "resource": "*"
+      }
+    ],
+    "projectID": "global",
+    "time": {
+      "created": 1793751311820,
+      "idle": 1793751314215,
+      "updated": 1793751314211
+    },
+    "title": "Run child env proof",
+    "tokens": {
+      "cache": {
+        "read": 12800,
+        "write": 0
+      },
+      "input": 373,
+      "output": 33,
+      "reasoning": 0
+    }
+  }
+]

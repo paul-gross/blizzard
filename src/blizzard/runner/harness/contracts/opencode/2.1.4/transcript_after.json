@@ -1,0 +1,132 @@
+[
+  {
+    "id": "msg_1a3e9db690015Qjb6wxKjvjmc8",
+    "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
+    "time": {
+      "created": 1793751374721
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "executed": false,
+        "id": "call_13b85373594d4a8ca2585903a3101cf5",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_0fbe0c605b8a1bfc016aea7950234c87d295b55be5f1efbb00"
+        },
+        "state": {
+          "content": [
+            {
+              "text": "SLEPT\n",
+              "type": "text"
+            }
+          ],
+          "input": {
+            "command": "echo $$ > proof-sleep.pid; sleep 40; echo SLEPT",
+            "timeout": 60000
+          },
+          "metadata": {
+            "exit": 0,
+            "status": "completed",
+            "truncated": false
+          },
+          "status": "completed"
+        },
+        "time": {
+          "completed": 1793751416677,
+          "created": 1793751376163,
+          "ran": 1793751376600
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3e9db8b0013LAQ5ieHMN2vRx",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_0fbe0c605b8a1bfc016aea794f48b087d2b0b812787d1deab4",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751416701,
+      "created": 1793751374747,
+      "streamed": 1793751376623
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 167,
+      "output": 37,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_0fbe0c605b8a1bfc016aea7979804c87d2950547aa61ecfc2e",
+          "phase": "final_answer"
+        },
+        "text": "DONE",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3ea7f99001Pj0tAw6mSGtI1X",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_0fbe0c605b8a1bfc016aea7979108087d2b6f965483aa3872d",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751417710,
+      "created": 1793751416752,
+      "streamed": 1793751417693
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 218,
+      "output": 5,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3ea83750010F1JqznfpScTGr",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751417717
+    },
+    "type": "idle"
+  }
+]
