@@ -1,7 +1,8 @@
 """Verify a hub-signed federation JWT.
 
 ``kid``-selected signature verification against the cached hub JWKS, ``aud == this runner_id``, a
-required ``exp`` with ±30s leeway (:meth:`FederatedIdentity.from_claims`), and a replayed ``jti``
+required ``exp`` and an optional ``iat``, each with ±30s leeway judged against the injected clock
+(:meth:`FederatedIdentity.from_claims`), and a replayed ``jti``
 refused via the store-backed single-use cache. Every failure collapses to one :class:`FederationTokenError`."""
 
 from __future__ import annotations
@@ -17,8 +18,8 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import IJwksCache
 
-#: The ±30s clock-skew leeway: applied to ``exp`` by :meth:`FederatedIdentity.from_claims`, and to
-#: ``iat``, harmlessly, by PyJWT's own ``leeway`` kwarg.
+#: The ±30s clock-skew leeway: applied to ``exp`` and ``iat`` by :meth:`FederatedIdentity.from_claims`,
+#: against the injected clock.
 CLOCK_SKEW_LEEWAY_SECONDS = 30
 
 #: The claims a federation token must carry; ``exp`` too, else its ``jti`` could replay unretained.
@@ -49,6 +50,12 @@ class FederatedIdentity:
             raise FederationTokenError("token is missing a required claim")
         if jti_retention(claims) <= now:
             raise FederationTokenError("token expired")
+        if "iat" in claims:
+            issued_at = claims["iat"]
+            if isinstance(issued_at, bool) or not isinstance(issued_at, int | float):
+                raise FederationTokenError("token issue time is not a timestamp")
+            if datetime.fromtimestamp(issued_at, tz=UTC) > now + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS):
+                raise FederationTokenError("token is not yet valid")
         email = claims.get("email")
         return cls(
             user_id=str(claims["sub"]),
@@ -95,8 +102,8 @@ class FederationToken:
                 algorithms=["RS256"],
                 audience=self.runner_id,
                 leeway=CLOCK_SKEW_LEEWAY_SECONDS,
-                # Expiry is judged against the injected clock by the model, not PyJWT's wall clock.
-                options={"verify_exp": False},
+                # Expiry and issue time are judged against the injected clock by the model, not PyJWT's wall clock.
+                options={"verify_exp": False, "verify_iat": False},
             )
         except jwt.PyJWTError as exc:
             raise FederationTokenError(f"token invalid: {exc}") from exc
