@@ -14,6 +14,7 @@ from click.testing import CliRunner
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.admission import classification_of_manifest
 from blizzard.runner.harness.compatibility import CompatibilityClassification, EvidenceState
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode_v2.compatibility.corpus import ProofEvidence, Sanitizer
 from blizzard.runner.harness.opencode_v2.compatibility.proof import final_assistant_text, part_error_type, tool_output
 from blizzard.runner.harness.opencode_v2.compatibility.rows import (
@@ -93,7 +94,7 @@ def test_the_report_takes_its_worst_row_and_blocks_an_unadmitted_version() -> No
 
 def test_the_sanitizer_redacts_secrets_credential_keys_and_host_paths() -> None:
     sanitizer = Sanitizer(secrets=("pw-123",), replacements=(("/home/op", "<home>"), ("/home/op/scratch", "<scratch>")))
-    value = {
+    value: JsonObject = {
         "url": "http://opencode:pw-123@127.0.0.1",
         "location": {"directory": "/home/op/scratch/repo"},
         "settings": {"apiKey": "sk-live"},
@@ -109,7 +110,7 @@ def test_the_sanitizer_redacts_secrets_credential_keys_and_host_paths() -> None:
 
 def test_the_evidence_writes_fixtures_a_manifest_and_routes_the_store_fixture_to_opencode1(tmp_path: Path) -> None:
     evidence = ProofEvidence(tmp_path / "out", Sanitizer(secrets=("pw",), replacements=()))
-    captures = {"events": [{"pw": "pw"}], "error_shapes_from_source": {}, "store_migration": {"signal": 1}}
+    captures: JsonObject = {"events": [{"pw": "pw"}], "error_shapes_from_source": {}, "store_migration": {"signal": 1}}
     evidence.write(_report(), captures, model="opencode/pulse#high")
     manifest = json.loads((tmp_path / "out" / "manifest.json").read_text())
     assert manifest["major_version"] == 2
@@ -140,10 +141,13 @@ def test_the_store_snapshot_reads_schema_counts_and_the_migration_signal(tmp_pat
 
 
 def test_part_readers_take_the_tool_output_error_type_and_final_text() -> None:
-    part = {"type": "tool", "state": {"content": [{"type": "text", "text": "out"}], "error": {"type": "x.y"}}}
+    part: JsonObject = {
+        "type": "tool",
+        "state": {"content": [{"type": "text", "text": "out"}], "error": {"type": "x.y"}},
+    }
     assert tool_output(part) == "out"
     assert part_error_type(part) == "x.y"
-    messages = [
+    messages: list[JsonObject] = [
         {"type": "assistant", "content": [{"type": "text", "text": "first"}]},
         {"type": "assistant", "content": [{"type": "reasoning", "text": "r"}, {"type": "text", "text": "last"}]},
     ]
