@@ -2,22 +2,19 @@ import { expect, stepChunkUntil, stepUntilHeld, test } from '../../harness/fixtu
 
 // The forge-status projection, end to end: a chunk's status shows on its forge issue as a label and clears when the chunk
 // leaves the live set, a label deleted by hand comes back, and a forge outage degrades to a recorded skip. Every pass of
-// the hub's `forge_status` sweep is stepped; the only clock waits are the two whose subject is the full-pass floor.
+// the hub's `forge_status` sweep is stepped; the waits whose subject is the full-pass floor advance the stack's clock
+// past it.
 
-const INTERVAL_SECONDS = 1n;
-/** The hub reads the forge afresh once this many intervals have gone by with nothing changed on the hub side. */
-const FLOOR_SECONDS = 5 * Number(INTERVAL_SECONDS);
-const FLOOR_DEADLINE_MS = (FLOOR_SECONDS + 25) * 1000;
+/**
+ * The hub reads the forge afresh once the full-pass floor has gone by with nothing changed on the hub side:
+ * `FULL_PASS_FLOOR_INTERVALS` (5) × `DEFAULT_ANNOTATION_INTERVAL_SECONDS` (120).
+ */
+const FLOOR_SECONDS = 600;
 
 test.describe('at fresh-hub', () => {
-  test.use({
-    isolation: 'fresh-hub',
-    hubConfig: async ({ hubConfig }, use) => {
-      await use({ ...hubConfig, annotation_interval_seconds: INTERVAL_SECONDS });
-    },
-  });
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
 
-  test('test_forge_status_projection_e2e', async ({ api, forge, issue, repository, runnerHost, workerCheckpoint }) => {
+  test('test_forge_status_projection_e2e', async ({ api, clock, forge, issue, repository, runnerHost, workerCheckpoint }) => {
     test.slow();
     const graph = JSON.stringify({
       name: 'default-delivery',
@@ -74,10 +71,8 @@ test.describe('at fresh-hub', () => {
     const deleted = await forge.call('DELETE', `/repos/${repo.owner}/${repo.name}/issues/${c.number}/labels/blizzard:ingested`);
     expect(deleted.status, JSON.stringify(deleted.body)).toBe(200);
     expect(await labels(c.number)).toEqual([]);
-    await expect.poll(() => swept(c.number), {
-      message: 'the full pass did not re-assert the hand-deleted label',
-      timeout: FLOOR_DEADLINE_MS,
-    }).toEqual(['blizzard:ingested']);
+    await clock.advance(FLOOR_SECONDS);
+    expect(await swept(c.number), 'the full pass did not re-assert the hand-deleted label').toEqual(['blizzard:ingested']);
 
     // -- a forge outage degrades to a recorded skip, and the projection re-converges --
     // The `unreachable` lever stands in for a process kill, which would also wipe the forge's state.
@@ -91,19 +86,17 @@ test.describe('at fresh-hub', () => {
     expect((await forge.call('POST', '/_levers/unreachable', {})).status).toBe(200);
     try {
       // Only a full pass reads the forge, so only one landing inside the outage records the skip.
-      await expect.poll(async () => {
-        await sweep();
-        const feed = (await api.get('/api/events')).body as { events: { kind: string; detail?: { work_source_id?: string } }[] };
-        return feed.events.some((event) => event.kind === 'forge-status-source-skipped' && event.detail?.work_source_id === sourceId);
-      }, { message: 'the sweep should have recorded a skip naming the source while the forge was unreachable', timeout: FLOOR_DEADLINE_MS }).toBe(true);
+      await clock.advance(FLOOR_SECONDS);
+      await sweep();
+      const feed = (await api.get('/api/events')).body as { events: { kind: string; detail?: { work_source_id?: string } }[] };
+      const skips = feed.events.filter((event) => event.kind === 'forge-status-source-skipped' && event.detail?.work_source_id === sourceId);
+      expect(skips, 'the sweep should have recorded a skip naming the source while the forge was unreachable').toHaveLength(1);
       // The hub itself is unaffected: chunk reads are never blocked on the forge being reachable.
       expect((await api.get(`/api/chunks/${d.chunkId}`)).status).toBe(200);
     } finally {
       expect((await forge.call('DELETE', '/_levers/unreachable')).status).toBe(200);
     }
-    await expect.poll(() => swept(d.number), {
-      message: 'the projection did not re-converge once the forge returned',
-      timeout: FLOOR_DEADLINE_MS,
-    }).toEqual(['blizzard:ingested']);
+    await clock.advance(FLOOR_SECONDS);
+    expect(await swept(d.number), 'the projection did not re-converge once the forge returned').toEqual(['blizzard:ingested']);
   });
 });
