@@ -2,7 +2,7 @@
 
 Exercised over a real store via TestClient: the route's shape, its 409/503/404 forms,
 and the store-derivation it delegates to (:class:`TakeoverService`, pinned at the
-domain level by ``tests/test_runner_takeover.py``).
+domain level by ``tests/component/runner/lifecycle/test_takeover.py``).
 """
 
 from __future__ import annotations

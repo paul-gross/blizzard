@@ -124,7 +124,7 @@ class ReadyQueue:
     """The hub's ready queue as the runner's routed bindings see it — one peek naming their projects, then for the
     returned entry: acquire its environments all-or-nothing from its project's workspace, bind them locally, then race
     for the route. ``_entries`` is one peek's own snapshot, holding at most one entry when a capability-asserting
-    runner peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
+    runner peeks fresh before every ``claim_one()`` (``tests/unit/runner/loop/test_loop.py``'s pinning)."""
 
     ctx: ClaimContext
     bindings: tuple[RoutedBinding, ...]

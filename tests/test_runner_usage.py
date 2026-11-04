@@ -883,7 +883,7 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
 def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path: Path):
     """Tenure-end release no longer removes any lease's per-generation stdout file
     — only the periodic age-based sweep prunes it now
-    (`tests/test_runner_retention_step.py`)."""
+    (`tests/unit/runner/loop/test_retention_step.py`)."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_1", epoch=1)
     # lease_1 resumed once (generation 2) before it closed.

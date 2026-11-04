@@ -1,0 +1,1099 @@
+"""The runner-local machine-status routes — ``GET /runner`` / ``/asks`` / ``/escalations``.
+
+Exercised over a real store via TestClient. Hub-free but for the derived reachability
+read: every route's shape, its empty and unwired forms, and the derivation->wire
+mapping are the point."""
+
+from __future__ import annotations
+
+from concurrent.futures import Executor
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Unpack
+
+import pytest
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.gate_enforceability import UnenforceableGateReason
+from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.hub.client import BindingDeclaration, HubVersionWindow, RegistrationReply, UnenforceableGate
+from blizzard.runner.hub.hub_version import HubVersionHolder, ICurrentHubVersion
+from blizzard.runner.hub.identity import (
+    ICurrentIdentityVerdict,
+    ICurrentRunnerIdentity,
+    IdentityVerdictHolder,
+    RunnerIdentity,
+    RunnerIdentityHolder,
+)
+from blizzard.runner.hub.served_projects import ServedProject
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.status.view import RunnerStatusService
+from tests.config_inputs import create_runner_app
+from tests.factory_fields import NewLeaseFields
+from tests.runner_client import runner_client
+from tests.runner_fakes import (
+    FIXTURE_PROJECT_ID,
+    TEST_WORKSPACE_ID,
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_store,
+    make_stores,
+    registered_identity,
+    serving,
+    single_workspace,
+)
+from tests.support import assert_all_timestamps_utc
+from tests.support_child_launch import CHILDREN, version_probe
+
+_NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+def _app_with_status(
+    tmp_path: Path,
+    *,
+    clock: FixedClock | None = None,
+    harness: FakeHarness | None = None,
+    agents: int = 2,
+    env_pool: tuple[str, ...] | None = None,
+    gates: tuple[str, ...] = (),
+    runner_dir: str = "",
+    identity: ICurrentRunnerIdentity | None = None,
+    identity_verdict: ICurrentIdentityVerdict | None = None,
+    bindings: tuple[BindingDeclaration, ...] | None = None,
+    hub_version: ICurrentHubVersion | None = None,
+):
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    pool = config.home_workspace.envs if env_pool is None else env_pool
+    _harness = harness or FakeHarness(
+        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
+        verdict=None,
+    )
+    service = RunnerStatusService(
+        clock or FixedClock(_NOW),
+        pause=store,
+        daemon_liveness=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
+        served_projects=store,
+        identity=identity or registered_identity("rn_status", config.name),
+        identity_verdict=identity_verdict,
+        hub_version=hub_version,
+        runner_name=config.name,
+        workspace_id=TEST_WORKSPACE_ID,
+        bindings=serving(agents) if bindings is None else bindings,
+        agents=agents,
+        hub_url=config.hub_url,
+        workspaces=single_workspace(FakeProvider({env: f"/ws/{env}" for env in pool})),
+        gates=gates,
+        runner_dir=runner_dir,
+        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
+    )
+    return create_runner_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), runner_status=service
+    ), store
+
+
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields]) -> None:
+    fields: NewLeaseFields = {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "graph_id": "gr_1",
+        "node_id": "nd_build",
+        "node_name": "build",
+        "epoch": 1,
+        "retries_max": 2,
+        "created_at": _NOW,
+    }
+    fields.update(overrides)
+    store.record_lease(NewLease(**fields))
+
+
+# --- GET /runner ---
+
+
+def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, agents=3)
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["runner_id"], body["runner_name"]) == ("rn_status", "runner-local")
+    assert body["workspace_id"] == TEST_WORKSPACE_ID
+    assert body["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
+    assert body["capacities"] == {
+        "used": 0,
+        "agents": 3,
+        "free": 3,
+        "bindings": [
+            {
+                "project": FIXTURE_PROJECT_ID,
+                "project_id": None,
+                "workspace_id": TEST_WORKSPACE_ID,
+                "agents": 3,
+                "used": 0,
+                "free": 3,
+            }
+        ],
+    }
+    assert body["routing_conflicts"] == []
+    assert body["hub"] == {
+        "endpoint": "http://127.0.0.1:8421",
+        "reachable": False,
+        "last_contact_at": None,
+        "buffer_depth": 0,
+        "hub_version": None,
+        "window": None,
+    }
+    assert body["last_tick_at"] is None
+    assert body["gates"] == []
+    assert body["identity"] is None
+    assert (body["tenant_id"], body["tenant_name"]) == (None, None)
+    assert_all_timestamps_utc(body)
+
+
+def test_summary_reports_the_hub_version_and_window_the_latest_registration_answered(tmp_path: Path) -> None:
+    held = HubVersionHolder()
+    held.hold(
+        RegistrationReply(
+            runner_id="rn_status",
+            runner_name="runner-local",
+            first_registration=False,
+            hub_version="0.3.0",
+            window=HubVersionWindow(floor="0.2", ceiling="0.3"),
+        )
+    )
+    app, _store = _app_with_status(tmp_path, hub_version=held)
+    with runner_client(app) as client:
+        hub = client.get("/api/runner").json()["hub"]
+
+    assert (hub["hub_version"], hub["window"]) == ("0.3.0", {"floor": "0.2", "ceiling": "0.3"})
+
+
+def test_summary_names_each_project_two_bindings_resolve_to(tmp_path: Path) -> None:
+    bindings = (
+        BindingDeclaration("pr_a", TEST_WORKSPACE_ID, 1),
+        BindingDeclaration("alpha", TEST_WORKSPACE_ID, 1),
+    )
+    app, store = _app_with_status(tmp_path, bindings=bindings)
+    store.record_runner_identity(
+        RunnerIdentity(runner_id=store.connections.runner_id or "", runner_name="r", registered_at=_NOW)
+    )
+    store.record_served_projects(
+        [
+            ServedProject("pr_a", project_id="pr_a", slug="alpha"),
+            ServedProject("alpha", project_id="pr_a", slug="alpha"),
+        ],
+        at=_NOW,
+    )
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["routing_conflicts"] == [{"project_id": "pr_a", "entries": ["pr_a", "alpha"]}]
+
+
+def test_summary_carries_the_tenant_beside_the_runners_id_and_name(tmp_path: Path) -> None:
+    identity = RunnerIdentity(
+        runner_id="rn_status", runner_name="r-bravo", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
+    )
+    app, _store = _app_with_status(tmp_path, identity=RunnerIdentityHolder(identity))
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert (body["runner_id"], body["runner_name"]) == ("rn_status", "r-bravo")
+    assert (body["tenant_id"], body["tenant_name"]) == ("tn_bravo", "bravo")
+
+
+def test_summary_reports_the_identity_verdict_naming_both_runners_and_the_reset_command(tmp_path: Path) -> None:
+    verdict = IdentityVerdictHolder("blizzard runner store reset /runner")
+    verdict.record(IdentityState.MISMATCHED, store_runner_id="rn_status", token_runner_id="rn_other", checked_at=_NOW)
+    app, _store = _app_with_status(tmp_path, identity_verdict=verdict)
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["identity"] == {
+        "state": "mismatched",
+        "store_runner_id": "rn_status",
+        "token_runner_id": "rn_other",
+        "checked_at": "2026-07-16T12:00:00+00:00",
+        "reset_command": "blizzard runner store reset /runner",
+        "reason": None,
+    }
+    assert_all_timestamps_utc(body)
+
+
+def test_an_unchecked_verdict_reports_no_ids_and_no_check_yet(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, identity_verdict=IdentityVerdictHolder("blizzard runner store reset /r"))
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["identity"] == {
+        "state": "unchecked",
+        "store_runner_id": None,
+        "token_runner_id": None,
+        "checked_at": None,
+        "reset_command": "blizzard runner store reset /r",
+        "reason": None,
+    }
+
+
+def test_patch_runner_reports_the_identity_get_reports(tmp_path: Path) -> None:
+    app, _ = _app_with_status(tmp_path, identity=RunnerIdentityHolder())
+
+    with runner_client(app) as client:
+        patched = client.patch("/api/runner", json={"paused": True, "by": "operator"})
+        read = client.get("/api/runner")
+
+    assert patched.status_code == 200
+    assert (patched.json()["runner_id"], patched.json()["runner_name"]) == (None, read.json()["runner_name"])
+    assert read.json()["runner_id"] is None
+    assert (patched.json()["local_paused"], patched.json()["hub_paused"], patched.json()["paused"]) == (
+        read.json()["pause"]["local"],
+        read.json()["pause"]["hub"],
+        read.json()["pause"]["effective"],
+    )
+
+
+def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, gates=("build", "review"))
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["gates"] == ["build", "review"]
+
+
+def test_503_when_status_service_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    with runner_client(create_runner_app(config)) as client:
+        for path in ("/api/runner", "/api/escalations", "/api/takeovers"):
+            assert client.get(path).status_code == 503, path
+
+
+def test_capacities_reflect_active_leases_the_same_way_fill_counts_them(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path, agents=2)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    capacities = resp.json()["capacities"]
+    assert capacities["used"] == 1
+    assert [(b["agents"], b["used"], b["free"]) for b in capacities["bindings"]] == [(2, 1, 1)]
+
+
+def test_hub_reachable_when_last_contact_is_within_the_staleness_threshold(tmp_path: Path) -> None:
+    clock = FixedClock(_NOW)
+    app, store = _app_with_status(tmp_path, clock=clock)
+    store.set_hub_paused(paused=False, at=_NOW - timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    hub = resp.json()["hub"]
+    assert hub["reachable"] is True
+    assert hub["last_contact_at"] == (_NOW - timedelta(minutes=1)).isoformat()
+
+
+def test_hub_unreachable_when_last_contact_is_stale(tmp_path: Path) -> None:
+    """The hub-down path: an old contact fact reads honestly as unreachable, not stale-true."""
+    clock = FixedClock(_NOW)
+    app, store = _app_with_status(tmp_path, clock=clock)
+    store.set_hub_paused(paused=False, at=_NOW - timedelta(hours=1))
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    hub = resp.json()["hub"]
+    assert hub["reachable"] is False
+    assert hub["last_contact_at"] == (_NOW - timedelta(hours=1)).isoformat()  # still reported, just stale
+
+
+def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_local_pause(paused=True, at=_NOW, by="alice", report_kind="runner.locally_paused", report_payload="{}")
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["pause"] == {"local": True, "hub": False, "effective": True, "local_reason": None}
+
+
+def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path) -> None:
+    """A reasoned local pause (a usage limit, the spend ceiling) reads its reason back on the
+    runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`."""
+    app, store = _app_with_status(tmp_path)
+    store.record_local_pause(
+        paused=True,
+        at=_NOW,
+        by="usage-limit",
+        report_kind="runner.locally_paused",
+        report_payload="{}",
+        reason="usage limit: claude_code (resets 2026-09-21T22:40Z)",
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["pause"]["local_reason"] == "usage limit: claude_code (resets 2026-09-21T22:40Z)"
+
+
+def test_pause_local_reason_is_none_when_not_locally_paused(tmp_path: Path) -> None:
+    """A reason from a stale, already-cleared local-pause fact must never leak into the
+    status view once the brake is off — reading it back is gated on `local_paused`, not a
+    bare newest-row lookup."""
+    app, store = _app_with_status(tmp_path)
+    store.record_local_pause(
+        paused=True,
+        at=_NOW,
+        by="usage-limit",
+        report_kind="runner.locally_paused",
+        report_payload="{}",
+        reason="usage limit: claude_code",
+    )
+    store.record_local_pause(
+        paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
+
+
+def test_buffer_depth_counts_the_unacked_outbound_buffer(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
+    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_2", lease_id="lease_2", payload="{}", created_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["hub"]["buffer_depth"] == 2
+
+
+def test_buffer_depth_reports_the_true_depth_above_the_drains_own_per_run_limit(tmp_path: Path) -> None:
+    """`buffer_depth` reads a dedicated count, never the drain's own bounded
+    `pending_outbound(limit)` — a backlog bigger than any one run's slice must still report
+    its true size, not the slice size."""
+    app, store = _app_with_status(tmp_path)
+    total = 150  # bigger than the outbound drain's own per-run slice bound
+    for i in range(total):
+        store.enqueue_outbound(
+            kind="lease.minted", chunk_id=f"ch_{i}", lease_id=f"lease_{i}", payload="{}", created_at=_NOW
+        )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["hub"]["buffer_depth"] == total
+
+
+def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_daemon_liveness(alive_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["last_tick_at"] == _NOW.isoformat()
+
+
+# --- GET /asks?open=true ---
+
+
+def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=["main", "dev"],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0] == {
+        "question_id": "qn_1",
+        "chunk_id": "ch_1",
+        "lease_id": "lease_1",
+        "question": "which branch?",
+        "options": ["main", "dev"],
+        "session_id": "sess-a",
+        "harness_id": "claude_code",
+        "asked_at": _NOW.isoformat(),
+        "project_id": None,
+    }
+
+
+def test_open_asks_hides_an_unforwarded_ask_a_newer_one_on_its_lease_supersedes(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    for question_id in ("qn_1", "qn_2"):
+        store.record_ask(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            question_id=question_id,
+            question="which branch?",
+            options=[],
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+            asked_at=_NOW,
+        )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.status_code == 200, resp.text
+    assert [item["question_id"] for item in resp.json()["items"]] == ["qn_2"]
+    unforwarded = store.unforwarded_ask("lease_1")
+    assert unforwarded is not None
+    assert unforwarded.question_id == "qn_2"  # the same ask the forwarder picks
+
+
+def test_open_asks_includes_a_forwarded_and_parked_ask(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert [item["question_id"] for item in resp.json()["items"]] == ["qn_1"]
+
+
+def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    store.record_park_resume(lease_id="lease_1", question_id="qn_1", resumed_at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.json()["items"] == []
+
+
+def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_path: Path) -> None:
+    """The display-level backstop: an ask must never read open once its lease
+    has closed, regardless of which loop path retired the park fact."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    # The lease closed with no matching `park_resumes` row — the exact leak shape for a
+    # non-happy-path ending (stopped/detached/abandoned).
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="released",
+        closed_at=_NOW + timedelta(minutes=1),
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.json()["items"] == []
+
+
+def test_open_false_is_refused_rather_than_answered_wrong(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path)
+    with runner_client(app) as client:
+        resp = client.get("/api/asks", params={"open": "false"})
+
+    assert resp.status_code == 400
+
+
+# --- GET /escalations ---
+
+
+def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    closed_at = _NOW + timedelta(minutes=5)
+    store.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=closed_at
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0] == {
+        "chunk_id": "ch_1",
+        "lease_id": "lease_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "closed_at": closed_at.isoformat(),
+        "resume_command": "cd /ws/e1 && claude --resume sess-a",
+        # `_seed_lease` mints no session stamps, so this escalation reads
+        # *unknown* on all three and renders the bare resume command.
+        "session_name": None,
+        "model": None,
+        "effort": None,
+        "harness_id": "claude_code",
+        "harness_version": None,
+        # No runner dir is injected here, so the runner cannot compose the wrapped verb.
+        "wrapped_takeover_command": None,
+        "cause": None,
+        "project_id": None,
+        "closure": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("reason", "cause"),
+    [
+        ("owner-unresolvable-mint", "owner-unresolvable"),
+        ("no-acceptable-harness-mint", "no-acceptable-harness"),
+        ("escalated", None),
+    ],
+)
+def test_an_escalation_derives_its_cause_from_the_closure_reason(
+    tmp_path: Path, reason: str, cause: str | None
+) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason=reason, closed_at=_NOW)
+
+    with runner_client(app) as client:
+        items = client.get("/api/escalations").json()["items"]
+
+    assert [item["cause"] for item in items] == [cause]
+
+
+@pytest.mark.parametrize("cause", ["retries-exhausted", "spend-cap"])
+def test_an_ordinary_escalated_closure_reads_back_the_cause_recorded_beside_it(tmp_path: Path, cause: str) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW,
+        escalation_cause=cause,
+    )
+
+    with runner_client(app) as client:
+        items = client.get("/api/escalations").json()["items"]
+
+    assert [item["cause"] for item in items] == [cause]
+
+
+def test_an_escalation_carries_the_wrapped_takeover_command_when_the_runner_dir_is_known(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path, runner_dir="/opt/runner dir")
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+    with runner_client(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert (
+        item["wrapped_takeover_command"]
+        == "blizzard runner takeover ch_1 --dir '/opt/runner dir' --runner runner-local"
+    )
+    assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a"
+    assert "BLIZZARD_LEASE_TOKEN" not in str(item)
+
+
+def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_stamp(tmp_path: Path) -> None:
+    """The escalation reports the escalated generation's own recorded
+    ``harness_version`` beside ``harness_id``, read never re-resolved."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        harness_version="1.2.3",
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW + timedelta(minutes=5),
+    )
+
+    with runner_client(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert item["harness_id"] == "claude_code"
+    assert item["harness_version"] == "1.2.3"
+
+
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(
+    tmp_path: Path, workspace_root: str, expected_cwd: str, spawn_executor: Executor
+) -> None:
+    """Pins the paste surface to the REAL adapter: a human running
+    ``resume_command`` in a bare terminal must stay at the interactive permission
+    default — and from the session's own spawn cwd."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    probe = FakeProbe()
+    service = RunnerStatusService(
+        FixedClock(_NOW),
+        pause=store,
+        daemon_liveness=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
+        identity=registered_identity("rn_status"),
+        runner_name="runner-local",
+        workspace_id="workspace-local",
+        hub_url="http://hub",
+        workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
+        harnesses=HarnessRegistry(
+            {
+                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                    adapter=ClaudeCodeAdapter(
+                        worker_env=AllowlistedEnv.of(()),
+                        binary="claude",
+                        permission_mode="bypassPermissions",
+                        process=probe,
+                        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+                        versions=version_probe(),
+                    )
+                )
+            }
+        ),
+    )
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+    (escalation,) = service.escalations()
+
+    assert escalation.resume_command == f"cd {expected_cwd} && claude --resume sess-a"
+    assert "--permission-mode" not in escalation.resume_command
+
+
+def test_a_superseded_escalation_does_not_appear(tmp_path: Path) -> None:
+    """A later lease mint for the same chunk closes the escalation by supersession."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    _seed_lease(store, lease_id="lease_2", chunk_id="ch_1", epoch=2, created_at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations")
+
+    assert resp.json()["items"] == []
+
+
+def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations")
+
+    assert resp.json()["items"] == []
+
+
+def _seed_escalation(store: SqlAlchemyRunnerStore, chunk_id: str, *, escalated_at: datetime, epoch: int = 1) -> None:
+    lease_id = f"lease_{chunk_id}_{epoch}"
+    _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id, epoch=epoch, created_at=escalated_at)
+    store.record_closure(
+        lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="escalated", closed_at=escalated_at
+    )
+
+
+def test_the_default_answer_lists_only_open_escalations_without_a_closure(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_escalation(store, "ch_open", escalated_at=_NOW)
+    _seed_escalation(store, "ch_closed", escalated_at=_NOW)
+    store.record_escalation_closure(chunk_id="ch_closed", reason="stopped", at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        default = client.get("/api/escalations").json()
+        explicit = client.get("/api/escalations", params={"state": "open"}).json()
+
+    assert default == explicit
+    assert [(i["chunk_id"], i["closure"]) for i in default["items"]] == [("ch_open", None)]
+
+
+def test_state_closed_lists_a_hub_closed_escalation_with_its_closure(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_escalation(store, "ch_open", escalated_at=_NOW)
+    _seed_escalation(store, "ch_1", escalated_at=_NOW)
+    hub_closed_at = _NOW + timedelta(minutes=7)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=hub_closed_at)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations", params={"state": "closed"})
+
+    assert resp.status_code == 200, resp.text
+    (item,) = resp.json()["items"]
+    assert (item["chunk_id"], item["lease_id"]) == ("ch_1", "lease_ch_1_1")
+    assert item["closed_at"] == _NOW.isoformat()
+    assert item["closure"] == {"reason": "stopped", "closed_at": hub_closed_at.isoformat()}
+
+
+def test_state_closed_reads_each_chunks_newest_closure_newest_first_bounded_by_limit(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for n in range(3):
+        _seed_escalation(store, f"ch_{n}", escalated_at=_NOW)
+        store.record_escalation_closure(chunk_id=f"ch_{n}", reason="done", at=_NOW + timedelta(minutes=n + 1))
+    store.record_escalation_closure(chunk_id="ch_0", reason="stopped", at=_NOW + timedelta(minutes=9))
+
+    with runner_client(app) as client:
+        every = client.get("/api/escalations", params={"state": "closed"}).json()["items"]
+        page = client.get("/api/escalations", params={"state": "closed", "limit": 2}).json()["items"]
+
+    assert [(i["chunk_id"], i["closure"]["reason"]) for i in every] == [
+        ("ch_0", "stopped"),
+        ("ch_2", "done"),
+        ("ch_1", "done"),
+    ]
+    assert [i["chunk_id"] for i in page] == ["ch_0", "ch_2"]
+
+
+def test_a_closure_before_a_later_escalation_does_not_close_it(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=_NOW)
+    _seed_escalation(store, "ch_1", escalated_at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        closed = client.get("/api/escalations", params={"state": "closed"}).json()["items"]
+        open_ = client.get("/api/escalations").json()["items"]
+
+    assert closed == []
+    assert [i["chunk_id"] for i in open_] == ["ch_1"]
+
+
+@pytest.mark.parametrize("params", [{"state": "parked"}, {"state": "closed", "limit": 0}])
+def test_an_unknown_state_or_an_out_of_range_limit_is_refused(tmp_path: Path, params: dict[str, str | int]) -> None:
+    app, _store = _app_with_status(tmp_path)
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations", params=params)
+
+    assert resp.status_code == 422
+
+
+# --- GET /takeovers — the stranded-takeover recovery surface ---
+
+
+def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    opened_at = _NOW + timedelta(minutes=5)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id=None,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=opened_at,
+    )
+
+    with runner_client(app) as client:
+        resp = client.get("/api/takeovers")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0] == {
+        "chunk_id": "ch_1",
+        "takeover_id": "tko_1",
+        "held_since": opened_at.isoformat(),
+        "harness_id": "claude_code",
+    }
+    assert_all_timestamps_utc(resp.json())
+
+
+def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id=None,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        resp = client.get("/api/takeovers")
+
+    assert resp.json()["items"] == []
+
+
+def test_no_open_takeovers_is_an_empty_list(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/takeovers")
+
+    assert resp.json()["items"] == []
+
+
+# --- GET /facts — the local fact log ---
+
+
+def test_facts_lists_recent_outbound_newest_first_including_acked(tmp_path: Path) -> None:
+    """The fact log is a ledger, not the pending queue — an acked fact still appears."""
+    app, store = _app_with_status(tmp_path)
+    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
+    store.enqueue_outbound(
+        kind="completion.submitted",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        payload="{}",
+        created_at=_NOW + timedelta(minutes=1),
+    )
+    acked_at = _NOW + timedelta(minutes=2)
+    store.ack_outbound(1, acked_at=acked_at)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/facts")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert [item["seq"] for item in items] == [2, 1]
+    assert items[1] == {
+        "seq": 1,
+        "kind": "lease.minted",
+        "chunk_id": "ch_1",
+        "lease_id": "lease_1",
+        "created_at": _NOW.isoformat(),
+        "acked_at": acked_at.isoformat(),
+        "project_id": None,
+    }
+    assert items[0]["acked_at"] is None
+    assert "payload" not in items[0]
+    assert_all_timestamps_utc(resp.json())
+
+
+def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for i in range(3):
+        store.enqueue_outbound(kind="lease.minted", chunk_id=f"ch_{i}", lease_id=None, payload="{}", created_at=_NOW)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/facts", params={"limit": 2})
+
+    assert [item["seq"] for item in resp.json()["items"]] == [3, 2]
+
+
+def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    with runner_client(create_runner_app(config)) as client:
+        assert client.get("/api/facts").status_code == 503
+
+
+def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: Path) -> None:
+    """The escalation is a **read** of the lease's stamps, not a
+    re-resolution, and its resume command lands the operator in the same configuration
+    the parked session actually ran with."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        epoch=1,
+        session_name="code",
+        resolved_model="opus",
+        resolved_effort="high",
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW + timedelta(minutes=5),
+    )
+
+    with runner_client(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert (item["session_name"], item["model"], item["effort"]) == ("code", "opus", "high")
+    assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
+
+
+def test_summary_names_each_held_binding_matching_no_workspace(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1", project_id="pr_1"
+    )
+    store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unmatched_bindings"] == [
+        {
+            "chunk_id": "ch_2",
+            "environment_id": "e9",
+            "workdir": "/elsewhere/e9",
+            "held_since": "2026-07-16T12:00:00+00:00",
+        }
+    ]
+
+
+# --- project attribution on facts, asks, escalations ---
+
+
+def test_facts_asks_and_escalations_name_their_chunks_project_from_its_binding(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for chunk_id, environment_id in (("ch_bound", "e1"), ("ch_esc_bound", "e2")):
+        store.record_binding(
+            chunk_id=chunk_id, environment_id=environment_id, workdir="/ws/x", bound_at=_NOW, project_id="proj_a"
+        )
+    for chunk_id, lease_id in (("ch_esc_bound", "lease_eb"), ("ch_esc_unbound", "lease_eu")):
+        _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id)
+        store.record_closure(
+            lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="escalated", closed_at=_NOW
+        )
+    for chunk_id, lease_id, question_id in (("ch_bound", "lease_b", "qn_b"), ("ch_unbound", "lease_u", "qn_u")):
+        _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id)
+        store.record_ask(
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            question_id=question_id,
+            question="?",
+            options=[],
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{lease_id}"),
+            asked_at=_NOW,
+        )
+    for chunk_id in ("ch_bound", "ch_unbound", None):
+        store.enqueue_outbound(kind="note", chunk_id=chunk_id, lease_id=None, payload="{}", created_at=_NOW)
+
+    with runner_client(app) as client:
+        asks = client.get("/api/asks", params={"open": "true"}).json()["items"]
+        escalations = client.get("/api/escalations").json()["items"]
+        facts = client.get("/api/facts").json()["items"]
+
+    assert {a["chunk_id"]: a["project_id"] for a in asks} == {"ch_bound": "proj_a", "ch_unbound": None}
+    assert {e["chunk_id"]: e["project_id"] for e in escalations} == {
+        "ch_esc_bound": "proj_a",
+        "ch_esc_unbound": None,
+    }
+    fact_projects = {f["chunk_id"]: f["project_id"] for f in facts}
+    assert (fact_projects["ch_bound"], fact_projects["ch_unbound"], fact_projects[None]) == ("proj_a", None, None)
+
+
+def test_summary_reports_the_gates_the_latest_registration_flagged(tmp_path: Path) -> None:
+    held = HubVersionHolder()
+    held.hold(
+        RegistrationReply(
+            runner_id="rn_status",
+            runner_name="runner-local",
+            first_registration=False,
+            unenforceable_gates=(UnenforceableGate("deliver", UnenforceableGateReason.HUB_EXECUTED),),
+        )
+    )
+    app, _store = _app_with_status(tmp_path, gates=("build", "deliver"), hub_version=held)
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unenforceable_gates"] == [{"node": "deliver", "reason": "hub-executed"}]
+
+
+def test_summary_reports_no_flags_before_any_hub_has_answered(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, gates=("build",), hub_version=HubVersionHolder())
+    with runner_client(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["unenforceable_gates"] is None
