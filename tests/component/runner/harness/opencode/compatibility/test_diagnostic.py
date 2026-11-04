@@ -32,11 +32,9 @@ from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.compatibility import (
-    PROBE_ROSTER,
     CompatibilityDiagnostic,
     CompatibilityProbe,
     EvidenceState,
-    IncompleteProbeReportError,
     ProbeObservation,
     classify_observation,
 )
@@ -49,10 +47,8 @@ from blizzard.runner.harness.opencode.compatibility.facts import provider_refusa
 from blizzard.runner.harness.opencode.compatibility.landlock import landlock_version
 from blizzard.runner.harness.opencode.compatibility.loopback import UrllibLoopbackTransport
 from blizzard.runner.harness.opencode.compatibility.probe import (
-    ADMITTED_OPENCODE_RANGE_DISPLAY,
     BOUNDARY_FAULT_SUMMARY,
     INTERNAL_FAULT_SUMMARY,
-    PINNED_OPENCODE_VERSION,
     SHAPE_FAULT_SUMMARY,
     OpenCodeCompatibilityProbe,
 )
@@ -75,8 +71,6 @@ from blizzard.runner.harness.opencode.compatibility.transcript import Transcript
 from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_run_jsonl
 from blizzard.runner.process.child_processes import ChildLaunchError, IPtyChild
 from tests.support_child_launch import CHILDREN, tool_env
-
-pytestmark = pytest.mark.component
 
 requires_landlock = pytest.mark.skipif(
     landlock_version() < 3,
@@ -618,40 +612,3 @@ def test_successful_run_rejects_and_reaps_a_pipe_closing_descendant(tmp_path: Pa
     assert result.process_group_reaped is True
     time.sleep(0.7)
     assert not marker.exists()
-
-
-class _ContractProbe:
-    observed_version = PINNED_OPENCODE_VERSION
-    admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
-    version_admitted = True
-
-    def __init__(self, observations: list[ProbeObservation]) -> None:
-        self.observations = observations
-
-    def run(self) -> list[ProbeObservation]:
-        return self.observations
-
-
-def _observations() -> list[ProbeObservation]:
-    return [ProbeObservation.observed(probe, f"{probe.value} observed") for probe in PROBE_ROSTER]
-
-
-@pytest.mark.unit
-def test_diagnostic_rejects_missing_results_before_evidence_can_be_published() -> None:
-    observations = _observations()[:-1]
-
-    with pytest.raises(IncompleteProbeReportError, match="missing probes"):
-        CompatibilityDiagnostic(_ContractProbe(observations)).run()
-
-
-@pytest.mark.unit
-def test_diagnostic_keeps_an_ambiguous_result_blocking() -> None:
-    observations = _observations()
-    observations[0] = ProbeObservation.ambiguous(CompatibilityProbe.FRESH_TURN, "two possible outcomes")
-
-    report = CompatibilityDiagnostic(_ContractProbe(observations)).run()
-
-    assert report.complete is True
-    assert report.classification.value == "blocking"
-    assert report.results[0].classification.value == "blocking"
-    assert report.admissible is False

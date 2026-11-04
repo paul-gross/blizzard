@@ -18,24 +18,19 @@ from blizzard.cli.collaborators import CliCollaborators
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.config import ConfigError
-from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, HarnessComposition, companion_path
 from blizzard.runner.harness.claude_code.bundle import composer
-from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.internal import bundle_publisher as bundle_module
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
-from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from tests.config_inputs import load_host_config
-from tests.harness_sections import sections
 from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
-
-pytestmark = pytest.mark.component
-
-_SECRET = "sentinel-secret-value"
+from tests.support_harness_bundle import SECRET as _SECRET
+from tests.support_harness_bundle import bundle as _bundle
+from tests.support_harness_bundle import runtime as _runtime
 
 
 def _http_collaborators(**overrides: Any) -> InitCollaborators:
@@ -83,64 +78,6 @@ def test_runner_plugin_collision_names_native_source_and_keeps_snapshot(tmp_path
     assert raised.value.path == native
     assert str(runtime / "opencode-worker-config.json") in str(raised.value)
     assert published_snapshot(runtime) == first.path.resolve()
-
-
-@pytest.mark.unit
-def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_path: Path) -> None:
-    bundle = _bundle(tmp_path)
-    runtime = _runtime(tmp_path)
-    first = publish_harness_bundle(bundle, runtime)
-    missing = runtime / "missing-worker-config.json"
-    with pytest.raises(HarnessBundleError) as raised:
-        publish_harness_bundle(bundle, runtime, sections=sections(OpenCodeSection(worker_config_path=str(missing))))
-    assert raised.value.path == missing
-    assert published_snapshot(runtime) == first.path.resolve()
-
-
-def _claude_code_bundle(tmp_path: Path, operator: dict[str, object]) -> Path:
-    settings = tmp_path / "bundle" / "claude-code" / "settings.json"
-    settings.parent.mkdir(parents=True)
-    settings.write_text(json.dumps(operator))
-    return settings
-
-
-@pytest.mark.unit
-def test_publish_composes_the_runner_wiring_into_the_snapshot_and_names_the_source_on_collision(
-    tmp_path: Path,
-) -> None:
-    settings = _claude_code_bundle(tmp_path, {"model": "opus"})
-    bundle = settings.parent.parent
-
-    composed = json.loads((publish_harness_bundle(bundle, tmp_path).path / "claude-code" / "settings.json").read_text())
-    assert composed["model"] == "opus"
-    assert "SessionEnd" in composed["hooks"]
-    assert composed["disableAllHooks"] is False
-
-    settings.write_text(json.dumps({"disableAllHooks": True}))
-    with pytest.raises(HarnessBundleError) as raised:
-        publish_harness_bundle(bundle, tmp_path)
-    assert raised.value.path == settings
-
-
-@pytest.mark.unit
-def test_publish_composes_under_the_given_autonomy_and_section_permission_mode(tmp_path: Path) -> None:
-    settings = _claude_code_bundle(tmp_path, {"permissions": {"disableBypassPermissionsMode": True}})
-    bundle = settings.parent.parent
-
-    with pytest.raises(HarnessBundleError) as dangerous:
-        publish_harness_bundle(bundle, tmp_path)
-    assert dangerous.value.path == settings
-    normal = publish_harness_bundle(bundle, tmp_path, autonomy=Autonomy.Normal)
-    composed = json.loads((normal.path / "claude-code" / "settings.json").read_text())
-    assert composed["permissions"]["disableBypassPermissionsMode"] is True
-    with pytest.raises(HarnessBundleError) as overridden:
-        publish_harness_bundle(
-            bundle,
-            tmp_path,
-            autonomy=Autonomy.Normal,
-            sections=sections(ClaudeCodeSection(permission_mode="bypassPermissions")),
-        )
-    assert overridden.value.path == settings
 
 
 def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
@@ -192,27 +129,6 @@ def test_ambient_directory_plugins_collide_with_operator_and_each_other(tmp_path
         check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
 
 
-def _bundle(tmp_path: Path) -> Path:
-    root = tmp_path / "bundle"
-    (root / "claude-code").mkdir(parents=True)
-    (root / "claude-code" / "settings.json").write_text(json.dumps({"note": _SECRET}))
-    (root / "opencode" / "prompts").mkdir(parents=True)
-    (root / "opencode" / "opencode.json").write_text(json.dumps({"agent": {"x": {"prompt": "{file:./prompts/p.txt}"}}}))
-    (root / "opencode" / "prompts" / "p.txt").write_text(_SECRET)
-    return root
-
-
-def _runtime(tmp_path: Path, config_dir: Path | str | None = None, hub: FakeInitHub | None = None) -> Path:
-    runtime = tmp_path / "runner"
-    assert init_runner(hub).invoke(runner_group, ["init", str(runtime)]).exit_code == 0
-    if config_dir is not None:
-        path = runtime / HOST_CONFIG_FILENAME
-        path.write_text(
-            path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{config_dir}"\n', 1)
-        )
-    return runtime
-
-
 def _fingerprint(root: Path) -> dict[str, tuple[str, int, int]]:
     return {
         str(p.relative_to(root)): (hashlib.sha256(p.read_bytes()).hexdigest(), p.stat().st_mode, p.stat().st_mtime_ns)
@@ -238,16 +154,6 @@ def test_config_dir_expands_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 def test_relative_config_dir_names_key_and_toml(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path, "rel/dir")
     with pytest.raises(ConfigError, match=r"\[harness\] config_dir.*rel/dir.*blizzard-host\.toml"):
-        load_runner_config(runtime)
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("value", ['""', "5"])
-def test_an_empty_or_non_string_config_dir_is_not_a_path_string(tmp_path: Path, value: str) -> None:
-    runtime = _runtime(tmp_path)
-    path = runtime / HOST_CONFIG_FILENAME
-    path.write_text(path.read_text().replace("[runner.harness]\n", f"[runner.harness]\nconfig_dir = {value}\n", 1))
-    with pytest.raises(ConfigError, match="config_dir must be a non-empty path string"):
         load_runner_config(runtime)
 
 

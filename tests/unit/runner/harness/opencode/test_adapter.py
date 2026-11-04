@@ -19,8 +19,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
+from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
@@ -29,9 +28,7 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.adapter import (
-    MAX_IDENTITY_PREAMBLE_LINES,
     OpenCodeAdapter,
-    PendingOpenCodeIdentity,
 )
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
@@ -46,7 +43,6 @@ from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.opencode.usage.price_cache import (
     FileOpenCodePriceCatalog,
-    IOpenCodePriceCatalog,
     OpenCodeContextTier,
     OpenCodeModelPrice,
     OpenCodeRate,
@@ -55,12 +51,12 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.node_steps.envelope import GraphArtifact
 from blizzard.runner.process.child_env import AllowlistedEnv
-from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope
-from tests.support_child_launch import CHILDREN, version_probe, wait_for_exit
-from tests.support_opencode_binary import worker_binary
+from tests.support_child_launch import CHILDREN, version_probe
+from tests.support_opencode_adapter import adapter as _adapter
+from tests.support_opencode_adapter import preamble as _preamble
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]
@@ -93,31 +89,13 @@ def _which_on_usr_bin(binary: str, path: object = None) -> str:
 
 @pytest.fixture(autouse=True)
 def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mirrors ``tests/test_runner_harness_adapter.py``'s fixture of the same shape: a unit
+    """Mirrors ``tests/unit/runner/harness/claude_code/test_adapter.py``'s fixture of the same shape: a unit
     test's fake spawn must not depend on whether ``opencode`` is really installed on this
     machine's ``PATH`` — `ensure_executable`'s `shutil.which` lookup runs before the
     faked ``subprocess.Popen`` ever sees the call."""
     monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
 
 
-def _adapter(spawn_executor: Executor, **kwargs: Any) -> OpenCodeAdapter:
-    process = kwargs.setdefault("process", FakeProbe())
-    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor, children=CHILDREN))
-    kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
-    return OpenCodeAdapter(**kwargs, versions=version_probe())
-
-
-def _preamble(workdir: str, *, stdout_path: str = "", stderr_path: str = "") -> WorkerPreamble:
-    return WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=workdir)],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-        stdout_path=stdout_path,
-        stderr_path=stderr_path,
-    )
-
-
-@pytest.mark.unit
 def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -136,7 +114,6 @@ def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
 
 
-@pytest.mark.unit
 def test_identity_env_keeps_lease_token_over_allowlisted_daemon_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -154,7 +131,6 @@ def test_identity_env_keeps_lease_token_over_allowlisted_daemon_token(
     assert env["OPENCODE_CONFIG_CONTENT"] == config.read_text()
 
 
-@pytest.mark.unit
 def test_relative_companions_resolve_in_content_from_snapshot_not_worker_cwd(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -179,7 +155,6 @@ def test_relative_companions_resolve_in_content_from_snapshot_not_worker_cwd(
     assert json.loads(config.read_text()) == document
 
 
-@pytest.mark.unit
 def test_effective_bundle_is_delivered_to_every_launch_kind(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -216,7 +191,6 @@ def test_effective_bundle_is_delivered_to_every_launch_kind(
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
 
 
-@pytest.mark.unit
 def test_numeric_window_reaches_all_launches_using_session_stamp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -266,7 +240,6 @@ def test_numeric_window_reaches_all_launches_using_session_stamp(
     assert captured[4][1]["OPENCODE_CONFIG_CONTENT"] == config.read_text()
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("failure", ["missing-model", "missing-limits", "resolver-error", "invalid-effective"])
 def test_numeric_window_fallback_preserves_launch_and_warns_once_per_window(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor, failure: str
@@ -319,7 +292,6 @@ def test_numeric_window_fallback_preserves_launch_and_warns_once_per_window(
     assert all(log["log_level"] == "warning" for log in warnings)
 
 
-@pytest.mark.unit
 def test_production_binding_reads_limits_from_worker_cache_for_launch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -365,52 +337,6 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
     assert limits == {"input": 9200, "context": 100000, "output": 5000}
 
 
-@pytest.mark.component
-def test_real_child_process_receives_effective_bundle_on_every_launch(tmp_path: Path, spawn_executor: Executor) -> None:
-    capture = tmp_path / "launches.jsonl"
-    binary = worker_binary(tmp_path, capture_path=capture)
-    effective = tmp_path / "effective"
-    effective.mkdir()
-    config = effective / "opencode.json"
-    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
-    workdir = tmp_path / "project"
-    workdir.mkdir()
-    adapter = _adapter(
-        spawn_executor,
-        binary=binary,
-        process=LinuxProcessProbe(),
-        worker_config_path=str(config),
-        effective_config_dir=str(effective),
-    )
-    preamble = _preamble(str(workdir), stdout_path=str(tmp_path / "fresh.jsonl"))
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    fresh = adapter.spawn(envelope, preamble, None)
-    fresh.confirm_durable()
-    fresh_handle = fresh.await_identity(5)
-    wait_for_exit(fresh_handle.pid)
-    resumed = adapter.spawn(envelope, preamble, None, resume_from=fresh_handle.session_id)
-    resumed.confirm_durable()
-    wait_for_exit(resumed.pid)
-    nudge = adapter.resume_with_message(str(workdir), fresh_handle.session_id, "continue")
-    nudge.confirm_durable()
-    wait_for_exit(nudge.pid)
-    judge = adapter.judge(str(workdir), fresh_handle.session_id, "assess", str(tmp_path / "judge.jsonl"))
-    judge.confirm_durable()
-    wait_for_exit(judge.pid)
-
-    recorded = [json.loads(line) for line in capture.read_text().splitlines()]
-    assert len(recorded) == 4
-    for launch in recorded:
-        assert launch["config"] == str(config)
-        assert launch["content"] == config.read_text()
-        assert launch["directory"] == str(effective)
-
-
-# --------------------------------------------------------------------------- #
-# The one command builder: every non-interactive kind carries `--format json`.
-
-
-@pytest.mark.unit
 def test_fresh_mint_carries_model_and_format_json_and_auto() -> None:
     cmd = OpenCodeCommand("opencode").build(
         OpenCodeInvocationKind.FRESH, prompt="do the thing", model="openai/gpt-5.6", variant="max", auto=True
@@ -429,7 +355,6 @@ def test_fresh_mint_carries_model_and_format_json_and_auto() -> None:
     ]
 
 
-@pytest.mark.unit
 def test_resume_omits_model_and_carries_session() -> None:
     cmd = OpenCodeCommand("opencode").build(
         OpenCodeInvocationKind.RESUME, prompt="continue", session_id="ses_1", model="openai/gpt-5.6", auto=True
@@ -438,7 +363,6 @@ def test_resume_omits_model_and_carries_session() -> None:
     assert cmd[cmd.index("--session") + 1] == "ses_1"
 
 
-@pytest.mark.unit
 def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
     """NUDGE serves both a produces-nudge and a parked-answer delivery: the two
     are distinct CALLER intents with no OpenCode CLI-level difference, so there is no
@@ -457,7 +381,6 @@ def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
         assert cmd[-1] == prompt
 
 
-@pytest.mark.unit
 def test_takeover_argv_has_no_format_json_and_no_auto() -> None:
     """Interactive takeover has no kind on `OpenCodeInvocationKind` at all — it
     is composed by this wholly separate method, never through `OpenCodeCommand.build`."""
@@ -471,13 +394,11 @@ def test_takeover_argv_has_no_format_json_and_no_auto() -> None:
 # Model / effort / compaction resolution.
 
 
-@pytest.mark.unit
 def test_resolve_model_strict_maps_a_configured_tier(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     assert adapter.resolve_model_strict(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_resolve_model_strict_returns_none_for_an_unmapped_tier(spawn_executor: Executor) -> None:
     # No built-in OpenCode tiers (unlike Claude Code): an unmapped tier resolves to
     # nothing, which is the contract a multi-harness selection reads.
@@ -485,13 +406,11 @@ def test_resolve_model_strict_returns_none_for_an_unmapped_tier(spawn_executor: 
     assert adapter.resolve_model_strict(["blizzard:frontier"]) is None
 
 
-@pytest.mark.unit
 def test_resolve_model_falls_back_to_the_adapter_default_when_nothing_resolves(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna")
     assert adapter.resolve_model(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_resolve_model_falls_back_to_empty_string_with_no_configured_default(spawn_executor: Executor) -> None:
     # Empty is legitimate for OpenCode: it lets OpenCode resolve its own configured
     # default rather than Blizzard inventing one.
@@ -499,13 +418,11 @@ def test_resolve_model_falls_back_to_empty_string_with_no_configured_default(spa
     assert adapter.resolve_model(["blizzard:frontier"]) == ""
 
 
-@pytest.mark.unit
 def test_resolve_model_accepts_a_bare_valid_provider_model_reference(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)
     assert adapter.resolve_model_strict(["openai/gpt-5.6-luna"]) == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_resolve_model_skips_a_malformed_native_reference(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, model_aliases=(("blizzard:basic", "openai/gpt-5.6-mini"),))
     # Not `provider/model` shaped (no slash) — this belongs to another harness's own
@@ -513,30 +430,25 @@ def test_resolve_model_skips_a_malformed_native_reference(spawn_executor: Execut
     assert adapter.resolve_model(["opus", "blizzard:basic"]) == "openai/gpt-5.6-mini"
 
 
-@pytest.mark.unit
 def test_resolve_effort_passes_through_the_well_known_ordinal(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)
     assert adapter.resolve_effort("max") == "max"
 
 
-@pytest.mark.unit
 def test_resolve_effort_maps_a_configured_alias(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, effort_aliases=(("high", "xhigh"),))
     assert adapter.resolve_effort("high") == "xhigh"
 
 
-@pytest.mark.unit
 def test_resolve_effort_drops_an_unrecognized_value(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)
     assert adapter.resolve_effort("ludicrous") is None
 
 
-@pytest.mark.unit
 def test_resolve_effort_of_none_is_none(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).resolve_effort(None) is None
 
 
-@pytest.mark.unit
 def test_resolve_compaction_window(spawn_executor: Executor) -> None:
     # No numeric translation is ever invented, regardless of the value's shape.
     adapter = _adapter(spawn_executor)
@@ -551,7 +463,6 @@ def test_resolve_compaction_window(spawn_executor: Executor) -> None:
 # `resolvable_tier_ids`: the capability snapshot's own tier enumeration.
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_is_empty_with_no_config_at_all(spawn_executor: Executor) -> None:
     # No built-in OpenCode tiers (unlike Claude Code's three): with nothing configured,
     # nothing is resolvable.
@@ -559,13 +470,11 @@ def test_resolvable_tier_ids_is_empty_with_no_config_at_all(spawn_executor: Exec
     assert adapter.resolvable_tier_ids() == ()
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_names_a_configured_alias(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     assert set(adapter.resolvable_tier_ids()) == {"blizzard:frontier"}
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_merges_every_configured_alias_once(spawn_executor: Executor) -> None:
     # Override-by-key precedence, matching `_resolve_one_model`: two distinct aliases
     # both appear, each exactly once.
@@ -585,7 +494,6 @@ def test_resolvable_tier_ids_merges_every_configured_alias_once(spawn_executor: 
 # Harness selection (harness-selection spec): an unmapped tier is a skip, not a spawn.
 
 
-@pytest.mark.unit
 def test_harness_selector_skips_opencode_when_its_tier_is_unmapped(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)  # no model_aliases at all
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
@@ -609,7 +517,6 @@ def test_harness_selector_skips_opencode_when_its_tier_is_unmapped(spawn_executo
     )
 
 
-@pytest.mark.unit
 def test_harness_selector_picks_opencode_once_its_tier_is_mapped(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
@@ -631,13 +538,11 @@ def test_harness_selector_picks_opencode_once_its_tier_is_mapped(spawn_executor:
 # `resume_command` (takeover): no `--format json`, no `--auto`, ever.
 
 
-@pytest.mark.unit
 def test_resume_command_is_the_literal_takeover(spawn_executor: Executor) -> None:
     cmd = _adapter(spawn_executor, binary="opencode").resume_command("/ws/e1", "ses-x")
     assert cmd == "cd /ws/e1 && opencode --session ses-x"
 
 
-@pytest.mark.unit
 def test_resume_command_carries_model_and_variant(spawn_executor: Executor) -> None:
     cmd = _adapter(spawn_executor, binary="opencode").resume_command(
         "/ws/e1", "ses-x", model="openai/gpt-5.6", effort="max"
@@ -645,13 +550,11 @@ def test_resume_command_carries_model_and_variant(spawn_executor: Executor) -> N
     assert cmd == "cd /ws/e1 && opencode --session ses-x --model openai/gpt-5.6 --variant max"
 
 
-@pytest.mark.unit
 def test_resume_command_is_identical_attended_or_not(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="opencode")
     assert adapter.resume_command("/ws/e1", "ses-x", attended=True) == adapter.resume_command("/ws/e1", "ses-x")
 
 
-@pytest.mark.unit
 def test_honors_session_hint_is_false(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).honors_session_hint() is False
 
@@ -660,7 +563,6 @@ def test_honors_session_hint_is_false(spawn_executor: Executor) -> None:
 # `spawn` requires an injected stdout path (the identity handshake needs somewhere to read).
 
 
-@pytest.mark.unit
 def test_spawn_without_a_stdout_path_raises(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="opencode")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
@@ -675,7 +577,6 @@ class _AskingResolver:
         )
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("content", ["[]", '"text"', "3", "null"])
 def test_non_object_config_content_fails_the_launch_as_a_spawn_error(spawn_executor: Executor, content: str) -> None:
     adapter = _adapter(spawn_executor, autonomy=Autonomy.Normal, permission_resolver=_AskingResolver())
@@ -685,350 +586,6 @@ def test_non_object_config_content_fails_the_launch_as_a_spawn_error(spawn_execu
 
 # --------------------------------------------------------------------------- #
 # Fresh-session handshake (component): identity arrives on the worker's own stdout.
-
-
-@pytest.mark.component
-def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = worker_binary(tmp_path, minted_session_id="ses_minted_abc")
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-    handle = pending.await_identity(5.0)
-
-    assert handle.session_id == "ses_minted_abc"
-    assert handle.pid > 0
-    assert handle.process_start_time
-    wait_for_exit(handle.pid)
-
-
-@pytest.mark.component
-def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = worker_binary(tmp_path, minted_session_id="ses_self_assigned")
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(
-        envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint-never-honored"
-    )
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-    handle = pending.await_identity(5.0)
-
-    assert handle.session_id == "ses_self_assigned"
-    assert handle.session_id != "hint-never-honored"
-    wait_for_exit(handle.pid)
-
-
-@pytest.mark.component
-def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path, spawn_executor: Executor) -> None:
-    """``spawn`` honors ``preamble.stderr_path`` the same way Claude Code's binding does —
-    every OpenCode failure event otherwise reports an empty stderr tail even though the
-    runner already allocated the file."""
-    binary = worker_binary(tmp_path, minted_session_id="ses_minted_abc", stderr_message="diagnostic-sentinel")
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    stderr_path = tmp_path / "lease-1.stderr"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(
-        envelope,
-        _preamble(str(workdir), stdout_path=str(stdout_path), stderr_path=str(stderr_path)),
-        session_hint="hint",
-    )
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-    handle = pending.await_identity(5.0)
-    wait_for_exit(handle.pid)
-
-    assert "diagnostic-sentinel" in stderr_path.read_text()
-
-
-@pytest.mark.component
-def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = worker_binary(tmp_path, malformed_first_line=True)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-
-    with pytest.raises(WorkerIdentityError):
-        pending.await_identity(5.0)
-
-
-@pytest.mark.component
-def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    binary = worker_binary(tmp_path, exit_before_output=True)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-
-    with pytest.raises(WorkerIdentityError):
-        pending.await_identity(5.0)
-
-
-@pytest.mark.component
-def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Path, spawn_executor: Executor) -> None:
-    """A dead-before-identity worker's real cause lives only in its own stderr capture —
-    surfaced on the raised error, since it is otherwise lost the moment the lease is marked
-    identity-failed and the group is killed."""
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_bytes(b"")
-    stderr_path = tmp_path / "lease-1.stderr"
-    stderr_path.write_text("Traceback (most recent call last):\nRuntimeError: mock-opencode blew up\n")
-    probe = FakeProbe(alive=set())  # already gone
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path=str(stderr_path),
-        process=probe,
-    )
-
-    with pytest.raises(WorkerIdentityError, match="mock-opencode blew up"):
-        pending.await_identity(0.1)
-
-
-@pytest.mark.component
-def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path, spawn_executor: Executor) -> None:
-    """A live process that has written nothing yet is a plain timeout, not a crash."""
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_bytes(b"")
-    probe = FakeProbe(alive={(4242, "start-token")})
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path="",
-        process=probe,
-    )
-
-    with pytest.raises(WorkerIdentityError):
-        pending.await_identity(0.1)
-
-
-@pytest.mark.component
-def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    """A worker that flushed its identity record then exited fast is a SUCCESS — the
-    valid record wins over liveness, so this must not raise even though
-    the process is already dead by the time ``await_identity`` looks."""
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_bytes(
-        json.dumps(
-            {
-                "type": "step_start",
-                "sessionID": "ses_flushed",
-                "part": {"id": "prt_start", "sessionID": "ses_flushed", "messageID": "msg_1", "type": "step-start"},
-            }
-        ).encode()
-        + b"\n"
-    )
-    probe = FakeProbe(alive=set())  # already gone
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path="",
-        process=probe,
-    )
-
-    handle = pending.await_identity(0.1)
-
-    assert handle.session_id == "ses_flushed"
-
-
-class _ExitsAtTheProbe(FakeProbe):
-    """A worker that flushes its identity record and exits just as its liveness is probed."""
-
-    def __init__(self, stdout_path: Path, record: bytes) -> None:
-        super().__init__()
-        self._stdout_path = stdout_path
-        self._record = record
-
-    def is_alive(self, pid: int, process_start_time: str) -> bool:
-        self._stdout_path.write_bytes(self._record)
-        return False
-
-
-@pytest.mark.component
-def test_fresh_spawn_reads_the_record_a_worker_flushed_as_it_exited(tmp_path: Path) -> None:
-    """A worker that writes its record and dies between a poll's read and its probe still
-    identifies — the read follows the probe, so it sees everything a dead worker wrote."""
-    stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_bytes(b"")
-    record = (
-        json.dumps(
-            {
-                "type": "step_start",
-                "sessionID": "ses_flushed_at_exit",
-                "part": {
-                    "id": "prt_start",
-                    "sessionID": "ses_flushed_at_exit",
-                    "messageID": "msg_1",
-                    "type": "step-start",
-                },
-            }
-        ).encode()
-        + b"\n"
-    )
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path="",
-        process=_ExitsAtTheProbe(stdout_path, record),
-    )
-
-    handle = pending.await_identity(0.1)
-
-    assert handle.session_id == "ses_flushed_at_exit"
-
-
-@pytest.mark.component
-def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path, spawn_executor: Executor) -> None:
-    """Identity arrives on the worker's own SHARED stdout — an earlier writer (a tool
-    banner, a stray line) may put non-JSON ahead of the real first record. Byte zero need
-    not be it: the handshake skips leading noise and finds identity further down."""
-    stdout_path = tmp_path / "lease-1.stdout"
-    identity_line = json.dumps(
-        {
-            "type": "step_start",
-            "sessionID": "ses_after_banner",
-            "part": {"id": "prt_start", "sessionID": "ses_after_banner", "messageID": "msg_1", "type": "step-start"},
-        }
-    )
-    stdout_path.write_text(f"A tool banner opencode never asked for\nnot json either\n{identity_line}\n")
-    probe = FakeProbe(alive={(4242, "start-token")})
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path="",
-        process=probe,
-    )
-
-    handle = pending.await_identity(1.0)
-
-    assert handle.session_id == "ses_after_banner"
-
-
-@pytest.mark.component
-def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: Path, spawn_executor: Executor) -> None:
-    """The leading-noise tolerance is bounded: a permanently noisy stream with no valid
-    identity in the first ``MAX_IDENTITY_PREAMBLE_LINES`` lines fails the handshake
-    outright, rather than waiting on ``await_identity``'s own timeout."""
-    stdout_path = tmp_path / "lease-1.stdout"
-    stdout_path.write_text("not json\n" * (MAX_IDENTITY_PREAMBLE_LINES + 1))
-    probe = FakeProbe(alive={(4242, "start-token")})
-    pending = PendingOpenCodeIdentity(
-        pid=4242,
-        pgid=4242,
-        process_start_time="start-token",
-        stdout_path=str(stdout_path),
-        stderr_path="",
-        process=probe,
-    )
-
-    with pytest.raises(WorkerIdentityError):
-        pending.await_identity(1.0)
-
-
-@pytest.mark.component
-def test_resume_spawn_never_performs_the_handshake(tmp_path: Path, spawn_executor: Executor) -> None:
-    """A resume already knows its session id — no polling, an instant `WorkerHandle`."""
-    binary = worker_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(
-        envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint=None, resume_from="ses_prior"
-    )
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-
-    handle = pending.await_identity(0)  # already a `WorkerHandle` — trivial phase two
-    assert handle.session_id == "ses_prior"
-    wait_for_exit(handle.pid)
-
-
-@pytest.mark.component
-def test_judge_and_resume_with_message_launch_against_the_recorded_session(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    binary = worker_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-
-    judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
-    judge_handle.confirm_durable()  # real component tests stand in for `Judgement._elicit`'s own call
-    wait_for_exit(judge_handle.pid)
-    output = Path(workdir / "judge-output.json").read_text()
-    assert adapter.parse_verdict(output) == "pass"
-
-    resumed = adapter.resume_with_message(
-        str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
-    )
-    resumed.confirm_durable()  # component tests stand in for `_wake`'s call (src/blizzard/runner/lifecycle/dormant.py)
-    wait_for_exit(resumed.pid)
-    assert (workdir / "nudge.out").exists()
-
-
-@pytest.mark.component
-def test_spawn_launches_through_the_process_launcher_with_its_own_group(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    binary = worker_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
-    handle = pending.await_identity(5.0)
-
-    assert handle.pgid is not None
-    assert handle.pgid == handle.pid  # `start_new_session=True`'s own POSIX contract
-    wait_for_exit(handle.pid)
-
-
-# --------------------------------------------------------------------------- #
-# Model pinned at fresh mint only (component-level argv proof via a captured Popen).
 
 
 def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
@@ -1042,7 +599,6 @@ def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
     return _fake_popen
 
 
-@pytest.mark.unit
 def test_spawn_pins_the_resolved_model_at_mint_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1066,7 +622,6 @@ def test_spawn_pins_the_resolved_model_at_mint_only(
     assert "--session" not in cmd
 
 
-@pytest.mark.unit
 def test_spawn_with_resume_from_omits_model_and_carries_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1092,7 +647,6 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
     assert handle.await_identity(0).session_id == "ses_prior"
 
 
-@pytest.mark.unit
 def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -1153,7 +707,6 @@ _EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None] | None] = {
 }
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
 def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(
     name: str, payload: dict[str, Any], spawn_executor: Executor
@@ -1166,7 +719,6 @@ def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(
     assert adapter.parse_assessment(output) == expected_assessment
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
 def test_has_usable_output_matches_the_expected_shape_for_every_fixture(
     name: str, payload: dict[str, Any], spawn_executor: Executor
@@ -1175,7 +727,6 @@ def test_has_usable_output_matches_the_expected_shape_for_every_fixture(
     assert _adapter(spawn_executor).has_usable_output(output) is _EXPECTED_USABLE[name]
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
 def test_parse_usage_matches_the_expected_shape_for_every_fixture(
     name: str, payload: dict[str, Any], spawn_executor: Executor
@@ -1198,7 +749,6 @@ def test_parse_usage_matches_the_expected_shape_for_every_fixture(
     assert sample.cost_usd == cost_usd
 
 
-@pytest.mark.unit
 def test_verdict_body_never_carries_tool_output_or_child_session_text(spawn_executor: Executor) -> None:
     # `child_session`'s tool call and its child's conversation must never leak into the
     # root turn's verdict body — the corpus's sharpest exclusion case.
@@ -1224,7 +774,6 @@ def test_verdict_body_never_carries_tool_output_or_child_session_text(spawn_exec
                 assert tool_output not in assessment, fixture_name
 
 
-@pytest.mark.unit
 def test_parse_usage_and_has_usable_output_tolerate_malformed_capture(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)
     assert adapter.parse_verdict("not json at all") is None
@@ -1233,7 +782,6 @@ def test_parse_usage_and_has_usable_output_tolerate_malformed_capture(spawn_exec
     assert adapter.parse_usage("not json at all", "spawn") is None
 
 
-@pytest.mark.unit
 def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest(spawn_executor: Executor) -> None:
     """A killed-mid-write worker can leave one truncated line behind an otherwise-complete
     capture; OpenCode has no transcript fallback to re-derive a lost verdict from, so
@@ -1255,7 +803,6 @@ def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest(spawn
     assert sample.cost_usd == 0.0123
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported_message(
     spawn_executor: Executor,
 ) -> None:
@@ -1281,7 +828,6 @@ def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported
     assert mixed.cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising(spawn_executor: Executor) -> None:
     payload = _fixture("success")
     lines = [json.dumps(message) for message in payload["export"]["messages"]]  # includes the user message
@@ -1297,7 +843,6 @@ def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising(spaw
     assert sample.cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_tool_title(
     spawn_executor: Executor,
 ) -> None:
@@ -1318,7 +863,6 @@ def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_
     assert sample.cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_ignores_unparseable_lines(spawn_executor: Executor) -> None:
     counted = {"input": 5, "output": 2, "reasoning": 1, "cache": {"read": 3, "write": 4}}
     event_line = json.dumps(
@@ -1355,9 +899,6 @@ class _FakePriceCatalog:
 
     def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
         return self.prices.get((provider, model))
-
-
-_fake_catalog_conforms: type[IOpenCodePriceCatalog] = _FakePriceCatalog
 
 
 def _luna_catalog(**price_kwargs: Any) -> _FakePriceCatalog:
@@ -1417,7 +958,6 @@ def _export_message(
 _ZERO_TOKENS = {"input": 40, "output": 8, "reasoning": 0, "cache": {"read": 0, "write": 0}}
 
 
-@pytest.mark.unit
 def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
@@ -1430,7 +970,6 @@ def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced(sp
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate(spawn_executor: Executor) -> None:
     payload = _fixture("success")
     output = _jsonl(payload["events"])
@@ -1443,7 +982,6 @@ def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate(spawn_e
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_invocation(
     spawn_executor: Executor,
 ) -> None:
@@ -1468,7 +1006,6 @@ def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_i
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_their_own_rate(
     spawn_executor: Executor,
 ) -> None:
@@ -1492,7 +1029,6 @@ def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_thei
     assert below_expected != above_expected  # each step really did price at its own rate
 
 
-@pytest.mark.unit
 def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
@@ -1507,7 +1043,6 @@ def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse(
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_parse_usage_gives_no_estimate_with_no_catalog_injected(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
@@ -1519,7 +1054,6 @@ def test_parse_usage_gives_no_estimate_with_no_catalog_injected(spawn_executor: 
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_missing(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -1535,7 +1069,6 @@ def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_miss
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_message_model(
     spawn_executor: Executor,
 ) -> None:
@@ -1560,7 +1093,6 @@ def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_mes
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate(spawn_executor: Executor) -> None:
     line = json.dumps(
         _export_message(
@@ -1581,7 +1113,6 @@ def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate(spawn_
     assert sample.estimated_cost_usd is not None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported_a_real_cost(
     spawn_executor: Executor,
 ) -> None:
@@ -1618,7 +1149,6 @@ def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_is_unpriced(
     spawn_executor: Executor,
 ) -> None:
@@ -1654,7 +1184,6 @@ def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_i
     assert sample.estimated_cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repeats_the_step(
     spawn_executor: Executor,
 ) -> None:
@@ -1681,7 +1210,6 @@ def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repea
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_configured_one(
     spawn_executor: Executor,
 ) -> None:
@@ -1702,7 +1230,6 @@ def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_conf
     assert adapter.sum_transcript_usage([line], "spawn").model == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_takes_a_supplied_observation_over_the_exports_model(spawn_executor: Executor) -> None:
     line = json.dumps(
         _export_message(
@@ -1723,7 +1250,6 @@ def test_sum_transcript_usage_takes_a_supplied_observation_over_the_exports_mode
     assert sample.kind == "judge"
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_prices_a_model_less_step_at_the_passed_model(spawn_executor: Executor) -> None:
     event_line = json.dumps(
         _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
@@ -1735,7 +1261,6 @@ def test_sum_transcript_usage_prices_a_model_less_step_at_the_passed_model(spawn
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_keeps_a_known_steps_model_when_a_later_copy_names_only_its_provider(
     spawn_executor: Executor,
 ) -> None:
@@ -1758,7 +1283,6 @@ def test_sum_transcript_usage_keeps_a_known_steps_model_when_a_later_copy_names_
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_derives_the_observation_when_none_is_supplied_even_for_a_pinned_model(
     spawn_executor: Executor,
 ) -> None:
@@ -1784,7 +1308,6 @@ def test_sum_transcript_usage_derives_the_observation_when_none_is_supplied_even
     )
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_keeps_the_fallback_chain_when_no_export_names_a_model(spawn_executor: Executor) -> None:
     event_line = json.dumps(
         _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
@@ -1800,7 +1323,6 @@ def test_sum_transcript_usage_keeps_the_fallback_chain_when_no_export_names_a_mo
     assert _adapter(spawn_executor).sum_transcript_usage([event_line], "spawn").model == "opencode"
 
 
-@pytest.mark.unit
 def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_carry_no_model(
     spawn_executor: Executor,
 ) -> None:
@@ -1831,7 +1353,6 @@ def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_c
     assert bare.input_tokens == 40
 
 
-@pytest.mark.unit
 def test_observed_model_reads_the_exports_provider_and_model_as_one_reference(spawn_executor: Executor) -> None:
     line = json.dumps(
         _export_message(
@@ -1848,7 +1369,6 @@ def test_observed_model_reads_the_exports_provider_and_model_as_one_reference(sp
     assert _adapter(spawn_executor, model="anthropic/claude-configured").observed_model([line]) == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_observed_model_is_none_for_run_events_and_model_less_exports(spawn_executor: Executor) -> None:
     """Never the configured default — a run event names nothing, and an export whose
     `message.info` leaves the pair unset names nothing either."""
@@ -1890,7 +1410,6 @@ class _CountingPriceCatalog:
         return self.inner.price_for(provider, model)
 
 
-@pytest.mark.unit
 def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_prices(spawn_executor: Executor) -> None:
     events = [
         _step_finish_event(
@@ -1911,7 +1430,6 @@ def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_price
 # --- classify_usage_limit ------------------------------------
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_reads_the_captured_go_upsell_event(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(USAGE_LIMIT_EVENT)
@@ -1923,7 +1441,6 @@ def test_classify_usage_limit_reads_the_captured_go_upsell_event(spawn_executor:
     assert limit.resets_at == now + timedelta(hours=2)
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_is_none_for_an_ordinary_provider_error(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     payload = _fixture("provider_error")
@@ -1932,7 +1449,6 @@ def test_classify_usage_limit_is_none_for_an_ordinary_provider_error(spawn_execu
     assert _adapter(spawn_executor).classify_usage_limit(output, [], now) is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(
@@ -1946,7 +1462,6 @@ def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit
     assert _adapter(spawn_executor).classify_usage_limit(output, [], now) is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raises(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(
@@ -1963,7 +1478,6 @@ def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raise
     assert limit.resets_at is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_tolerates_malformed_capture(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     assert _adapter(spawn_executor).classify_usage_limit("not json at all", [], now) is None
@@ -1972,7 +1486,6 @@ def test_classify_usage_limit_tolerates_malformed_capture(spawn_executor: Execut
 # --- classify_provider_overload ------------------------------
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_reads_a_529_status_code(spawn_executor: Executor) -> None:
     output = json.dumps(
         {
@@ -1988,7 +1501,6 @@ def test_classify_provider_overload_reads_a_529_status_code(spawn_executor: Exec
     assert overload.detail == "Overloaded"
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529_status(
     spawn_executor: Executor,
 ) -> None:
@@ -2003,7 +1515,6 @@ def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529
     assert _adapter(spawn_executor).classify_provider_overload(output, []) is not None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_never_calls_the_transcript_reader(spawn_executor: Executor) -> None:
     output = json.dumps(
         {
@@ -2022,7 +1533,6 @@ def test_classify_provider_overload_never_calls_the_transcript_reader(spawn_exec
     assert overload is not None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_an_ordinary_provider_error(spawn_executor: Executor) -> None:
     payload = _fixture("provider_error")
     output = _jsonl(payload["events"])
@@ -2030,19 +1540,16 @@ def test_classify_provider_overload_is_none_for_an_ordinary_provider_error(spawn
     assert _adapter(spawn_executor).classify_provider_overload(output, []) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_a_429_usage_limit_refusal(spawn_executor: Executor) -> None:
     output = json.dumps(USAGE_LIMIT_EVENT)
 
     assert _adapter(spawn_executor).classify_provider_overload(output, []) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_tolerates_malformed_capture(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).classify_provider_overload("not json at all", []) is None
 
 
-@pytest.mark.unit
 def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -2073,14 +1580,12 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)
 
 
-@pytest.mark.unit
 def test_a_declared_supported_list_refuses_a_provider_model_outside_it(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, supported_models=["openai/*"])
     assert adapter.resolve_model_strict(["anthropic/claude-sonnet-4"]) is None
     assert adapter.resolve_model_strict(["anthropic/claude-sonnet-4", "openai/gpt-5"]) == "openai/gpt-5"
 
 
-@pytest.mark.unit
 def test_an_empty_supported_list_accepts_no_native_name_but_still_maps_a_tier(spawn_executor: Executor) -> None:
     adapter = _adapter(
         spawn_executor, supported_models=[], model_aliases=[("blizzard:frontier", "openai/gpt-5.6-luna")]
@@ -2089,7 +1594,6 @@ def test_an_empty_supported_list_accepts_no_native_name_but_still_maps_a_tier(sp
     assert adapter.resolve_model_strict(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
 
 
-@pytest.mark.unit
 def test_with_no_declared_list_any_provider_model_is_accepted_and_reported(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor)
     assert adapter.resolve_model_strict(["openai/gpt-5.6-luna"]) == "openai/gpt-5.6-luna"

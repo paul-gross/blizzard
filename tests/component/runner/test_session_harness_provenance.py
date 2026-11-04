@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
 import sqlalchemy as sa
 
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
@@ -14,18 +13,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from tests.runner_fakes import make_store, record_usage
 
-pytestmark = [pytest.mark.component]
-
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
-
-
-@pytest.mark.unit
-def test_session_reference_is_a_composite_key() -> None:
-    """A same raw id remains distinguishable in every domain value that carries it."""
-    claude = SessionReference(CLAUDE_CODE_HARNESS_ID, "shared")
-    other = SessionReference("other_harness", "shared")
-    assert claude != other
-    assert {claude, other} == {claude, other}
 
 
 def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(tmp_path: Path) -> None:

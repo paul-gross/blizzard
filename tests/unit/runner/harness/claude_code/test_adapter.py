@@ -8,15 +8,13 @@ covers usage parsing, the per-lease stdout redirect, and node-entry resume.
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import stat
 import subprocess
 from collections.abc import Callable, Sequence
 from concurrent.futures import Executor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Any
+from typing import IO
 
 import pytest
 from structlog.testing import capture_logs
@@ -37,11 +35,12 @@ from blizzard.runner.process.child_processes import (
     Stream,
     StreamTarget,
 )
-from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.suite_plugin import DAEMON_ENV
 from tests.support_child_launch import CHILDREN, tool_env, version_probe
+from tests.support_claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
+from tests.support_claude_code_adapter import adapter as _adapter
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
@@ -63,16 +62,6 @@ def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
     absent-from-``PATH`` behavior override this within their own body."""
     monkeypatch.setattr(shutil, "which", _which_on_usr_bin)
-
-
-def _adapter(spawn_executor: Executor, **kwargs: Any) -> ClaudeCodeAdapter:
-    """A :class:`ClaudeCodeAdapter` helper defaulting ``process`` to a fresh :class:`FakeProbe`
-    and ``launcher`` to a real one over it — most cases here don't care which they get."""
-    process = kwargs.setdefault("process", FakeProbe())
-    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor, children=CHILDREN))
-    kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
-    kwargs.setdefault("versions", version_probe())
-    return ClaudeCodeAdapter(**kwargs)
 
 
 class _ScriptedRuns:
@@ -128,17 +117,14 @@ def _scripted_versions(reply: ChildRun | BaseException) -> VersionProbe:
     return VersionProbe(_ScriptedRuns(reply), tool_env())
 
 
-@pytest.mark.unit
 def test_parse_verdict_extracts_choice_from_json_envelope(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).parse_verdict(_JSON_PASS) == "pass"
 
 
-@pytest.mark.unit
 def test_parse_verdict_reads_plain_text_reply(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).parse_verdict("verdict: <Choice>fail</Choice>") == "fail"
 
 
-@pytest.mark.unit
 def test_parse_verdict_missing_choice_is_none(spawn_executor: Executor) -> None:
     assert (
         _adapter(spawn_executor).parse_verdict('{"type":"result","result":"no verdict here","session_id":"s1"}') is None
@@ -150,24 +136,20 @@ def test_parse_verdict_missing_choice_is_none(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).parse_verdict("<Choice>   </Choice>") is None
 
 
-@pytest.mark.unit
 def test_parse_assessment_returns_text_after_the_choice(spawn_executor: Executor) -> None:
     output = '{"type":"result","result":"<Choice>fail</Choice>\\nBLOCKING: guard empty input","session_id":"s1"}'
     assert _adapter(spawn_executor).parse_assessment(output) == "BLOCKING: guard empty input"
 
 
-@pytest.mark.unit
 def test_parse_assessment_is_empty_without_a_choice(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).parse_assessment("no verdict at all") == ""
 
 
-@pytest.mark.unit
 def test_resume_command_is_the_literal_takeover(spawn_executor: Executor) -> None:
     cmd = _adapter(spawn_executor, binary="claude").resume_command("/ws/e1", "sess-x")
     assert cmd == "cd /ws/e1 && claude --resume sess-x"
 
 
-@pytest.mark.unit
 def test_attended_resume_command_reasserts_the_permission_mode(spawn_executor: Executor) -> None:
     # The flag is per-invocation, not session-sticky: the takeover door's
     # exec'd command reasserts it so a bypassPermissions worker is not demoted mid-task.
@@ -178,7 +160,6 @@ def test_attended_resume_command_reasserts_the_permission_mode(spawn_executor: E
     assert cmd == "cd /ws/e1 && claude --resume sess-x --model opus --permission-mode bypassPermissions"
 
 
-@pytest.mark.unit
 def test_the_advertised_paste_string_never_carries_the_permission_mode(spawn_executor: Executor) -> None:
     # The default composition is the escalation record / `runner status` paste string:
     # a human runs it in a bare terminal, so it stays at the interactive default.
@@ -187,7 +168,6 @@ def test_the_advertised_paste_string_never_carries_the_permission_mode(spawn_exe
     assert adapter.resume_command("/ws/e1", "sess-x") == "cd /ws/e1 && claude --resume sess-x"
 
 
-@pytest.mark.unit
 def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_executor: Executor) -> None:
     assert (
         _adapter(spawn_executor, binary="claude", permission_mode="").resume_command("/ws/e1", "sess-x", attended=True)
@@ -199,7 +179,6 @@ def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_execu
 # `observe_version` (bounded and non-raising — read AFTER a worker is already live).
 
 
-@pytest.mark.unit
 def test_observe_version_reads_the_binarys_version_output(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -208,7 +187,6 @@ def test_observe_version_reads_the_binarys_version_output(
     assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() == "claude-code 1.2.3"
 
 
-@pytest.mark.unit
 def test_observe_version_times_out_to_none_rather_than_raising(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -221,7 +199,6 @@ def test_observe_version_times_out_to_none_rather_than_raising(
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
 
 
-@pytest.mark.unit
 def test_observe_version_missing_binary_reads_none_rather_than_raising(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -237,7 +214,6 @@ def test_observe_version_missing_binary_reads_none_rather_than_raising(
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
 
 
-@pytest.mark.unit
 def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -286,7 +262,6 @@ def _spawn_fixture(spawn_executor: Executor) -> tuple[ClaudeCodeAdapter, Envelop
     return adapter, envelope, preamble
 
 
-@pytest.mark.unit
 def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -305,7 +280,6 @@ def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id
     assert handle.session_id == "prior-sid"
 
 
-@pytest.mark.unit
 def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
@@ -320,7 +294,6 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch,
     assert handle.session_id == "fresh-hint"
 
 
-@pytest.mark.unit
 def test_spawn_omits_settings_without_a_bundle_or_settings_path(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -333,7 +306,6 @@ def test_spawn_omits_settings_without_a_bundle_or_settings_path(
     assert "--settings" not in captured["cmd"]
 
 
-@pytest.mark.unit
 def test_spawn_stamps_process_start_time_from_the_injected_probe(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -361,7 +333,6 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(
     assert handle.process_start_time == "fake-start-time-token"
 
 
-@pytest.mark.unit
 def test_judge_stamps_process_start_time_from_the_injected_probe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -383,7 +354,6 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
     assert handle.process_start_time == "fake-judge-start-time"
 
 
-@pytest.mark.unit
 def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -411,10 +381,7 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
 # --------------------------------------------------------------------------- #
 # Spawn-environment allowlist: no call path copies `os.environ` wholesale
 
-_SENTINEL_UNLISTED_VAR = "MY_UNLISTED_SENTINEL_VAR"
 
-
-@pytest.mark.unit
 def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -435,7 +402,6 @@ def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     assert _SENTINEL_UNLISTED_VAR not in env
 
 
-@pytest.mark.unit
 def test_spawn_env_excludes_the_elicitation_marker(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
@@ -450,161 +416,6 @@ def test_spawn_env_excludes_the_elicitation_marker(spawn_executor: Executor) -> 
     assert "BLIZZARD_ELICITATION" not in env
 
 
-@pytest.mark.component
-def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
-) -> None:
-    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
-    monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-
-    handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert "BZ_HUB_TOKEN" not in dumped
-    assert _SENTINEL_UNLISTED_VAR not in dumped
-
-
-@pytest.mark.component
-def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path, spawn_executor: Executor) -> None:
-    # `--resume` inherits none of the spawn env, so a judge given a preamble must carry
-    # the same per-lease identity a resume does.
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_42",
-        local_api_url="http://127.0.0.1:8431",
-        lease_token="fresh-judge-token",
-    )
-
-    handle = adapter.judge(
-        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
-    )
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
-    assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
-    assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-judge-token"  # the re-minted plaintext rides the judge
-    assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
-
-
-@pytest.mark.component
-def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_42",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.judge(
-        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
-    )
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert dumped["BLIZZARD_ELICITATION"] == "1"
-
-
-@pytest.mark.component
-def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
-) -> None:
-    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
-    monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-
-    resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert "BZ_HUB_TOKEN" not in dumped
-    assert _SENTINEL_UNLISTED_VAR not in dumped
-
-
-@pytest.mark.component
-def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    # A resumed worker needs the same per-lease identity a fresh spawn gets, since
-    # `--resume` inherits none of the spawn env — the resume child env must carry it too.
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_42",
-        local_api_url="http://127.0.0.1:8431",
-        lease_token="fresh-resume-token",
-    )
-
-    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
-    assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
-    assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-resume-token"  # the re-minted plaintext rides the resume
-    assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
-
-
-@pytest.mark.component
-def test_resume_with_message_child_env_excludes_the_elicitation_marker(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    dump_script = tmp_path / "dump-env"
-    dump_script.write_text(_ENV_DUMP_HARNESS)
-    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(dump_script))
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_42",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    dumped = json.loads((workdir / "env-dump.json").read_text())
-    assert "BLIZZARD_ELICITATION" not in dumped
-
-
-@pytest.mark.unit
 def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
     monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
     adapter = _adapter(
@@ -622,7 +433,6 @@ def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPa
     assert env["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
 
 
-@pytest.mark.unit
 def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
     monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
     monkeypatch.setenv("LC_TIME", "fr_FR.UTF-8")
@@ -640,7 +450,6 @@ def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPa
     assert env["LC_TIME"] == "fr_FR.UTF-8"
 
 
-@pytest.mark.unit
 def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars(
     monkeypatch: pytest.MonkeyPatch,
     spawn_executor: Executor,
@@ -665,7 +474,6 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
     assert env["BLIZZARD_SESSION_ID"] == "sess-1"
 
 
-@pytest.mark.unit
 def test_spawn_env_carries_the_lease_capability_token(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -685,7 +493,6 @@ def test_spawn_env_carries_the_lease_capability_token(
     assert env["BLIZZARD_LEASE_TOKEN"] == "plaintext-lease-token"
 
 
-@pytest.mark.unit
 def test_spawn_env_carries_the_scratch_directory_when_the_preamble_names_one(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -703,7 +510,6 @@ def test_spawn_env_carries_the_scratch_directory_when_the_preamble_names_one(
     assert env["BLIZZARD_TMPDIR"] == "/runner/worker-tmp/lease_1"
 
 
-@pytest.mark.unit
 def test_spawn_env_excludes_the_scratch_directory_when_the_preamble_names_none(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
@@ -718,7 +524,6 @@ def test_spawn_env_excludes_the_scratch_directory_when_the_preamble_names_none(s
     assert "BLIZZARD_TMPDIR" not in env
 
 
-@pytest.mark.unit
 def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_inject(
     spawn_executor: Executor,
 ) -> None:
@@ -743,273 +548,6 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_
     assert (spawn_injected | judge_injected) - set(DAEMON_ENV["unset"]) == set()
 
 
-_ENV_DUMP_HARNESS = """#!/usr/bin/env python3
-import json, os
-with open("env-dump.json", "w") as f:
-    json.dump(dict(os.environ), f)
-print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "", "session_id": "auto"}))
-"""
-
-
-_FAKE_HARNESS = """#!/usr/bin/env python3
-import sys, json
-args = sys.argv[1:]
-session = resume = prompt = None
-i = 0
-while i < len(args):
-    a = args[i]
-    if a == "--session-id": session = args[i + 1]; i += 2
-    elif a == "--resume": resume = args[i + 1]; i += 2
-    elif a == "--output-format": i += 2
-    elif a == "--settings": i += 2
-    elif a == "--permission-mode": i += 2
-    elif a == "--model": i += 2
-    elif a in ("-p", "--print"): i += 1
-    else: prompt = a; i += 1
-sid = resume or session or "auto"
-open("argv.txt", "w").write(" ".join(args))
-if resume is None:
-    open("spawned-here.txt", "w").write(prompt or "")
-    result = ""
-else:
-    result = "Assessed. <Choice>pass</Choice>"
-print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": result, "session_id": sid}))
-"""
-
-
-def _fake_binary(tmp_path: Path) -> str:
-    script = tmp_path / "fake-claude"
-    script.write_text(_FAKE_HARNESS)
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    return str(script)
-
-
-@pytest.mark.component
-def test_spawn_launches_real_process_in_workdir(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123").await_identity(0)
-
-    assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
-    assert handle.pid > 0
-    assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
-    assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
-    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()  # the autonomy default
-    assert "--model claude-opus-5" in (workdir / "argv.txt").read_text()  # pinned Opus, not the ambient default
-
-
-_VERSION_HANGS_HARNESS = """#!/usr/bin/env python3
-import sys, json, time
-args = sys.argv[1:]
-if args == ["--version"]:
-    time.sleep(30)
-    sys.exit(0)
-session = resume = prompt = None
-i = 0
-while i < len(args):
-    a = args[i]
-    if a == "--session-id": session = args[i + 1]; i += 2
-    elif a == "--resume": resume = args[i + 1]; i += 2
-    elif a == "--output-format": i += 2
-    elif a == "--settings": i += 2
-    elif a == "--permission-mode": i += 2
-    elif a == "--model": i += 2
-    elif a in ("-p", "--print"): i += 1
-    else: prompt = a; i += 1
-sid = resume or session or "auto"
-if resume is None:
-    open("spawned-here.txt", "w").write(prompt or "")
-    result = ""
-else:
-    result = "Assessed. <Choice>pass</Choice>"
-print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": result, "session_id": sid}))
-"""
-
-
-@pytest.mark.component
-def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
-) -> None:
-    """``observe_version``, read immediately BEFORE the spawn, hangs past its own bound and
-    reads back ``None`` instead of blocking — the spawn right after it, on the same binary,
-    is entirely unaffected."""
-    # `observe_version` is shared verbatim with OpenCode — the bound lives on
-    # `version_probe`, not on this adapter module.
-    monkeypatch.setattr("blizzard.runner.harness.internal.version_probe.VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
-    script = tmp_path / "hung-version-claude"
-    script.write_text(_VERSION_HANGS_HARNESS)
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=str(script))
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    assert adapter.observe_version() is None  # bounded — never waits out the hang
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert handle.pid > 0
-    assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
-
-
-@pytest.mark.component
-def test_spawn_pins_a_configured_model(tmp_path: Path, spawn_executor: Executor) -> None:
-    # The worker model is pinned so a spawn never inherits the operator's ambient
-    # ``claude`` default; the constructor argument overrides the Opus default.
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary, model="claude-sonnet-5")
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
-
-
-@pytest.mark.component
-def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path, spawn_executor: Executor) -> None:
-    # A headless worker has no one to approve tool use; the configured permission mode is
-    # what lets it edit/commit in its sandboxed worktree.
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary, permission_mode="bypassPermissions")
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
-
-
-@pytest.mark.component
-def test_judge_resume_output_parses_to_choice(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary)
-    output_path = str(workdir / "judge-output.json")
-
-    handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    output = Path(output_path).read_text()
-    assert adapter.parse_verdict(output) == "pass"
-
-
-@pytest.mark.component
-def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path, spawn_executor: Executor) -> None:
-    # ``--permission-mode`` is per-invocation, not session-sticky, so ``judge`` must
-    # reassert it exactly as ``spawn``/``resume_with_message`` do.
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary, permission_mode="bypassPermissions")
-
-    handle = adapter.judge(
-        str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
-    )
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
-
-
-@pytest.mark.component
-def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path, spawn_executor: Executor) -> None:
-    # ``--resume`` does not inherit the spawn's ``--settings``, so a resumed session
-    # would lose its heartbeat/session-end hooks unless this re-attaches the file.
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    settings = tmp_path / "worker-settings.json"
-    adapter = _adapter(spawn_executor, binary=binary, settings_path=str(settings))
-
-    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
-
-
-@pytest.mark.component
-def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    # ``judge``'s resume must reuse the same flags, in the same order, as the session's
-    # real turns, or it recreates the cache instead of reading it.
-    binary = _fake_binary(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    settings = tmp_path / "worker-settings.json"
-    adapter = _adapter(
-        spawn_executor=spawn_executor, binary=binary, settings_path=str(settings), permission_mode="bypassPermissions"
-    )
-
-    resumed = adapter.resume_with_message(
-        str(workdir), "sess-123", "continue", model="sonnet", effort="high", compaction_window="150k"
-    )
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-    resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
-
-    judge_handle = adapter.judge(
-        str(workdir),
-        "sess-123",
-        "assess",
-        str(workdir / "judge-output.json"),
-        model="sonnet",
-        effort="high",
-        compaction_window="150k",
-    )
-    judge_handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(judge_handle.pid, 0)
-    judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
-
-    assert judge_prefix == resumed_prefix
-    assert resumed_arg == "continue"
-    assert judge_arg == "assess"
-    assert f"--settings {settings}" in judge_prefix
-    assert "--effort high" in judge_prefix
-    assert "--model sonnet" in judge_prefix
-    assert "--autocompact 150k" in judge_prefix
-    assert "--permission-mode bypassPermissions" in judge_prefix
-
-
-@pytest.mark.unit
 def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -1043,61 +581,6 @@ def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_defaul
     assert captured["cmd"][captured["cmd"].index("--model") + 1] == "sonnet"
 
 
-@pytest.mark.component
-def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path, spawn_executor: Executor) -> None:
-    # The worker's cwd is the winter workspace root, not the env subdir, and the
-    # runner-composed preamble is prepended to the node envelope prompt.
-    binary = _fake_binary(tmp_path)
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
-    env_workdir = workspace_root / "r1"
-    env_workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary)
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-        workspace_root=str(workspace_root),
-        prompt_prefix="PREAMBLE-TABLE",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
-    assert (workspace_root / "spawned-here.txt").exists()
-    assert not (env_workdir / "spawned-here.txt").exists()
-    # The composed prompt is the prefix followed by the envelope prompt.
-    assert (workspace_root / "spawned-here.txt").read_text() == f"PREAMBLE-TABLE\n\n{envelope.prompt}"
-
-
-@pytest.mark.component
-def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path, spawn_executor: Executor) -> None:
-    # An empty workspace_root keeps the legacy cwd (the first env's workdir).
-    binary = _fake_binary(tmp_path)
-    env_workdir = tmp_path / "r1"
-    env_workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary)
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
-    assert (env_workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
-
-
-# --------------------------------------------------------------------------- #
-# Usage extraction (epic #57, #58): parse_usage, sum_transcript_usage
-
 _USAGE_ENVELOPE = json.dumps(
     {
         "type": "result",
@@ -1117,7 +600,6 @@ _USAGE_ENVELOPE = json.dumps(
 )
 
 
-@pytest.mark.unit
 def test_parse_usage_extracts_tokens_and_cost_from_json_envelope(spawn_executor: Executor) -> None:
     sample = _adapter(spawn_executor).parse_usage(_USAGE_ENVELOPE, "judge")
     assert sample is not None
@@ -1156,7 +638,6 @@ _SIGINT_ENVELOPE = json.dumps(
 )
 
 
-@pytest.mark.unit
 def test_parse_usage_extracts_a_real_cost_from_a_sigint_error_during_execution_envelope(
     spawn_executor: Executor,
 ) -> None:
@@ -1169,20 +650,17 @@ def test_parse_usage_extracts_a_real_cost_from_a_sigint_error_during_execution_e
     assert sample.output_tokens == 12
 
 
-@pytest.mark.unit
 def test_has_usable_output_is_true_for_a_sigint_error_during_execution_envelope(spawn_executor: Executor) -> None:
     """A judge that ends in this envelope was judged, not lost: it names no verdict, so
     the attempt fails and consumes a retry rather than relaunching indefinitely."""
     assert _adapter(spawn_executor).has_usable_output(_SIGINT_ENVELOPE) is True
 
 
-@pytest.mark.unit
 def test_parse_usage_returns_none_without_a_result_envelope(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor).parse_usage("not json at all", "spawn") is None
     assert _adapter(spawn_executor).parse_usage("", "spawn") is None
 
 
-@pytest.mark.unit
 def test_parse_usage_returns_none_when_envelope_has_no_usage_object(spawn_executor: Executor) -> None:
     # A killed/verdict-less worker's envelope (if any) carries no `usage` at all —
     # the caller's cue to fall back to `sum_transcript_usage`.
@@ -1190,7 +668,6 @@ def test_parse_usage_returns_none_when_envelope_has_no_usage_object(spawn_execut
     assert _adapter(spawn_executor).parse_usage(envelope, "spawn") is None
 
 
-@pytest.mark.unit
 def test_parse_usage_marks_model_unknown_when_envelope_and_transcript_omit_it(spawn_executor: Executor) -> None:
     envelope = json.dumps(
         {
@@ -1211,7 +688,6 @@ def test_parse_usage_marks_model_unknown_when_envelope_and_transcript_omit_it(sp
     assert sample.cost_usd is None  # no `total_cost_usd` in this envelope — absent, never fabricated
 
 
-@pytest.mark.unit
 def test_parse_usage_missing_token_fields_default_to_zero(spawn_executor: Executor) -> None:
     envelope = json.dumps({"type": "result", "result": "ok", "session_id": "s1", "usage": {}})
     sample = _adapter(spawn_executor).parse_usage(envelope, "spawn")
@@ -1220,7 +696,6 @@ def test_parse_usage_missing_token_fields_default_to_zero(spawn_executor: Execut
     assert counts == (0, 0, 0, 0)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_sums_multiple_assistant_messages(spawn_executor: Executor) -> None:
     lines = [
         json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
@@ -1269,7 +744,6 @@ def test_sum_transcript_usage_sums_multiple_assistant_messages(spawn_executor: E
     assert sample.cost_usd is None  # a transcript carries no dollar figure — the envelope-less fallback
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_counts_one_message_once_however_many_records_carry_it(spawn_executor: Executor) -> None:
     """A reply with several content blocks is written as several records that each repeat
     their message's ONE usage. Summing per record inflated the fallback by ~1.7x against the
@@ -1293,7 +767,6 @@ def test_sum_transcript_usage_counts_one_message_once_however_many_records_carry
     assert (sample.cache_read_tokens, sample.cache_create_tokens) == (1_000, 20)
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_counts_an_id_less_record_rather_than_collapsing_it(spawn_executor: Executor) -> None:
     """An unidentifiable message cannot be collapsed against anything, and is more likely one
     message than a repeat of the last — undercounting spend is the worse failure here."""
@@ -1318,7 +791,6 @@ def test_sum_transcript_usage_counts_an_id_less_record_rather_than_collapsing_it
     assert sample.input_tokens == 18
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines(spawn_executor: Executor) -> None:
     lines = [
         "",
@@ -1345,7 +817,6 @@ def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines(spawn_ex
     assert sample.cost_usd is None
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_reads_a_non_numeric_token_field_as_absent(spawn_executor: Executor) -> None:
     usage = {
         "input_tokens": "12",
@@ -1364,7 +835,6 @@ def test_sum_transcript_usage_reads_a_non_numeric_token_field_as_absent(spawn_ex
     assert counts == (14, 3, 0, 0)
 
 
-@pytest.mark.unit
 def test_parse_usage_reads_non_numeric_token_and_model_usage_fields_as_absent(spawn_executor: Executor) -> None:
     envelope = json.dumps(
         {
@@ -1384,7 +854,6 @@ def test_parse_usage_reads_non_numeric_token_and_model_usage_fields_as_absent(sp
     assert sample.cost_scope_tokens == 13
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_counts_each_empty_id_record_rather_than_collapsing_them(
     spawn_executor: Executor,
 ) -> None:
@@ -1393,7 +862,6 @@ def test_sum_transcript_usage_counts_each_empty_id_record_rather_than_collapsing
     assert _adapter(spawn_executor).sum_transcript_usage(lines, "spawn").input_tokens == 8
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_of_empty_transcript_is_zeroed(spawn_executor: Executor) -> None:
     sample = _adapter(spawn_executor, model="claude-sonnet-5").sum_transcript_usage([], "judge")
 
@@ -1403,7 +871,6 @@ def test_sum_transcript_usage_of_empty_transcript_is_zeroed(spawn_executor: Exec
     assert sample.cost_usd is None
 
 
-@pytest.mark.unit
 def test_observed_model_reads_the_last_assistant_records_model(spawn_executor: Executor) -> None:
     def _record(model: str | None) -> str:
         message: dict[str, object] = {"role": "assistant", "usage": {"input_tokens": 1, "output_tokens": 1}}
@@ -1421,7 +888,6 @@ def test_observed_model_reads_the_last_assistant_records_model(spawn_executor: E
     assert _adapter(spawn_executor, model="claude-haiku-4-5").observed_model(lines) == "claude-sonnet-5"
 
 
-@pytest.mark.unit
 def test_observed_model_is_none_when_no_record_names_a_model(spawn_executor: Executor) -> None:
     """Never the configured default: a caller must be able to tell "observed nothing"
     apart from "observed the fallback", which `sum_transcript_usage`'s own model cannot."""
@@ -1442,167 +908,7 @@ def test_observed_model_is_none_when_no_record_names_a_model(spawn_executor: Exe
 # --------------------------------------------------------------------------- #
 # Injected per-lease stdout redirect (epic #57): spawn / resume_with_message
 
-_FAKE_HARNESS_WITH_USAGE = """#!/usr/bin/env python3
-import sys, json
-args = sys.argv[1:]
-session = resume = prompt = None
-output_format = "text"
-i = 0
-while i < len(args):
-    a = args[i]
-    if a == "--session-id": session = args[i + 1]; i += 2
-    elif a == "--resume": resume = args[i + 1]; i += 2
-    elif a == "--output-format": output_format = args[i + 1]; i += 2
-    elif a == "--settings": i += 2
-    elif a == "--permission-mode": i += 2
-    elif a == "--model": i += 2
-    elif a in ("-p", "--print"): i += 1
-    else: prompt = a; i += 1
-sid = resume or session or "auto"
-result_text = "<Choice>pass</Choice>" if resume else ""
-if output_format != "json":
-    print(result_text)
-else:
-    envelope = {
-        "type": "result",
-        "subtype": "success",
-        "is_error": False,
-        "result": result_text,
-        "session_id": sid,
-        "model": "claude-opus-4-8",
-        "usage": {
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_input_tokens": 10,
-            "cache_creation_input_tokens": 5,
-        },
-        "total_cost_usd": 0.0123,
-    }
-    print(json.dumps(envelope))
-"""
 
-
-def _fake_binary_with_usage(tmp_path: Path) -> str:
-    script = tmp_path / "fake-claude-usage"
-    script.write_text(_FAKE_HARNESS_WITH_USAGE)
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-    return str(script)
-
-
-@pytest.mark.component
-def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = _fake_binary_with_usage(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(spawn_executor, binary=binary)
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-        stdout_path=str(stdout_path),
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert stdout_path.exists()
-    sample = adapter.parse_usage(stdout_path.read_text(), "spawn")
-    assert sample is not None
-    assert sample.input_tokens == 100
-    assert sample.cost_usd == 0.0123
-
-
-@pytest.mark.component
-def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path, spawn_executor: Executor) -> None:
-    # Empty `stdout_path` discards output (DEVNULL) — nothing is left on disk.
-    binary = _fake_binary_with_usage(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary)
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
-        lease_id="lease_1",
-        local_api_url="http://127.0.0.1:8431",
-    )
-
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
-    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
-
-    assert list(workdir.glob("*.stdout")) == []
-
-
-@pytest.mark.component
-def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Path, spawn_executor: Executor) -> None:
-    binary = _fake_binary_with_usage(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1-resume.stdout"
-    adapter = _adapter(spawn_executor, binary=binary)
-
-    resumed = adapter.resume_with_message(
-        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
-    )
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    assert stdout_path.exists()
-    sample = adapter.parse_usage(stdout_path.read_text(), "resume")
-    assert sample is not None
-    assert sample.output_tokens == 50
-
-
-@pytest.mark.component
-def test_resume_with_message_passes_output_format_json_so_cost_is_real(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    """Regression pin: ``resume_with_message`` must pass ``--output-format json`` so its
-    stdout is a JSON envelope and ``parse_usage`` reads the real ``total_cost_usd``."""
-    binary = _fake_binary_with_usage(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    stdout_path = tmp_path / "lease-1-resume-cost.stdout"
-    adapter = _adapter(spawn_executor, binary=binary)
-
-    resumed = adapter.resume_with_message(
-        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
-    )
-    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
-
-    sample = adapter.parse_usage(stdout_path.read_text(), "resume")
-    assert sample is not None
-    assert sample.cost_usd == 0.0123
-
-
-@pytest.mark.component
-def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path, spawn_executor: Executor) -> None:
-    """The other side: a resume invocation that omits ``--output-format json`` emits
-    plain text, not an envelope, so ``parse_usage`` returns ``None``."""
-    binary = _fake_binary_with_usage(tmp_path)
-    workdir = tmp_path / "e1"
-    workdir.mkdir()
-    adapter = _adapter(spawn_executor, binary=binary)
-
-    result = subprocess.run(
-        [binary, "-p", "--resume", "sess-usage", "deliver the answer"],
-        cwd=workdir,
-        capture_output=True,
-        text=True,
-    )
-
-    assert adapter.parse_usage(result.stdout, "resume") is None
-
-
-# --------------------------------------------------------------------------- #
-# Model / effort resolution: left-to-right, first entry that resolves wins.
-
-
-@pytest.mark.unit
 def test_resolve_model_maps_the_standard_tiers_with_no_config_at_all(spawn_executor: Executor) -> None:
     # A zero-config runner resolves the three standard tiers off the adapter's built-ins.
     adapter = _adapter(spawn_executor, binary="claude")
@@ -1611,13 +917,11 @@ def test_resolve_model_maps_the_standard_tiers_with_no_config_at_all(spawn_execu
     assert adapter.resolve_model(["blizzard:basic"]) == "sonnet"
 
 
-@pytest.mark.unit
 def test_resolve_model_takes_the_first_entry_that_resolves(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     assert adapter.resolve_model(["blizzard:advanced", "blizzard:basic"]) == "opus"
 
 
-@pytest.mark.unit
 def test_resolve_model_skips_a_native_name_belonging_to_another_harness(spawn_executor: Executor) -> None:
     # A mixed list must fall past a name belonging to another harness rather than hand
     # `claude` a name it would reject, turning a preference into a spawn failure.
@@ -1625,26 +929,22 @@ def test_resolve_model_skips_a_native_name_belonging_to_another_harness(spawn_ex
     assert adapter.resolve_model(["gpt-5.3-codex", "blizzard:basic"]) == "sonnet"
 
 
-@pytest.mark.unit
 def test_resolve_model_skips_an_alias_neither_config_nor_builtins_map(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     assert adapter.resolve_model(["blizzard:experimental", "blizzard:basic"]) == "sonnet"
 
 
-@pytest.mark.unit
 def test_resolve_model_accepts_a_native_short_name_and_the_claude_family_prefix(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     assert adapter.resolve_model(["haiku"]) == "haiku"
     assert adapter.resolve_model(["claude-sonnet-5"]) == "claude-sonnet-5"
 
 
-@pytest.mark.unit
 def test_runner_config_overrides_the_adapters_builtin_tier(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model_aliases=(("blizzard:basic", "haiku"),))
     assert adapter.resolve_model(["blizzard:basic"]) == "haiku"
 
 
-@pytest.mark.unit
 def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note(spawn_executor: Executor) -> None:
     # Never a spawn failure: an all-unresolvable list is exactly what a mixed-harness
     # fleet produces, and the fallback says which entries it skipped.
@@ -1659,27 +959,23 @@ def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note(
     assert note["fallback"] == "claude-opus-5"
 
 
-@pytest.mark.unit
 def test_an_empty_preference_list_is_the_adapter_default(spawn_executor: Executor) -> None:
     # A chunk that expresses no preference.
     assert _adapter(spawn_executor, binary="claude", model="claude-opus-5").resolve_model([]) == "claude-opus-5"
 
 
-@pytest.mark.unit
 def test_resolve_model_strict_mirrors_resolve_model_when_something_resolves(spawn_executor: Executor) -> None:
     # The same left-to-right walk, same winner.
     adapter = _adapter(spawn_executor, binary="claude")
     assert adapter.resolve_model_strict(["blizzard:advanced", "blizzard:basic"]) == "opus"
 
 
-@pytest.mark.unit
 def test_resolve_model_strict_is_none_for_an_empty_list(spawn_executor: Executor) -> None:
     # No adapter-default fallback — `resolve_model`'s own contract, not this one's, which
     # reports "nothing authored resolved" instead.
     assert _adapter(spawn_executor, binary="claude", model="claude-opus-5").resolve_model_strict([]) is None
 
 
-@pytest.mark.unit
 def test_resolve_model_strict_is_none_when_nothing_resolves(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
     assert adapter.resolve_model_strict(["gpt-5.3-codex", "blizzard:experimental"]) is None
@@ -1689,13 +985,11 @@ def test_resolve_model_strict_is_none_when_nothing_resolves(spawn_executor: Exec
 # `resolvable_tier_ids`: the capability snapshot's own tier enumeration.
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_names_every_built_in_tier_with_no_config_at_all(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     assert set(adapter.resolvable_tier_ids()) == {"blizzard:frontier", "blizzard:advanced", "blizzard:basic"}
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_merges_an_operator_alias_overriding_a_built_in_once(spawn_executor: Executor) -> None:
     # The operator's own table overrides the built-in entry by key — the overridden id
     # still appears exactly once, never twice with two different native names.
@@ -1705,7 +999,6 @@ def test_resolvable_tier_ids_merges_an_operator_alias_overriding_a_built_in_once
     assert set(tiers) == {"blizzard:frontier", "blizzard:advanced", "blizzard:basic"}
 
 
-@pytest.mark.unit
 def test_resolvable_tier_ids_includes_an_operator_alias_outside_the_built_ins(spawn_executor: Executor) -> None:
     adapter = _adapter(
         spawn_executor=spawn_executor, binary="claude", model_aliases=(("blizzard:experimental", "opus"),)
@@ -1713,25 +1006,21 @@ def test_resolvable_tier_ids_includes_an_operator_alias_outside_the_built_ins(sp
     assert "blizzard:experimental" in adapter.resolvable_tier_ids()
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("value", ["low", "medium", "high", "max"])
 def test_resolve_effort_passes_the_well_known_ordinal_through(value: str, spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor, binary="claude").resolve_effort(value) == value
 
 
-@pytest.mark.unit
 def test_resolve_effort_reaches_a_native_tier_outside_the_ordinal_via_config(spawn_executor: Executor) -> None:
     # `xhigh` is Claude Code's own, outside the well-known four — reachable by alias.
     adapter = _adapter(spawn_executor, binary="claude", effort_aliases=(("max", "xhigh"),))
     assert adapter.resolve_effort("max") == "xhigh"
 
 
-@pytest.mark.unit
 def test_resolve_effort_of_no_preference_is_none(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor, binary="claude").resolve_effort(None) is None
 
 
-@pytest.mark.unit
 def test_an_unrecognized_effort_logs_once_and_is_ignored(spawn_executor: Executor) -> None:
     # An unrecognized effort is an authoring mistake — dropped rather than failing a
     # spawn, and noted once rather than on every spawn of a long-lived runner.
@@ -1744,7 +1033,6 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored(spawn_executor: Executo
     assert len([entry for entry in logs if "unrecognized effort" in entry["event"]]) == 1
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("value", ["auto", "500k", "200000", "200"])
 def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: str, spawn_executor: Executor) -> None:
     # `auto` or a token count — the adapter checks the shape, not the CLI's
@@ -1752,12 +1040,10 @@ def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: s
     assert _adapter(spawn_executor, binary="claude").resolve_compaction_window(value) == value
 
 
-@pytest.mark.unit
 def test_resolve_compaction_window_of_no_preference_is_none(spawn_executor: Executor) -> None:
     assert _adapter(spawn_executor, binary="claude").resolve_compaction_window(None) is None
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("value", ["", "150k tokens", "True", "auto2"])
 def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(
     value: str, spawn_executor: Executor
@@ -1771,7 +1057,6 @@ def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(
     assert len([entry for entry in logs if "unrecognized compaction window" in entry["event"]]) == 1
 
 
-@pytest.mark.unit
 def test_a_missing_compaction_window_is_silently_none_never_logged(spawn_executor: Executor) -> None:
     # `None` means "no declaration" — not an authoring mistake, so it never logs (unlike
     # a real bad value, or the empty string): mirrors `resolve_effort`'s treatment of `None`.
@@ -1786,7 +1071,6 @@ def test_a_missing_compaction_window_is_silently_none_never_logged(spawn_executo
 # The session's resolved model and effort are both reasserted on every invocation.
 
 
-@pytest.mark.unit
 def test_spawn_at_mint_carries_the_resolved_model_and_effort(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1801,7 +1085,6 @@ def test_spawn_at_mint_carries_the_resolved_model_and_effort(
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
-@pytest.mark.unit
 def test_spawn_on_a_resume_reasserts_the_session_model_and_effort(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1816,7 +1099,6 @@ def test_spawn_on_a_resume_reasserts_the_session_model_and_effort(
     assert cmd[cmd.index("--effort") + 1] == "high"  # not sticky, so reasserted
 
 
-@pytest.mark.unit
 def test_spawn_at_mint_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
@@ -1828,7 +1110,6 @@ def test_spawn_at_mint_carries_the_compaction_window(monkeypatch: pytest.MonkeyP
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
 
 
-@pytest.mark.unit
 def test_spawn_on_a_resume_reasserts_the_compaction_window(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1843,7 +1124,6 @@ def test_spawn_on_a_resume_reasserts_the_compaction_window(
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
 
 
-@pytest.mark.unit
 def test_spawn_supplying_no_compaction_window_omits_the_flag(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1857,7 +1137,6 @@ def test_spawn_supplying_no_compaction_window_omits_the_flag(
     assert "--autocompact" not in cmd
 
 
-@pytest.mark.unit
 def test_judge_carries_the_compaction_window(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -1872,7 +1151,6 @@ def test_judge_carries_the_compaction_window(
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
 
 
-@pytest.mark.unit
 def test_resume_with_message_carries_the_compaction_window(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1885,7 +1163,6 @@ def test_resume_with_message_carries_the_compaction_window(
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
 
 
-@pytest.mark.unit
 def test_spawn_supplying_neither_behaves_exactly_as_before(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1900,7 +1177,6 @@ def test_spawn_supplying_neither_behaves_exactly_as_before(
     assert "--effort" not in cmd
 
 
-@pytest.mark.unit
 def test_judge_reasserts_the_session_model_and_effort(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -1916,7 +1192,6 @@ def test_judge_reasserts_the_session_model_and_effort(
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
-@pytest.mark.unit
 def test_resume_with_message_reasserts_the_session_model_and_effort(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -1934,7 +1209,6 @@ def test_resume_with_message_reasserts_the_session_model_and_effort(
 # invocation the harness itself reports none for.
 
 
-@pytest.mark.unit
 def test_parse_usage_does_not_attribute_an_unobserved_model_to_the_expectation(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
@@ -1945,7 +1219,6 @@ def test_parse_usage_does_not_attribute_an_unobserved_model_to_the_expectation(s
     assert sample.model == "unknown"
 
 
-@pytest.mark.unit
 def test_parse_usage_still_prefers_what_the_harness_itself_reports(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     output = json.dumps({"result": "x", "model": "claude-haiku-4-5", "usage": {"input_tokens": 5}})
@@ -1956,7 +1229,6 @@ def test_parse_usage_still_prefers_what_the_harness_itself_reports(spawn_executo
     assert sample.model == "claude-haiku-4-5"
 
 
-@pytest.mark.unit
 def test_parse_usage_without_an_observed_model_does_not_assume_the_adapter_default(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
@@ -1967,7 +1239,6 @@ def test_parse_usage_without_an_observed_model_does_not_assume_the_adapter_defau
     assert sample.model == "unknown"
 
 
-@pytest.mark.unit
 def test_parse_usage_attributes_envelope_without_model_to_this_invocations_transcript(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model="fable")
     output = json.dumps(
@@ -1995,7 +1266,6 @@ def test_parse_usage_attributes_envelope_without_model_to_this_invocations_trans
     )
 
 
-@pytest.mark.unit
 def test_parse_usage_ignores_an_inline_sidechains_model_after_the_worker_reply(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     output = json.dumps(
@@ -2017,7 +1287,6 @@ def test_parse_usage_ignores_an_inline_sidechains_model_after_the_worker_reply(s
     assert adapter.sum_transcript_usage(lines, "spawn", model="sonnet").model == "claude-sonnet-5"
 
 
-@pytest.mark.unit
 def test_parse_usage_uses_a_single_model_usage_entry_when_no_transcript_is_available(spawn_executor: Executor) -> None:
     output = json.dumps(
         {"type": "result", "usage": {"input_tokens": 5}, "modelUsage": {"claude-sonnet-5": {"inputTokens": 5}}}
@@ -2029,7 +1298,6 @@ def test_parse_usage_uses_a_single_model_usage_entry_when_no_transcript_is_avail
     assert sample.model == "claude-sonnet-5"
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_keeps_model_unknown_when_no_line_names_one(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", model="claude-opus-5")
     lines = [json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 3}}})]
@@ -2043,7 +1311,6 @@ def test_sum_transcript_usage_keeps_model_unknown_when_no_line_names_one(spawn_e
     assert [(e["log_level"], e["expected_model"], e["kind"]) for e in unavailable] == [("warning", "sonnet", "judge")]
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_takes_a_supplied_observation_without_re_deriving_it(
     spawn_executor: Executor, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2061,7 +1328,6 @@ def test_sum_transcript_usage_takes_a_supplied_observation_without_re_deriving_i
     assert sample.model == "claude-fable-5-1"
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_derives_the_observation_from_its_lines_when_none_is_supplied(
     spawn_executor: Executor,
 ) -> None:
@@ -2078,7 +1344,6 @@ def test_sum_transcript_usage_derives_the_observation_from_its_lines_when_none_i
     assert [e["event"] for e in logs if e["log_level"] == "warning"] == []
 
 
-@pytest.mark.unit
 def test_sum_transcript_usage_compares_a_supplied_observation_against_the_expected_model(
     spawn_executor: Executor,
 ) -> None:
@@ -2092,7 +1357,6 @@ def test_sum_transcript_usage_compares_a_supplied_observation_against_the_expect
     assert [(e["expected_model"], e["observed_model"]) for e in differs] == [("claude-sonnet-5", "claude-fable-5-1")]
 
 
-@pytest.mark.unit
 def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """A leaked model override can move a resumed worker off its session's model."""
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
@@ -2106,7 +1370,6 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
 # resume_command composes a command for an attended takeover.
 
 
-@pytest.mark.unit
 def test_resume_command_appends_the_sessions_stamped_model_and_effort(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
 
@@ -2115,7 +1378,6 @@ def test_resume_command_appends_the_sessions_stamped_model_and_effort(spawn_exec
     assert command == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
 
 
-@pytest.mark.unit
 def test_resume_command_with_no_stamps_renders_todays_bare_command(spawn_executor: Executor) -> None:
     # A session predating the stamps reads *unknown*: render the bare command rather than
     # guessing at a default and presenting it as what the session ran.
@@ -2124,7 +1386,6 @@ def test_resume_command_with_no_stamps_renders_todays_bare_command(spawn_executo
     assert adapter.resume_command("/ws/e1", "sess-a") == "cd /ws/e1 && claude --resume sess-a"
 
 
-@pytest.mark.unit
 def test_resume_command_appends_only_the_stamp_it_has(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
 
@@ -2136,7 +1397,6 @@ def test_resume_command_appends_only_the_stamp_it_has(spawn_executor: Executor) 
     )
 
 
-@pytest.mark.unit
 def test_parse_usage_reads_the_cost_scope_off_the_model_breakdown(spawn_executor: Executor) -> None:
     # Claude Code's own shape: `usage` is this invocation, `modelUsage` is what the cost
     # figure was charged for — and on a resumed session that is the session to date.
@@ -2170,7 +1430,6 @@ def test_parse_usage_reads_the_cost_scope_off_the_model_breakdown(spawn_executor
     assert sample.cost_usd == 2.118976
 
 
-@pytest.mark.unit
 def test_parse_usage_sums_every_model_the_breakdown_names(spawn_executor: Executor) -> None:
     # Sub-models the top-level `usage` omits are still inside the cost figure's scope.
     envelope = json.dumps(
@@ -2191,7 +1450,6 @@ def test_parse_usage_sums_every_model_the_breakdown_names(spawn_executor: Execut
     assert sample.cost_scope_tokens == 18551
 
 
-@pytest.mark.unit
 def test_parse_usage_reports_no_cost_scope_when_the_envelope_breaks_out_no_models(spawn_executor: Executor) -> None:
     # The shape that preceded the breakdown: nothing to read, so the figure is this
     # invocation's and rides verbatim.
@@ -2203,7 +1461,6 @@ def test_parse_usage_reports_no_cost_scope_when_the_envelope_breaks_out_no_model
 # --- classify_usage_limit ------------------------------------
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_reads_the_synthetic_transcript_record(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)  # 2:00pm America/Chicago (CDT, UTC-5)
     lines = [transcript_fixtures.rate_limit_record()]
@@ -2214,7 +1471,6 @@ def test_classify_usage_limit_reads_the_synthetic_transcript_record(spawn_execut
     assert limit.resets_at == datetime(2026, 9, 5, 22, 40, tzinfo=UTC)
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_rolls_the_reset_to_the_next_day_when_already_past(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 23, 0, tzinfo=UTC)  # past 5:40pm CDT already
     limit = _adapter(spawn_executor).classify_usage_limit("", [transcript_fixtures.rate_limit_record()], now)
@@ -2222,7 +1478,6 @@ def test_classify_usage_limit_rolls_the_reset_to_the_next_day_when_already_past(
     assert limit.resets_at == datetime(2026, 9, 6, 22, 40, tzinfo=UTC)
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_none_for_an_unparseable_reset_never_raises(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     record = transcript_fixtures.rate_limit_record(text="You've hit your session limit")
@@ -2232,7 +1487,6 @@ def test_classify_usage_limit_none_for_an_unparseable_reset_never_raises(spawn_e
     assert limit.detail == "You've hit your session limit"
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_none_for_an_unrecognized_timezone(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     record = transcript_fixtures.rate_limit_record(text="resets 5:40pm (Nowhere/Imaginary)")
@@ -2241,7 +1495,6 @@ def test_classify_usage_limit_none_for_an_unrecognized_timezone(spawn_executor: 
     assert limit.resets_at is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_is_none_for_an_ordinary_assistant_reply(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     limit = _adapter(spawn_executor).classify_usage_limit(
@@ -2250,7 +1503,6 @@ def test_classify_usage_limit_is_none_for_an_ordinary_assistant_reply(spawn_exec
     assert limit is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_is_none_for_a_non_rate_limit_api_error(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     other_error = json.dumps({"type": "assistant", "isApiErrorMessage": True, "error": "overloaded"})
@@ -2258,7 +1510,6 @@ def test_classify_usage_limit_is_none_for_a_non_rate_limit_api_error(spawn_execu
     assert limit is None
 
 
-@pytest.mark.unit
 def test_classify_usage_limit_tolerates_malformed_lines(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     limit = _adapter(spawn_executor).classify_usage_limit(
@@ -2270,20 +1521,17 @@ def test_classify_usage_limit_tolerates_malformed_lines(spawn_executor: Executor
 # --- classify_provider_overload ------------------------------
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_reads_the_synthetic_transcript_record(spawn_executor: Executor) -> None:
     overload = _adapter(spawn_executor).classify_provider_overload("", [transcript_fixtures.overload_record()])
     assert overload is not None
     assert "529" in overload.detail
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_an_ordinary_assistant_reply(spawn_executor: Executor) -> None:
     lines = [transcript_fixtures.assistant_text("all good here")]
     assert _adapter(spawn_executor).classify_provider_overload("", lines) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_the_sigint_error_during_execution_envelope(
     spawn_executor: Executor,
 ) -> None:
@@ -2294,19 +1542,16 @@ def test_classify_provider_overload_is_none_for_the_sigint_error_during_executio
     assert _adapter(spawn_executor).classify_provider_overload(output, lines) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_a_rate_limit_api_error(spawn_executor: Executor) -> None:
     lines = [transcript_fixtures.rate_limit_record()]
     assert _adapter(spawn_executor).classify_provider_overload("", lines) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_for_a_non_overload_server_error(spawn_executor: Executor) -> None:
     other_error = json.dumps({"type": "assistant", "isApiErrorMessage": True, "error": "server_error"})
     assert _adapter(spawn_executor).classify_provider_overload("", [other_error]) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_is_none_when_a_real_reply_follows_it_in_the_range(spawn_executor: Executor) -> None:
     # A relaunched judge reuses its first judge boundary, so its own range can hold an
     # earlier overload record followed by a real reply — that generation completed.
@@ -2314,13 +1559,11 @@ def test_classify_provider_overload_is_none_when_a_real_reply_follows_it_in_the_
     assert _adapter(spawn_executor).classify_provider_overload("", lines) is None
 
 
-@pytest.mark.unit
 def test_classify_provider_overload_tolerates_malformed_lines(spawn_executor: Executor) -> None:
     lines = ["not json", "", transcript_fixtures.overload_record()]
     assert _adapter(spawn_executor).classify_provider_overload("", lines) is not None
 
 
-@pytest.mark.unit
 def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -2342,28 +1585,24 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)
 
 
-@pytest.mark.unit
 def test_a_declared_supported_list_refuses_a_native_name_outside_it(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", supported_models=["opus"])
     assert adapter.resolve_model_strict(["sonnet", "claude-sonnet-4"]) is None
     assert adapter.resolve_model_strict(["sonnet", "opus"]) == "opus"
 
 
-@pytest.mark.unit
 def test_a_declared_supported_pattern_accepts_a_matching_native_name(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", supported_models=["claude-opus-*"])
     assert adapter.resolve_model_strict(["claude-opus-5"]) == "claude-opus-5"
     assert adapter.resolve_model_strict(["opus"]) is None
 
 
-@pytest.mark.unit
 def test_an_empty_supported_list_accepts_no_native_name_but_still_maps_a_tier(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude", supported_models=[])
     assert adapter.resolve_model_strict(["opus"]) is None
     assert adapter.resolve_model_strict(["blizzard:advanced"]) == "opus"
 
 
-@pytest.mark.unit
 def test_an_alias_target_bypasses_the_supported_list(spawn_executor: Executor) -> None:
     adapter = _adapter(
         spawn_executor, binary="claude", supported_models=["haiku"], model_aliases=[("house", "gpt-custom")]
@@ -2371,7 +1610,6 @@ def test_an_alias_target_bypasses_the_supported_list(spawn_executor: Executor) -
     assert adapter.resolve_model_strict(["house"]) == "gpt-custom"
 
 
-@pytest.mark.unit
 def test_with_no_declared_list_the_built_in_vocabulary_is_accepted_and_reported(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="claude")
     assert adapter.resolve_model_strict(["fable"]) == "fable"

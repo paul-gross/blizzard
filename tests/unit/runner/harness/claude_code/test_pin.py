@@ -1,6 +1,6 @@
 """Pinning tests for comment-defended runner-harness decisions.
 
-Unit tier, alongside ``tests/test_runner_harness_adapter.py``'s coverage of the same
+Unit tier, alongside ``tests/unit/runner/harness/claude_code/test_adapter.py``'s coverage of the same
 adapter: each test here pins a decision whose only defence was prose.
 """
 

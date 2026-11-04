@@ -1,6 +1,6 @@
 """``src/blizzard/runner/harness/opencode/transcript/export.py`` — the ``opencode export`` child seam (unit).
 
-Mirrors ``tests/test_runner_harness_adapter.py``'s own ``observe_version`` coverage: a scripted
+Mirrors ``tests/unit/runner/harness/claude_code/test_adapter.py``'s own ``observe_version`` coverage: a scripted
 launch seam, never a real ``opencode`` binary."""
 
 from __future__ import annotations

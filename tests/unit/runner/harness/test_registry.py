@@ -42,7 +42,6 @@ def _harness() -> FakeHarness:
     )
 
 
-@pytest.mark.unit
 def test_session_reference_requires_both_owner_and_raw_session_id() -> None:
     assert SessionReference(CLAUDE_CODE_HARNESS_ID, "session") == SessionReference("claude_code", "session")
 
@@ -52,7 +51,6 @@ def test_session_reference_requires_both_owner_and_raw_session_id() -> None:
         SessionReference(CLAUDE_CODE_HARNESS_ID, "")
 
 
-@pytest.mark.unit
 def test_registry_resolves_only_the_exact_requested_owner() -> None:
     adapter = _harness()
     source = FakeTranscriptSource()
@@ -76,7 +74,6 @@ _ROLE_ACCESSORS = (
 )
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("accessor", _ROLE_ACCESSORS)
 def test_every_role_accessor_resolves_the_bound_adapter_and_raises_the_registry_errors_naming_the_owner(
     accessor: str,
@@ -103,7 +100,6 @@ class _RecordingHealth:
         return HarnessHealthResult(harness_id=harness_id, available=True, cause=None, degradations=())
 
 
-@pytest.mark.unit
 def test_capability_snapshot_refreshes_each_harness_health_with_its_own_adapter_and_version() -> None:
     claude, opencode = _harness(), _harness()
     claude.harness_version, opencode.harness_version = "1.0", "2.0"
@@ -117,7 +113,6 @@ def test_capability_snapshot_refreshes_each_harness_health_with_its_own_adapter_
     assert health.refreshed == [(CLAUDE_CODE_HARNESS_ID, claude, "1.0"), (OPENCODE_HARNESS_ID, opencode, "2.0")]
 
 
-@pytest.mark.unit
 def test_capability_snapshot_with_no_health_cache_reports_every_harness_available() -> None:
     """The registration push fails open: a caller with no health cache asserts no harness unhealthy."""
     claude, opencode = _harness(), _harness()
@@ -132,7 +127,6 @@ def test_capability_snapshot_with_no_health_cache_reports_every_harness_availabl
     assert all(entry.available for entry in snapshot)
 
 
-@pytest.mark.unit
 def test_registry_distinguishes_a_known_unavailable_capability() -> None:
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness())})
 
@@ -141,14 +135,12 @@ def test_registry_distinguishes_a_known_unavailable_capability() -> None:
     assert raised.value.capability == "transcript source"
 
 
-@pytest.mark.unit
 def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
     app = export_runner_app()
 
     assert runner_seams(app).harnesses.known_harnesses == ()
 
 
-@pytest.mark.unit
 def test_production_registry_shares_one_process_launcher_across_both_bindings(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -165,7 +157,6 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
     assert claude_launcher is opencode_launcher
 
 
-@pytest.mark.unit
 def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path, spawn_executor: Executor) -> None:
     """OpenCode's binding names a real transcript source, shared by the adapter and the binding."""
     registry = build_production_harness_registry(
@@ -181,7 +172,6 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
     assert adapter_source is source
 
 
-@pytest.mark.unit
 def test_production_registry_injects_a_file_price_catalog_from_worker_env_passthrough(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -200,7 +190,6 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
     assert vars(catalog)["_path"] == tmp_path / "xdg-cache" / "opencode" / "models.json"
 
 
-@pytest.mark.unit
 def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -217,7 +206,6 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
     assert vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"] is None
 
 
-@pytest.mark.unit
 def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_opencode(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -233,7 +221,6 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
         registry.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
 
-@pytest.mark.unit
 def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
     registry = build_production_harness_registry(
         with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False).harness_settings(NO_TRACING),
@@ -247,7 +234,6 @@ def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_exe
         registry.lifecycle(OPENCODE_HARNESS_ID)
 
 
-@pytest.mark.unit
 def test_production_registry_defaults_to_claude_code_with_both_enabled(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
@@ -261,7 +247,6 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
     ) == (CLAUDE_CODE_HARNESS_ID)
 
 
-@pytest.mark.unit
 def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
     assert list(
@@ -294,7 +279,6 @@ def _probe_auth_path(config: RunnerConfig) -> Path | None:
     return vars(probe)["_auth_path"]
 
 
-@pytest.mark.unit
 def test_production_opencode_probe_follows_the_worker_env_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A daemon ``XDG_DATA_HOME`` the worker never receives does not move the probe."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -304,7 +288,6 @@ def test_production_opencode_probe_follows_the_worker_env_home(tmp_path: Path, m
     assert _probe_auth_path(config) == tmp_path / "home" / ".local" / "share" / "opencode" / "auth.json"
 
 
-@pytest.mark.unit
 def test_production_opencode_probe_follows_a_passed_through_xdg_data_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -315,7 +298,6 @@ def test_production_opencode_probe_follows_a_passed_through_xdg_data_home(
     assert _probe_auth_path(config) == tmp_path / "xdg" / "opencode" / "auth.json"
 
 
-@pytest.mark.unit
 def test_production_opencode_probe_prefers_an_explicit_auth_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -324,17 +306,3 @@ def test_production_opencode_probe_prefers_an_explicit_auth_path(
     config = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), auth_path=str(explicit))
 
     assert _probe_auth_path(config) == explicit
-
-
-@pytest.mark.component
-def test_the_production_opencode_probe_admits_against_the_injected_corpus(tmp_path: Path) -> None:
-    """The probe holds the very corpus its caller built — the one the health cache reads too — not one of its own."""
-    corpus = CommittedCorpus()
-    probe = build_production_harness_health_probes(
-        RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
-        spawn_roots=("",),
-        corpus=corpus,
-        children=CHILDREN,
-    )[OPENCODE_HARNESS_ID]
-    assert isinstance(probe, OpenCodeHealthProbe)
-    assert vars(probe)["_corpus"] is corpus
