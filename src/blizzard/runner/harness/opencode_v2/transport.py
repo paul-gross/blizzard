@@ -4,9 +4,9 @@ leaves the machine."""
 from __future__ import annotations
 
 import ipaddress
-from collections.abc import Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -99,7 +99,29 @@ class UrllibServiceTransport:
             yield iter(response)
 
 
+class BoundedTransport:
+    """``inner``, every request's timeout cut to what is left of one deadline, and refused once it has passed."""
+
+    def __init__(self, inner: IServiceTransport, deadline: float, monotonic: Callable[[], float]) -> None:
+        self._inner = inner
+        self._deadline = deadline
+        self._monotonic = monotonic
+
+    def _bounded(self, request: ServiceRequest) -> ServiceRequest:
+        left = self._deadline - self._monotonic()
+        if left <= 0:
+            raise ServiceUnreachableError("the call's bound was spent before the service answered")
+        return replace(request, timeout_seconds=min(request.timeout_seconds, left))
+
+    def send(self, request: ServiceRequest) -> ServiceResponse:
+        return self._inner.send(self._bounded(request))
+
+    def stream(self, request: ServiceRequest) -> AbstractContextManager[Iterator[bytes]]:
+        return self._inner.stream(self._bounded(request))
+
+
 __all__ = [
+    "BoundedTransport",
     "IServiceTransport",
     "NonLoopbackServiceError",
     "ServiceRequest",

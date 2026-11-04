@@ -366,3 +366,29 @@ def test_claude_code_recognition_is_unchanged_by_the_registry_move() -> None:
 
     kinds = {e.kind for e in events}
     assert kinds == {KIND_FILE_READ, KIND_SKILL_INVOCATION, KIND_AGENT_SPAWN}
+
+
+# --- OpenCode 2 dialect -----------------------------------------
+
+_OPENCODE_V2 = "opencode-v2/1"
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "kind", "subject"),
+    [
+        ("read", {"path": "NOTES.md"}, KIND_FILE_READ, "NOTES.md"),
+        ("skill", {"id": "proof-skill"}, KIND_SKILL_INVOCATION, "proof-skill"),
+        ("subagent", {"agent": "general", "prompt": "go"}, KIND_AGENT_SPAWN, "general"),
+    ],
+)
+def test_opencode_2_calls_mint_their_events(tool: str, arguments: dict[str, str], kind: str, subject: str) -> None:
+    """OpenCode 2's tools and argument keys, proven against the live 2.1.4 capture."""
+    events = extract_events([_tool_turn(0, tool, arguments)], normalizer_version=_OPENCODE_V2)
+
+    assert [(event.kind, event.subject, event.tool) for event in events] == [(kind, subject, tool)]
+
+
+def test_opencode_2_does_not_recognize_opencode_1_argument_keys() -> None:
+    turns = [_tool_turn(0, "read", {"filePath": "a.py"}), _tool_turn(1, "task", {"subagent_type": "coder"})]
+
+    assert extract_events(turns, normalizer_version=_OPENCODE_V2) == []

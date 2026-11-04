@@ -29,6 +29,7 @@ class ProofRow(StrEnum):
     EVENTS = "events"
     CHILD_AGENTS = "child_agents"
     TRANSCRIPT_READ = "transcript_read"
+    TRANSCRIPT_TOOLS = "transcript_tools"
     COMPACTION = "compaction"
     MODEL_AND_VARIANT = "model_and_variant"
     TAKEOVER = "takeover"

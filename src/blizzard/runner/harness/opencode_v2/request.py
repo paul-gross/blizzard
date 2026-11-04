@@ -37,6 +37,12 @@ class DriveRequestError(ValueError):
     """The request file is missing, unreadable, or not a request."""
 
 
+def minted_by(metadata: JsonObject, runner_id: str) -> bool:
+    """Whether a session's metadata names ``runner_id`` as its minter."""
+    mine = metadata.get(METADATA_KEY)
+    return isinstance(mine, dict) and mine.get("runner") == runner_id
+
+
 @domain_model
 @dataclass(frozen=True)
 class DriveRequest:
@@ -59,8 +65,7 @@ class DriveRequest:
 
     def minted_here(self, metadata: JsonObject) -> bool:
         """Whether a session's metadata names this request's runner as its minter."""
-        mine = metadata.get(METADATA_KEY)
-        return isinstance(mine, dict) and mine.get("runner") == self.runner_id
+        return minted_by(metadata, self.runner_id)
 
     def payload(self) -> JsonObject:
         return {
@@ -153,6 +158,7 @@ __all__ = [
     "DriveKind",
     "DriveRequest",
     "DriveRequestError",
+    "minted_by",
     "take_request",
     "write_request",
 ]

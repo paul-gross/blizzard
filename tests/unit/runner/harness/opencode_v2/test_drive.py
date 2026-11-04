@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import threading
+import time
 from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
@@ -348,6 +349,44 @@ def test_polls_that_keep_failing_fail_the_turn_and_interrupt_the_tree() -> None:
     assert result.outcome is Outcome.FAILED
     assert result.error is not None and result.error.kind is ErrorKind.SERVICE
     assert service.interrupted == [ROOT]
+
+
+def test_a_step_still_streaming_is_read_rather_than_counted_as_a_failed_poll() -> None:
+    """2.1.4 records no usage on a step until it ends; polling through one outlasting the failure bound is no outage."""
+    streaming = assistant("msg_a", tools=(tool("call_1", "running"),))
+    streaming["time"] = {"created": 2}
+    del streaming["tokens"], streaming["cost"]
+    ends_at = time.monotonic() + 0.3
+
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.running.add(session_id)
+        service.messages[session_id] += [
+            {"type": "user", "id": "msg_u", "time": {"created": 1}, "text": "go"},
+            streaming,
+        ]
+
+    def advance(service: SessionService) -> None:
+        if time.monotonic() >= ends_at and ROOT in service.running:
+            service.running.discard(ROOT)
+            service.messages[ROOT][-1] = assistant("msg_a", "done", tools=(tool("call_1"),))
+            service.messages[ROOT].append(idle("msg_i"))
+
+    harness = Harness(SessionService(on_prompt=prompt, on_poll=advance), _request())
+    harness.driver._failing_bound_seconds = 0.05  # pyright: ignore[reportPrivateUsage]  # a short bound
+    result = harness.run()
+    assert result.outcome is Outcome.SUCCEEDED and result.text == "done"
+
+
+def test_a_turn_past_the_services_first_page_is_read_to_its_end() -> None:
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.messages[session_id] += [
+            *({"type": "user", "id": f"msg_{n:04d}", "time": {"created": 1}, "text": "earlier"} for n in range(450)),
+            assistant("msg_z", "the last word"),
+            idle("msg_zi"),
+        ]
+
+    result = Harness(SessionService(on_prompt=prompt), _request()).run()
+    assert result.outcome is Outcome.SUCCEEDED and result.text == "the last word"
 
 
 def test_a_shape_the_driver_cannot_read_fails_the_turn_with_a_result() -> None:

@@ -277,6 +277,33 @@
     {
       "classification": "supported",
       "evidence": [
+        "transcript_tools_messages",
+        "message_pages",
+        "session_not_found"
+      ],
+      "facts": {
+        "cursor_opaque": true,
+        "empty_page_ends": true,
+        "missing_session_status": 404,
+        "pages_continue": true,
+        "read_completed": true,
+        "skill_completed": true,
+        "tool_inputs": {
+          "read": [
+            "path"
+          ],
+          "skill": [
+            "id"
+          ]
+        }
+      },
+      "name": "transcript_tools",
+      "state": "observed",
+      "summary": "the read and skill tools ran and recorded their input; the message listing pages forward through an opaque cursor to an empty last page, and a missing session answers 404"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
         "compaction_messages"
       ],
       "name": "compaction",
