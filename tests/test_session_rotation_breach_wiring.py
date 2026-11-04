@@ -8,16 +8,27 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.node_steps import SessionMode
+from blizzard.runner.harness.adapter import (
+    IHarnessLifecycleAndVerdict,
+    IHarnessProviderOverload,
+    IHarnessSelfTestSeam,
+    IHarnessUsageAccounting,
+    IHarnessUsageLimits,
+    IHarnessWorkerLifecycle,
+)
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.leases.model import PoolHead
+from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPosition
+from blizzard.runner.leases.model import Lease, PoolHead
 from blizzard.runner.lifecycle.session import SessionResolver
-from blizzard.runner.node_steps.envelope import RotateBounds
+from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 from tests.runner_fakes import make_envelope
 
 pytestmark = pytest.mark.unit
@@ -31,7 +42,7 @@ class _Model:
 
     lenient: str = "lenient-model"
     strict: str | None = "strict-model"
-    calls: list[tuple[str, Sequence[str]]] = field(default_factory=list)
+    calls: list[tuple[str, Sequence[str]]] = field(default_factory=list[tuple[str, Sequence[str]]])
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         self.calls.append(("lenient", preferences))
@@ -41,12 +52,24 @@ class _Model:
         self.calls.append(("strict", preferences))
         return self.strict
 
+    def resolve_effort(self, value: str | None) -> str | None:
+        raise NotImplementedError
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
+        raise NotImplementedError
+
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    def supported_models(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
 
 @dataclass
 class _Source:
     context: int | None = None
     size: int | None = None
-    calls: list[tuple[str, str, str | None]] = field(default_factory=list)
+    calls: list[tuple[str, str, str | None]] = field(default_factory=list[tuple[str, str, str | None]])
 
     def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         self.calls.append(("context_tokens", session_id, spawn_cwd))
@@ -56,13 +79,31 @@ class _Source:
         self.calls.append(("size_bytes", session_id, spawn_cwd))
         return self.size
 
+    def turns_since(
+        self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
+    ) -> TranscriptBatch:
+        raise NotImplementedError
+
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        raise NotImplementedError
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        raise NotImplementedError
+
 
 @dataclass
 class _Registry:
     model: _Model = field(default_factory=_Model)
     source: _Source | Exception = field(default_factory=_Source)
     owner_error: Exception | None = None
-    asked: list[tuple[str, str]] = field(default_factory=list)
+    asked: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
     def model_resolution(self, harness_id: str) -> _Model:
         self.asked.append(("model_resolution", harness_id))
@@ -76,15 +117,61 @@ class _Registry:
             raise self.source
         return self.source
 
+    @property
+    def known_harnesses(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    def lifecycle(self, harness_id: str) -> IHarnessWorkerLifecycle:
+        raise NotImplementedError
+
+    def lifecycle_and_verdict(self, harness_id: str) -> IHarnessLifecycleAndVerdict:
+        raise NotImplementedError
+
+    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam:
+        raise NotImplementedError
+
+    def usage_accounting(self, harness_id: str) -> IHarnessUsageAccounting:
+        raise NotImplementedError
+
+    def usage_limits(self, harness_id: str) -> IHarnessUsageLimits:
+        raise NotImplementedError
+
+    def provider_overload(self, harness_id: str) -> IHarnessProviderOverload:
+        raise NotImplementedError
+
+    def source_calls(self) -> list[tuple[str, str, str | None]]:
+        assert isinstance(self.source, _Source)
+        return self.source.calls
+
 
 @dataclass
 class _Leases:
     invocations: int = 0
-    counted: list[SessionReference] = field(default_factory=list)
+    counted: list[SessionReference] = field(default_factory=list[SessionReference])
 
     def session_invocation_count(self, session: SessionReference) -> int:
         self.counted.append(session)
         return self.invocations
+
+    def latest_session(self, chunk_id: str, node_name: str | None) -> SessionReference | None:
+        raise NotImplementedError
+
+    def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
+        raise NotImplementedError
+
+    def lease_for_session(self, session: SessionReference) -> Lease | None:
+        raise NotImplementedError
+
+    def session_ended_lease_ids(self) -> set[str]:
+        raise NotImplementedError
+
+    def session_preamble_fingerprint(self, session: SessionReference) -> PreambleFingerprint | None:
+        raise NotImplementedError
+
+
+class _NodeKwargs(TypedDict):
+    model: list[str]
+    harnesses: list[str]
 
 
 _HEAD = PoolHead(
@@ -97,7 +184,9 @@ _HEAD = PoolHead(
 _HEAD_SESSION = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-head")
 
 
-def _node(*, model: list[str] | None, harnesses: list[str] | None = None, rotate: RotateBounds | None = None):
+def _node(
+    *, model: list[str] | None, harnesses: list[str] | None = None, rotate: RotateBounds | None = None
+) -> EnvelopeNode:
     return make_envelope(
         "ch_1",
         "verify",
@@ -113,10 +202,12 @@ def _node(*, model: list[str] | None, harnesses: list[str] | None = None, rotate
 
 
 def _resolver(registry: _Registry, leases: _Leases | None = None, *, wired: bool = True) -> SessionResolver:
-    return SessionResolver(leases=leases or _Leases(), harnesses=registry, transcripts_wired=wired)  # type: ignore[arg-type]
+    return SessionResolver(leases=leases or _Leases(), harnesses=registry, transcripts_wired=wired)
 
 
-def _breach(resolver: SessionResolver, node):
+def _breach(
+    resolver: SessionResolver, node: EnvelopeNode
+) -> tuple[str | None, UnknownHarnessError | UnavailableHarnessError | None]:
     return resolver.pool_head_breach(_HEAD, node, _CWD)
 
 
@@ -146,7 +237,7 @@ def test_a_lenient_selection_resolves_the_declared_preference_leniently() -> Non
     ],
     ids=["authored-tier", "several-members"],
 )
-def test_a_strict_selection_resolves_the_declared_preference_strictly(node_kwargs) -> None:
+def test_a_strict_selection_resolves_the_declared_preference_strictly(node_kwargs: _NodeKwargs) -> None:
     registry = _Registry(model=_Model(strict="head-model"))
 
     assert _breach(_resolver(registry), _node(**node_kwargs)) == (None, None)
@@ -195,14 +286,16 @@ def test_a_model_breach_short_circuits_before_any_threshold_is_read() -> None:
     leases = _Leases(invocations=10**6)
 
     assert _breach(_resolver(registry, leases), _node(model=["sonnet"], rotate=rotate)) == ("model-drift", None)
-    assert registry.source.calls == []  # type: ignore[union-attr]
+    assert registry.source_calls() == []
     assert leases.counted == []
 
 
 @pytest.mark.parametrize(
     "error", [UnknownHarnessError("x", ()), UnavailableHarnessError("x", "model")], ids=["unknown", "unavailable"]
 )
-def test_an_unresolvable_owner_is_an_owner_unresolvable_breach_carrying_its_exception(error) -> None:
+def test_an_unresolvable_owner_is_an_owner_unresolvable_breach_carrying_its_exception(
+    error: UnknownHarnessError | UnavailableHarnessError,
+) -> None:
     registry = _Registry(owner_error=error)
 
     assert _breach(_resolver(registry), _node(model=["sonnet"])) == ("owner-unresolvable", error)
@@ -287,7 +380,9 @@ def test_an_unwired_transcripts_lane_measures_neither_transcript_signal() -> Non
 @pytest.mark.parametrize(
     "error", [UnknownHarnessError("x", ()), UnavailableHarnessError("x", "model")], ids=["unknown", "unavailable"]
 )
-def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_the_invocation_count(error) -> None:
+def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_the_invocation_count(
+    error: UnknownHarnessError | UnavailableHarnessError,
+) -> None:
     registry = _under_model()
     registry.source = error
     rotate = RotateBounds(max_context_tokens=1, max_transcript_bytes=1, max_invocations=2)
@@ -324,7 +419,7 @@ def test_an_unresolvable_transcript_source_leaves_its_bounds_unmeasured_but_not_
     ],
 )
 def test_each_threshold_breaches_strictly_over_its_bound_and_the_first_declared_wins(
-    rotate, context, size, invocations, expected
+    rotate: RotateBounds, context: int | None, size: int | None, invocations: int, expected: str | None
 ) -> None:
     registry = _under_model()
     registry.source = _Source(context=context, size=size)

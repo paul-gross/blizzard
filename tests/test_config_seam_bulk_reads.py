@@ -25,6 +25,7 @@ from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.projects.model import ProjectId, ProjectSlug
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from tests.support import (
     FakeWorkSource,
@@ -375,7 +376,7 @@ def _apply_statements(hub: HubHarness, document: dict[str, object]) -> tuple[lis
 
 
 def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path: Path) -> None:
-    counts = []
+    counts: list[tuple[int, int]] = []
     for n in (1, _N):
         (tmp_path / str(n)).mkdir()
         hub = _config_hub(tmp_path / str(n), n)
@@ -402,16 +403,18 @@ def test_choose_project_is_flat_across_source_counts(tmp_path: Path) -> None:
 
 
 def test_resolve_reads_every_active_source_s_revisions_once(tmp_path: Path) -> None:
-    counts = []
+    counts: list[int] = []
     for n in (1, _N):
         names = [f"src{i}" for i in range(n)]
         (tmp_path / str(n)).mkdir()
         hub = build_hub(tmp_path / str(n), work_sources={name: FakeWorkSource(name=name) for name in names})
+        built_in = hub.work_sources.get("hub")
+        assert isinstance(built_in, HubWorkSource)
         registry = StoreWorkSourceRegistry(
             records=hub.services.work_source_records,
             objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
             build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
-            built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+            built_in=built_in,
         )
         registry.resolve("unclaimed")  # Builds every source, so the measured call only compares revisions.
         assert registry.resolve(f"{names[-1]}#7") == WorkRef(source=names[-1], ref="7")

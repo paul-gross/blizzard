@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,15 +21,20 @@ from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeFields,
     ForgeId,
+    ForgeSlug,
+    IReadForgeRepository,
 )
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    IReadRepositoryRecordRepository,
     RepositoryFields,
     RepositoryId,
     RepositorySecretUnavailable,
+    RepositorySlug,
 )
+from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
-from blizzard.hub.domain.projects.links import RepositoryLink
+from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
 from blizzard.hub.forge.commit_check import SeamCommitResolver
@@ -74,20 +79,53 @@ def _row(name: str) -> ConfiguredRepository:
     )
 
 
-class _Records:
+class _Records(IReadRepositoryRecordRepository):
     def __init__(self, rows: list[ConfiguredRepository]) -> None:
         self.rows = rows
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         return self.rows
 
+    def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None:
+        raise NotImplementedError
 
-class _ForgeRecords:
+    def get_many(self, repository_ids: list[RepositoryId]) -> dict[RepositoryId, ConfiguredRepository]:
+        raise NotImplementedError
+
+    def get_by_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        raise NotImplementedError
+
+    def get_by_former_slug(self, slug: RepositorySlug) -> ConfiguredRepository | None:
+        raise NotImplementedError
+
+    def resolve(self, value: str) -> ConfiguredRepository | None:
+        raise NotImplementedError
+
+
+class _ForgeRecords(IReadForgeRepository):
     def list_all(self, *, include_retired: bool) -> list[ConfiguredForge]:
         return [_GITHUB]
 
+    def get(self, forge_id: ForgeId) -> ConfiguredForge | None:
+        raise NotImplementedError
 
-class _Links:
+    def get_many(self, forge_ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
+        raise NotImplementedError
+
+    def get_by_slug(self, slug: ForgeSlug) -> ConfiguredForge | None:
+        raise NotImplementedError
+
+    def get_by_former_slug(self, slug: ForgeSlug) -> ConfiguredForge | None:
+        raise NotImplementedError
+
+    def get_by_api_base(self, api_base: str) -> ConfiguredForge | None:
+        raise NotImplementedError
+
+    def resolve(self, value: str) -> ConfiguredForge | None:
+        raise NotImplementedError
+
+
+class _Links(IReadProjectLinks):
     def __init__(self, linked: set[str]) -> None:
         self.linked = linked
 
@@ -96,6 +134,40 @@ class _Links:
             RepositoryLink(project_id=project_id, repository_id=RepositoryId(f"repo_{name}"), revision=1)
             for name in sorted(self.linked)
         ]
+
+    def source_link(self, project_id: ProjectId, work_source_id: WorkSourceId) -> SourceLink | None:
+        raise NotImplementedError
+
+    def repository_link(self, project_id: ProjectId, repository_id: RepositoryId) -> RepositoryLink | None:
+        raise NotImplementedError
+
+    def sources_of(self, project_id: ProjectId) -> list[SourceLink]:
+        raise NotImplementedError
+
+    def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
+        raise NotImplementedError
+
+    def source_links_for(
+        self, pairs: Sequence[tuple[ProjectId, WorkSourceId]]
+    ) -> dict[tuple[ProjectId, WorkSourceId], SourceLink]:
+        raise NotImplementedError
+
+    def repository_links_for(
+        self, pairs: Sequence[tuple[ProjectId, RepositoryId]]
+    ) -> dict[tuple[ProjectId, RepositoryId], RepositoryLink]:
+        raise NotImplementedError
+
+    def sources_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[SourceLink]]:
+        raise NotImplementedError
+
+    def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        raise NotImplementedError
+
+    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+        raise NotImplementedError
+
+    def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:
+        raise NotImplementedError
 
 
 class _Refs:
@@ -167,9 +239,9 @@ def _resolver(
     forges: _Forges, loop: ActionLoop, *, linked: set[str] | None = None, timeout: float = 10.0
 ) -> CommitResolver:
     return SeamCommitResolver(
-        repositories=_Records([_row("widget")]),  # type: ignore[arg-type]
-        forge_records=_ForgeRecords(),  # type: ignore[arg-type]
-        links=_Links({"widget"} if linked is None else linked),  # type: ignore[arg-type]
+        repositories=_Records([_row("widget")]),
+        forge_records=_ForgeRecords(),
+        links=_Links({"widget"} if linked is None else linked),
         forges=forges,
         loop=loop,
         timeout=timeout,
@@ -226,7 +298,7 @@ def test_a_check_past_its_wait_degrades_to_none_and_cancels_the_future(loop: Act
 
 @pytest.mark.parametrize(
     ("repo", "linked"),
-    [pytest.param("gadget", None, id="no-record"), pytest.param("widget", set(), id="not-linked")],
+    [pytest.param("gadget", None, id="no-record"), pytest.param("widget", set[str](), id="not-linked")],
 )
 def test_a_repository_no_link_resolves_degrades_to_none_without_a_forge(
     loop: ActionLoop, repo: str, linked: set[str] | None

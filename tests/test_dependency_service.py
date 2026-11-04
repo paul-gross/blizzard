@@ -9,7 +9,7 @@ cross-declaration race atomicity is proven at the component tier
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -50,7 +50,7 @@ class _FakeFactsRepo:
     facts are never consulted."""
 
     facts: ChunkFacts | None
-    calls: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list[str])
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         self.calls.append(chunk_id)
@@ -68,7 +68,7 @@ class _FakeLifecycleRepo:
     is never consulted."""
 
     ephemeral: frozenset[str] = frozenset()
-    calls: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list[str])
 
     def is_ephemeral(self, chunk_id: str) -> bool:
         self.calls.append(chunk_id)
@@ -85,9 +85,9 @@ class _FakeDependenciesRepo:
     call under test; ``declared``/``released`` record every write this seam was asked to
     make."""
 
-    standing: list[DependencyEdge] = field(default_factory=list)
-    declared: list[tuple[str, str, str, datetime]] = field(default_factory=list)
-    released: list[tuple[str, str, str, datetime]] = field(default_factory=list)
+    standing: list[DependencyEdge] = field(default_factory=list[DependencyEdge])
+    declared: list[tuple[str, str, str, datetime]] = field(default_factory=list[tuple[str, str, str, datetime]])
+    released: list[tuple[str, str, str, datetime]] = field(default_factory=list[tuple[str, str, str, datetime]])
     _next_id: int = 0
 
     def list_standing_edges(self) -> list[DependencyEdge]:
@@ -176,7 +176,7 @@ class _FakeExclusiveWrites:
     dependencies_repo: _FakeDependenciesRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.facts_repo, self.lifecycle_repo, self.dependencies_repo))
 
 

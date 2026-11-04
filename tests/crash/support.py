@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -679,7 +679,7 @@ def wait_death(proc: subprocess.Popen[str], *, timeout: float = 60.0) -> int:
 
 
 @contextlib.contextmanager
-def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx2.Client]:
+def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Generator[httpx2.Client]:
     log = daemon_log_sink(origins.parent / "forge.log")
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],

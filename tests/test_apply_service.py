@@ -8,7 +8,7 @@ writers are spies; every other port raises on an unexpected call."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
@@ -75,11 +75,11 @@ class _Ports:
     """Every port the services hold. Only the probes and the ``*_locked`` spies answer."""
 
     pre_lock: ChunkFacts
-    migrations: list[dict[str, Any]] = field(default_factory=list)
-    transitions: list[dict[str, Any]] = field(default_factory=list)
-    decisions: list[dict[str, Any]] = field(default_factory=list)
+    migrations: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    transitions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    decisions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     wakes: int = 0
-    migration_handles: list[ILockedChunkRead] = field(default_factory=list)
+    migration_handles: list[ILockedChunkRead] = field(default_factory=list[ILockedChunkRead])
     refusal: FenceRefusal | None = None
     gate: GateDecision | None = None
 
@@ -138,7 +138,7 @@ class _Ports:
 @dataclass
 class _LockedRead:
     chunk_facts: ChunkFacts | None
-    read_ids: list[str] = field(default_factory=list)
+    read_ids: list[str] = field(default_factory=list[str])
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         self.read_ids.append(chunk_id)
@@ -152,11 +152,11 @@ class _LockedRead:
 class _FakeExclusiveWrites:
     under_lock: ChunkFacts | None
     clock: FixedClock
-    locked_ids: list[list[str]] = field(default_factory=list)
-    handles: list[_LockedRead] = field(default_factory=list)
+    locked_ids: list[list[str]] = field(default_factory=list[list[str]])
+    handles: list[_LockedRead] = field(default_factory=list[_LockedRead])
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         self.locked_ids.append(list(chunk_ids))
         self.handles.append(_LockedRead(self.under_lock))

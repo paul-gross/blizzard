@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.hub.domain.graph.model import SessionRef
+from blizzard.hub.domain.graph.model import ChoiceDoc, GraphDoc, SessionRef
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphFile
 from tests.repo_files import repo_root
@@ -22,7 +22,7 @@ _GRAPHS_ROOT = repo_root() / "src" / "blizzard" / "hub" / "graphs"
 _PACKAGED = ("advanced-development-workflow", "default", "basic-development-workflow")
 
 
-def _doc(name: str):
+def _doc(name: str) -> GraphDoc:
     # Through the loader, as `graph sync` reads it: a raw parse would leave every file
     # reference unresolved, which is not a shape the hub ever mints from.
     return GraphFile(_GRAPHS_ROOT / name / "graph.yaml").doc
@@ -107,7 +107,7 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
-def _choice(doc, node: str, choice: str):
+def _choice(doc: GraphDoc, node: str, choice: str) -> ChoiceDoc:
     found = doc.node(node)
     assert found is not None and found.judgement is not None
     return next(c for c in found.judgement.choices if c.name == choice)

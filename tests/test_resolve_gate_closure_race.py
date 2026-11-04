@@ -30,7 +30,9 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, hub_store_connections
-from tests.test_decisions_api import _open_decision
+from tests.test_decisions_api import (
+    _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared fixture helper owned by another test module; no public surface yet
+)
 
 pytestmark = pytest.mark.component
 

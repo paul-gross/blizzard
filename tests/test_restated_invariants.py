@@ -66,7 +66,7 @@ def _fact(
     quote: str = "the owner states it",
     min_markers: int | None = None,
 ) -> dict[str, Any]:
-    fact = {
+    fact: dict[str, Any] = {
         "id": fact_id,
         "statement": "A fact stated for testing.",
         "owner": owner,

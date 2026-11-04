@@ -16,6 +16,7 @@ from blizzard.foundation.flags import (
     FlagOffError,
     FlagRegistry,
     Flags,
+    FlagSide,
     resolve_flags,
     without_off_fields,
 )
@@ -41,8 +42,8 @@ default = "off"
 """
 
 
-def _flags(side: str, **overrides: bool) -> Flags:
-    return resolve_flags(FlagRegistry.parse(_REGISTRY, "fixture"), side, overrides).flags  # type: ignore[arg-type]
+def _flags(side: FlagSide, **overrides: bool) -> Flags:
+    return resolve_flags(FlagRegistry.parse(_REGISTRY, "fixture"), side, overrides).flags
 
 
 def _router(guard: Any, name: str) -> APIRouter:
@@ -84,7 +85,7 @@ def _declared_404(app: FastAPI) -> dict[str, Any]:
 @pytest.mark.component
 @pytest.mark.parametrize(("build", "side", "flag"), [(_hub, "hub", "hub-thing"), (_host, "runner", "runner-thing")])
 def test_a_held_route_is_declared_answers_404_with_the_flag_while_off_and_answers_once_on(
-    build: Any, side: str, flag: str
+    build: Any, side: FlagSide, flag: str
 ) -> None:
     off = build(_flags(side))
     declared = _declared_404(off)
@@ -153,7 +154,7 @@ def test_a_guarded_field_without_a_default_is_a_declaration_error() -> None:
 
 @pytest.mark.component
 @pytest.mark.parametrize(("build", "side"), [(_hub, "hub"), (_host, "runner")])
-def test_a_guard_keeps_the_dependencies_and_responses_a_route_already_declares(build: Any, side: str) -> None:
+def test_a_guard_keeps_the_dependencies_and_responses_a_route_already_declares(build: Any, side: FlagSide) -> None:
     flag = "hub-thing" if side == "hub" else "runner-thing"
     guard = hub_flag_guard if side == "hub" else runner_flag_guard
     seen: list[str] = []

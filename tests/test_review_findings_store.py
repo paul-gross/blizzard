@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine, FromClause, Select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -204,11 +204,14 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._stmts, name)
 
-        def select(self, from_, *cols):
+        def select(self, from_: FromClause, *cols: Any) -> Select[Any]:
             stmt = self._stmts.select(from_, *cols)
             return stmt.where(sa.literal(False)) if from_ is scopes else stmt
 
-    monkeypatch.setattr(module, "statements_of", lambda conn: _BlindToScopes(real_statements_of(conn)))
+    def blind_statements_of(conn: Connection) -> _BlindToScopes:
+        return _BlindToScopes(real_statements_of(conn))
+
+    monkeypatch.setattr(module, "statements_of", blind_statements_of)
 
     plan = ReviewFindingsPlan(
         chunk_id="ch_1",

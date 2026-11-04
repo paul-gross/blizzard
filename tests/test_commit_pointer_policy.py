@@ -3,6 +3,8 @@ branch with no `:`, and a full lowercase 40- or 64-hex hash; an asset is never j
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -16,8 +18,10 @@ _SHA256 = "b" * 64
 
 
 def _commit(**overrides: str | None) -> CompletionArtifact:
-    fields = {"repo": "acme/widget", "branch_name": "feat/x", "commit_hash": _SHA1, **overrides}
-    return CompletionArtifact(name="w", kind=ArtifactKind.GIT_COMMIT, **fields)
+    base = CompletionArtifact(
+        name="w", kind=ArtifactKind.GIT_COMMIT, repo="acme/widget", branch_name="feat/x", commit_hash=_SHA1
+    )
+    return replace(base, **overrides)
 
 
 def test_a_complete_pointer_is_accepted() -> None:

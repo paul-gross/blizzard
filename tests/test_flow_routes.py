@@ -18,7 +18,10 @@ from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import chunk_stores, hub_store_connections, report_lease, seed_runner
-from tests.test_flow_driver import _GRAPH, World
+from tests.test_flow_driver import (
+    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared graph fixture lives in test_flow_driver; no public helper yet
+    World,
+)
 
 pytestmark = pytest.mark.component
 

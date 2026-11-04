@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Connection, insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
@@ -42,7 +42,7 @@ _ROUTINE = Routine(
 )
 
 
-def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:
+def _seed_artifact(conn: Connection, artifact_id: str, *, chunk_id: str) -> None:
     conn.execute(
         insert(s.artifacts).values(
             stamp(

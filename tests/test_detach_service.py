@@ -6,7 +6,7 @@ meaningfully implemented; every other seam raises loudly if called (``bzh:domain
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -53,7 +53,7 @@ class _FakeExclusiveWrites:
     route: Route | None
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.route))
 
 
@@ -63,9 +63,9 @@ class _FakeChunkRepo:
 
     Callers wrap an instance in :func:`_as_route` for pyright's structural check."""
 
-    released: list[tuple[str, datetime]] = field(default_factory=list)
-    causes: list[RouteReleaseCause | None] = field(default_factory=list)
-    expected: list[RunnerLifecycleVersion | None] = field(default_factory=list)
+    released: list[tuple[str, datetime]] = field(default_factory=list[tuple[str, datetime]])
+    causes: list[RouteReleaseCause | None] = field(default_factory=list[RouteReleaseCause | None])
+    expected: list[RunnerLifecycleVersion | None] = field(default_factory=list[RunnerLifecycleVersion | None])
 
     def record_route_released_locked(
         self,

@@ -207,7 +207,7 @@ def test_a_boundary_already_under_a_release_heading_is_left_and_named(
     ],
 )
 def test_a_refused_cut_exits_one_and_leaves_the_tree_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, notes, doc, version
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, notes: dict[str, str], doc: str, version: str
 ) -> None:
     root = _tree(tmp_path, notes, doc)
     before = _snapshot(root)

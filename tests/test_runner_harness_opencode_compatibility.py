@@ -166,7 +166,7 @@ def test_diagnostic_requires_the_probe_to_declare_its_observed_version() -> None
             return _all_observations()
 
     with pytest.raises(CompatibilityContractError, match="did not report its observed version"):
-        CompatibilityDiagnostic(ProbeWithoutVersion()).run()  # pyright: ignore[reportArgumentType]
+        CompatibilityDiagnostic(ProbeWithoutVersion()).run()  # pyright: ignore[reportArgumentType]  # the probe omits the version on purpose: the refusal is under test
 
 
 def test_report_rejects_a_missing_probe_instead_of_publishing_an_incomplete_result() -> None:

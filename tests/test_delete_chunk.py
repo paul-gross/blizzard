@@ -7,6 +7,7 @@ way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly â€
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
@@ -195,7 +197,9 @@ def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
     ],
     ids=["running", "paused", "needs_human", "waiting_on_human", "stopped", "done"],
 )
-def test_delete_refuses_every_status_outside_groupable(tmp_path: Path, driver, expected_status: str) -> None:
+def test_delete_refuses_every_status_outside_groupable(
+    tmp_path: Path, driver: Callable[[ChunkStores, str], None], expected_status: str
+) -> None:
     chunks, _, delete, _ = _stores(tmp_path)
     chunk = _mint(chunks, "ch_1")
     driver(chunks, "ch_1")
@@ -306,8 +310,8 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
         chunks.dependencies.declare_locked(handle, chunk.chunk_id, "ch_prereq", by="author", at=_T0)
     original = items.withdraw_open
 
-    def fail_after_withdraw(*args, **kwargs):
-        original(*args, **kwargs)
+    def fail_after_withdraw(pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
+        original(pointer, at=at, transaction=transaction)
         raise RuntimeError("injected failure")
 
     monkeypatch.setattr(items, "withdraw_open", fail_after_withdraw)

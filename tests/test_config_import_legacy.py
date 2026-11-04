@@ -128,7 +128,7 @@ def _rows(config: HubConfig) -> dict[str, list[dict[str, object]]]:
         store = hub_store_connections(engine)
         with engine.connect() as conn:
             return {
-                t.name: [dict(r._mapping) for r in conn.execute(_past_the_default_project(store.select(t)))]
+                t.name: [dict(r) for r in conn.execute(_past_the_default_project(store.select(t))).mappings()]
                 for t in _TABLES
             }
     finally:

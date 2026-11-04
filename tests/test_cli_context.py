@@ -4,7 +4,7 @@ and the tenant a call names — ahead of any verb consuming them."""
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from dataclasses import replace
 
 import click
@@ -52,7 +52,18 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
+
+
+def _response(status_code: int, payload: object | None = None) -> httpx2.Response:
+    """A real response for :meth:`CliContext.check`, with a JSON body only when ``payload`` is given."""
+    request = httpx2.Request("GET", f"{_HUB_URL}/x")
+    if payload is None:
+        return httpx2.Response(status_code, request=request)
+    return httpx2.Response(status_code, json=payload, request=request)
 
 
 class _FakeStreamResponse(_FakeResponse):
@@ -73,7 +84,7 @@ class _FakeStreamResponse(_FakeResponse):
 
 def _stream_returning(resp: _FakeStreamResponse, sent: list[dict[str, object]] | None = None):
     @contextlib.contextmanager
-    def fake_stream(method: str, url: str, **kwargs: object) -> Iterator[_FakeStreamResponse]:
+    def fake_stream(method: str, url: str, **kwargs: object) -> Generator[_FakeStreamResponse]:
         if sent is not None:
             sent.append(kwargs)
         yield resp
@@ -119,41 +130,41 @@ def test_stream_surfaces_a_bare_401_with_the_login_hint() -> None:
 
 
 def test_check_surfaces_an_unnamed_403s_detail() -> None:
-    resp = _FakeResponse(403, {"detail": "missing permission 'transcript:read'"})
+    resp = _response(403, {"detail": "missing permission 'transcript:read'"})
 
     with pytest.raises(click.ClickException) as exc_info:
-        _CTX.check(resp, "GET /x")  # type: ignore[arg-type]
+        _CTX.check(resp, "GET /x")
 
     assert exc_info.value.message == "missing permission 'transcript:read'"
 
 
 def test_check_falls_back_to_a_generic_message_when_the_403_body_has_no_detail() -> None:
-    resp = _FakeResponse(403, None)
+    resp = _response(403, None)
 
     with pytest.raises(click.ClickException) as exc_info:
-        _CTX.check(resp, "GET /x")  # type: ignore[arg-type]
+        _CTX.check(resp, "GET /x")
 
     assert exc_info.value.message == "forbidden"
 
 
 def test_check_a_named_on_status_entry_still_wins_over_the_bare_403_branch() -> None:
-    resp = _FakeResponse(403, None)
+    resp = _response(403, None)
 
     with pytest.raises(click.ClickException) as exc_info:
-        _CTX.check(resp, "GET /x", on_status={403: "named fallback"})  # type: ignore[arg-type]
+        _CTX.check(resp, "GET /x", on_status={403: "named fallback"})
 
     assert exc_info.value.message == "named fallback"
 
 
 def test_check_leaves_a_200_alone() -> None:
-    _CTX.check(_FakeResponse(200), "GET /x")  # type: ignore[arg-type]  # must not raise
+    _CTX.check(_response(200), "GET /x")  # must not raise
 
 
 # --- the tenant a call names ------------------------------------------------------
 
 _BRAVO = "ten_01BRAVO"
 _TENANT_REQUIRED = {"detail": {"code": "tenant_required", "message": "name the tenant to act in"}}
-_ME = {
+_ME: dict[str, list[dict[str, object]]] = {
     "tenants": [
         {"tenant_id": "ten_01ALPHA", "name": "alpha", "role": "admin", "permissions": []},
         {"tenant_id": _BRAVO, "name": "bravo", "role": "guest", "permissions": []},

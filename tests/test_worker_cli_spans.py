@@ -19,7 +19,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 
 from blizzard.foundation import cli_spans
 from blizzard.foundation.span_clock import Clock
-from blizzard.foundation.trace_ids import format_traceparent, parse_traceparent
+from blizzard.foundation.trace_ids import DerivedContext, format_traceparent, parse_traceparent
 from blizzard.runner.cli import runner as runner_group
 from tests.worker_http import Bound, bind_transport
 
@@ -307,8 +307,14 @@ class _Post:
         return type("Response", (), {"status_code": self.status})()
 
 
+def _parent() -> DerivedContext:
+    parent = parse_traceparent(_PARENT)
+    assert parent is not None
+    return parent
+
+
 def _open_span() -> cli_spans.CliSpan:
-    span = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
+    span = cli_spans.CliSpan.open(_parent(), "runner ask", clock=Clock())
     span.finish(0)
     return span
 
@@ -451,17 +457,23 @@ def test_an_open_span_carries_its_chunk_lease_and_start_time_and_parent() -> Non
 
 
 def test_a_zero_random_id_is_replaced_by_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_spans.secrets, "randbits", lambda _bits: 0)
+    def randbits(_bits: int) -> int:
+        return 0
+
+    monkeypatch.setattr(cli_spans.secrets, "randbits", randbits)
 
     root = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
-    child = cli_spans.CliSpan.open(parse_traceparent(_PARENT), "runner ask", clock=Clock())  # type: ignore[arg-type]
+    child = cli_spans.CliSpan.open(_parent(), "runner ask", clock=Clock())
 
     assert (root.trace_id, root.span_id) == (1, 1)
     assert child.span_id == 1
 
 
 def test_a_nonzero_random_id_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_spans.secrets, "randbits", lambda bits: (1 << bits) - 1)
+    def randbits(bits: int) -> int:
+        return (1 << bits) - 1
+
+    monkeypatch.setattr(cli_spans.secrets, "randbits", randbits)
 
     root = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
 

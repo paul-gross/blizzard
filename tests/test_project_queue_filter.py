@@ -7,6 +7,7 @@ tenant's order, at their whole-order positions and never reranked. Every queue e
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from tests.support import (
@@ -190,7 +192,7 @@ def test_matched_peek_reconstitutes_only_served_candidates(tmp_path: Path, polic
             super().__init__(hub_store_connections(hub.engine), hub.clock)
             self.requested: list[list[str]] = []
 
-        def movement_facts_for(self, chunk_ids):
+        def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
             self.requested.append(list(chunk_ids))
             return super().movement_facts_for(chunk_ids)
 

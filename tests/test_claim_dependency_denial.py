@@ -8,14 +8,16 @@ so a peek-then-claim window can never slip a blocked chunk through."""
 from __future__ import annotations
 
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
+from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from tests.support import HubHarness, build_hub, count_queries, ingest
 
 pytestmark = pytest.mark.component
@@ -117,7 +119,9 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
     real_declare_locked = dependencies_store.declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):
+    def _blocking_declare_locked(
+        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the declaration's write"
         return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)

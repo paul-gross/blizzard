@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,10 +53,13 @@ def _fleet_operations(spec: dict[str, Any]) -> dict[tuple[str, str], dict[str, A
 
 def _refs(node: object) -> set[str]:
     if isinstance(node, dict):
-        found = {node["$ref"].rsplit("/", 1)[-1]} if isinstance(node.get("$ref"), str) else set()
-        return found.union(*(_refs(value) for value in node.values()))
+        mapping = cast("dict[object, object]", node)
+        ref = mapping.get("$ref")
+        found: set[str] = {ref.rsplit("/", 1)[-1]} if isinstance(ref, str) else set()
+        return found.union(*(_refs(value) for value in mapping.values()))
     if isinstance(node, list):
-        return set().union(*(_refs(value) for value in node))
+        items = cast("list[object]", node)
+        return set[str]().union(*(_refs(value) for value in items))
     return set()
 
 

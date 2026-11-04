@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 
 import httpx2
 import pytest
@@ -33,7 +33,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 class _FakeStreamResponse(_FakeResponse):
@@ -50,7 +53,7 @@ class _FakeStreamResponse(_FakeResponse):
 
 def _stream_returning(resp: _FakeStreamResponse):
     @contextlib.contextmanager
-    def fake_stream(method: str, url: str, **kwargs: object) -> Iterator[_FakeStreamResponse]:
+    def fake_stream(method: str, url: str, **kwargs: object) -> Generator[_FakeStreamResponse]:
         yield resp
 
     return fake_stream

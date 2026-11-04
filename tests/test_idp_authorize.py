@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from httpx2 import Response
 from jwt.algorithms import RSAAlgorithm
 
@@ -125,9 +126,10 @@ def test_authorize_with_session_delivers_a_signed_jwt_via_form_post(tmp_path: Pa
     header = jwt.get_unverified_header(token)
     key_jwk = next(k for k in jwks["keys"] if k["kid"] == header["kid"])
     public_key = RSAAlgorithm.from_jwk(key_jwk)
+    assert isinstance(public_key, RSAPublicKey)
     claims = jwt.decode(
         token,
-        key=public_key,  # type: ignore[arg-type]
+        key=public_key,
         algorithms=["RS256"],
         audience="runner-a",
         options={"verify_exp": False},
@@ -285,9 +287,10 @@ def _claims(hub: HubHarness, resp: Response, audience: str) -> dict[str, object]
     jwks = hub.client.get("/api/auth/jwks.json").json()
     kid = jwt.get_unverified_header(token_match.group(1))["kid"]
     public_key = RSAAlgorithm.from_jwk(next(k for k in jwks["keys"] if k["kid"] == kid))
+    assert isinstance(public_key, RSAPublicKey)
     return jwt.decode(
         token_match.group(1),
-        key=public_key,  # type: ignore[arg-type]
+        key=public_key,
         algorithms=["RS256"],
         audience=audience,
         options={"verify_exp": False},

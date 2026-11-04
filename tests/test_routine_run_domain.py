@@ -74,7 +74,7 @@ class _FakeGraphs:
 
 @dataclass
 class _FakeRoutines:
-    retired: set[str] = field(default_factory=set)
+    retired: set[str] = field(default_factory=set[str])
 
     def is_retired(self, routine_id: str) -> bool:
         return routine_id in self.retired
@@ -86,7 +86,7 @@ class _FakeRoutines:
 @dataclass
 class _FakeScopes:
     scopes: dict[str, Scope] = field(default_factory=lambda: {"blizzard": _DEFAULT_SCOPE})
-    retired: set[str] = field(default_factory=set)
+    retired: set[str] = field(default_factory=set[str])
 
     def get(self, project_id: str, slug: str) -> Scope | None:
         scope = self.scopes.get(slug)
@@ -118,7 +118,7 @@ class _FakeRoutineScopes:
 
 @dataclass
 class _FakeFindingSets:
-    newest: dict[tuple[str, str], FindingSet] = field(default_factory=dict)
+    newest: dict[tuple[str, str], FindingSet] = field(default_factory=dict[tuple[str, str], FindingSet])
 
     def newest_for_routine_scope(self, project_id: str, routine_name: str, scope_slug: str) -> FindingSet | None:
         found = self.newest.get((routine_name, scope_slug))
@@ -130,9 +130,9 @@ class _FakeFindingSets:
 
 @dataclass
 class _FakeChunks:
-    ready: list[Chunk] = field(default_factory=list)
-    positions: dict[str, float] = field(default_factory=dict)
-    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
+    ready: list[Chunk] = field(default_factory=list[Chunk])
+    positions: dict[str, float] = field(default_factory=dict[str, float])
+    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
     live_holder: str | None = None
 
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
@@ -154,7 +154,7 @@ class _FakeChunks:
 @dataclass
 class _FakeItems:
     next_ref: int = 1
-    calls: list[dict[str, Any]] = field(default_factory=list)
+    calls: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
 
     def allocate_ref(self, source: str) -> str:
         ref = str(self.next_ref)

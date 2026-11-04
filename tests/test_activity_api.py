@@ -22,7 +22,7 @@ from tests.test_fleet_auth import bearer, seed_enrolled
 pytestmark = pytest.mark.component
 
 
-def _activity(hub: HubHarness, **params) -> list[dict[str, Any]]:
+def _activity(hub: HubHarness, **params: str | int) -> list[dict[str, Any]]:
     resp = hub.client.get("/api/activity", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["activity"]
@@ -195,7 +195,7 @@ def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kind
     hub = build_hub(tmp_path)
     store = chunk_stores(hub.engine, hub.clock)
     store.events.record_event(
-        severity="error",  # type: ignore[arg-type]  # a legacy, since-fixed value
+        severity="error",  # pyright: ignore[reportArgumentType]  # a legacy, since-fixed value
         kind="hub-node-unroutable-outcome",
         runner_id="hub",
         chunk_id=None,

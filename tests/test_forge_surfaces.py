@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx2
 import pytest
 
 from blizzard.auth_core import Role
@@ -189,7 +190,7 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
         {"secret_name": "gh-token", "bucket": "core", "limit": 5000, "remaining": 1200, "reset": reset.isoformat()},
     ]
 
-    def forward(method: str, url: str, *, timeout: float, **kwargs):
+    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
         return hub.client.request(method.upper(), urlsplit(url).path, **kwargs)
 
     result = bind_stubs(request=forward).runner.invoke(

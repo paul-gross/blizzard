@@ -35,7 +35,7 @@ def _finding_set_id(at: datetime) -> str:
 
 @dataclass
 class _FakeFindingSets:
-    by_routine: dict[str, list[FindingSet]] = field(default_factory=dict)
+    by_routine: dict[str, list[FindingSet]] = field(default_factory=dict[str, list[FindingSet]])
 
     def newest_by_scope_for_routine(self, project_id: str, routine_name: str) -> list[FindingSet]:
         return [fs for fs in self.by_routine.get(routine_name, []) if fs.project_id == project_id]
@@ -46,8 +46,8 @@ class _FakeFindingSets:
 
 @dataclass
 class _FakeDelivery:
-    counts: dict[tuple[str, datetime], int] = field(default_factory=dict)
-    calls: list[tuple[str, datetime]] = field(default_factory=list)
+    counts: dict[tuple[str, datetime], int] = field(default_factory=dict[tuple[str, datetime], int])
+    calls: list[tuple[str, datetime]] = field(default_factory=list[tuple[str, datetime]])
 
     def count_landed_since(self, repo: str, since: datetime) -> int:
         self.calls.append((repo, since))

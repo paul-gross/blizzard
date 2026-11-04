@@ -29,7 +29,7 @@ class _RecordedRow:
 
 @dataclass
 class _FakeEvents:
-    rows: list[_RecordedRow] = field(default_factory=list)
+    rows: list[_RecordedRow] = field(default_factory=list[_RecordedRow])
 
     def record_event(
         self,
@@ -51,9 +51,9 @@ class _FakeEvents:
 
 @dataclass
 class _FakePublisher:
-    published: list[tuple[str, str]] = field(default_factory=list)
-    projects: list[str | None] = field(default_factory=list)
-    keys: list[str | None] = field(default_factory=list)
+    published: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    projects: list[str | None] = field(default_factory=list[str | None])
+    keys: list[str | None] = field(default_factory=list[str | None])
 
     def publish_event_logged(
         self,

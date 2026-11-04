@@ -64,9 +64,11 @@ def _stub_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, completed:
     selections: list[list[str]] = []
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(m, "MUTANTS_DIR", tmp_path / "mutants")
-    monkeypatch.setattr(
-        m, "ensure_mutant_tree_for_scope", lambda scope, mutants_dir, fresh=False: ["tests/test_cli.py"]
-    )
+
+    def _tree_for_scope(scope: object, mutants_dir: Path, fresh: bool = False) -> list[str]:
+        return ["tests/test_cli.py"]
+
+    monkeypatch.setattr(m, "ensure_mutant_tree_for_scope", _tree_for_scope)
 
     def run_scope(
         scope: object, *, test_selection: list[str], budget_seconds: float | None, mutant_names: tuple[str, ...] = ()
@@ -127,7 +129,11 @@ def test_main_with_no_changed_function_writes_an_empty_complete_report_without_r
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
-    monkeypatch.setattr(m, "changed_mutant_globs", lambda scope, since: [])
+
+    def _no_globs(scope: object, since: str) -> list[str]:
+        return []
+
+    monkeypatch.setattr(m, "changed_mutant_globs", _no_globs)
     assert m.main(["cli-surface", "--since", "abc123"]) == 0
     assert selections == []
     report = json.loads((tmp_path / "mutants" / m.REPORT_NAME).read_text())
@@ -139,7 +145,11 @@ def test_main_with_since_hands_the_changed_function_globs_to_the_run(
 ) -> None:
     _stub_the_run(monkeypatch, tmp_path, completed=True)
     (tmp_path / "mutants").mkdir()
-    monkeypatch.setattr(m, "changed_mutant_globs", lambda scope, since: ["blizzard.cli.x.x_run__mutmut_*"])
+
+    def _run_globs(scope: object, since: str) -> list[str]:
+        return ["blizzard.cli.x.x_run__mutmut_*"]
+
+    monkeypatch.setattr(m, "changed_mutant_globs", _run_globs)
     handed: list[tuple[str, ...]] = []
 
     def run_scope(
@@ -528,7 +538,7 @@ def test_build_report_counts_every_known_status(tmp_path: Path) -> None:
             "blizzard.hub.domain.x_run__mutmut_4": 2,  # check was interrupted by user
         },
     )
-    report = m.build_report(scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=lambda name, path: "diff")
+    report = m.build_report(scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=_plain_diff)
     assert report["scope"] == "hub-daemon"
     assert report["total"] == 4
     assert report["counts"]["killed"] == 1
@@ -545,9 +555,7 @@ def test_build_report_survivors_carry_mutant_file_function_and_diff(tmp_path: Pa
         "src/blizzard/hub/domain.py",
         {"blizzard.hub.domain.x_run__mutmut_2": 0},
     )
-    report = m.build_report(
-        scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=lambda name, path: f"diff for {name}"
-    )
+    report = m.build_report(scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=_named_diff)
     (survivor,) = report["survivors"]
     assert survivor["mutant"] == "blizzard.hub.domain.x_run__mutmut_2"
     assert survivor["file"] == "src/blizzard/hub/domain.py"
@@ -559,7 +567,7 @@ def test_build_report_survivors_carry_mutant_file_function_and_diff(tmp_path: Pa
 def test_build_report_names_a_method_survivor_s_function_and_class(tmp_path: Path) -> None:
     mutants_dir = tmp_path / "mutants"
     _write_meta(mutants_dir, "src/blizzard/hub/domain.py", {"blizzard.hub.domain.xǁWidgetǁrun__mutmut_2": 0})
-    report = m.build_report(scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=lambda name, path: "diff")
+    report = m.build_report(scope="hub-daemon", mutants_dir=mutants_dir, diff_provider=_plain_diff)
     (survivor,) = report["survivors"]
     assert survivor["function"] == "run"
     assert survivor["class"] == "Widget"
@@ -571,6 +579,14 @@ def test_build_report_names_a_method_survivor_s_function_and_class(tmp_path: Pat
 class _FakeRunner:
     def startup(self) -> None:
         pass
+
+
+def _plain_diff(name: str, path: Path) -> str:
+    return "diff"
+
+
+def _named_diff(name: str, path: Path) -> str:
+    return f"diff for {name}"
 
 
 def _fake_mutmut(run: object) -> SimpleNamespace:
@@ -599,7 +615,10 @@ def test_the_budget_does_not_count_the_phases_before_the_mutation_loop() -> None
 
 
 def test_an_expired_budget_interrupts_the_mutation_loop() -> None:
-    fake = _fake_mutmut(lambda _names, _max_children: _mutation_loop(fake))
+    def run(_names: object, _max_children: object) -> None:
+        _mutation_loop(fake)
+
+    fake = _fake_mutmut(run)
     assert m._run_with_budget(0.05, fake) is False
 
 
@@ -621,7 +640,10 @@ def test_an_exit_with_no_expired_budget_propagates() -> None:
 
 
 def test_the_runner_factory_is_restored_after_the_run() -> None:
-    fake = _fake_mutmut(lambda _names, _max_children: None)
+    def run(_names: object, _max_children: object) -> None:
+        return None
+
+    fake = _fake_mutmut(run)
     original = fake.get_mutant_runner
     m._run_with_budget(60, fake)
     assert fake.get_mutant_runner is original
@@ -819,7 +841,7 @@ def test_build_report_restricted_to_globs_leaves_out_every_other_mutant(tmp_path
     report = m.build_report(
         scope="hub-daemon",
         mutants_dir=mutants_dir,
-        diff_provider=lambda name, path: "diff",
+        diff_provider=_plain_diff,
         name_globs=["blizzard.hub.domain.x_run__mutmut_*"],
         since="abc",
     )
@@ -845,7 +867,11 @@ def test_an_unrelated_assertion_in_a_delta_run_propagates() -> None:
 
 def test_the_mutant_names_reach_mutmut_s_run() -> None:
     seen: list[object] = []
-    m._run_with_budget(None, _fake_mutmut(lambda names, _max: seen.append(names)), ("a*", "b*"))
+
+    def run(names: object, _max: object) -> None:
+        seen.append(names)
+
+    m._run_with_budget(None, _fake_mutmut(run), ("a*", "b*"))
     assert seen == [("a*", "b*")]
 
 
@@ -885,21 +911,28 @@ class _Clock:
         return self.now
 
 
-def _scripted_runner(
-    clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict[str, object] | None]]
-):
-    calls: list[tuple[str, float]] = []
+class _ScriptedRunner:
+    def __init__(
+        self, clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict[str, object] | None]]
+    ) -> None:
+        self.calls: list[tuple[str, float]] = []
+        self._clock = clock
+        self._mutants_dir = mutants_dir
+        self._script = script
 
-    def runner(slug: str, since: str, timeout: float):
-        calls.append((slug, timeout))
-        exit_code, took, report = script[slug]
-        clock.now += took
+    def __call__(self, slug: str, since: str, timeout: float) -> object:
+        self.calls.append((slug, timeout))
+        exit_code, took, report = self._script[slug]
+        self._clock.now += took
         if report is not None:
-            (mutants_dir / m.REPORT_NAME).write_text(json.dumps(report))
+            (self._mutants_dir / m.REPORT_NAME).write_text(json.dumps(report))
         return m.ScopeRun(exit_code, "boom" if exit_code else "")
 
-    runner.calls = calls  # type: ignore[attr-defined]
-    return runner
+
+def _scripted_runner(
+    clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict[str, object] | None]]
+) -> _ScriptedRunner:
+    return _ScriptedRunner(clock, mutants_dir, script)
 
 
 def _scope_report(*survivors: str) -> dict[str, object]:
@@ -944,7 +977,7 @@ def test_delta_with_no_changed_function_in_a_touched_scope_is_no_changes_without
     report = m.run_delta("HEAD~1", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
     assert [(e["scope"], e["status"]) for e in report["scopes"]] == [("hub-daemon", "no-changes")]
     assert report["scopes"][0]["reason"]
-    assert runner.calls == []  # type: ignore[attr-defined]
+    assert runner.calls == []
 
 
 def test_delta_reports_an_over_budget_scope_and_skips_the_rest_keeping_finished_results(tmp_path: Path) -> None:
@@ -959,7 +992,7 @@ def test_delta_reports_an_over_budget_scope_and_skips_the_rest_keeping_finished_
     by_scope = {entry["scope"]: entry for entry in report["scopes"]}
     assert by_scope["hub-daemon"]["status"] == "complete"
     assert by_scope["cli-surface"]["status"] == "over-budget"
-    assert runner.calls == [("hub-daemon", 100), ("cli-surface", 60)]  # type: ignore[attr-defined]
+    assert runner.calls == [("hub-daemon", 100), ("cli-surface", 60)]
 
 
 def test_delta_budget_spent_in_preparation_leaves_later_scopes_unstarted(tmp_path: Path) -> None:
@@ -970,7 +1003,7 @@ def test_delta_budget_spent_in_preparation_leaves_later_scopes_unstarted(tmp_pat
         "HEAD~3", budget_seconds=100, repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock
     )
     assert [e["status"] for e in report["scopes"]] == ["over-budget", "over-budget"]
-    assert [call[0] for call in runner.calls] == ["hub-daemon"]  # type: ignore[attr-defined]
+    assert [call[0] for call in runner.calls] == ["hub-daemon"]
 
 
 def test_delta_records_a_mutmut_failure_as_failed_with_its_reason(tmp_path: Path) -> None:
@@ -999,7 +1032,7 @@ def test_delta_rejects_a_revision_that_names_no_commit_before_running(tmp_path: 
     runner = _scripted_runner(_Clock(), tmp_path, {})
     with pytest.raises(m.UnknownRevisionError):
         m.run_delta("nope", repo_root=tmp_path, mutants_dir=tmp_path / "mutants", scope_runner=runner)
-    assert runner.calls == []  # type: ignore[attr-defined]
+    assert runner.calls == []
 
 
 def test_main_delta_exits_zero_whenever_the_report_is_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1059,7 +1092,10 @@ def test_scope_process_survives_a_process_group_already_gone(monkeypatch: pytest
     def gone(pid: int, sig: int) -> None:
         raise ProcessLookupError
 
-    monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **k: _Proc())
+    def _popen(*a: object, **k: object) -> _Proc:
+        return _Proc()
+
+    monkeypatch.setattr(m.subprocess, "Popen", _popen)
     monkeypatch.setattr(m.os, "killpg", gone)
     assert m._run_scope_process("cli-surface", "HEAD", 1.0) == m.ScopeRun(None, "last line")
 

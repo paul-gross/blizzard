@@ -11,7 +11,7 @@ import contextlib
 import re
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ def _require_mock_data_binary() -> Path:
 
 
 @contextlib.contextmanager
-def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx2.Client]:
+def _zero_work_source_hub(hub_dir: Path, port: int) -> Generator[httpx2.Client]:
     """Host a real hub with **zero** configured work sources.
 
     Mirrors ``tests.fleet_launchers.run_hub`` minus ``create_work_sources`` — every

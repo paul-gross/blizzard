@@ -90,10 +90,6 @@ run = "uv run ruff format ."
 description = "Type-check with pyright"
 run = "uv run pyright"
 
-[tasks.typecheck-strict]
-description = "Pyright in strict mode with type-ignore comments disabled — a report over the include paths, or over the paths passed"
-run = "scripts/typecheck-strict.sh"
-
 [tasks.unused-ignores]
 description = "Pyright's unnecessary-suppression check over the tests and both store-migration test trees — every type-ignore comment that suppresses nothing, or over the paths passed"
 run = "scripts/unused-ignores.sh"

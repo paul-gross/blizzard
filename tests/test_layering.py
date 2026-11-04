@@ -1337,7 +1337,8 @@ def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> lis
                 isinstance(node, ast.Attribute) and node.attr == "IWriteSessionStore"
             )
             if names_write_store:
-                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names IWriteSessionStore")  # type: ignore[union-attr]
+                assert isinstance(node, ast.Name | ast.Attribute)
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names IWriteSessionStore")
     return violations
 
 
@@ -1973,7 +1974,7 @@ def _driver_import_violations(
             if package not in admitted and _imports_package(modules, package)
         ]
     for path, admitted in sorted(exceptions.items()):
-        modules = _imported_modules(path) if path.exists() else set()
+        modules = _imported_modules(path) if path.exists() else set[str]()
         violations += [
             f"{path.relative_to(runner_dir)} is exempt for {package} but does not import it"
             for package in admitted
@@ -2177,7 +2178,8 @@ def _layer_cycle(layers: Mapping[str, frozenset[str]], kernel: str | None = _DOM
     """A cycle through the declared edges plus every package's implicit edge to the shared ``kernel``, if
     any, as the packages along it — empty when the layers are acyclic."""
     edges = {
-        pkg: set(deps) | ({kernel} if kernel is not None and pkg != kernel else set()) for pkg, deps in layers.items()
+        pkg: set(deps) | ({kernel} if kernel is not None and pkg != kernel else set[str]())
+        for pkg, deps in layers.items()
     }
     state: dict[str, int] = {}
     stack: list[str] = []
@@ -4168,7 +4170,7 @@ def _adapter_model_violations(src_root: Path, paths: Iterable[Path] | None = Non
                 annotations, member = [item.annotation], item.target.id
             else:
                 continue
-            mentioned = set().union(*(_mentioned_types(a, scan.aliases) for a in annotations))
+            mentioned = set[str]().union(*(_mentioned_types(a, scan.aliases) for a in annotations))
             local = scan.imports.get(site.path, {})
             named = {local.get(name, ("", name))[1] for name in mentioned} & adapter_models
             if named:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 
 import click
@@ -54,7 +54,7 @@ def _relay(hub: HubHarness, token: str) -> Bound:
     @contextlib.contextmanager
     def fake_stream(
         method: str, url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object
-    ) -> Iterator[httpx2.Response]:
+    ) -> Generator[httpx2.Response]:
         with hub.client.stream(method.upper(), url, params=params, headers=headers) as resp:
             yield resp
 

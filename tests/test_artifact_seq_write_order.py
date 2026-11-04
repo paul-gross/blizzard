@@ -13,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import build_hub, ingest
 
@@ -60,9 +60,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
             close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
         )
 
-    sources = cast(IReadChunkArtifactsRepository, hub.services.chunks.artifacts).delivery_sources_for([chunk_id])[
-        chunk_id
-    ]
+    sources = hub.services.chunks.artifacts.delivery_sources_for([chunk_id])[chunk_id]
 
     assert [m.name for m in sources.pr_markers] == ["delivery-pr/acme/one/3", "delivery-pr/acme/one/4"]
     view = DeliveryRead.of(ChunkFacts(minted=True), sources)

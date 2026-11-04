@@ -42,7 +42,7 @@ def _ui(tmp_path: Path, fixture: str, at: str) -> list[dict[str, object]]:
     target.parent.mkdir(parents=True)
     shutil.copy(_FIXTURES / fixture, target)
     out = subprocess.run([_VALE, "--output=JSON", at], cwd=tmp_path, capture_output=True, text=True, check=False)
-    alerts = json.loads(out.stdout).get(at, []) if out.stdout.strip() else []
+    alerts: list[dict[str, object]] = json.loads(out.stdout).get(at, []) if out.stdout.strip() else []
     return [a for a in alerts if a["Check"] == "Blizzard.UiSurface"]
 
 

@@ -15,7 +15,7 @@ from click.testing import CliRunner
 from blizzard.foundation.flags.registry import FlagRegistry
 from blizzard.tools.compat.releases import parse_release
 from blizzard.tools.flag_lifecycle import main
-from blizzard.tools.flag_lifecycle_domain import Snapshot, derive
+from blizzard.tools.flag_lifecycle_domain import Mode, Snapshot, derive
 
 _PATH = "src/blizzard/foundation/flags/registry.toml"
 
@@ -39,16 +39,16 @@ def snapshot(tag: str, *, on: bool | None = None, retired: bool = False) -> Snap
 
 @pytest.mark.unit
 @pytest.mark.parametrize("mode", ["pr", "cut", "tag"])
-def test_initial_on_and_stable_reversal_fail(mode: str) -> None:
-    _, findings = derive([snapshot("v1.0.0-rc.1", on=True), snapshot("v1.0.0", on=True)], registry(on=False), mode)  # type: ignore[arg-type]
+def test_initial_on_and_stable_reversal_fail(mode: Mode) -> None:
+    _, findings = derive([snapshot("v1.0.0-rc.1", on=True), snapshot("v1.0.0", on=True)], registry(on=False), mode)
     assert [(f.rule, f.severity) for f in findings] == [("initial-on", "FAIL"), ("post-stable-reversal", "FAIL")]
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("mode,expected", [("pr", "WARN"), ("cut", "FAIL"), ("tag", "FAIL")])
-def test_due_and_on_live(mode: str, expected: str) -> None:
+def test_due_and_on_live(mode: Mode, expected: str) -> None:
     releases = [snapshot("v1.0.0-rc.1", on=False), snapshot("v1.0.0", on=True), snapshot("v1.1.0", on=True)]
-    rows, findings = derive(releases, registry(on=True), mode)  # type: ignore[arg-type]
+    rows, findings = derive(releases, registry(on=True), mode)
     assert rows[0].due
     assert [(f.rule, f.severity) for f in findings] == [("due-live", expected)]
 
@@ -124,13 +124,13 @@ def test_tombstone_removable_once_no_supported_release_holds_it() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("mode", ["pr", "cut", "tag"])
-def test_tombstone_removed_fails_while_a_supported_release_holds_it_live(mode: str) -> None:
+def test_tombstone_removed_fails_while_a_supported_release_holds_it_live(mode: Mode) -> None:
     releases = [snapshot("v1.0.0", on=False), snapshot("v1.1.0", on=False)]
     supported = frozenset({"v1.1.0"})
-    findings = derive(releases, registry(), mode, supported=supported)[1]  # type: ignore[arg-type]
+    findings = derive(releases, registry(), mode, supported=supported)[1]
     assert [(f.rule, f.severity) for f in findings] == [("tombstone-removed", "FAIL")]
-    assert derive(releases, registry(retired=True), mode, supported=supported)[1] == []  # type: ignore[arg-type]
-    assert derive(releases, registry(), mode, supported=frozenset({"v0.9.0"}))[1] == []  # type: ignore[arg-type]
+    assert derive(releases, registry(retired=True), mode, supported=supported)[1] == []
+    assert derive(releases, registry(), mode, supported=frozenset({"v0.9.0"}))[1] == []
 
 
 @pytest.mark.unit

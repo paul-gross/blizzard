@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token
+from tests.support import HubHarness, build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -49,10 +49,10 @@ nodes:
 """
 
 
-def ask_question(hub, *, question_id: str = "qn_1") -> str:
+def ask_question(hub: HubHarness, *, question_id: str = "qn_1") -> str:
     """Mint the graph, claim a chunk, and land an open question; return the chunk id."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
-    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    chunk_id: str = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     claim = hub.client.post(
         "/api/fleet/routes",

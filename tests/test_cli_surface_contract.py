@@ -14,6 +14,7 @@ from typing import Any
 
 import click
 import pytest
+from typing_extensions import TypeIs
 
 from blizzard.tools.cli_surface import ROOTS, build
 from tests.repo_files import repo_root
@@ -27,11 +28,19 @@ def _committed(name: str) -> dict[str, Any]:
     return json.loads((_CONTRACTS_DIR / f"{name}.json").read_text())
 
 
-def _diff(path: str, live: Any, committed: Any) -> list[str]:
+def _string_keyed(node: object) -> TypeIs[dict[str, object]]:
+    return isinstance(node, dict)
+
+
+def _listed(node: object) -> TypeIs[list[object]]:
+    return isinstance(node, list)
+
+
+def _diff(path: str, live: object, committed: object) -> list[str]:
     """Every leaf mismatch between a live node and its committed counterpart, named by
     the command path it was found under — so a failure points at one node, not the
     whole tree."""
-    if isinstance(live, dict) and isinstance(committed, dict):
+    if _string_keyed(live) and _string_keyed(committed):
         offenders: list[str] = []
         for key in sorted(set(live) | set(committed)):
             if key not in live:
@@ -41,7 +50,7 @@ def _diff(path: str, live: Any, committed: Any) -> list[str]:
             else:
                 offenders.extend(_diff(f"{path}.{key}" if key != "commands" else path, live[key], committed[key]))
         return offenders
-    if isinstance(live, list) and isinstance(committed, list):
+    if _listed(live) and _listed(committed):
         if len(live) != len(committed):
             return [f"{path}: {len(live)} live entries vs {len(committed)} committed"]
         offenders = []

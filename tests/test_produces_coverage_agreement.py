@@ -60,7 +60,7 @@ def _asset(name: str, *, attached: bool) -> CompletionArtifact:
 
 #: (id, produces, submission artifacts, expected "is every name covered?"). A ``produces``
 #: entry is either a bare asset name (``str``) or a :func:`_git_commit_spec`.
-_SCENARIOS = [
+_SCENARIOS: list[tuple[str, list[str | ProducesSpec], list[CompletionArtifact], bool]] = [
     ("no-produces", [], [], True),
     ("git-commit-covers-the-name", ["backend"], [_git_commit("backend")], True),
     ("explicit-attach-covers-the-name", ["findings"], [_asset("findings", attached=True)], True),

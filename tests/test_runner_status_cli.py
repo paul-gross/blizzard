@@ -23,7 +23,12 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.cli.control import _GateDecision, _gates_line, _UnenforceableGate, gate_decision_lines
+from blizzard.runner.cli.control import (
+    _GateDecision,  # pyright: ignore[reportPrivateUsage]  # the decision wire shape has no public name
+    _gates_line,  # pyright: ignore[reportPrivateUsage]  # the gates-line renderer has no public surface
+    _UnenforceableGate,  # pyright: ignore[reportPrivateUsage]  # the flag wire shape has no public name
+    gate_decision_lines,
+)
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference

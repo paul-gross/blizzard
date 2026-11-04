@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import Engine, create_engine, event, text
 
 from blizzard.foundation.store.engine import create_engine_from_url, set_sqlite_pragmas
 
@@ -36,7 +36,11 @@ def test_non_sqlite_url_gets_no_pragma_listener(monkeypatch: pytest.MonkeyPatch)
     # The postgres driver is an opt-in extra (pyproject.toml), not installed by default —
     # stubbing `create_engine` isolates the URL-prefix branch from needing it installed.
     fake_engine = create_engine("sqlite://")
-    monkeypatch.setattr("blizzard.foundation.store.engine.create_engine", lambda *a, **k: fake_engine)
+
+    def _fake_create_engine(*_args: object, **_kwargs: object) -> Engine:
+        return fake_engine
+
+    monkeypatch.setattr("blizzard.foundation.store.engine.create_engine", _fake_create_engine)
     engine = create_engine_from_url("postgresql://user:pass@localhost/blizzard")
     assert engine is fake_engine
     assert not event.contains(engine, "connect", set_sqlite_pragmas)

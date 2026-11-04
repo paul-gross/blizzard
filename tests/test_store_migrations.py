@@ -138,7 +138,7 @@ def test_schema_snapshot_tells_constraint_shapes_and_names_apart(
 ) -> None:
     """SQLite reflects a unique constraint through ``get_unique_constraints`` only, never
     ``get_indexes``; the snapshot reads both, and every constraint's name."""
-    snapshots = []
+    snapshots: list[dict[str, object]] = []
     for side, constraint in (("left", left), ("right", right)):
         metadata = sa.MetaData()
         sa.Table("pair", metadata, sa.Column("a", sa.Text, nullable=False), sa.Column("b", sa.Text), constraint)

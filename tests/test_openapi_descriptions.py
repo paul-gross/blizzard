@@ -11,8 +11,9 @@ import ast
 import json
 import re
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -53,7 +54,7 @@ def _carries_internal_identifier(text: str) -> bool:
     return bool(_INTERNAL_PATH.search(text) or _internal_identifiers(text))
 
 
-_FORBIDDEN = {
+_FORBIDDEN: dict[str, Callable[[str], bool]] = {
     "client-surface claim": lambda text: bool(
         re.search(r"\bboards?\b|\bthe UI\b|\bfrontend\b|\bdocks?\b|\bkiosk\b", text, re.IGNORECASE)
     ),
@@ -66,13 +67,14 @@ _FORBIDDEN = {
 
 def _descriptions(node: object, path: str = "") -> Iterator[tuple[str, str]]:
     if isinstance(node, dict):
-        for key, value in node.items():
+        mapping = cast("dict[str, object]", node)
+        for key, value in mapping.items():
             if key == "description" and isinstance(value, str):
                 yield path, value
             else:
                 yield from _descriptions(value, f"{path}/{key}")
     elif isinstance(node, list):
-        for index, value in enumerate(node):
+        for index, value in enumerate(cast("list[object]", node)):
             yield from _descriptions(value, f"{path}/{index}")
 
 
@@ -102,7 +104,7 @@ def _unschemaed_wire_models() -> list[tuple[str, str, str]]:
     `SseFramePayload`, not `BaseModel` directly, and is as publishable as one. A private
     class is skipped — a `_`-prefixed Protocol is a structural alias no route can name, and
     its internal references are the point of it."""
-    found = []
+    found: list[tuple[str, str, str]] = []
     for path in sorted(_WIRE.glob("*.py")):
         for node in ast.walk(ast.parse(path.read_text())):
             if not isinstance(node, ast.ClassDef) or node.name.startswith("_"):

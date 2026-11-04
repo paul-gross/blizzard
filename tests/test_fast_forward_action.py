@@ -1,6 +1,7 @@
 """Fast-forward landing through the action and forge seams."""
 
 from dataclasses import replace
+from typing import NoReturn
 
 import pytest
 
@@ -9,7 +10,15 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
 from tests.github_double import RED, check, comparison
-from tests.test_land_action import _SUBMITTED, _WIDGET, _forge, _land, _row, _Sink, _visit
+from tests.test_land_action import (
+    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _forge,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _land,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _row,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _Sink,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+    _visit,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+)
 
 pytestmark = pytest.mark.component
 
@@ -70,7 +79,7 @@ def test_inherited_failure_waits_without_a_rerun_while_a_check_is_pending():
 @pytest.mark.parametrize(
     "reason,cause", [(ForgeRejected.STALE, None), (ForgeRejected.PROTECTED, EscalationCause.BRANCH_PROTECTED)]
 )
-def test_advance_refusals(reason, cause):
+def test_advance_refusals(reason: str, cause: EscalationCause | None) -> None:
     forge = _ahead()
     forge.repo(_WIDGET).replies["advance_ref"] = [ForgeRejected(reason)]
     answer, sink = _land(forge, _fast_visit())
@@ -85,7 +94,7 @@ def test_stale_advance_rechecks_moved_base_before_retrying():
     forge = _ahead()
     state = forge.repo(_WIDGET)
 
-    def move_base(**_kwargs):
+    def move_base(**_kwargs: object) -> NoReturn:
         state.base_tip = "later-tip"
         state.heads["main"] = "later-tip"
         raise ForgeRejected(ForgeRejected.STALE)
@@ -156,7 +165,7 @@ def test_recovery_records_proven_revision_not_later_base_tip():
     assert not forge.writes()
 
 
-def _diverged(candidate="candidate", parents=None):
+def _diverged(candidate: str = "candidate", parents: tuple[str, ...] | None = None):
     forge = _ahead()
     state = forge.repo(_WIDGET)
     state.heads["feat/x-landing"] = candidate

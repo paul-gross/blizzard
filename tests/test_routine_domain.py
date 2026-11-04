@@ -81,7 +81,7 @@ _CTX = ChangeContext(actor="usr_1", door=Door.CLI)
 class _FakeScopeRepo:
     """Only ``get`` is live — a routine's default-scope mint commits through the routine repo."""
 
-    stored: dict[str, Scope] = field(default_factory=dict)
+    stored: dict[str, Scope] = field(default_factory=dict[str, Scope])
 
     def get(self, project_id: str, slug: str) -> Scope | None:
         stored = self.stored.get(slug)
@@ -99,8 +99,8 @@ def _as_write_scopes(fake: _FakeScopeRepo) -> IWriteScopeRepository:
 class _FakeRoutineScopeRepo:
     """A plain in-memory ``(routine_id, scope_slug)`` set; link/unlink record their change."""
 
-    linked: set[tuple[str, str]] = field(default_factory=set)
-    changes: list[tuple[int, ConfigChange]] = field(default_factory=list)
+    linked: set[tuple[str, str]] = field(default_factory=set[tuple[str, str]])
+    changes: list[tuple[int, ConfigChange]] = field(default_factory=list[tuple[int, ConfigChange]])
 
     def list_scopes(self, routine_id: str) -> list[str]:
         return sorted(slug for rid, slug in self.linked if rid == routine_id)
@@ -126,12 +126,12 @@ class _FakeRoutineRepo:
     mint, and links the default into ``joins`` — the one-transaction shape of the real store."""
 
     joins: _FakeRoutineScopeRepo = field(default_factory=_FakeRoutineScopeRepo)
-    by_id: dict[str, Routine] = field(default_factory=dict)
-    by_name: dict[str, Routine] = field(default_factory=dict)
-    changes: list[ConfigChange] = field(default_factory=list)
-    mints: list[ScopeMint] = field(default_factory=list)
-    updates: list[int] = field(default_factory=list)
-    recorded: list[tuple[str, bool, int, str]] = field(default_factory=list)
+    by_id: dict[str, Routine] = field(default_factory=dict[str, Routine])
+    by_name: dict[str, Routine] = field(default_factory=dict[str, Routine])
+    changes: list[ConfigChange] = field(default_factory=list[ConfigChange])
+    mints: list[ScopeMint] = field(default_factory=list[ScopeMint])
+    updates: list[int] = field(default_factory=list[int])
+    recorded: list[tuple[str, bool, int, str]] = field(default_factory=list[tuple[str, bool, int, str]])
 
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)

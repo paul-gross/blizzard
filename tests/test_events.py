@@ -266,7 +266,7 @@ def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kind
     hub = build_hub(tmp_path)
     store = chunk_stores(hub.engine, hub.clock)
     store.events.record_event(
-        severity="error",  # type: ignore[arg-type]  # a legacy, since-fixed value
+        severity="error",  # pyright: ignore[reportArgumentType]  # a legacy, since-fixed value outside the vocabulary
         kind="hub-node-unroutable-outcome",
         runner_id="hub",
         chunk_id=None,

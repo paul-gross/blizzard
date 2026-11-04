@@ -82,7 +82,11 @@ def test_apply_installs_the_formats_exception_processors(monkeypatch: pytest.Mon
     """The chain `apply` configures is the one production logs through — asserting the
     format's own hook leaves a chain that drops the hook green."""
     installed: dict[str, Any] = {}
-    monkeypatch.setattr(structlog, "configure", lambda **kwargs: installed.update(kwargs))
+
+    def configure(**kwargs: Any) -> None:
+        installed.update(kwargs)
+
+    monkeypatch.setattr(structlog, "configure", configure)
 
     Json().apply()
 

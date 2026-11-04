@@ -112,7 +112,7 @@ def response_only_models(
 ) -> set[type[BaseModel]]:
     documents = list(documents)
     responses, requests = _document_roles(documents)
-    parsed = set().union(*(_parsed_class_names(root) for root in client_roots))
+    parsed = set[str]().union(*(_parsed_class_names(root) for root in client_roots))
     named = [model for name in (responses | parsed) - requests for model in index.get(name, [])]
     reached = {model for model in _with_nested(named) if model.__name__ not in requests}
     return reached | _bases_only_reached_through(reached, requests, index)
@@ -356,7 +356,7 @@ def test_a_class_both_roles_reach_stays_closed() -> None:
 def test_an_open_mark_on_a_type_without_unrecognized_is_refused() -> None:
     with pytest.raises(TypeError, match=r"E \| Unrecognized"):
 
-        class _Misopened(BaseModel):
+        class _Misopened(BaseModel):  # pyright: ignore[reportUnusedClass]  # defining the class is the refusal under test
             shade: Annotated[_Shade, OPEN]
 
 

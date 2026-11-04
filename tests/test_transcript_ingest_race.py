@@ -11,7 +11,7 @@ Postgres alike, is the tenant-row lock every write unit opens with."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -121,7 +121,7 @@ class _Competitor:
 @contextmanager
 def _competing_on(
     monkeypatch: pytest.MonkeyPatch, store: TranscriptSegmentStore, read: str, competitor: _Competitor
-) -> Iterator[None]:
+) -> Generator[None]:
     """Start ``competitor`` from inside this thread's first ``store.<read>``, once the read has its value."""
     real = getattr(store, read)
     caller = threading.get_ident()

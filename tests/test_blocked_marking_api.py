@@ -7,6 +7,7 @@ chunk may do, only what it says about why it cannot yet be claimed."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -212,7 +213,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_calls += 1
         return super().load_facts(chunk_id, transaction=transaction)
 
-    def load_facts_for(self, chunk_ids):
+    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 

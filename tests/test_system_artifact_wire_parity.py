@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import get_args
+from typing import cast, get_args
 
 import pytest
 from pydantic import BaseModel
@@ -74,12 +74,11 @@ def test_every_guard_pair_matches_its_model_exactly(doc: Path) -> None:
     for name, body in _guard_pairs(doc):
         model = _MODELS.get(name)
         assert model is not None, f"{doc}: '### {name}' names no known wire model (add it to _MODELS if new)"
-        payload = json.loads(body)
+        payload: object = json.loads(body)
         assert isinstance(payload, dict), f"{doc}: '### {name}' json block is not a JSON object"
+        keys = set(cast("dict[str, object]", payload))
         expected = _model_field_aliases(model)
-        assert set(payload.keys()) == expected, (
-            f"{doc}: '### {name}' json block's keys {set(payload.keys())} != {model.__name__}'s fields {expected}"
-        )
+        assert keys == expected, f"{doc}: '### {name}' json block's keys {keys} != {model.__name__}'s fields {expected}"
         # Must also actually parse into the model, not merely carry the right key set.
         model.model_validate(payload)
 

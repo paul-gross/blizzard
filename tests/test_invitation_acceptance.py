@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+import httpx2
 import pytest
 import sqlalchemy as sa
 import structlog
@@ -69,7 +70,7 @@ def _hub(tmp_path: Path, identity: ProviderIdentity) -> tuple[HubHarness, FakeOA
     return build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github}), github
 
 
-def _sign_in(hub: HubHarness, token: str, *, session: str | None = None) -> Any:
+def _sign_in(hub: HubHarness, token: str, *, session: str | None = None) -> httpx2.Response:
     if session is not None:
         hub.client.cookies.set("bz_session", session)
     authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False)
@@ -83,7 +84,7 @@ def _me(hub: HubHarness, session: str) -> Any:
     return hub.client.get("/api/me")
 
 
-def _refused(landed: Any, refusal: SignInRefusal) -> None:
+def _refused(landed: httpx2.Response, refusal: SignInRefusal) -> None:
     """``landed`` is a refused sign-in: the login page naming ``refusal``, and no session handed out."""
     assert landed.status_code == 302, landed.text
     location = urlsplit(landed.headers["location"])
@@ -274,6 +275,10 @@ def _used(hub: HubHarness, tenant: TenantId) -> str:
     return token
 
 
+def _names_nothing(_hub: HubHarness, _tenant: TenantId) -> str:
+    return "no-such-token"
+
+
 def _closed(hub: HubHarness, tenant: TenantId) -> str:
     other = hub.add_tenant("other")
     _invitation_id, token = seed_invitation(hub.engine, other.tenant, _WORK, Role.GUEST)
@@ -288,7 +293,7 @@ def _closed(hub: HubHarness, tenant: TenantId) -> str:
         pytest.param(_revoked, id="revoked"),
         pytest.param(_used, id="already-used"),
         pytest.param(_closed, id="tenant-closed"),
-        pytest.param(lambda _hub, _tenant: "no-such-token", id="names-nothing"),
+        pytest.param(_names_nothing, id="names-nothing"),
     ],
 )
 def test_an_invitation_no_longer_usable_writes_nothing(tmp_path: Path, invitation: Any) -> None:

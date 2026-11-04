@@ -38,7 +38,7 @@ def _cookie(token: str) -> dict[str, str]:
 
 def _seed_users_with_identities(hub: HubHarness, n: int) -> list[User]:
     identities = IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test")))
-    users = []
+    users: list[User] = []
     for i in range(n):
         user = seed_user(hub, username=f"user{i}", role=Role.GUEST)
         identities.link(

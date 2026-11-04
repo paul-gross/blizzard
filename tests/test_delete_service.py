@@ -8,7 +8,7 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -47,9 +47,11 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 class _FakeItemsRepo:
     """Records the hub-item withdrawals deletion performs; any other call is a failure."""
 
-    deleted: list[tuple[str, str, datetime]] = field(default_factory=list)
-    work_refs_seen: list[list[WorkRef]] = field(default_factory=list)
-    withdrawals: list[tuple[WorkRef, datetime, Transaction | None]] = field(default_factory=list)
+    deleted: list[tuple[str, str, datetime]] = field(default_factory=list[tuple[str, str, datetime]])
+    work_refs_seen: list[list[WorkRef]] = field(default_factory=list[list[WorkRef]])
+    withdrawals: list[tuple[WorkRef, datetime, Transaction | None]] = field(
+        default_factory=list[tuple[WorkRef, datetime, Transaction | None]]
+    )
 
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
         self.work_refs_seen.append([pointer])
@@ -69,11 +71,13 @@ class _FakeExclusiveWrites:
     current: Chunk | None = None
 
     items: _FakeItemsRepo = field(default_factory=_FakeItemsRepo)
-    releases: list[tuple[str, str, datetime, LockedTransaction]] = field(default_factory=list)
-    delete_transactions: list[LockedTransaction] = field(default_factory=list)
+    releases: list[tuple[str, str, datetime, LockedTransaction]] = field(
+        default_factory=list[tuple[str, str, datetime, LockedTransaction]]
+    )
+    delete_transactions: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
 
     @contextmanager
-    def begin(self) -> Iterator[Transaction]:
+    def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
@@ -174,8 +178,8 @@ def _done_via_operator_completion_facts() -> ChunkFacts:
 
 
 @pytest.mark.parametrize("facts_factory", [_not_ready_facts, _ready_facts], ids=["not_ready", "ready"])
-def test_delete_succeeds_at_every_groupable_status(facts_factory: object) -> None:
-    service, items = _service(facts_factory())  # type: ignore[operator]
+def test_delete_succeeds_at_every_groupable_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, items = _service(facts_factory())
 
     fact_id = service.delete(_CHUNK, by="operator")
 
@@ -206,10 +210,10 @@ def test_delete_succeeds_at_every_groupable_status(facts_factory: object) -> Non
         "done_via_operator_completion",
     ],
 )
-def test_delete_refuses_a_non_groupable_status(facts_factory: object) -> None:
+def test_delete_refuses_a_non_groupable_status(facts_factory: Callable[[], ChunkFacts]) -> None:
     """Deletion is refused at every status outside ``PRE_CLAIM_STATUSES`` — ``paused``
     refused right alongside the runner-held and terminal statuses, not a special case."""
-    service, items = _service(facts_factory())  # type: ignore[operator]
+    service, items = _service(facts_factory())
 
     with pytest.raises(ChunkNotDeletable):
         service.delete(_CHUNK, by="operator")

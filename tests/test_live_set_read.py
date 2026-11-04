@@ -204,7 +204,7 @@ def test_live_read_equals_the_full_derivation_minus_terminal_statuses(tmp_path: 
     assert not any(cid.startswith("ch_term_") for cid in live)
 
 
-def _peek(hub: HubHarness, token: str) -> tuple[object, object]:
+def _peek(hub: HubHarness, token: str) -> tuple[dict[str, object], dict[str, object]]:
     get = hub.client.get("/api/fleet/queue/peek")
     post = hub.client.post("/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=bearer(token))
     assert get.status_code == post.status_code == 200
@@ -234,7 +234,7 @@ def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_coun
     bare_token, heavy_token = _token(bare), _token(heavy)
 
     assert _peek(bare, bare_token) == _peek(heavy, heavy_token)
-    assert _peek(heavy, heavy_token)[0]["entries"]  # type: ignore[index]
+    assert _peek(heavy, heavy_token)[0]["entries"]
 
     def post(hub: HubHarness, token: str):
         return lambda: hub.client.post(

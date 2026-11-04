@@ -124,12 +124,19 @@ def test_origin_url_reads_the_named_worktree_not_the_process_cwd(
 # --- src/blizzard/runner/app.py: the hermetic default hub client ----------------------------------
 
 
+class _CountingHubServer(ThreadingHTTPServer):
+    """The hub double's server, recording every path its handler served."""
+
+    seen: list[str]
+
+
 class _CountingHubHandler(BaseHTTPRequestHandler):
     """An oauth-mode hub double on a real port: a runner that probes it reads an IdP
     surface and gates its human lane."""
 
     def do_GET(self) -> None:  # BaseHTTPRequestHandler's own casing, not ours
-        self.server.seen.append(self.path)  # type: ignore[attr-defined]
+        assert isinstance(self.server, _CountingHubServer)
+        self.server.seen.append(self.path)
         body = json.dumps({"keys": []}).encode()
         self.send_response(200)
         self.send_header("content-type", "application/json")
@@ -147,8 +154,8 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
     a real client against ``config.hub_url``, so a coincidental live listener there
     cannot flip the human lane's gating outside the composition root's control — and the
     same holds for ``hub_proxy_client``, the ``HubProxy``-forward seam's own default."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHubHandler)
-    server.seen: list[str] = []  # type: ignore[attr-defined]
+    server = _CountingHubServer(("127.0.0.1", 0), _CountingHubHandler)
+    server.seen = []
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         config = RunnerConfig(
@@ -169,7 +176,7 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
 
     assert status != 401
     assert proxy_status == 404  # the hermetic double's own answer, never the real hub's
-    assert server.seen == []  # type: ignore[attr-defined]
+    assert server.seen == []
 
 
 # --- src/blizzard/runner/api/hub_proxy.py: the retry ceiling stays inside the worker's read timeout -----

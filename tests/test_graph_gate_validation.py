@@ -61,9 +61,12 @@ def test_human_gate_node_mints_without_a_judgement_prompt() -> None:
 
 
 def test_hub_executor_cannot_declare_human_judgement() -> None:
+    deliver = _GATE_NODES["deliver"]
+    judgement = deliver["judgement"]
+    assert isinstance(judgement, dict)
     nodes = {
         **_GATE_NODES,
-        "deliver": {**_GATE_NODES["deliver"], "judgement": {**_GATE_NODES["deliver"]["judgement"], "by": "human"}},
+        "deliver": {**deliver, "judgement": {**judgement, "by": "human"}},
     }
     result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes}), TEST_CATALOGUE).result
     assert not result.ok

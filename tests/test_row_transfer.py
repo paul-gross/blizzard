@@ -21,7 +21,7 @@ def _table(metadata: sa.MetaData, name: str, **refers: str) -> sa.Table:
 
 
 def _handle(**issued: dict[int, int]) -> TransferHandle:
-    return TransferHandle(runner_id="rn_1", source=None, destination=None, issued=issued)  # type: ignore[arg-type]
+    return TransferHandle(runner_id="rn_1", source=None, destination=None, issued=issued)  # pyright: ignore[reportArgumentType]  # remapped reads only the issued keys; no connection is touched
 
 
 def test_a_referred_to_table_comes_before_every_table_naming_it_whatever_their_names() -> None:

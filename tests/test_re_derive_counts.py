@@ -7,7 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func
+from sqlalchemy import Table, func
 
 from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
 from blizzard.hub.store import schema as s
@@ -17,7 +17,7 @@ from tests.test_analytics_events_api import ingest_chunk, record_transcript, too
 pytestmark = pytest.mark.component
 
 
-def _hub_with_one_segment(tmp_path: Path):
+def _hub_with_one_segment(tmp_path: Path) -> tuple[HubHarness, str]:
     hub = build_hub(tmp_path)
     chunk_id = ingest_chunk(hub)
     turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
@@ -52,7 +52,9 @@ def test_a_stored_segment_is_counted(tmp_path: Path) -> None:
     assert by_chunk.derived == 0  # the forced derive left its marker current: no candidate remains
 
 
-def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True) -> None:
+def _push(
+    hub: HubHarness, chunk_id: str, *, segment_id: str, supersedes: str | None = None, final: bool = True
+) -> None:
     turns = [tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")]
     record = record_transcript(chunk_id, turns=turns, segment_id=segment_id)
     record["supersedes"] = supersedes
@@ -61,7 +63,7 @@ def _push(hub, chunk_id: str, *, segment_id: str, supersedes: str | None = None,
     assert push.status_code == 200, push.text
 
 
-def _count(hub: HubHarness, table) -> int:
+def _count(hub: HubHarness, table: Table) -> int:
     with hub.engine.connect() as conn:
         return int(conn.execute(hub_store_connections(hub.engine).select(table, func.count())).scalar_one())
 

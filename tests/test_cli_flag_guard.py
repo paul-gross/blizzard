@@ -125,7 +125,11 @@ def test_a_held_option_is_listed_and_marked_refused_when_given_while_off_and_wor
 
 def test_a_flag_off_404_reaching_the_response_check_renders_the_same_message() -> None:
     body = {"detail": FlagOff.of("hub-thing").model_dump()}
-    bound = bind_stubs(get=lambda url, **_: _Response(404, body))
+
+    def _get(url: str, **_: object) -> _Response:
+        return _Response(404, body)
+
+    bound = bind_stubs(get=_get)
     cli = CliContext(
         hub_url="http://hub.local",
         session_reader=InMemorySessionStore(),

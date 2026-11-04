@@ -4,12 +4,13 @@ response encoders, the export handle's switches, and the paths that make no span
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import TypedDict, Unpack
 
 import pytest
 from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import Message
 
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
@@ -167,7 +168,7 @@ def test_the_traces_read_agrees_with_the_fleet_trace_settings(environ: dict[str,
 
 
 @pytest.mark.parametrize(("content_type", "body"), _ENCODINGS)
-def test_the_recorded_metrics_decode_in_both_encodings(content_type: str, body) -> None:
+def test_the_recorded_metrics_decode_in_both_encodings(content_type: str, body: Callable[[str], bytes]) -> None:
     decoded = decode_metrics(body("metrics"), content_type)
     assert decoded.unsupported == 0
     points = decoded.points
@@ -180,7 +181,7 @@ def test_the_recorded_metrics_decode_in_both_encodings(content_type: str, body) 
 
 
 @pytest.mark.parametrize(("content_type", "body"), _ENCODINGS)
-def test_the_recorded_logs_decode_in_both_encodings(content_type: str, body) -> None:
+def test_the_recorded_logs_decode_in_both_encodings(content_type: str, body: Callable[[str], bytes]) -> None:
     records = decode_logs(body("logs"), content_type)
     assert len(records) == 6
     first = records[0]
@@ -192,7 +193,7 @@ def test_the_recorded_logs_decode_in_both_encodings(content_type: str, body) -> 
     assert first.attributes["event.sequence"] == 0
 
 
-def _encodings(message) -> list[tuple[str, bytes]]:
+def _encodings(message: Message) -> list[tuple[str, bytes]]:
     return [
         (PROTOBUF_CONTENT_TYPE, message.SerializeToString()),
         (JSON_CONTENT_TYPE, json.dumps(claude_code_telemetry.hex_ids(MessageToDict(message))).encode()),
@@ -271,7 +272,9 @@ def test_an_exponential_histogram_decodes_with_its_scale_and_both_sides_buckets(
         (b"{}", "text/plain"),
     ],
 )
-def test_a_malformed_or_unsupported_body_is_a_decode_error(decode, body: bytes, content_type: str) -> None:
+def test_a_malformed_or_unsupported_body_is_a_decode_error(
+    decode: Callable[[bytes, str], object], body: bytes, content_type: str
+) -> None:
     with pytest.raises(OtlpDecodeError):
         decode(body, content_type)
 
@@ -397,14 +400,17 @@ def test_other_paths_are_not_excluded() -> None:
 
 def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> None:
     from opentelemetry.exporter.otlp.proto.common.metrics_encoder import encode_metrics
-    from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult
+    from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
+    from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
 
     class Capture(MetricExporter):
         def __init__(self) -> None:
             super().__init__()
-            self.requests: list[object] = []
+            self.requests: list[ExportMetricsServiceRequest] = []
 
-        def export(self, metrics_data, timeout_millis: float = 10_000, **kwargs):
+        def export(
+            self, metrics_data: MetricsData, timeout_millis: float = 10_000, **kwargs: object
+        ) -> MetricExportResult:
             self.requests.append(encode_metrics(metrics_data))
             return MetricExportResult.SUCCESS
 
@@ -448,7 +454,7 @@ def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> No
     )
     handle.shutdown(5.0)
     (request,) = capture.requests
-    metrics = {m.name: m for rm in request.resource_metrics for sm in rm.scope_metrics for m in sm.metrics}  # type: ignore[attr-defined]
+    metrics = {m.name: m for rm in request.resource_metrics for sm in rm.scope_metrics for m in sm.metrics}
     assert metrics["m"].sum.aggregation_temporality == 1 and metrics["m"].sum.is_monotonic
     assert metrics["g"].gauge.data_points[0].as_double == 1.5
     histogram = metrics["h"].histogram
@@ -465,7 +471,8 @@ def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> No
 def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
     import threading
 
-    from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
+    from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData, ResourceMetrics
+    from opentelemetry.sdk.resources import Resource
 
     from blizzard.runner.tracing.internal.received_pipeline import MetricQueue
 
@@ -477,7 +484,9 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
             super().__init__()
             self.exported: list[int] = []
 
-        def export(self, metrics_data, timeout_millis: float = 10_000, **kwargs):
+        def export(
+            self, metrics_data: MetricsData, timeout_millis: float = 10_000, **kwargs: object
+        ) -> MetricExportResult:
             entered.set()
             release.wait(5.0)
             self.exported.append(len(metrics_data.resource_metrics))
@@ -491,7 +500,8 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
 
     held = Held()
     queue = MetricQueue(held, max_points=4)
-    batch = {n: MetricsData(resource_metrics=[object()] * n) for n in (1, 2, 3)}  # type: ignore[list-item]
+    empty = ResourceMetrics(resource=Resource({}), scope_metrics=[], schema_url="")
+    batch = {n: MetricsData(resource_metrics=[empty] * n) for n in (1, 2, 3)}
     queue.put(batch[1], 1)
     assert entered.wait(5.0)
     queue.put(batch[2], 2)
@@ -518,7 +528,9 @@ def test_the_metrics_queue_shutdown_discards_what_is_queued_and_leaves_an_in_fli
             self.shut_down_while_exporting = False
             self.exporting = False
 
-        def export(self, metrics_data, timeout_millis: float = 10_000, **kwargs):
+        def export(
+            self, metrics_data: MetricsData, timeout_millis: float = 10_000, **kwargs: object
+        ) -> MetricExportResult:
             self.exporting = True
             entered.set()
             release.wait(5.0)

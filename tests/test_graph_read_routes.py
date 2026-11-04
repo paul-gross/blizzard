@@ -156,7 +156,7 @@ def test_list_graphs_returns_every_mint_past_the_default_page_limit(tmp_path: Pa
     """``GET /api/graphs`` is unpaged: ``effective`` is each name's newest non-retired mint, which a page of mints
     cannot compute, and mints are insert-only and few."""
     hub = build_hub(tmp_path)
-    alpha_ids = []
+    alpha_ids: list[str] = []
     for _ in range(DEFAULT_LIMIT):
         alpha_ids.append(_mint(hub, _GRAPH_A))
         hub.clock.advance(timedelta(seconds=1))

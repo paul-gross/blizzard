@@ -6,6 +6,7 @@ the membership as it stands when the change commits — against a real hub holdi
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -201,7 +202,7 @@ def test_a_tenant_admin_is_refused_the_hub_level_routes_whichever_tenant_is_name
         assert hub.client.get("/api/traces/status", headers=headers).status_code == 403
 
 
-def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step) -> None:
+def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step: Callable[[], None]) -> None:
     """Run ``step`` once, just before the next identity unit of work takes the identity lock."""
     begin = IdentityTransactions.begin
 

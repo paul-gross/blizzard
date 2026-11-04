@@ -12,7 +12,7 @@ fake shape (``tests/test_delete_service.py``)."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -49,8 +49,8 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 class _FakeChunkRepo:
     """Only ``record_stop_locked`` is live; anything else is a bug."""
 
-    stopped: list[tuple[str, str]] = field(default_factory=list)
-    stamps: list[datetime] = field(default_factory=list)
+    stopped: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    stamps: list[datetime] = field(default_factory=list[datetime])
 
     def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         self.stopped.append((chunk_id, by))
@@ -78,7 +78,7 @@ class _FakeExclusiveWrites:
     clock: FixedClock
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
 
@@ -148,8 +148,8 @@ def _done_facts() -> ChunkFacts:
 
 
 @pytest.mark.parametrize("facts_factory", [_done_facts, _stopped_facts], ids=["done", "stopped"])
-def test_stop_refuses_done_and_stopped(facts_factory: object) -> None:
-    service, repo = _service(facts_factory())  # type: ignore[operator]
+def test_stop_refuses_done_and_stopped(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, repo = _service(facts_factory())
 
     with pytest.raises(ChunkNotStoppable):
         service.stop(_CHUNK, by="operator")
@@ -162,8 +162,8 @@ def test_stop_refuses_done_and_stopped(facts_factory: object) -> None:
     [_not_ready_facts, _running_facts, _waiting_on_human_facts, _needs_human_facts, _paused_facts, _delivering_facts],
     ids=["not_ready", "running", "waiting_on_human", "needs_human", "paused", "delivering"],
 )
-def test_stop_allows_every_non_terminal_status(facts_factory: object) -> None:
-    service, repo = _service(facts_factory())  # type: ignore[operator]
+def test_stop_allows_every_non_terminal_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, repo = _service(facts_factory())
 
     service.stop(_CHUNK, by="operator")
 

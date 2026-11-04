@@ -93,7 +93,9 @@ def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
 
 
 def _retire(store: RoutineStore, routine: Routine, retired: bool = True) -> Routine:
-    moved, change = routine.set_retired(retired, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    transition = routine.set_retired(retired, _CTX, if_match=None, at=_NOW)
+    assert transition is not None
+    moved, change = transition
     return store.record_lifecycle(
         moved, retired=retired, from_revision=routine.revision, at=_NOW, by="paul", change=change
     )
@@ -146,21 +148,27 @@ def test_create_with_an_empty_model_preference_reads_back_empty(tmp_path: Path) 
     store, project = _store(tmp_path)
     _create(store, _routine(project, default_model=[]))
 
-    assert store.get("rtn_1").default_model == []  # type: ignore[union-attr]
+    stored = store.get("rtn_1")
+    assert stored is not None
+    assert stored.default_model == []
 
 
 def test_create_with_a_harnesses_preference_reads_back(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
     _create(store, _routine(project, default_harnesses=["claude_code", "codex"]))
 
-    assert store.get("rtn_1").default_harnesses == ["claude_code", "codex"]  # type: ignore[union-attr]
+    stored = store.get("rtn_1")
+    assert stored is not None
+    assert stored.default_harnesses == ["claude_code", "codex"]
 
 
 def test_create_with_no_harnesses_preference_reads_back_empty(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
     _create(store, _routine(project, default_harnesses=[]))
 
-    assert store.get("rtn_1").default_harnesses == []  # type: ignore[union-attr]
+    stored = store.get("rtn_1")
+    assert stored is not None
+    assert stored.default_harnesses == []
 
 
 def test_get_by_name(tmp_path: Path) -> None:
@@ -262,7 +270,9 @@ def test_record_lifecycle_from_a_moved_revision_appends_no_fact(tmp_path: Path) 
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     routine = _create(store, _routine(project))
-    moved, change = routine.set_retired(True, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    transition = routine.set_retired(True, _CTX, if_match=None, at=_NOW)
+    assert transition is not None
+    moved, change = transition
 
     with pytest.raises(ConfigRevisionConflict):
         store.record_lifecycle(moved, retired=True, from_revision=9, at=_NOW, by="paul", change=change)
@@ -303,7 +313,9 @@ def _scope_id(engine: Engine, slug: str) -> str:
 def _relink(store: RoutineScopeStore, routine: Routine, slug: str, *, link: bool) -> Routine:
     linked = store.list_scopes(routine.routine_id)
     scopes = [*linked, slug] if link else [x for x in linked if x != slug]
-    moved, change = routine.with_scopes(linked, scopes, _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    transition = routine.with_scopes(linked, scopes, _CTX, if_match=None, at=_NOW)
+    assert transition is not None
+    moved, change = transition
     verb = store.link if link else store.unlink
     return verb(moved, slug, from_revision=routine.revision, change=change)
 
@@ -314,7 +326,9 @@ def test_link_then_list_scopes_round_trips_moving_the_revision(tmp_path: Path) -
     linked = _relink(store, routine, "other", link=True)
 
     assert store.list_scopes("rtn_1") == ["blizzard", "other"]
-    assert RoutineStore(hub_store_connections(engine)).get("rtn_1").revision == linked.revision == 2  # type: ignore[union-attr]
+    reread = RoutineStore(hub_store_connections(engine)).get("rtn_1")
+    assert reread is not None
+    assert reread.revision == linked.revision == 2
     assert _changes(engine)[-1] == ("routine", "nightly", 2, "edit")
 
 
@@ -330,7 +344,9 @@ def test_unlink_removes_the_link(tmp_path: Path) -> None:
 
 def test_link_from_a_moved_revision_conflicts_and_links_nothing(tmp_path: Path) -> None:
     store, routine, engine = _routine_scope_store(tmp_path)
-    moved, change = routine.with_scopes(["blizzard"], ["blizzard", "other"], _CTX, if_match=None, at=_NOW)  # type: ignore[misc]
+    transition = routine.with_scopes(["blizzard"], ["blizzard", "other"], _CTX, if_match=None, at=_NOW)
+    assert transition is not None
+    moved, change = transition
 
     with pytest.raises(ConfigRevisionConflict):
         store.link(moved, "other", from_revision=3, change=change)

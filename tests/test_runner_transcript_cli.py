@@ -7,6 +7,7 @@ import json
 
 import httpx2
 import pytest
+from click.testing import Result
 
 from blizzard.runner.cli import runner as runner_group
 from tests.transcript_bodies import content_body, index_body
@@ -37,7 +38,7 @@ def _daemon(get_status: int = 200, detail: str = "") -> tuple[Bound, list[str]]:
     return bind_transport(handler), seen
 
 
-def _run(bound: Bound, *argv: str) -> object:
+def _run(bound: Bound, *argv: str) -> Result:
     return bound.runner.invoke(runner_group, ["transcript", *argv, "--runner-url", _URL])
 
 
@@ -47,9 +48,9 @@ def test_list_prints_the_segments_this_runner_holds_and_json_prints_the_body() -
     listed = _run(bound, "list", "ch_1")
     raw = _run(bound, "list", "ch_1", "--json")
 
-    assert listed.exit_code == 0, listed.output  # type: ignore[attr-defined]
-    assert listed.output.split()[0] == "sg_1"  # type: ignore[attr-defined]
-    assert json.loads(raw.output) == index_body("ch_1", "sg_1")  # type: ignore[attr-defined]
+    assert listed.exit_code == 0, listed.output
+    assert listed.output.split()[0] == "sg_1"
+    assert json.loads(raw.output) == index_body("ch_1", "sg_1")
     assert "/runners/rn_1/api/chunks/ch_1/transcripts" in seen
 
 
@@ -59,16 +60,16 @@ def test_get_renders_the_turns_and_show_resolves_to_it() -> None:
     got = _run(bound, "get", "ch_1", "sg_1")
     shown = _run(bound, "show", "ch_1", "sg_1")
 
-    assert got.exit_code == 0, got.output  # type: ignore[attr-defined]
-    assert got.output.splitlines()[0] == "sg_1  final"  # type: ignore[attr-defined]
-    assert shown.output == got.output  # type: ignore[attr-defined]
+    assert got.exit_code == 0, got.output
+    assert got.output.splitlines()[0] == "sg_1  final"
+    assert shown.output == got.output
 
 
 def test_get_maps_an_absent_segment_and_an_unavailable_harness() -> None:
     absent = _run(_daemon(404)[0], "get", "ch_1", "sg_1")
     unavailable = _run(_daemon(503, "harness opencode is not installed")[0], "get", "ch_1", "sg_1")
 
-    assert absent.exit_code != 0  # type: ignore[attr-defined]
-    assert "holds no segment sg_1 for chunk ch_1" in absent.output  # type: ignore[attr-defined]
-    assert unavailable.exit_code != 0  # type: ignore[attr-defined]
-    assert "harness opencode is not installed" in unavailable.output  # type: ignore[attr-defined]
+    assert absent.exit_code != 0
+    assert "holds no segment sg_1 for chunk ch_1" in absent.output
+    assert unavailable.exit_code != 0
+    assert "harness opencode is not installed" in unavailable.output

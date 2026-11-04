@@ -25,7 +25,12 @@ pytestmark = pytest.mark.component
 
 
 #: What a registration answers when the runner sent no bindings.
-_NO_BINDINGS = {"bindings": None, "subscription": None, "subscription_unrostered": False, "unenforceable_gates": []}
+_NO_BINDINGS: dict[str, object] = {
+    "bindings": None,
+    "subscription": None,
+    "subscription_unrostered": False,
+    "unenforceable_gates": [],
+}
 _HANDSHAKE = {
     "hub_version": __version__,
     "window": {"floor": VERSION_WINDOW.floor, "ceiling": line_of(__version__)},

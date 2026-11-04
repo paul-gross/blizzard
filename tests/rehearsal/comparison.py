@@ -6,7 +6,7 @@ baseline's columns; what the candidate adds is never compared. Each mismatch is 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 type Schema = Mapping[str, Any]
 type Rows = dict[str, dict[str, dict[str, str]]]
@@ -40,14 +40,16 @@ def project(value: Any, schema: Schema, openapi: Schema) -> Any:
             }
         extra = schema.get("additionalProperties")
         if isinstance(extra, dict):
-            return {key: project(item, extra, openapi) for key, item in value.items()}
-        return value
+            # JSON objects decoded from a response: string keys, values of any JSON shape.
+            entries = cast("dict[str, Any]", value)
+            return {key: project(item, cast("Schema", extra), openapi) for key, item in entries.items()}
+        return cast("dict[str, Any]", value)
     if isinstance(value, list):
         items = next(
             (_resolved(b, openapi)["items"] for b in schema.get("anyOf", ()) if "items" in _resolved(b, openapi)),
             schema.get("items", {}),
         )
-        return [project(item, items, openapi) for item in value]
+        return [project(item, items, openapi) for item in cast("list[Any]", value)]
     return value
 
 
@@ -110,10 +112,16 @@ def _resolved(schema: Schema, openapi: Schema) -> Schema:
 
 def _diff(before: Any, after: Any, where: str, found: list[str]) -> None:
     if isinstance(before, dict) and isinstance(after, dict):
-        for name, value in before.items():
-            _diff(value, after.get(name, _ABSENT), f"{where} field {name}", found)
-    elif isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
-        for index, (left, right) in enumerate(zip(before, after, strict=True)):
+        after_fields = cast("dict[str, Any]", after)
+        for name, value in cast("dict[str, Any]", before).items():
+            _diff(value, after_fields.get(name, _ABSENT), f"{where} field {name}", found)
+    elif isinstance(before, list) and isinstance(after, list):
+        before_items, after_items = cast("list[Any]", before), cast("list[Any]", after)
+        if len(before_items) != len(after_items):
+            if before_items != after_items:
+                found.append(f"{where}: {before!r} became {after!r}")
+            return
+        for index, (left, right) in enumerate(zip(before_items, after_items, strict=True)):
             _diff(left, right, f"{where}[{index}]", found)
     elif before != after:
         found.append(f"{where}: {before!r} became {after!r}")
@@ -121,7 +129,8 @@ def _diff(before: Any, after: Any, where: str, found: list[str]) -> None:
 
 def _without_deprecated(node: Any) -> Any:
     if isinstance(node, dict):
-        return {key: _without_deprecated(value) for key, value in node.items() if key != "deprecated"}
+        fields = cast("dict[str, Any]", node)
+        return {key: _without_deprecated(value) for key, value in fields.items() if key != "deprecated"}
     if isinstance(node, list):
-        return [_without_deprecated(item) for item in node]
+        return [_without_deprecated(item) for item in cast("list[Any]", node)]
     return node

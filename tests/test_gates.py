@@ -133,7 +133,12 @@ def _claim_and_lease(hub: HubHarness, chunk_id: str, *, epoch: int = 1, seq: int
 
 
 def _completion(
-    node_id: str, *, choice: str, epoch: int = 1, decision_id: str | None = None, artifacts=None
+    node_id: str,
+    *,
+    choice: str,
+    epoch: int = 1,
+    decision_id: str | None = None,
+    artifacts: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "choice": choice,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -21,7 +22,7 @@ def _workflow() -> dict[Any, Any]:
     return yaml.safe_load(_WORKFLOW_PATH.read_text())
 
 
-def _step(job: str, predicate) -> dict[str, Any]:
+def _step(job: str, predicate: Callable[[dict[str, Any]], bool]) -> dict[str, Any]:
     return next(s for s in _workflow()["jobs"][job]["steps"] if predicate(s))
 
 

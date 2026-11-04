@@ -239,7 +239,8 @@ def test_a_budget_at_or_above_the_ceiling_over_the_same_hours_halts_the_runner(
     projection = _projected(tmp_path, f"[runner.cost]\n{cost}\n[runner.throttle.budget]\n{budget}")
     assert isinstance(projection, HaltedRunner) is refused
     if refused:
-        assert "throttle.budget.usd" in "\n".join(projection.errors)  # type: ignore[union-attr]
+        assert isinstance(projection, HaltedRunner)
+        assert "throttle.budget.usd" in "\n".join(projection.errors)
 
 
 def test_neither_choice_set_holds_on_both_and_configures_nothing(tmp_path: Path) -> None:

@@ -33,7 +33,7 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission, Withdrawal
 from blizzard.hub.domain.delivery.reconcile import (
     FlowLineReconciler,
-    _Standing,
+    _Standing,  # pyright: ignore[reportPrivateUsage]  # the patched submit seam is typed by this private record
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.events.broker import EventBroker
@@ -669,7 +669,8 @@ def _refuse_at_the_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     submitted: it resolves against no records."""
 
     def unresolved(artifacts: Any, **kwargs: Any) -> Any:
-        return resolve_visit(artifacts, **{**kwargs, "repositories": []})
+        kwargs["repositories"] = []
+        return resolve_visit(artifacts, **kwargs)
 
     monkeypatch.setattr(flow_turn, "resolve_visit", unresolved)
 

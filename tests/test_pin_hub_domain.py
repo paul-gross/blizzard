@@ -52,7 +52,7 @@ def test_envelope_requires_graph_explicitly() -> None:
     ``TypeError``, never a silent fall-back to the pre-#144 "no declaration, no chunk
     default" envelope."""
     with pytest.raises(TypeError):
-        Envelope(  # type: ignore[call-arg]
+        Envelope(  # pyright: ignore[reportCallIssue]  # omitting graph is the refusal under test
             chunk=_chunk(),
             node=_node(),
             artifacts=[],
@@ -65,4 +65,4 @@ def test_follow_latest_requires_hub_default_explicitly() -> None:
     the hub setting gets a ``TypeError``, never a silent ``True`` (migrating a fleet that
     never opted in) or a silent ``False`` (never migrating anything)."""
     with pytest.raises(TypeError):
-        FollowLatest.of(None)  # type: ignore[call-arg]
+        FollowLatest.of(None)  # pyright: ignore[reportCallIssue]  # omitting hub_default is the refusal under test

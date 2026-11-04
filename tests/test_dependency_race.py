@@ -9,13 +9,16 @@ or fold blocks on that lock rather than racing underneath it."""
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral, PrerequisiteScope
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
+from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
@@ -43,7 +46,9 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     release_write = threading.Event()
     real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):
+    def _blocking_declare_locked(
+        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
@@ -131,7 +136,9 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     release_write = threading.Event()
     real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):
+    def _blocking_declare_locked(
+        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
@@ -194,7 +201,9 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         start = threading.Barrier(2)
         results: dict[str, object] = {}
 
-        def _x_depends_on_y(dep=x, prereq=y, barrier=start, sink=results) -> None:
+        def _x_depends_on_y(
+            dep: Chunk = x, prereq: Chunk = y, barrier: threading.Barrier = start, sink: dict[str, object] = results
+        ) -> None:
             barrier.wait()
             try:
                 sink["x_on_y"] = hub.services.dependencies.declare(
@@ -203,7 +212,9 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
             except DependencyWouldCloseCycle:
                 sink["x_on_y"] = "refused"
 
-        def _y_depends_on_x(dep=y, prereq=x, barrier=start, sink=results) -> None:
+        def _y_depends_on_x(
+            dep: Chunk = y, prereq: Chunk = x, barrier: threading.Barrier = start, sink: dict[str, object] = results
+        ) -> None:
             barrier.wait()
             try:
                 sink["y_on_x"] = hub.services.dependencies.declare(
@@ -245,10 +256,12 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     release_write = threading.Event()
     real_record_fold_locked = _writable_dependencies(hub).record_fold_locked
 
-    def _blocking_record_fold_locked(handle, targets, **kwargs):
+    def _blocking_record_fold_locked(
+        handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    ) -> dict[str, int]:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold_locked(handle, targets, **kwargs)
+        return real_record_fold_locked(handle, targets, grouped_into=grouped_into, by=by, at=at)
 
     _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked
 

@@ -334,7 +334,7 @@ def test_check_without_a_changes_directory_is_a_usage_error(tmp_path: Path, monk
 def test_the_readme_has_one_valid_example_per_kind() -> None:
     readme = (repo_root() / "changes" / "README.md").read_text(encoding="utf-8")
     blocks = re.findall(r"```markdown\n(.*?)```", readme, re.DOTALL)
-    kinds = []
+    kinds: list[str] = []
     for block in blocks:
         parsed = parse_note(block, path="README.md", directory="unreleased", note_id="example")
         assert isinstance(parsed, Note)

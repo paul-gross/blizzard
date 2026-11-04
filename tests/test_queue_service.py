@@ -8,7 +8,7 @@ against a fake chunk repository (``bzh:repository-split``), zero store."""
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -97,7 +97,7 @@ class _FakeChunkRepo:
     )
 
     @contextmanager
-    def begin(self) -> Iterator[Transaction]:
+    def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:

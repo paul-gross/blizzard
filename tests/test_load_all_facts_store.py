@@ -351,7 +351,7 @@ def test_bulk_read_status_matches_per_chunk_load_facts_across_every_derived_stat
     bulk = store.facts.load_all_facts()
 
     assert set(bulk) == set(LIVE_CHUNK_IDS)  # grouped/deleted excluded (AC4)
-    statuses_seen = set()
+    statuses_seen: set[ChunkStatus] = set()
     for chunk_id in LIVE_CHUNK_IDS:
         expected = store.facts.load_facts(chunk_id)
         assert expected is not None
@@ -667,7 +667,7 @@ def test_load_facts_for_batches_the_graph_node_read_when_chunks_pin_more_graphs_
 ) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
     store, engine, _clock = seeded_chunk_stores(tmp_path)
-    ids = []
+    ids: list[str] = []
     for i in range(5):  # five distinct pinned graphs under a cap of two
         graph_id = f"gr_extra_{i}"
         with engine.begin() as conn:

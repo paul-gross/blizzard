@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
@@ -146,28 +147,28 @@ class _FakeServices:
         return _roster(built)
 
 
-class _FakeState:
-    def __init__(self, services: _FakeServices, config: HubConfig) -> None:
-        self.services = services
-        self.config = config
-        self.shutdown = asyncio.Event()
-        self.platform_tracing = DisabledPlatformTracing()
-        self.flow_driver = None
-
-
-class _FakeApp:
-    """Duck-types the two attributes ``lifespan`` reads off a real ``FastAPI``
-    instance — ``app.state.{services,config,shutdown,platform_tracing,flow_driver}`` — with no ASGI machinery."""
+class _FakeApp(FastAPI):
+    """A real ``FastAPI`` carrying only the ``app.state.{services,config,shutdown,platform_tracing,flow_driver}``
+    ``lifespan`` reads, with fake services."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
-        self.state = _FakeState(services, config)
+        super().__init__()
+        self.state.services = services
+        self.state.config = config
+        self.state.shutdown = asyncio.Event()
+        self.state.platform_tracing = DisabledPlatformTracing()
+        self.state.flow_driver = None
 
 
 @pytest.fixture
 def no_early_second_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin each lifespan sweep's jitter to its whole interval. The jitter is drawn from ``[0, interval)`` and offsets
     the second pass, so a draw inside a test's window would add a pass to a count that expects only the first."""
-    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda low, high: high)
+
+    def _whole_interval(low: float, high: float) -> float:
+        return high
+
+    monkeypatch.setattr("blizzard.hub.app.random.uniform", _whole_interval)
 
 
 @pytest.mark.usefixtures("no_early_second_pass")
@@ -179,7 +180,7 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     services.event_derivation = event_derivation
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    async with lifespan(app):  # type: ignore[arg-type]
+    async with lifespan(app):
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert event_derivation.calls == 1
@@ -195,7 +196,7 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
     services.close_drain = close_drain
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    async with lifespan(app):  # type: ignore[arg-type]
+    async with lifespan(app):
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert close_drain.calls == 1
@@ -206,7 +207,7 @@ async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(
     services = _FakeServices(work_sources=_FakeWorkSources(annotating=("widget",)), annotation=annotator)
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
+    sweeps = list(Sweep.all(app))
 
     [sweep] = [sweep for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"]
     sweep.reconciler()
@@ -221,7 +222,7 @@ async def test_the_sweep_set_has_no_forge_status_sweep_without_an_annotator(tmp_
     services = _FakeServices(work_sources=_FakeWorkSources())
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
-    sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
+    sweeps = list(Sweep.all(app))
 
     assert all(sweep.logger_name != "blizzard.hub.forge_status" for sweep in sweeps)
 
@@ -344,7 +345,7 @@ async def test_the_sweep_set_has_no_sweep_for_a_stepped_one(tmp_path: Path) -> N
         sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED, SweepName.EVENT_DERIVATION: SweepMode.TIMED}),
     )
 
-    names = [sweep.config_name for sweep in Sweep.all(_FakeApp(services, config))]  # type: ignore[arg-type]
+    names = [sweep.config_name for sweep in Sweep.all(_FakeApp(services, config))]
 
     assert names == [SweepName.EVENT_DERIVATION, SweepName.TENANT_TEARDOWN]
 
@@ -359,7 +360,7 @@ async def test_a_stepped_sweep_runs_no_pass_at_boot_and_a_timed_one_runs_as_toda
         root=tmp_path, db_url="sqlite:///:memory:", sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED})
     )
 
-    async with lifespan(_FakeApp(services, config)):  # type: ignore[arg-type]
+    async with lifespan(_FakeApp(services, config)):
         await asyncio.sleep(0.05)
 
     assert close_drain.calls == 0

@@ -7,7 +7,7 @@ are meaningfully implemented; every other seam raises loudly if called
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -41,19 +41,21 @@ class _FakeChunkRepo:
     unit the fake also opens; ``locks`` records the one lock set the unit declares."""
 
     facts: ChunkFacts
-    ready: list[Chunk] = field(default_factory=list)
-    statuses: dict[str, ChunkStatus] = field(default_factory=dict)
-    positions: dict[str, float] = field(default_factory=dict)
-    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
-    promoted: list[tuple[str, datetime]] = field(default_factory=list)
-    stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
+    ready: list[Chunk] = field(default_factory=list[Chunk])
+    statuses: dict[str, ChunkStatus] = field(default_factory=dict[str, ChunkStatus])
+    positions: dict[str, float] = field(default_factory=dict[str, float])
+    promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
+    promoted: list[tuple[str, datetime]] = field(default_factory=list[tuple[str, datetime]])
+    stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
     promoted_return: int = 1
-    paused: dict[str, Chunk] = field(default_factory=dict)
-    paused_facts: dict[str, ChunkFacts] = field(default_factory=dict)
-    locks: list[tuple[list[str], list[tuple[str, str]]]] = field(default_factory=list)
+    paused: dict[str, Chunk] = field(default_factory=dict[str, Chunk])
+    paused_facts: dict[str, ChunkFacts] = field(default_factory=dict[str, ChunkFacts])
+    locks: list[tuple[list[str], list[tuple[str, str]]]] = field(
+        default_factory=list[tuple[list[str], list[tuple[str, str]]]]
+    )
 
     @contextmanager
-    def begin(self) -> Iterator[Transaction]:
+    def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:

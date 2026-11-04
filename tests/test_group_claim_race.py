@@ -8,11 +8,14 @@ mid-fold can't interleave with the fold's own guard-check-then-write."""
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from tests.support import build_hub, ingest
 
@@ -35,7 +38,9 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
     work_refs = cast(IWriteChunkWorkRefsRepository, hub.services.chunks.work_refs)
     real_add_work_refs_locked = work_refs.add_work_refs_locked
 
-    def _blocking_add_work_refs_locked(handle, chunk_id, pointers, *, at):
+    def _blocking_add_work_refs_locked(
+        handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    ) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
         return real_add_work_refs_locked(handle, chunk_id, pointers, at=at)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 import yaml
@@ -26,16 +27,21 @@ RUN_STEP_ALLOWLIST = frozenset(
 
 
 def _is_step_list(value: object) -> bool:
-    return isinstance(value, list) and any(isinstance(step, dict) and "command" in step for step in value)
+    if not isinstance(value, list):
+        return False
+    steps = cast("list[object]", value)
+    return any(isinstance(step, dict) and "command" in step for step in steps)
 
 
 def _yaml_authors_run(document: object) -> bool:
     if isinstance(document, dict):
-        if "run" in document and ("executor" in document or _is_step_list(document["run"])):
+        mapping = cast("dict[object, object]", document)
+        if "run" in mapping and ("executor" in mapping or _is_step_list(mapping["run"])):
             return True
-        return any(_yaml_authors_run(value) for value in document.values())
+        return any(_yaml_authors_run(value) for value in mapping.values())
     if isinstance(document, list):
-        return any(_yaml_authors_run(item) for item in document)
+        items = cast("list[object]", document)
+        return any(_yaml_authors_run(item) for item in items)
     return False
 
 

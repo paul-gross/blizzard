@@ -6,7 +6,9 @@ vocabulary narrows to a chunk's project, and every garden view names its project
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+import httpx2
 import pytest
 
 from blizzard.foundation.run_mode import RunMode
@@ -22,7 +24,7 @@ _CTX = ChangeContext(actor="operator", door=Door.API)
 _WINDOW = {"since": "2026-07-01T00:00:00Z", "until": "2026-08-01T00:00:00Z"}
 
 
-def _ok(response, status: int = 200):
+def _ok(response: httpx2.Response, status: int = 200) -> Any:
     assert response.status_code == status, response.text
     return response.json()
 
@@ -68,7 +70,7 @@ def _run(hub: HubHarness, project: str) -> str:
 
 
 def _proposal(hub: HubHarness, project: str, title: str = "t") -> dict[str, object]:
-    body = {"class": "c", "title": title, "body": "b", "findings": []}
+    body: dict[str, object] = {"class": "c", "title": title, "body": "b", "findings": []}
     return _ok(hub.client.post(f"/api/projects/{project}/garden-proposals", json=body), 201)
 
 
@@ -131,7 +133,7 @@ def test_the_tenant_wide_listings_narrow_to_the_project_named(hub: HubHarness) -
 
     def slugs(path: str, key: str, project: str | None = None) -> set[str]:
         params = {"project": project} if project is not None else {}
-        body = _ok(hub.client.get(path, params=params))
+        body: dict[str, list[dict[str, str]]] | list[dict[str, str]] = _ok(hub.client.get(path, params=params))
         rows = body["proposals"] if isinstance(body, dict) else body
         return {row[key] for row in rows}
 

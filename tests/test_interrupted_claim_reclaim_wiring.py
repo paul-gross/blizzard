@@ -92,7 +92,11 @@ def _rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     workspaces = _Workspaces(ctx.workspaces)
     ctx = replace(ctx, workspaces=workspaces)
     spawns: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
-    monkeypatch.setattr(Spawner, "spawn", lambda self, *a, **k: spawns.append((a, k)))
+
+    def _record_spawn(self: Spawner, *a: Any, **k: Any) -> None:
+        spawns.append((a, k))
+
+    monkeypatch.setattr(Spawner, "spawn", _record_spawn)
     return SimpleNamespace(
         store=store,
         hub=hub,

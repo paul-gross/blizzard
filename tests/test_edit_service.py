@@ -6,7 +6,7 @@ component tier (``tests/test_edit_claim_race.py``), not here."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -86,9 +86,13 @@ class _FakeChunkRepo:
     #: distinction overrides it with a freshly-diverged record. ``None`` means gone under
     #: the lock, matching a real handle's post-deletion/-fold answer.
     current: Chunk | None = _CHUNK
-    graphs_set: list[tuple[str, str]] = field(default_factory=list)
-    defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
-    intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
+    graphs_set: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(
+        default_factory=list[tuple[str, list[str], str | None, list[str]]]
+    )
+    intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(
+        default_factory=list[tuple[str, IntendedMigration | None]]
+    )
 
     def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
@@ -143,7 +147,7 @@ class _FakeExclusiveWrites:
     repo: _FakeChunkRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
 
 
@@ -335,8 +339,8 @@ def test_set_defaults_writes_on_a_ready_unclaimed_chunk() -> None:
     [_running_facts, _waiting_on_human_facts, _needs_human_facts, _stopped_facts, _done_facts],
     ids=["running", "waiting_on_human", "needs_human", "stopped", "done"],
 )
-def test_set_graph_refuses_every_status_once_claimed(facts_factory: object) -> None:
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
+def test_set_graph_refuses_every_status_once_claimed(facts_factory: Callable[[], ChunkFacts]) -> None:
+    repo = _FakeChunkRepo(facts=facts_factory())
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable):
@@ -350,8 +354,8 @@ def test_set_graph_refuses_every_status_once_claimed(facts_factory: object) -> N
     [_running_facts, _waiting_on_human_facts, _needs_human_facts, _stopped_facts, _done_facts],
     ids=["running", "waiting_on_human", "needs_human", "stopped", "done"],
 )
-def test_set_defaults_refuses_every_status_once_claimed(facts_factory: object) -> None:
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
+def test_set_defaults_refuses_every_status_once_claimed(facts_factory: Callable[[], ChunkFacts]) -> None:
+    repo = _FakeChunkRepo(facts=facts_factory())
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable):
@@ -385,7 +389,7 @@ def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> 
     @dataclass
     class _SpyExclusiveWrites:
         @contextmanager
-        def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
             calls.append("acquire")
             try:
                 yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))
@@ -483,8 +487,8 @@ _MIGRATION_TO_GR2 = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_2", 
     ],
     ids=["not_ready", "ready", "running", "waiting_on_human", "needs_human", "paused", "delivering"],
 )
-def test_edit_intended_migration_writes_on_every_non_terminal_status(facts_factory: object) -> None:
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
+def test_edit_intended_migration_writes_on_every_non_terminal_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    repo = _FakeChunkRepo(facts=facts_factory())
     service = _service(repo)
 
     service.edit(_CHUNK, ChunkEdit(intended_migration=_MIGRATION_TO_GR2), migration_target=_TARGET_GRAPH)
@@ -493,8 +497,8 @@ def test_edit_intended_migration_writes_on_every_non_terminal_status(facts_facto
 
 
 @pytest.mark.parametrize("facts_factory", [_stopped_facts, _done_facts], ids=["stopped", "done"])
-def test_edit_intended_migration_refuses_a_terminal_status(facts_factory: object) -> None:
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
+def test_edit_intended_migration_refuses_a_terminal_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    repo = _FakeChunkRepo(facts=facts_factory())
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable) as excinfo:

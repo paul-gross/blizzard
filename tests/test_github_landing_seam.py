@@ -12,7 +12,7 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.internal.github_reads import ANSWERS_MAX, COMPARISONS_MAX, KeptAnswers, KeptComparisons
-from blizzard.hub.forge.landing import ForgeRejected, MergeMethod
+from blizzard.hub.forge.landing import Comparison, ComparisonStatus, ForgeRejected, MergeMethod
 from tests.test_github_landing import REPO, Harness, pull, reply, workflow_run
 
 pytestmark = pytest.mark.unit
@@ -244,7 +244,7 @@ def test_a_304_with_nothing_kept_is_asked_again_unconditionally() -> None:
     assert "if-none-match" not in harness.recorded.requests[0].headers
 
 
-_COMPARE = {
+_COMPARE: dict[str, object] = {
     "status": "ahead",
     "ahead_by": 1,
     "behind_by": 0,
@@ -281,6 +281,18 @@ def test_a_compare_naming_a_branch_is_sent_every_time_and_conditionally() -> Non
     assert harness.recorded.requests[1].headers["if-none-match"] == '"k"'
 
 
+_EMPTY_COMPARISON = Comparison(
+    status=ComparisonStatus.IDENTICAL,
+    ahead=0,
+    behind=0,
+    merge_base=None,
+    commits=(),
+    commits_truncated=False,
+    files=(),
+    files_truncated=False,
+)
+
+
 def test_the_stores_stay_within_their_bounds_and_evict_the_least_recently_used() -> None:
     answers = KeptAnswers(3)
     for key in "abc":
@@ -291,7 +303,7 @@ def test_the_stores_stay_within_their_bounds_and_evict_the_least_recently_used()
     assert (ANSWERS_MAX, COMPARISONS_MAX) == (512, 64)
     comparisons = KeptComparisons()
     for n in range(COMPARISONS_MAX + 5):
-        comparisons.put(str(n), None)  # type: ignore[arg-type]
+        comparisons.put(str(n), _EMPTY_COMPARISON)
     assert len(comparisons) == COMPARISONS_MAX
 
 

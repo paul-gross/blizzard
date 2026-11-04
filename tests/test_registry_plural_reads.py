@@ -6,8 +6,10 @@ from __future__ import annotations
 import dataclasses
 from datetime import timedelta
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
+from fastapi.testclient import TestClient
 
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.runners import hosts_of
@@ -17,7 +19,7 @@ from tests.support import HubHarness, build_hub, count_queries, seed_runner
 pytestmark = pytest.mark.component
 
 
-def _add_host(client, name: str) -> str:
+def _add_host(client: TestClient, name: str) -> str:
     resp = client.post("/api/hosts", json={"name": name})
     assert resp.status_code == 201, resp.text
     return str(resp.json()["host_id"])
@@ -161,13 +163,17 @@ def test_hosts_of_reads_the_named_hosts_only_and_a_missing_host_falls_back(
         seed_runner(hub, runner_id)
         assert hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": [runner_id]}).status_code == 200
     services = hub.services
-    monkeypatch.setattr(services.hosts, "list_hosts", lambda **_: pytest.fail("a full host list was read"))
-    registrations = [services.registry.get_runner(r) for r in ("rn_1", "rn_2")]
-    assert all(r is not None for r in registrations)
-    ghost = dataclasses.replace(registrations[0], host_id="ho_gone")  # type: ignore[type-var]
 
-    found = hosts_of(services, registrations)  # type: ignore[arg-type]
-    with_missing = hosts_of(services, [*registrations, ghost])  # type: ignore[list-item]
+    def _no_full_list(**_: object) -> NoReturn:
+        pytest.fail("a full host list was read")
+
+    monkeypatch.setattr(services.hosts, "list_hosts", _no_full_list)
+    registrations = [r for r in (services.registry.get_runner(r) for r in ("rn_1", "rn_2")) if r is not None]
+    assert len(registrations) == 2
+    ghost = dataclasses.replace(registrations[0], host_id="ho_gone")
+
+    found = hosts_of(services, registrations)
+    with_missing = hosts_of(services, [*registrations, ghost])
 
     assert set(found) == {first, second}
     assert with_missing == found

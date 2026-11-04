@@ -22,6 +22,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverOwnerUnresolvable, TakeoverService
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
@@ -86,7 +87,7 @@ def _two_harness_registry(harness_a: FakeHarness, harness_b: FakeHarness) -> Har
     )
 
 
-def _swap_registry(ctx, registry: HarnessRegistry):
+def _swap_registry(ctx: LoopContext, registry: HarnessRegistry) -> LoopContext:
     """``make_context`` bakes its single-harness registry into three other places besides
     ``ctx.harnesses`` itself — ``ctx.usage`` (:class:`UsageRecorder`), ``ctx.sessions``
     (:class:`SessionResolver`), and ``ctx.harness_selector`` (:class:`HarnessSelector`) each
@@ -399,6 +400,6 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     assert store.open_takeover_for_chunk("ch_b") is None
 
 
-def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: set[str]) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

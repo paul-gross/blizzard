@@ -60,7 +60,7 @@ def test_a_proposal_with_a_blank_field_refuses_the_delivery(tmp_path: Path, fiel
     seed_scope(hub, SCOPE)
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
-    candidate = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
+    candidate: dict[str, object] = {"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": []}
     candidate[field] = "   "
     record_artifact(hub, chunk_id, name="docket", content=json.dumps([candidate]))
 

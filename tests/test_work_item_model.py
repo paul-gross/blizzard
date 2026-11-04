@@ -138,7 +138,7 @@ def test_an_edit_strips_a_supplied_title_and_body() -> None:
 @pytest.mark.parametrize(("field_name", "kwargs"), [("title", {"title": " "}), ("body", {"body": ""})])
 def test_an_edit_refuses_a_blank_supplied_field(field_name: str, kwargs: dict[str, str]) -> None:
     with pytest.raises(WorkItemFieldBlank) as caught:
-        WorkItemEdit(**kwargs)  # pyright: ignore[reportArgumentType]
+        WorkItemEdit(**kwargs)  # pyright: ignore[reportArgumentType]  # a blank field is passed on purpose: the refusal is under test
     assert caught.value.field_name == field_name
 
 

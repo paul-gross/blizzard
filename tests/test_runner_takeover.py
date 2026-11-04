@@ -906,7 +906,7 @@ def test_the_decision_transaction_is_all_or_none(tmp_path: Path) -> None:
             opened_at=_NOW,
             fence_payload="{}",
             lease_token_hash="new-token-hash",
-            entered_at="not an instant",  # type: ignore[arg-type]  # the last write fails
+            entered_at="not an instant",  # pyright: ignore[reportArgumentType]  # an unstorable instant makes the last write fail
         )
 
     assert store.open_takeover_for_chunk("ch_1") is None

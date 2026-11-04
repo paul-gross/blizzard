@@ -5,10 +5,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx2
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.projects.model import ProjectEdit, ProjectSlug
+from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
 from tests.support import HubHarness, build_hub
 
 pytestmark = pytest.mark.component
@@ -47,11 +48,11 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
-def _apply(hub: HubHarness, document: dict[str, object], *, dry_run: bool = False):
+def _apply(hub: HubHarness, document: dict[str, object], *, dry_run: bool = False) -> httpx2.Response:
     return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 1, **document})
 
 
-def _rows(applied) -> list[tuple[str, str, str]]:
+def _rows(applied: httpx2.Response) -> list[tuple[str, str, str]]:
     assert applied.status_code == 200, applied.text
     return [(o["kind"], o["key"], o["op"]) for o in applied.json()["outcomes"]]
 
@@ -60,7 +61,7 @@ def _changes(hub: HubHarness) -> list[dict[str, object]]:
     return hub.client.get("/api/config/changes", params={"limit": 200}).json()["changes"]
 
 
-def _project_id(hub: HubHarness, slug: str) -> str:
+def _project_id(hub: HubHarness, slug: str) -> ProjectId:
     project = hub.services.projects.get_by_slug(ProjectSlug(slug))
     assert project is not None
     return project.project_id
@@ -86,8 +87,8 @@ def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
     project_id = _project_id(hub, slug)
     links = hub.services.project_links
     return (
-        sorted(_source_slug(hub, link.work_source_id) for link in links.sources_of(project_id)),  # type: ignore[arg-type]
-        sorted(_repository_slug(hub, link.repository_id) for link in links.repositories_of(project_id)),  # type: ignore[arg-type]
+        sorted(_source_slug(hub, link.work_source_id) for link in links.sources_of(project_id)),
+        sorted(_repository_slug(hub, link.repository_id) for link in links.repositories_of(project_id)),
     )
 
 
@@ -214,7 +215,12 @@ def test_a_former_slug_is_refused_naming_the_project_that_left_it(hub: HubHarnes
 
 
 def test_a_dry_run_plans_projects_and_links_without_writing_them(hub: HubHarness) -> None:
-    document = {"work_sources": [_SOURCE], "repositories": [_REPO], "projects": [_WEB], "scopes": [{"slug": "c"}]}
+    document: dict[str, object] = {
+        "work_sources": [_SOURCE],
+        "repositories": [_REPO],
+        "projects": [_WEB],
+        "scopes": [{"slug": "c"}],
+    }
     refused = _apply(hub, document, dry_run=True)
     assert refused.status_code == 422 and refused.json()["detail"][0]["type"] == "project_required"
     document["scopes"] = [{"slug": "c", "project": "web"}]

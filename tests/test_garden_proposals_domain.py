@@ -66,14 +66,16 @@ def _finding(finding_id: str) -> Finding:
 @dataclass
 class _FakeGardenProposalRepo:
     created: list[tuple[str, GardenProposalOrigin, str | None, str | None, str, str, str, list[str], datetime]] = field(
-        default_factory=list
+        default_factory=list[
+            tuple[str, GardenProposalOrigin, str | None, str | None, str, str, str, list[str], datetime]
+        ]
     )
-    edited: list[tuple[str, GardenProposalEdit]] = field(default_factory=list)
-    attached: list[tuple[str, list[str]]] = field(default_factory=list)
-    detached: list[tuple[str, list[str]]] = field(default_factory=list)
+    edited: list[tuple[str, GardenProposalEdit]] = field(default_factory=list[tuple[str, GardenProposalEdit]])
+    attached: list[tuple[str, list[str]]] = field(default_factory=list[tuple[str, list[str]]])
+    detached: list[tuple[str, list[str]]] = field(default_factory=list[tuple[str, list[str]]])
     #: Proposal ids `edit`/`attach`/`detach` treat as already closed, mirroring the
     #: store's own closed-then-write guard returning `None`.
-    closed_ids: set[str] = field(default_factory=set)
+    closed_ids: set[str] = field(default_factory=set[str])
 
     def create(
         self,
@@ -598,9 +600,9 @@ def test_detach_a_closed_proposal_the_store_alone_detects_still_raises_already_c
 
 @dataclass
 class _FakeReadGardenProposalRepo:
-    by_routine: dict[str, list[GardenProposal]] = field(default_factory=dict)
+    by_routine: dict[str, list[GardenProposal]] = field(default_factory=dict[str, list[GardenProposal]])
 
-    closed_ids: set[str] = field(default_factory=set)
+    closed_ids: set[str] = field(default_factory=set[str])
 
     def list_for_routine(
         self, project_id: str, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
@@ -618,9 +620,9 @@ class _FakeReadGardenProposalRepo:
 
 @dataclass
 class _FakeGardenProposalClosureRepo:
-    closed: dict[str, GardenProposalClosure] = field(default_factory=dict)
+    closed: dict[str, GardenProposalClosure] = field(default_factory=dict[str, GardenProposalClosure])
     #: Land after the id's first read — a close racing the domain's pre-check.
-    closed_late: dict[str, GardenProposalClosure] = field(default_factory=dict)
+    closed_late: dict[str, GardenProposalClosure] = field(default_factory=dict[str, GardenProposalClosure])
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
         if proposal_id in self.closed_late and proposal_id not in self.closed:

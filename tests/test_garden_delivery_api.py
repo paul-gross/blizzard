@@ -8,6 +8,7 @@ artifacts recorded via ``services.chunks.record_hub_artifact`` — the
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -134,13 +135,15 @@ def record_artifact(hub: HubHarness, chunk_id: str, *, name: str, content: str, 
 
 
 def garden_delta(
-    *, scope: str = SCOPE, revisions: dict[str, str] | None = None, findings: list[dict] | None = None
+    *, scope: str = SCOPE, revisions: dict[str, str] | None = None, findings: list[dict[str, object]] | None = None
 ) -> str:
     return json.dumps({"scope": scope, "revisions": revisions or {}, "measurement": None, "findings": findings or []})
 
 
-def add_op(*, class_: str = "c", locus: str = "a.py:1", summary: str = "s", ref: str | None = None) -> dict:
-    op = {"op": "add", "class": class_, "locus": locus, "summary": summary}
+def add_op(
+    *, class_: str = "c", locus: str = "a.py:1", summary: str = "s", ref: str | None = None
+) -> dict[str, object]:
+    op: dict[str, object] = {"op": "add", "class": class_, "locus": locus, "summary": summary}
     if ref is not None:
         op["ref"] = ref
     return op
@@ -158,7 +161,15 @@ def _proposals(*, findings: list[str]) -> str:
     return json.dumps([{"ref": "p1", "class": "c", "title": "t", "body": "b", "findings": findings}])
 
 
-def post(hub: HubHarness, chunk_id: str, *, delta=(), proposals=(), node_id: str = _NODE_ID, epoch: int = _EPOCH):
+def post(
+    hub: HubHarness,
+    chunk_id: str,
+    *,
+    delta: Sequence[str] = (),
+    proposals: Sequence[str] = (),
+    node_id: str = _NODE_ID,
+    epoch: int = _EPOCH,
+):
     return hub.client.post(
         f"/api/chunks/{chunk_id}/garden-delivery?node_id={node_id}&epoch={epoch}",
         json={"delta": list(delta), "proposals": list(proposals)},

@@ -21,7 +21,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
-from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX
+from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopContext
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
@@ -50,7 +50,14 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store: SqlAlchemyRunnerStore, *, lease="lease_1", chunk="ch_1", node_id="nd_build", epoch=1):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    lease: str = "lease_1",
+    chunk: str = "ch_1",
+    node_id: str = "nd_build",
+    epoch: int = 1,
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -149,7 +156,7 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     red = FakeCheckRunner({"mise run lint": CheckOutcome(passed=False, output_tail="boom")})
     green = FakeCheckRunner({"mise run lint": CheckOutcome(passed=True, output_tail="ok")})
 
-    def _ctx(check_runner):
+    def _ctx(check_runner: FakeCheckRunner) -> LoopContext:
         return make_context(
             store,
             hub=FakeHub(),
@@ -183,8 +190,17 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
 class _RecordingResumeHarness(FakeHarness):
     """Captures whether the resume-fired fact was already durable at the resume call."""
 
-    def __init__(self, *, store: SqlAlchemyRunnerStore, lease_id: str, epoch: int, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        *,
+        store: SqlAlchemyRunnerStore,
+        lease_id: str,
+        epoch: int,
+        handle: WorkerHandle,
+        verdict: str | None,
+        assessment: str = "",
+    ) -> None:
+        super().__init__(handle=handle, verdict=verdict, assessment=assessment)
         self._store = store
         self._lease_id = lease_id
         self._epoch = epoch

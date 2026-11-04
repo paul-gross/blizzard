@@ -10,6 +10,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, SessionMode
+from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
 from tests.support import TEST_CATALOGUE
@@ -19,8 +20,14 @@ pytestmark = pytest.mark.unit
 _GRAPH = PACKAGED.named("basic-harness-workflow")
 
 
-def _doc():
+def _doc() -> GraphDoc:
     return _GRAPH.doc
+
+
+def _node(doc: GraphDoc, name: str) -> NodeDoc:
+    node = doc.node(name)
+    assert node is not None, name
+    return node
 
 
 def test_bas_hwf_validates_with_no_errors_or_warnings() -> None:
@@ -47,13 +54,13 @@ def test_bas_hwf_shape_is_the_six_node_frontier_build_advanced_gate_lane() -> No
         "retrospective",
     ]
     assert doc.node("plan") is None  # no plan-gate, same as bas-dwf
-    assert doc.node("build").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("review").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("iterate").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("pre-push").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("deliver").executor is Executor.HUB  # type: ignore[union-attr]
-    assert doc.node("record-findings").executor is Executor.HUB  # type: ignore[union-attr]
-    assert doc.node("retrospective").executor is Executor.RUNNER  # type: ignore[union-attr]
+    assert _node(doc, "build").executor is Executor.RUNNER
+    assert _node(doc, "review").executor is Executor.RUNNER
+    assert _node(doc, "iterate").executor is Executor.RUNNER
+    assert _node(doc, "pre-push").executor is Executor.RUNNER
+    assert _node(doc, "deliver").executor is Executor.HUB
+    assert _node(doc, "record-findings").executor is Executor.HUB
+    assert _node(doc, "retrospective").executor is Executor.RUNNER
 
 
 def test_bas_hwf_four_pools_retier_review_iterate_and_prepush_off_frontier() -> None:
@@ -77,10 +84,10 @@ def test_bas_hwf_four_pools_retier_review_iterate_and_prepush_off_frontier() -> 
 
 def test_bas_hwf_node_continuity() -> None:
     doc = _doc()
-    assert (doc.node("build").session, doc.node("build").session_source) == (SessionMode.RESUME, "code")  # type: ignore[union-attr]
-    assert (doc.node("review").session, doc.node("review").session_source) == (SessionMode.FRESH, "gate")  # type: ignore[union-attr]
-    assert (doc.node("iterate").session, doc.node("iterate").session_source) == (SessionMode.RESUME, "iteration")  # type: ignore[union-attr]
-    assert (doc.node("pre-push").session, doc.node("pre-push").session_source) == (SessionMode.RESUME, "prepush")  # type: ignore[union-attr]
+    assert (_node(doc, "build").session, _node(doc, "build").session_source) == (SessionMode.RESUME, "code")
+    assert (_node(doc, "review").session, _node(doc, "review").session_source) == (SessionMode.FRESH, "gate")
+    assert (_node(doc, "iterate").session, _node(doc, "iterate").session_source) == (SessionMode.RESUME, "iteration")
+    assert (_node(doc, "pre-push").session, _node(doc, "pre-push").session_source) == (SessionMode.RESUME, "prepush")
     retrospective = doc.node("retrospective")
     assert retrospective is not None
     # Explicit, not bare resume: unlike bas-dwf, the prepush lineage never saw build
@@ -117,26 +124,26 @@ def test_bas_hwf_target_routing_table() -> None:
 
 def test_bas_hwf_produces() -> None:
     doc = _doc()
-    build_produces = {(p.name, p.kind) for p in doc.node("build").produces}  # type: ignore[union-attr]
+    build_produces = {(p.name, p.kind) for p in _node(doc, "build").produces}
     assert ("commit", ArtifactKind.GIT_COMMIT) in build_produces
-    assert any(p.name == "review-findings" for p in doc.node("review").produces)  # type: ignore[union-attr]
-    assert any(p.name == "review-finding-delta" for p in doc.node("review").produces)  # type: ignore[union-attr]
-    assert any(p.name == "retrospective" for p in doc.node("retrospective").produces)  # type: ignore[union-attr]
+    assert any(p.name == "review-findings" for p in _node(doc, "review").produces)
+    assert any(p.name == "review-finding-delta" for p in _node(doc, "review").produces)
+    assert any(p.name == "retrospective" for p in _node(doc, "retrospective").produces)
 
 
 def test_bas_hwf_pre_push_redeclares_the_commit_and_produces_retrospective() -> None:
     doc = _doc()
-    pre_push_produces = {(p.name, p.kind) for p in doc.node("pre-push").produces}  # type: ignore[union-attr]
+    pre_push_produces = {(p.name, p.kind) for p in _node(doc, "pre-push").produces}
     assert ("commit", ArtifactKind.GIT_COMMIT) in pre_push_produces
-    assert any(p.name == "pre-push-summary" for p in doc.node("pre-push").produces)  # type: ignore[union-attr]
-    assert any(p.name == "retrospective" for p in doc.node("pre-push").produces)  # type: ignore[union-attr]
+    assert any(p.name == "pre-push-summary" for p in _node(doc, "pre-push").produces)
+    assert any(p.name == "retrospective" for p in _node(doc, "pre-push").produces)
 
 
 def test_bas_hwf_review_finding_refutes_is_produced_only_by_iterate() -> None:
     doc = _doc()
     producing = {node.name for node in doc.nodes if any(p.name == "review-finding-refutes" for p in node.produces)}
     assert producing == {"iterate"}
-    iterate_produces = {(p.name, p.kind) for p in doc.node("iterate").produces}  # type: ignore[union-attr]
+    iterate_produces = {(p.name, p.kind) for p in _node(doc, "iterate").produces}
     assert ("commit", ArtifactKind.GIT_COMMIT) in iterate_produces
 
 

@@ -8,6 +8,7 @@ from blizzard.hub.documents import (
     CONFIG_CODECS,
     YAML_CODEC,
     ConfigDecodeError,
+    IConfigCodec,
     accepted_extensions,
     codec_for_media_type,
     codec_for_path,
@@ -60,7 +61,7 @@ def test_a_root_that_is_not_a_mapping_is_refused(document: bytes) -> None:
 
 
 @pytest.mark.parametrize("codec", CONFIG_CODECS, ids=lambda codec: codec.extensions[0])
-def test_encode_round_trips_through_decode(codec) -> None:
+def test_encode_round_trips_through_decode(codec: IConfigCodec) -> None:
     document: dict[str, object] = {
         "yes": "yes",
         "sci": "1e3",

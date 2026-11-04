@@ -241,7 +241,7 @@ def test_run_delta_reads_back_the_added_observed_and_gone_groups(tmp_path: Path)
     hub = build_hub(tmp_path)
     routine = _routine(hub)
     chunk_id = _run(hub, routine)
-    findings = [
+    findings: list[dict[str, object]] = [
         {"op": "add", "class": "stale-docstring", "locus": "a.py:1", "summary": "s", "introduced": None},
         {"op": "observed", "id": "fin_seen"},
         {"op": "gone", "id": "fin_missing", "note": "not found this pass"},

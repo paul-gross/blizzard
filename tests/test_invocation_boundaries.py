@@ -51,8 +51,14 @@ def _store(tmp_path: Path):
 
 
 def _seed_exited_lease(
-    store: SqlAlchemyRunnerStore, *, lease="lease_r", chunk="ch_1", node="nd_review", epoch=1, session="sess-a"
-):
+    store: SqlAlchemyRunnerStore,
+    *,
+    lease: str = "lease_r",
+    chunk: str = "ch_1",
+    node: str = "nd_review",
+    epoch: int = 1,
+    session: str = "sess-a",
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,

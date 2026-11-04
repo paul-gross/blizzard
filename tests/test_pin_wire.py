@@ -65,7 +65,7 @@ def test_chunk_ingest_accepts_source_native_tokens_only() -> None:
 def test_chunk_history_view_requires_all_three_history_lists() -> None:
     """The three fields are required, not defaulted to ``[]``: a hub-side
     rename must fail loudly here rather than decode as "no history yet"."""
-    full = {"history": [], "migrations": [], "bounces": []}
+    full: dict[str, list[object]] = {"history": [], "migrations": [], "bounces": []}
     assert ChunkHistoryView.model_validate(full).bounces == []
     for missing in ("history", "migrations", "bounces"):
         with pytest.raises(ValidationError) as caught:
@@ -87,7 +87,7 @@ def test_graph_policy_request_follow_latest_carries_no_default() -> None:
     naming ``null``, never done by an omitted field."""
     assert GraphPolicyRequest.model_fields["follow_latest"].is_required()
     with pytest.raises(ValidationError):
-        GraphPolicyRequest()  # type: ignore[call-arg]
+        GraphPolicyRequest()  # pyright: ignore[reportCallIssue]  # omitting the required field is the refusal under test
     assert GraphPolicyRequest(follow_latest=None).follow_latest is None
 
 
@@ -114,7 +114,7 @@ def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None
 def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() -> None:
     """A turn stored before this field existed is read back through ``content_view``'s
     ``TurnSegmentView.model_validate``; required here, that read 500s on every such turn."""
-    without_field = {
+    without_field: dict[str, object] = {
         "name": "Bash",
         "input": {},
         "input_unparsed": None,

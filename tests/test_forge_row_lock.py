@@ -6,7 +6,7 @@ on one forge wait for each other's commit rather than leaving an enabled record 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -79,7 +79,7 @@ class _FirstStatementConn:
 
 
 @contextmanager
-def _scoped_connection() -> Iterator[Connection]:
+def _scoped_connection() -> Generator[Connection]:
     connections = ScopedConnections(
         create_engine("sqlite://"), HubStoreErrorFactory(get_logger("test")), StoreScope(TenantId("ten_test"))
     )
@@ -113,7 +113,7 @@ def test_the_write_locks_the_forge_row_before_any_guard_read(write: str) -> None
     with _scoped_connection() as scoped:
         conn = _FirstStatementConn(scoped)
         with pytest.raises(_Stop):
-            _WRITES[write](conn)  # type: ignore[arg-type]
+            _WRITES[write](conn)  # pyright: ignore[reportArgumentType]  # a first-statement recording double stands in for Connection; only execute is exercised
 
     lock_stmt = conn.statements[0]
     assert isinstance(lock_stmt, Update)

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
 
@@ -35,12 +36,19 @@ nodes:
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
+class _RoutineView(TypedDict):
+    """The slice of the routine view these tests read."""
+
+    routine_id: str
+    name: str
+
+
 def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub: HubHarness, *, name: str = "nightly") -> dict:
+def _create_routine(hub: HubHarness, *, name: str = "nightly") -> _RoutineView:
     body: dict[str, object] = {
         "name": name,
         "graph_name": "alpha",

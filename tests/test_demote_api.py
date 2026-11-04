@@ -5,10 +5,12 @@ a claimed or ended chunk is refused naming its status; a claim racing a demote r
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import Connection
 
 from blizzard.hub.store.internal import chunk_queue_store as chunk_queue_store_module
 from tests.support import HubHarness, build_hub, ingest, report_lease
@@ -210,10 +212,10 @@ def test_a_claim_blocks_while_a_demote_holds_the_row_lock_mid_write(tmp_path: Pa
     release_write = threading.Event()
     real_insert = chunk_queue_store_module.insert_demote_rows
 
-    def _blocking_insert(conn, chunk_id, **kwargs):
+    def _blocking_insert(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the demote's write"
-        return real_insert(conn, chunk_id, **kwargs)
+        return real_insert(conn, chunk_id, position=position, at=at)
 
     chunk_queue_store_module.insert_demote_rows = _blocking_insert
     try:

@@ -784,7 +784,9 @@ def test_a_miss_with_an_unknown_reason_lands_and_supersedes_a_lapsed_condition(t
     ack = _post(2, "credential_expired", now - timedelta(minutes=1))
 
     assert ack["rejected"] == []
-    assert _miss_row(hub.engine, "r1").reason == "credential_expired"  # type: ignore[union-attr]
+    miss = _miss_row(hub.engine, "r1")
+    assert miss is not None
+    assert miss.reason == "credential_expired"
     assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
 
 

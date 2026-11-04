@@ -12,7 +12,7 @@ import os
 import re
 import stat
 import subprocess
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
@@ -26,6 +26,7 @@ from blizzard.runner.harness.compatibility import (
     CompatibilityProbe,
     EvidenceState,
 )
+from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
 from blizzard.runner.harness.opencode.compatibility.compaction import (
     IOpenCodeCompactor,
@@ -67,6 +68,17 @@ requires_landlock = pytest.mark.skipif(
 )
 
 
+def _object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _operations(evidence: Mapping[str, JsonValue]) -> list[JsonObject]:
+    operations = evidence["operations"]
+    assert isinstance(operations, list)
+    return [_object(operation) for operation in operations]
+
+
 def _mock_opencode() -> Path:
     return require_opencode_cli_surface(require_mock_fleet())
 
@@ -79,7 +91,7 @@ class _RecordingScratchGit:
         self.path: Path | None = None
 
     @contextmanager
-    def new_scratch_repo(self) -> Iterator[OpenCodeScratchRepo]:
+    def new_scratch_repo(self) -> Generator[OpenCodeScratchRepo]:
         with self.inner.new_scratch_repo() as repo:
             self.path = repo.workdir
             yield repo
@@ -356,7 +368,7 @@ def test_real_compactor_requires_a_new_transition_after_successful_summarize(tmp
         "transition_observed": False,
         "effective": False,
     }
-    summarize = next(item for item in probe.evidence["operations"] if item["operation"] == "compaction_summarize")  # type: ignore[index]
+    summarize = next(item for item in _operations(probe.evidence) if item["operation"] == "compaction_summarize")
     assert summarize["http"] == {"method": "POST", "path": "/session/ses_fake/summarize", "status": 200}
 
 
@@ -519,8 +531,8 @@ def test_version_preflight_uses_disposable_cwd_and_isolated_child_scopes(tmp_pat
     preflight_cwd = Path(cwd)
     assert preflight_cwd != Path.cwd()
     assert preflight_cwd.name == "preflight-cwd"
-    version_operation = probe.evidence["operations"][0]  # type: ignore[index]
-    assert version_operation["cwd"] == str(preflight_cwd)  # type: ignore[index]
+    version_operation = _operations(probe.evidence)[0]
+    assert version_operation["cwd"] == str(preflight_cwd)
     assert set(environment_keys) >= {
         "OPENCODE_CONFIG_DIR",
         "XDG_CONFIG_HOME",
@@ -555,7 +567,7 @@ def test_process_control_requires_the_requested_tool_to_be_live(tmp_path: Path) 
     process_control = next(result for result in report.results if result.probe is CompatibilityProbe.PROCESS_CONTROL)
     assert process_control.state is EvidenceState.FAILED
     assert "live state" in process_control.summary
-    assert probe.evidence["process_control"]["live_state_observed"] is False  # type: ignore[index]
+    assert _object(probe.evidence["process_control"])["live_state_observed"] is False
 
 
 def test_takeover_requires_recorded_session_workdir_signal(tmp_path: Path) -> None:
@@ -628,8 +640,8 @@ def test_takeover_accepts_an_idle_sse_handshake_and_preserves_stream_headers(tmp
 
     takeover = next(result for result in report.results if result.probe is CompatibilityProbe.TAKEOVER)
     assert takeover.state is EvidenceState.OBSERVED
-    assert probe.evidence["takeover"]["event_stream_valid"] is True  # type: ignore[index]
-    assert probe.evidence["takeover"]["event_stream_bytes"] == 0  # type: ignore[index]
+    assert _object(probe.evidence["takeover"])["event_stream_valid"] is True
+    assert _object(probe.evidence["takeover"])["event_stream_bytes"] == 0
 
 
 def test_takeover_triggers_local_activity_to_complete_a_gated_upstream_handshake(tmp_path: Path) -> None:
@@ -640,7 +652,7 @@ def test_takeover_triggers_local_activity_to_complete_a_gated_upstream_handshake
 
     takeover = next(result for result in report.results if result.probe is CompatibilityProbe.TAKEOVER)
     assert takeover.state is EvidenceState.OBSERVED
-    trigger = next(item for item in probe.evidence["operations"] if item["operation"] == "takeover_event_trigger")  # type: ignore[index]
+    trigger = next(item for item in _operations(probe.evidence) if item["operation"] == "takeover_event_trigger")
     assert trigger["http"] == {"method": "POST", "path": "/session", "status": 200}
 
 
@@ -729,7 +741,7 @@ def test_disposable_scratch_repository_is_never_reachable_or_writable_by_another
 
     class _PermissionRecordingScratchGit(_RecordingScratchGit):
         @contextmanager
-        def new_scratch_repo(self) -> Iterator[OpenCodeScratchRepo]:
+        def new_scratch_repo(self) -> Generator[OpenCodeScratchRepo]:
             with super().new_scratch_repo() as repo:
                 yield repo
                 seen.extend(
@@ -751,7 +763,7 @@ def test_a_scratch_repository_fault_is_not_reported_as_an_OpenCode_shape(tmp_pat
 
     class _FailingScratchGit(_RecordingScratchGit):
         @contextmanager
-        def new_scratch_repo(self) -> Iterator[OpenCodeScratchRepo]:
+        def new_scratch_repo(self) -> Generator[OpenCodeScratchRepo]:
             raise OSError("the scratch repository could not be created")
             yield  # pragma: no cover - unreachable, present so this stays a generator
 
@@ -809,7 +821,7 @@ def test_version_suffix_or_additional_output_blocks_before_scratch_creation(tmp_
 
     assert report.classification.value == "blocking"
     assert scratch.path is None
-    assert [operation["operation"] for operation in probe.evidence["operations"]] == ["version"]  # type: ignore[index]
+    assert [operation["operation"] for operation in _operations(probe.evidence)] == ["version"]
 
 
 def test_a_local_version_suffix_is_admitted_by_range_membership(tmp_path: Path) -> None:
@@ -868,7 +880,7 @@ def test_mutating_fake_cannot_change_host_auth_file_during_version_preflight(
 
     assert report.admissible is True
     assert auth_source.read_bytes() == before
-    assert probe.evidence["xdg"]["auth_provisioned"] is True  # type: ignore[index]
+    assert _object(probe.evidence["xdg"])["auth_provisioned"] is True
 
 
 def test_mismatched_binary_cannot_read_disposable_auth_during_version_preflight(
@@ -896,7 +908,7 @@ def test_mismatched_binary_cannot_read_disposable_auth_during_version_preflight(
     assert report.observed_version == "1.18.24"
     assert scratch.path is None
     assert not marker.exists()
-    assert not probe.evidence["xdg"]["auth_provisioned"]  # type: ignore[index]
+    assert not _object(probe.evidence["xdg"])["auth_provisioned"]
 
 
 def test_static_replayed_final_export_cannot_satisfy_transcript_proof(tmp_path: Path) -> None:

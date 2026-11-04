@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert, inspect, select, text, update
+from sqlalchemy import Engine, insert, inspect, select, text, update
 
 import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -45,7 +45,11 @@ def _hub_engine(tmp_path: Path):
 def test_version_tracks_the_installed_distribution_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     """``blizzard.__version__`` is whatever the *installed* distribution's metadata says —
     a build-stamped wheel reports its own version, not a literal frozen into the source."""
-    monkeypatch.setattr(importlib.metadata, "version", lambda _distribution: "9.9.9.dev999")
+
+    def stamped_version(_distribution: str) -> str:
+        return "9.9.9.dev999"
+
+    monkeypatch.setattr(importlib.metadata, "version", stamped_version)
     try:
         reloaded = importlib.reload(blizzard)
         assert reloaded.__version__ == "9.9.9.dev999"
@@ -85,7 +89,9 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
     assert runner_invariants(engine).run() == []
 
 
-def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int) -> None:
+def _seed_submission(
+    engine: Engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int
+) -> None:
     """A chunk's one submission, holding ``flow_ids`` — each flow created if it does not yet exist."""
     with engine.begin() as conn:
         conn.execute(
@@ -126,12 +132,12 @@ def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tup
             )
 
 
-def _slugs(engine) -> list[str]:
+def _slugs(engine: Engine) -> list[str]:
     """The turn invariants' violations only — the seeded submissions carry no graph for the line-standing check."""
     return [v.invariant for v in hub_invariants(engine).run() if v.invariant.startswith("hub:one-turn-")]
 
 
-def _open_turn(engine, turn_id: str, submission_id: str) -> None:
+def _open_turn(engine: Engine, turn_id: str, submission_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(
             insert(hub.hub_turns).values(
@@ -140,7 +146,7 @@ def _open_turn(engine, turn_id: str, submission_id: str) -> None:
         )
 
 
-def _end_turn(engine, turn_id: str) -> None:
+def _end_turn(engine: Engine, turn_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(hub_scoped(update(hub.hub_turns).where(hub.hub_turns.c.turn_id == turn_id).values(ended_at=_NOW)))
 

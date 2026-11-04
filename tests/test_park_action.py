@@ -10,15 +10,26 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.land import Land
+from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ChangeState
 from tests.github_double import change
-from tests.test_land_action import _GADGET, _SUBMITTED, _WIDGET, _forge, _land, _row, _Sink, _visit
+from tests.test_land_action import (
+    _GADGET,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _forge,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _land,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _row,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _Sink,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+    _visit,  # pyright: ignore[reportPrivateUsage]  # land-action suite fixture shared until it moves to a support module
+)
 
 pytestmark = pytest.mark.component
 
 
-def parked_visit(repos=(_WIDGET,), *, park_index=0):
+def parked_visit(repos: tuple[str, ...] = (_WIDGET,), *, park_index: int = 0) -> Visit:
     visit = _visit(repos)
     targets = tuple(
         replace(t, landing_policy=LandingPolicy.PARK) if i == park_index else t
@@ -27,7 +38,7 @@ def parked_visit(repos=(_WIDGET,), *, park_index=0):
     return replace(visit, resolution=replace(visit.resolution, targets=targets))
 
 
-def marker(visit, epoch=1, age=0):
+def marker(visit: Visit, epoch: int = 1, age: int = 0) -> StoredArtifact:
     return replace(
         _row(ArtifactKind.ASSET, f"delivery-pr/{_WIDGET}/1", "{}"),
         epoch=epoch,
