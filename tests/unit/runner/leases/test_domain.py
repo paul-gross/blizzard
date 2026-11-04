@@ -1,0 +1,385 @@
+"""Derived lease state — ``LeaseActivity.state``: the pure precedence tests, with no store and no I/O."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Unpack
+
+import pytest
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseState
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases.activity import (
+    HEARTBEAT_STALENESS_THRESHOLD,
+    RECENT_LEASE_LIMIT,
+    ClosedLeaseActivity,
+    LeaseActivity,
+    Liveness,
+    LocalLeaseService,
+    OpenHumanFacts,
+    is_healthy_closure,
+    lease_display_status,
+)
+from blizzard.runner.leases.model import Lease, NewLease
+from tests.factory_fields import LeaseFields
+from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store
+
+_NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+def _lease_record(**overrides: Unpack[LeaseFields]) -> Lease:
+    fields: LeaseFields = {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "graph_id": "gr_1",
+        "node_id": "nd_build",
+        "node_name": "build",
+        "epoch": 1,
+        "retries_max": 2,
+        "created_at": _NOW,
+        "pid": 100,
+        "process_start_time": "start-100",
+        "session_id": "sess-a",
+    }
+    fields.update(overrides)
+    return Lease(**fields)
+
+
+# LeaseActivity.state — pure, all seven states + precedence
+
+
+def test_state_running_when_alive_and_fresh() -> None:
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=False, alive=True, stale=False).state == "running"
+
+
+def test_state_stale_when_alive_but_heartbeat_old() -> None:
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=False, alive=True, stale=True).state == "stale"
+
+
+def test_state_exited_when_process_not_alive() -> None:
+    """A dead pid is ADVANCE's exit-is-done, not a stall — it derives exited
+    even when the (stale) heartbeat check would also fire, since exit is checked first."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True).state == "exited"
+
+
+def test_state_spawning_when_pid_unset() -> None:
+    lease = _lease_record(pid=None, process_start_time=None)
+    assert LeaseActivity(lease, parked=False, alive=False, stale=False).state == "spawning"
+
+
+def test_state_spawning_when_session_unset() -> None:
+    lease = _lease_record(session_id=None)
+    assert LeaseActivity(lease, parked=False, alive=True, stale=False).state == "spawning"
+
+
+def test_state_parked_when_dormant_on_a_question() -> None:
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=True, alive=True, stale=False).state == "parked"
+
+
+def test_state_parked_wins_over_stale() -> None:
+    """Precedence: a lease that is both parked and stale derives parked — the reap
+    clock is stopped for a dormant lease, so a growing heartbeat age is expected, not
+    a stall."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=True, alive=True, stale=True).state == "parked"
+
+
+def test_state_spawning_wins_over_an_ancient_heartbeat() -> None:
+    """Precedence: a lease with no pid/session derives spawning even when its
+    heartbeat baseline reads as stale — the mint→spawn window has no live worker to
+    stall yet."""
+    lease = _lease_record(pid=None, process_start_time=None, session_id=None)
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True).state == "spawning"
+
+
+def test_closed_activity_derives_closed() -> None:
+    """A closed lease's pid may have been reused by an unrelated process, so it carries no
+    liveness facts at all — the closure fact is the whole state."""
+    activity = ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="transitioned")
+    assert activity.state == "closed"
+
+
+@pytest.mark.parametrize("fact", ["alive", "parked", "stale", "backing_off"])
+def test_closed_activity_cannot_carry_liveness_facts(fact: str) -> None:
+    with pytest.raises(TypeError):
+        ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="reaped", **{fact: True})  # pyright: ignore[reportArgumentType]  # a liveness fact must raise TypeError
+
+
+def test_state_backing_off_when_flagged() -> None:
+    """A lease with an open, un-elapsed provider-overload backoff derives
+    ``backing-off``, distinct from ``exited`` even though its worker's process is gone."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=False, alive=False, stale=False, backing_off=True).state == ("backing-off")
+
+
+def test_state_backing_off_wins_over_exited() -> None:
+    """Precedence: a backing-off lease's exited worker would otherwise misread as
+    ``exited`` (its pid/session are still set from the generation that overloaded) —
+    the backoff fact must win."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True, backing_off=True).state == ("backing-off")
+
+
+def test_state_parked_wins_over_backing_off() -> None:
+    """Precedence: parked outranks backing-off — a lease cannot be both in practice, but
+    the ranking still holds if it were."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, parked=True, alive=False, stale=False, backing_off=True).state == ("parked")
+
+
+# Liveness.stale — the staleness-boundary pin
+
+
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
+    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _seed_lease(
+    store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", created_at: datetime = _NOW
+) -> None:
+    store.record_lease(
+        NewLease(
+            lease_id=lease,
+            chunk_id=chunk,
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=created_at,
+        )
+    )
+
+
+def _liveness(store: SqlAlchemyRunnerStore, lease: Lease) -> Liveness:
+    """``lease``'s baseline from the facts the store holds for it."""
+    return Liveness.of(
+        lease, heartbeat=store.latest_heartbeat(lease.lease_id), spawn=store.latest_spawn(lease.lease_id)
+    )
+
+
+def test_stale_at_exact_threshold_is_not_stale(tmp_path: Path) -> None:
+    """The true edge: ``now - last == THRESHOLD`` reads not-stale (strict ``>``)."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    at_threshold = _NOW + HEARTBEAT_STALENESS_THRESHOLD
+
+    assert _liveness(store, lease).stale(at_threshold) is False
+
+
+def test_stale_just_past_threshold_is_stale(tmp_path: Path) -> None:
+    """One microsecond past the threshold flips stale — pins against a ``>``→``>=`` drift."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    just_past = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(microseconds=1)
+
+    assert _liveness(store, lease).stale(just_past) is True
+
+
+def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path: Path) -> None:
+    """'s live incident, at the predicate: an ask-park resumed at T+2h, far
+    past the threshold, records a fresh ``lease_spawns`` row — the worker gets the
+    whole window back, not stale at birth and reaped seconds into its first turn."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    # Parked for two hours: without the spawn fact in the baseline the lease is long stale.
+    resumed_at = _NOW + timedelta(hours=2)
+    assert _liveness(store, lease).stale(resumed_at) is True
+
+    # The answer-resume respawns the same lease — a second generation, same lease_id.
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="s2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=resumed_at,
+    )
+
+    assert _liveness(store, lease).stale(resumed_at + timedelta(seconds=1)) is False
+    assert _liveness(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert (
+        _liveness(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    )  # and the window still closes, absent new heartbeats
+
+
+def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path: Path) -> None:
+    """The baseline is the newest of the two, not the spawn alone: a worker beating away
+    long after its spawn must not be measured from the spawn and reaped mid-work."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
+    beat_at = _NOW + timedelta(minutes=50)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
+    assert _liveness(store, lease).stale(beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+
+
+def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path: Path) -> None:
+    """REAP's residue — minted at FILL, spawn-return never recorded. The pre-#150
+    ``created_at`` floor is unchanged for it."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert _liveness(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+
+
+def _lease_service(
+    store: SqlAlchemyRunnerStore,
+    clock: FixedClock,
+    probe: FakeProbe,
+    *,
+    stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
+    recent_limit: int = RECENT_LEASE_LIMIT,
+) -> LocalLeaseService:
+    return LocalLeaseService(
+        clock,
+        probe,
+        lease_record=store,
+        liveness=store,
+        asks=store,
+        environments=store,
+        overload=store,
+        elicitations=store,
+        git_commits=store,
+        takeovers=store,
+        escalations=store,
+        stale_after=stale_after,
+        recent_limit=recent_limit,
+    )
+
+
+def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path: Path) -> None:
+    """The caller may already have read `latest_heartbeat`, so it can hand it in
+    rather than have `Liveness.of` re-query. A supplied `None` (a lease that genuinely
+    never beat) is honored as such, never re-read."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
+    beat_at = _NOW + timedelta(minutes=30)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert _liveness(store, lease).last_activity == beat_at  # read from the store
+    assert Liveness.of(lease, heartbeat=beat_at, spawn=_NOW).last_activity == beat_at  # supplied: same answer
+    # A supplied None means "never beat" and must not be re-read into the real value —
+    # the baseline falls back to the spawn, not to the heartbeat sitting in the store.
+    assert Liveness.of(lease, heartbeat=None, spawn=_NOW).last_activity == _NOW
+
+
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (OpenHumanFacts(takeover=True, escalated=True, asking=True), LeaseDisplayStatus.HUMAN_IN_SESSION),
+        (OpenHumanFacts(escalated=True, asking=True), LeaseDisplayStatus.NEEDS_HUMAN),
+        (OpenHumanFacts(asking=True), LeaseDisplayStatus.WAITING_ASK),
+        (OpenHumanFacts(), LeaseDisplayStatus.RUNNING),
+    ],
+)
+def test_display_status_precedence_is_takeover_then_escalation_then_ask_then_state(
+    facts: OpenHumanFacts, expected: LeaseDisplayStatus
+) -> None:
+    assert lease_display_status("running", **vars(facts)) is expected
+
+
+def test_display_status_falls_through_to_every_lease_state() -> None:
+    states: list[LeaseState] = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
+    assert [lease_display_status(s, takeover=False, escalated=False, asking=False).value for s in states] == states
+
+
+def test_only_a_transitioned_closure_is_healthy() -> None:
+    assert [r for r in LeaseClosureReason if is_healthy_closure(r.value)] == [LeaseClosureReason.TRANSITIONED]
+    assert is_healthy_closure("transitioned") is True
+    assert is_healthy_closure("failed") is False
+    assert is_healthy_closure("a-store-only-reason") is False
+    assert is_healthy_closure(None) is False
+
+
+def test_every_injected_dependency_is_read_through_the_service(tmp_path: Path) -> None:
+    """Each constructor argument shapes the panel: the clock and ``stale_after`` judge
+    staleness, the probe aliveness, the stores the lease, beat, binding and open ask, and
+    ``recent_limit`` the closed tail."""
+    store = _store(tmp_path)
+    _seed_lease(store, chunk="ch_1", lease="lease_1")
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    beat_at = _NOW + timedelta(minutes=1)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_ask(lease_id="lease_1", chunk_id="ch_1", question_id="q1", question="?", options=[], asked_at=_NOW)
+    _seed_lease(store, chunk="ch_2", lease="lease_2")
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
+    for n, lease in enumerate(("lease_c1", "lease_c2")):
+        _seed_lease(store, chunk=f"ch_c{n}", lease=lease)
+        store.record_closure(
+            lease_id=lease,
+            chunk_id=f"ch_c{n}",
+            node_id="nd_build",
+            reason="failed",
+            closed_at=_NOW + timedelta(minutes=n),
+        )
+    probe = FakeProbe(alive={(100, "start-100")})
+    clock = FixedClock(beat_at + timedelta(minutes=9))
+    service = _lease_service(store, clock, probe, stale_after=timedelta(minutes=10), recent_limit=1)
+
+    first, second, closed = service.list_recent()
+
+    assert isinstance(first, LeaseActivity) and isinstance(second, LeaseActivity)
+    assert (first.lease.lease_id, first.state, first.last_heartbeat_at) == ("lease_1", "running", beat_at)
+    assert (first.environment_id, first.workdir, first.human) == ("e1", "/ws/e1", OpenHumanFacts(asking=True))
+    assert (second.lease.lease_id, second.state) == ("lease_2", "exited")
+    assert closed.lease.lease_id == "lease_c2"
+    clock.advance(timedelta(minutes=2))
+    assert service.list_active()[0].state == "stale"

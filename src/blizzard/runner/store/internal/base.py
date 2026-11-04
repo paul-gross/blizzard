@@ -86,7 +86,7 @@ HELD_BINDING = Unsuperseded(
     ),
 )
 
-# Pinned by tests/test_runner_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent.
+# Pinned by tests/unit/runner/loop/test_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent.
 OPEN_INTENT = Unsuperseded(
     resume_clears.c.id,
     (

@@ -1,7 +1,7 @@
 """Every daemon config key is named by a merge-gating test (unit tier).
 
 The floor, not the proof: naming a key is weaker than pinning its threading
-(``tests/test_runner_loop_build.py``), but a *new* key with neither fails here (#276).
+(``tests/unit/runner/test_loop_build.py``), but a *new* key with neither fails here (#276).
 """
 
 from __future__ import annotations

@@ -350,7 +350,8 @@ class FactIngestService:
             return self._chunk_locked_landing(runner_id, kind, fact, now=now)
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
-            # own epoch (pinned in tests/test_usage_facts_ingest.py, tests/test_route_token_authz.py).
+            # own epoch (pinned in tests/component/hub/domain/execution/test_usage_facts_ingest.py,
+            # tests/test_route_token_authz.py).
             return _Landing(
                 write=lambda transaction: self._usage.record_usage(
                     fact.require_text("chunk_id"),

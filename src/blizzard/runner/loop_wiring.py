@@ -451,7 +451,7 @@ class PeriodicDriver:
         stepper: RunnerStepper | None = None,
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
-        # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
+        # fails startup rather than the loop thread (`tests/unit/runner/test_loop_build.py`).
         self._owned = stepper is None
         self._stepper = stepper or RunnerStepper(config, process_graph=process_graph)
         self._wiring = self._stepper.wiring
