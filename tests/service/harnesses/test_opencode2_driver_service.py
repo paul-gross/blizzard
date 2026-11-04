@@ -108,7 +108,7 @@ class Engine:
             [_BLIZZARD, "runner", "opencode", "drive", "--request", str(path)],
             cwd=request.directory,
             env=self.env(),
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PIPE,  # drained-pipe: this spawn reads its own stdout
             stderr=subprocess.PIPE,
             text=True,
         )
