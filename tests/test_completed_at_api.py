@@ -1,6 +1,6 @@
 """``completed_at`` on ``GET /api/chunks`` — the wire half of
 :meth:`ChunkFacts.completed_at`. The derivation itself is unit-tested (pure over
-``ChunkFacts``) in ``tests/test_chunk_status_derivation.py``; this proves the hub
+``ChunkFacts``) in ``tests/unit/hub/domain/chunk/test_model_status_derivation.py``; this proves the hub
 serializes it correctly for a terminal chunk over the real HTTP surface, and
 withholds it for a non-terminal one.
 """

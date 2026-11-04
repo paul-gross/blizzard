@@ -60,7 +60,7 @@ run = "scripts/playwright-check.sh"
 
 [tasks.sse-contract]
 description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235, broadened to the runner in blizzard#317): the Python producer+parse suite against contracts/sse/'s golden corpus (hub top-level + runner/ scope), then fleet's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
-run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
+run = "uv run pytest tests/component/wire/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
 
 [tasks.restatement-check]
 description = "blizzard:restatement-sweep — fail when a fact is stated at an undeclared site (new), a declared site is no longer observed (stale), a declared non-owner site carries no reason, or a designated owner does not actually state its fact"

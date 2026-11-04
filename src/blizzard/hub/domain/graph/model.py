@@ -871,7 +871,7 @@ class Mint:
 
     def newer_than(self, other: Mint) -> bool:
         """**Strictly** newer — pinned by
-        tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint"""
+        tests/component/hub/api/test_graphs_follow_latest.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint"""
         return self.order > other.order
 
 
@@ -903,7 +903,7 @@ class Mints:
         """Whether each ``graph_id`` is the newest non-retired mint of its name.
 
         ``retired_ids`` carries no default, so omitting it raises — pinned by
-        tests/test_graph_domain.py::test_mints_effective_requires_retired_ids_explicitly"""
+        tests/unit/hub/domain/graph/test_model_mint_selection.py::test_mints_effective_requires_retired_ids_explicitly"""
         effective_ids = {m.graph.graph_id for m in self.newest_by_name.values()}
         return {m.graph.graph_id: m.graph.graph_id in effective_ids for m in self.mints}
 

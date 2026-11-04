@@ -14,8 +14,8 @@ the string verbatim, and `null` when unmarked.
 
 `blizzard-export-contracts` builds the documents from `schema.py` alone, so the merge gate's `contract drift` step turns
 red when `schema.py` changes without a regenerated document. `blizzard:store-contract`
-(`uv run pytest tests/test_store_contract.py`) reflects a head-migrated store, on SQLite, and holds it to the document,
-so it turns red when a revision and `schema.py` disagree.
+(`uv run pytest tests/component/tools/test_store_contract.py`) reflects a head-migrated store, on SQLite, and holds it
+to the document, so it turns red when a revision and `schema.py` disagree.
 
 Regenerate after an intended change:
 

@@ -13,10 +13,10 @@ The runner scope is the runner host's one stream, carrying every runner it serve
 runner's hub-minted id, so a consumer routes it to that runner's state; `environment-changed` is the host's own and
 carries none.
 
-Both the Python producer-side contract test (`tests/test_sse_contract.py`) and the TypeScript consumer-side contract
-spec (`web/projects/fleet/src/lib/sse/sse-contract.spec.ts`) read these same files directly, over both scopes — there is
-no per-side copy. Moving a golden reddens whichever side has not caught up to the change; changing a side's shape
-without moving the golden reddens that side.
+Both the Python producer-side contract test (`tests/component/wire/test_sse_contract.py`) and the TypeScript
+consumer-side contract spec (`web/projects/fleet/src/lib/sse/sse-contract.spec.ts`) read these same files directly, over
+both scopes — there is no per-side copy. Moving a golden reddens whichever side has not caught up to the change;
+changing a side's shape without moving the golden reddens that side.
 
 ## Compatibility
 

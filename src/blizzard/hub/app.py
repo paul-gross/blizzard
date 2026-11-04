@@ -467,7 +467,7 @@ def create_app(
     log = get_logger("blizzard.hub")
 
     platform_tracing = platform_tracing or DisabledPlatformTracing()
-    # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
+    # No framework exporters: tests/component/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = TraceGatedFastAPI(
         title="blizzard-hub",
         version=__version__,
@@ -690,7 +690,7 @@ def build_hosted_app(
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned:
-    # `tests/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
+    # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
     flow_driver: FlowDriver | None = None
     if readiness.evaluate().ready:
         tenants = core.every_open()

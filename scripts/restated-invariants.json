@@ -223,13 +223,13 @@
           "role": "owner"
         },
         {
-          "file": "tests/test_events_stream.py",
+          "file": "tests/component/hub/api/test_events_stream.py",
           "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
           "role": "allowed",
           "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
         },
         {
-          "file": "tests/test_runner_events_stream.py",
+          "file": "tests/component/runner/api/test_events_stream.py",
           "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
           "role": "allowed",
           "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."

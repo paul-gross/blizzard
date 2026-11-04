@@ -2,7 +2,7 @@
 Phase-2 ``ValidatedDelivery`` over a fake repository — every id mints with the right
 prefix, every field maps through from the wire ops, an empty delta still yields exactly
 one finding_set entry and zero finding/fact entries (``bzh:domain-core``, the
-``tests/test_garden_proposals_domain.py`` shape)."""
+``tests/unit/hub/domain/garden/proposals/test_model.py`` shape)."""
 
 from __future__ import annotations
 

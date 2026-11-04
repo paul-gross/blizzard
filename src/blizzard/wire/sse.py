@@ -139,7 +139,7 @@ class EventLoggedPayload(SseFramePayload):
 
 
 #: Keyed by :class:`HubEventType`. The key set is pinned against the broker's vocabulary by
-#: ``tests/test_sse_contract.py::TestCorpusClosure``.
+#: ``tests/component/wire/test_sse_contract.py::TestCorpusClosure``.
 SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     HubEventType.CHUNK_CHANGED: ChunkChangedPayload,
     HubEventType.QUESTION_ASKED: QuestionAskedPayload,

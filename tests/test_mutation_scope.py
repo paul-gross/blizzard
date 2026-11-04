@@ -68,7 +68,7 @@ def _stub_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, completed:
     monkeypatch.setattr(m, "MUTANTS_DIR", tmp_path / "mutants")
 
     def _tree_for_scope(scope: object, mutants_dir: Path, fresh: bool = False) -> list[str]:
-        return ["tests/test_cli.py"]
+        return ["tests/unit/cli/test_cli.py"]
 
     monkeypatch.setattr(m, "ensure_mutant_tree_for_scope", _tree_for_scope)
 
@@ -88,7 +88,7 @@ def test_main_hands_the_frozen_selection_to_the_run_and_writes_the_report(
     selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
     (tmp_path / "mutants").mkdir()
     assert m.main(["cli-surface"]) == 0
-    assert selections == [["tests/test_cli.py"]]
+    assert selections == [["tests/unit/cli/test_cli.py"]]
     assert json.loads((tmp_path / "mutants" / m.REPORT_NAME).read_text())["scope"] == "cli-surface"
 
 
@@ -465,8 +465,8 @@ def _ensure(slug: str, tmp_path: Path) -> list[str]:
 
 
 def test_ensure_mutant_tree_creates_a_fresh_tree_with_a_scope_marker(tmp_path: Path) -> None:
-    _write(tmp_path / "tests" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
-    assert _ensure("cli-surface", tmp_path) == ["tests/test_cli.py"]
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
+    assert _ensure("cli-surface", tmp_path) == ["tests/unit/cli/test_cli.py"]
     assert (tmp_path / "mutants" / m.SCOPE_MARKER_NAME).read_text().strip() == "cli-surface"
 
 
@@ -496,25 +496,25 @@ def test_ensure_mutant_tree_clears_a_tree_with_no_scope_marker(tmp_path: Path) -
 
 
 def test_ensure_mutant_tree_reuses_the_frozen_selection_on_resume(tmp_path: Path) -> None:
-    _write(tmp_path / "tests" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
     _ensure("cli-surface", tmp_path)
-    _write(tmp_path / "tests" / "test_cli_new.py", "from blizzard.cli import main\n" + _UNIT)
-    assert _ensure("cli-surface", tmp_path) == ["tests/test_cli.py"]
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli_new.py", "from blizzard.cli import main\n" + _UNIT)
+    assert _ensure("cli-surface", tmp_path) == ["tests/unit/cli/test_cli.py"]
 
 
 def test_ensure_mutant_tree_reselects_on_a_scope_switch(tmp_path: Path) -> None:
-    _write(tmp_path / "tests" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
     _write(tmp_path / "tests" / "test_hub.py", "from blizzard.hub import domain\n" + _UNIT)
     _ensure("cli-surface", tmp_path)
     assert _ensure("hub-daemon", tmp_path) == ["tests/test_hub.py"]
 
 
 def test_ensure_mutant_tree_drops_a_frozen_test_file_since_deleted(tmp_path: Path) -> None:
-    _write(tmp_path / "tests" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
-    _write(tmp_path / "tests" / "test_cli_gone.py", "from blizzard.cli import main\n" + _UNIT)
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli.py", "from blizzard.cli import main\n" + _UNIT)
+    _write(tmp_path / "tests" / "unit" / "cli" / "test_cli_gone.py", "from blizzard.cli import main\n" + _UNIT)
     _ensure("cli-surface", tmp_path)
-    (tmp_path / "tests" / "test_cli_gone.py").unlink()
-    assert _ensure("cli-surface", tmp_path) == ["tests/test_cli.py"]
+    (tmp_path / "tests" / "unit" / "cli" / "test_cli_gone.py").unlink()
+    assert _ensure("cli-surface", tmp_path) == ["tests/unit/cli/test_cli.py"]
 
 
 # --- report building: no mutmut import required ------------------------------------------------

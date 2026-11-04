@@ -402,7 +402,7 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
 
 def _delete_chunk(hub: HubHarness, chunk_id: str) -> None:
     """``DELETE /api/chunks/{id}`` — ``httpx2``'s own ``delete()`` refuses ``json``, so
-    this goes through ``request`` instead (mirrors ``tests/test_chunk_delete_route.py``'s own)."""
+    this goes through ``request`` instead (mirrors ``tests/component/hub/api/test_chunks_delete.py``'s own)."""
     resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
     assert resp.status_code == 202, resp.text
 

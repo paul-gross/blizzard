@@ -1,0 +1,470 @@
+"""The operational event log, unit tier: store writes/reads, feed derivation, migration (#125).
+
+``event_log`` is an append-only operational-fact table (``bzh:facts-not-status``): one
+row per thing that happened, no status column. These tests pin round-trip, filtering,
+supersession, feed ordering, and the migration."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from sqlalchemy import Connection, Engine, insert
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.hub.domain.chunk.model import EscalationOpen, EventFeed, OperationalEvent, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from tests.migration_support_event_log import T0
+from tests.support import (
+    chunk_stores,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+    stamp,
+)
+
+
+def _at(seconds: int) -> datetime:
+    return T0 + timedelta(seconds=seconds)
+
+
+def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
+    _, engine = migrate_to(tmp_path, "head")
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=T0)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_b", graph_id="gr_1", at=T0)
+    clock = FixedClock(T0)
+    return chunk_stores(engine, clock), engine, clock
+
+
+def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None:
+    store, _, _clock = _store(tmp_path)
+    store.events.record_event(
+        severity=EventLogSeverity.CRITICAL,
+        kind="worker-lost",
+        runner_id="runner-1",
+        chunk_id="ch_a",
+        lease_id="lease-1",
+        node_name="build",
+        message="worker exited without a session-end",
+        detail={"via": "advance", "reason": "failed", "stderr_tail": "boom"},
+        at=_at(10),
+    )
+    (row,) = store.events.list_events()
+    assert row.severity == "critical"
+    assert row.kind == "worker-lost"
+    assert row.runner_id == "runner-1"
+    assert row.chunk_id == "ch_a"
+    assert row.lease_id == "lease-1"
+    assert row.node_name == "build"
+    assert row.message == "worker exited without a session-end"
+    assert row.detail == {"via": "advance", "reason": "failed", "stderr_tail": "boom"}
+    assert row.recorded_at == _at(10)
+    assert row.id > 0
+
+
+def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
+    store, _, _clock = _store(tmp_path)
+    store.events.record_event(
+        severity=EventLogSeverity.WARNING,
+        kind="command-failed",
+        runner_id="runner-1",
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message="git push failed",
+        detail=None,
+        at=_at(5),
+    )
+    (row,) = store.events.list_events()
+    assert row.chunk_id is None
+    assert row.lease_id is None
+    assert row.detail is None
+
+
+def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> None:
+    store, _, _clock = _store(tmp_path)
+    store.events.record_event(
+        severity=EventLogSeverity.INFO,
+        kind="attempt-abandoned",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="a",
+        detail=None,
+        at=_at(1),
+    )
+    store.events.record_event(
+        severity=EventLogSeverity.WARNING,
+        kind="attempt-failed",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="b",
+        detail=None,
+        at=_at(2),
+    )
+    store.events.record_event(
+        severity=EventLogSeverity.CRITICAL,
+        kind="worker-lost",
+        runner_id="r2",
+        chunk_id="ch_b",
+        lease_id=None,
+        node_name=None,
+        message="c",
+        detail=None,
+        at=_at(3),
+    )
+
+    # Newest-first over recorded_at.
+    assert [e.message for e in store.events.list_events()] == ["c", "b", "a"]
+    # Filters.
+    assert [e.message for e in store.events.list_events(severity=EventLogSeverity.WARNING)] == ["b"]
+    assert [e.message for e in store.events.list_events(runner_id="r2")] == ["c"]
+    assert [e.message for e in store.events.list_events(chunk_id="ch_a")] == ["b", "a"]
+    assert [e.message for e in store.events.list_events(since=_at(2))] == ["c", "b"]
+    # Bounded.
+    assert [e.message for e in store.events.list_events(limit=1)] == ["c"]
+
+
+def test_list_events_cap_keeps_the_newest_rows_regardless_of_severity(tmp_path: Path) -> None:
+    store, _, _clock = _store(tmp_path)
+    store.events.record_event(
+        severity=EventLogSeverity.CRITICAL,
+        kind="worker-lost",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="old-critical",
+        detail=None,
+        at=_at(1),
+    )
+    for sec in (2, 3, 4, 5):
+        store.events.record_event(
+            severity=EventLogSeverity.WARNING if sec % 2 else EventLogSeverity.INFO,
+            kind="attempt-failed",
+            runner_id="r1",
+            chunk_id="ch_a",
+            lease_id=None,
+            node_name=None,
+            message=f"row-{sec}",
+            detail=None,
+            at=_at(sec),
+        )
+
+    # A limit=3 read over 5 rows drops the old critical for the newer warning/info rows.
+    assert [e.message for e in store.events.list_events(limit=3)] == ["row-5", "row-4", "row-3"]
+    assert [e.message for e in store.events.list_events()][-1] == "old-critical"
+
+
+def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
+    store, engine, clock = _store(tmp_path)
+    with engine.begin() as conn:  # seed the requeue and stop cases' chunks
+        seed_chunk(conn, "ch_c", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_d", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_e", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_f", graph_id="gr_1", at=T0)
+
+    # ch_a: escalation, nothing after it -> OPEN.
+    store.escalations.record_escalation(
+        "ch_a",
+        epoch=1,
+        takeover_command="cd a && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    # ch_b: escalation then a LATER lease mint -> superseded (closed).
+    store.escalations.record_escalation(
+        "ch_b",
+        epoch=1,
+        takeover_command="cd b && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    seed_lease(engine, "ch_b", epoch=2, runner_id="r1", at=_at(20))
+    # ch_c: escalation then a LATER requeue -> superseded (closed).
+    store.escalations.record_escalation(
+        "ch_c",
+        epoch=1,
+        takeover_command="cd c && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    with store.exclusive.locked(["ch_c"]) as handle:
+        store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
+    # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
+    # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
+    store.escalations.record_escalation(
+        "ch_d",
+        epoch=1,
+        takeover_command="cd d && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    clock.instant = _at(20)
+    with store.exclusive.locked(["ch_d"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_d", by="operator", at=_at(20))
+    # ch_e: stop then a LATER escalation -> still dropped; a stopped chunk is terminal, so the
+    # store query excludes it before the escalation's ordering is ever consulted.
+    clock.instant = _at(10)
+    with store.exclusive.locked(["ch_e"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_e", by="operator", at=_at(10))
+    # Seeded as a raw row: the write fence refuses an escalation on a stopped chunk, so the
+    # store cannot produce this ordering — only the read's exclusion can be pinned.
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.escalations).values(
+                stamp(
+                    s.escalations,
+                    chunk_id="ch_e",
+                    epoch=1,
+                    takeover_command="cd e && resume",
+                    wrapped_takeover_command="",
+                    recorded_at=_at(20),
+                )
+            )
+        )
+    # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
+    # lease is minted here, so completion is the only arm that can close it.
+    store.escalations.record_escalation(
+        "ch_f",
+        epoch=1,
+        takeover_command="cd f && resume",
+        at=_at(10),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    store.movement.record_transition(
+        transition_id="tr_f1",
+        chunk_id="ch_f",
+        from_node_id=None,
+        to_node_id=RESERVED_TERMINAL,
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=_at(20),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+
+    # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.
+    ch_f_facts = store.facts.load_facts("ch_f")
+    assert ch_f_facts is not None and ch_f_facts.status() is ChunkStatus.DONE
+
+    opens = store.escalations.list_open_escalations()
+    assert sorted(e.chunk_id for e in opens) == ["ch_a"]
+    assert next(e.takeover_command for e in opens if e.chunk_id == "ch_a") == "cd a && resume"
+
+
+def test_event_feed_sorts_by_recency_across_severities() -> None:
+    events = [
+        OperationalEvent(
+            id=1,
+            recorded_at=_at(1),
+            severity=EventLogSeverity.INFO,
+            kind="k",
+            runner_id="r",
+            chunk_id=None,
+            lease_id=None,
+            node_name=None,
+            message="info-old",
+            detail=None,
+        ),
+        OperationalEvent(
+            id=2,
+            recorded_at=_at(9),
+            severity=EventLogSeverity.WARNING,
+            kind="k",
+            runner_id="r",
+            chunk_id=None,
+            lease_id=None,
+            node_name=None,
+            message="warn-new",
+            detail=None,
+        ),
+        OperationalEvent(
+            id=3,
+            recorded_at=_at(2),
+            severity=EventLogSeverity.CRITICAL,
+            kind="k",
+            runner_id="r",
+            chunk_id=None,
+            lease_id=None,
+            node_name=None,
+            message="crit-old",
+            detail=None,
+        ),
+    ]
+    escalations = [EscalationOpen(chunk_id="ch_z", recorded_at=_at(8), takeover_command="cd z")]
+    feed = EventFeed.of(events, escalations).rows
+    # Newest first whatever the severity: warn-new t9, projected needs-human t8, crit-old t2, info-old t1.
+    assert [e.message if e.kind == "k" else e.kind for e in feed] == ["warn-new", "needs-human", "crit-old", "info-old"]
+    assert [e.severity for e in feed] == ["warning", "critical", "critical", "info"]
+    # The projected escalation carries a negative synthetic id.
+    projected = next(e for e in feed if e.kind == "needs-human")
+    assert projected.id < 0
+    # It names its chunk and, naming no runner, carries `runner_id=None` rather than `""`.
+    assert projected.chunk_id == "ch_z"
+    assert projected.runner_id is None
+
+
+def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
+    """The feed message points at the escalation without reproducing what it carries —
+    neither a runner-composed resume command nor a hub-authored prose field may leak
+    into the message; the two-branch wording keys only on whether the raw field is set."""
+    runner_composed = EscalationOpen(
+        chunk_id="ch_a", recorded_at=_at(1), takeover_command="cd /ws/e1 && claude --resume sess-a"
+    )
+    hub_authored_empty = EscalationOpen(chunk_id="ch_b", recorded_at=_at(2), takeover_command="")
+    hub_authored_prose = EscalationOpen(
+        chunk_id="ch_c", recorded_at=_at(3), takeover_command="cross-graph target `x` names no enabled graph — …"
+    )
+
+    feed = EventFeed.of([], [runner_composed, hub_authored_empty, hub_authored_prose]).rows
+    by_chunk = {e.chunk_id: e.message for e in feed}
+
+    assert by_chunk["ch_a"] == "chunk ch_a needs a human — see the chunk's escalation for how to proceed"
+    assert by_chunk["ch_b"] == "chunk ch_b needs a human"
+    # The prose shape rides the populated-field branch — same pointer wording, no
+    # reproduction of the prose itself.
+    assert by_chunk["ch_c"] == "chunk ch_c needs a human — see the chunk's escalation for how to proceed"
+    # The regression class that matters: the raw field's content interpolated into
+    # the message. These fire on any wording that embeds it.
+    assert "claude --resume" not in by_chunk["ch_a"]
+    assert "cross-graph" not in by_chunk["ch_c"]
+
+
+def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Path) -> None:
+    store, engine, _clock = _store(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_tie", graph_id="gr_1", at=T0)
+        for command in ("first", "second"):
+            conn.execute(
+                insert(s.escalations).values(
+                    stamp(
+                        s.escalations,
+                        chunk_id="ch_tie",
+                        epoch=1,
+                        takeover_command=command,
+                        recorded_at=_at(10),
+                        cause=None,
+                        detail=None,
+                    )
+                )
+            )
+
+    escalations = store.escalations
+    assert isinstance(escalations, ChunkEscalationsStore)
+    newest = escalations.newest_escalation_per_chunk()
+
+    assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_tie": "second"}
+
+
+def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_skips_ephemeral_chunks(
+    tmp_path: Path,
+) -> None:
+    store, engine, _clock = _store(tmp_path)
+
+    def escalate(conn: Connection, chunk_id: str, command: str, *, at: datetime) -> None:
+        conn.execute(
+            insert(s.escalations).values(
+                stamp(
+                    s.escalations,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    takeover_command=command,
+                    recorded_at=at,
+                    cause=None,
+                    detail=None,
+                )
+            )
+        )
+
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=T0)
+        seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=T0)
+        # The newer recorded_at lands first, so it holds the lower id.
+        escalate(conn, "ch_a", "newer", at=_at(20))
+        escalate(conn, "ch_a", "older", at=_at(10))
+        escalate(conn, "ch_b", "only", at=_at(5))
+        escalate(conn, "ch_deleted", "deleted", at=_at(1))
+        escalate(conn, "ch_grouped", "grouped", at=_at(1))
+        conn.execute(
+            insert(s.chunk_deleted).values(
+                stamp(s.chunk_deleted, chunk_id="ch_deleted", deleted_at=_at(2), deleted_by="op")
+            )
+        )
+        conn.execute(
+            insert(s.chunk_grouped).values(
+                stamp(s.chunk_grouped, chunk_id="ch_grouped", grouped_into="ch_b", grouped_at=_at(2))
+            )
+        )
+
+    escalations = store.escalations
+    assert isinstance(escalations, ChunkEscalationsStore)
+    newest = escalations.newest_escalation_per_chunk()
+
+    assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_a": "newer", "ch_b": "only"}
+
+
+def _raw_event(engine: Engine, *, kind: str, severity: str, message: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.event_log).values(
+                stamp(s.event_log, recorded_at=_at(10), severity=severity, kind=kind, message=message)
+            )
+        )
+
+
+def _seed_unrecognized_severities(engine: Engine) -> None:
+    _raw_event(engine, kind="attempt-failed", severity="info", message="recognized")
+    _raw_event(engine, kind="attempt-abandoned", severity="bogus", message="kind-fallback")
+    _raw_event(engine, kind="mystery-kind", severity="bogus", message="unknown-kind")
+
+
+def test_list_events_narrows_an_unknown_severity_by_its_kind_and_an_unknown_kind_to_critical(tmp_path: Path) -> None:
+    store, engine, _clock = _store(tmp_path)
+    _seed_unrecognized_severities(engine)
+
+    by_message = {e.message: e.severity for e in store.events.list_events()}
+
+    assert by_message["recognized"] is EventLogSeverity.INFO
+    assert by_message["kind-fallback"] is EventLogSeverity.INFO
+    assert by_message["unknown-kind"] is EventLogSeverity.CRITICAL
+
+
+def test_activity_events_since_narrows_an_unknown_severity_by_its_kind_and_an_unknown_kind_to_critical(
+    tmp_path: Path,
+) -> None:
+    store, engine, _clock = _store(tmp_path)
+    _seed_unrecognized_severities(engine)
+
+    by_message = {e.message: e.severity for e in store.events.activity_events_since(T0, limit=10)}
+
+    assert by_message == {
+        "recognized": EventLogSeverity.INFO,
+        "kind-fallback": EventLogSeverity.INFO,
+        "unknown-kind": EventLogSeverity.CRITICAL,
+    }
+    assert all(type(severity) is EventLogSeverity for severity in by_message.values())
