@@ -112,6 +112,14 @@ def test_the_clock_routes_set_forward_and_refuse_the_rest(tmp_path: Path) -> Non
             assert client.post("/api/host/clock", json={"to": "2030-01-01T00:00:00"}).status_code == 422
             assert client.post("/api/host/clock", json={"advance_seconds": -1}).status_code == 422
             assert client.post("/api/host/clock", json={"advance_seconds": 1e300}).status_code == 422
+            for value in ("NaN", "Infinity", "-Infinity"):
+                response = client.post(
+                    "/api/host/clock",
+                    content=f'{{"advance_seconds": {value}}}',
+                    headers={"content-type": "application/json"},
+                )
+                assert response.status_code == 422
+                assert client.get("/api/host/clock").json()["now"] == ok.json()["now"]
     finally:
         host.close()
 
