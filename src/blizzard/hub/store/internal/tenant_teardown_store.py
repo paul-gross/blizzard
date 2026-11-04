@@ -45,7 +45,7 @@ def _deletion(row: Any) -> TenantDeletion:
 def _lock_every_tenant(conn: Connection) -> set[str]:
     """Take every ``tenants`` row's write lock — one no-op ``UPDATE`` each, in ``tenant_id`` order — and name the rows
     locked
-    (``tests/test_tenant_teardown.py::test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check``)."""
+    (``tests/component/hub/domain/tenancy/test_teardown.py::test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check``)."""
     tenants = conn.execute(select(_t.tenant_id).order_by(_t.tenant_id)).scalars().all()
     return {
         each

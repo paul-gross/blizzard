@@ -1,7 +1,7 @@
 """``GardenProposalAuthoring`` and ``RoutineGardenProposalReader`` (unit tier):
 operator create, edit, attach, and detach over a fake repository — every refusal is
 decided in the domain, and a clean call mints a `gprop_` id or delegates with the
-clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
+clock's instant (``bzh:domain-core``, the ``tests/unit/hub/domain/garden/test_scopes.py`` shape).
 ``RoutineGardenProposalReader`` filters a routine's proposals by closure state."""
 
 from __future__ import annotations

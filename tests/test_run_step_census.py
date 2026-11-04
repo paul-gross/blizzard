@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 RUN_STEP_ALLOWLIST = frozenset(
     {
         "rehearsal/test_upgrade_rehearsal.py",
-        "test_legacy_run.py",
+        "unit/hub/domain/graph/test_legacy_run.py",
     }
 )
 

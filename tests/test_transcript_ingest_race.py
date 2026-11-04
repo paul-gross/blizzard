@@ -5,7 +5,7 @@ from inside that read and joins it within a short bound. An ingest that took the
 its write unit opened lets the competitor finish in that window and then acts on the stale
 read; one that re-reads inside its unit holds the competitor off until it commits. The unit's
 keyed locks on the runner's lane and each chunk are the exclusion the ingest declares, pinned by
-``tests/test_transcript_ingest_service.py``; what serializes two ingests today, on SQLite and
+``tests/component/hub/domain/observability/test_transcript_ingest_service.py``; what serializes two ingests today, on SQLite and
 Postgres alike, is the tenant-row lock every write unit opens with."""
 
 from __future__ import annotations

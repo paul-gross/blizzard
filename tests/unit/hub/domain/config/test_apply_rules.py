@@ -1,0 +1,431 @@
+"""The apply reconcile in isolation — which writes and outcome rows a declaration earns against the
+stored records (unit tier)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from typing import TypedDict, Unpack
+
+import pytest
+
+from blizzard.hub.domain.config.apply import (
+    ApplyEntryRefused,
+    ApplyPlan,
+    ConfigDeclaration,
+    DeclaredReferences,
+    EntryOutcome,
+    PlannedWrite,
+    RepositoryDeclaration,
+    SecretNotActive,
+    StoredConfig,
+    WorkSourceDeclaration,
+    reconcile,
+)
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceFields, WorkSourceId
+from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
+from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
+from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
+from blizzard.hub.domain.kernel.unset import UNSET
+
+_PROJECT = "proj_test"
+_AT = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
+_CTX = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_X")
+_SOURCE = WorkSourceFields(
+    provider="github", locator="acme/demo", forge_id=ForgeId("frg_github"), annotate=True, secret="gh"
+)
+_REPO = RepositoryFields(
+    forge_id=ForgeId("frg_github"), owner="acme", repo="demo", base_branch="master", secret_name="gh"
+)
+_ACTIVE_GH = {"gh": RecordState.ACTIVE}
+
+
+def _source(name: str = "demo", *, retired: bool = False, fields: WorkSourceFields = _SOURCE) -> ConfiguredWorkSource:
+    return ConfiguredWorkSource(
+        work_source_id=WorkSourceId(f"wsrc_{name}"),
+        slug=name,
+        name=name,
+        fields=fields,
+        revision=3,
+        created_at=_AT,
+        created_by="bob",
+        retired=retired,
+    )
+
+
+def _repo(name: str = "blizzard", *, retired: bool = False) -> ConfiguredRepository:
+    return ConfiguredRepository(
+        repository_id=RepositoryId(f"repo_{name}"),
+        slug=name,
+        name=name,
+        fields=_REPO,
+        revision=2,
+        created_at=_AT,
+        created_by="bob",
+        retired=retired,
+    )
+
+
+class _RepositoryStated(TypedDict, total=False):
+    base_branch: str
+
+
+def _declared_repo(slug: str = "blizzard", **stated: Unpack[_RepositoryStated]) -> RepositoryDeclaration:
+    return RepositoryDeclaration(
+        slug=slug,
+        name=None,
+        fields=_REPO,
+        edit=RepositoryEdit(**stated),
+        repository_id=RepositoryId(f"repo_{slug}"),
+    )
+
+
+class _WorkSourceStated(TypedDict, total=False):
+    provider: str
+    locator: str
+    annotate: bool
+    secret: str | None
+
+
+def _declared_source(
+    slug: str = "demo", fields: WorkSourceFields = _SOURCE, **stated: Unpack[_WorkSourceStated]
+) -> WorkSourceDeclaration:
+    return WorkSourceDeclaration(
+        slug=slug,
+        name=None,
+        fields=fields,
+        edit=WorkSourceEdit(**stated),
+        work_source_id=WorkSourceId(f"wsrc_{slug}"),
+    )
+
+
+def _stored(
+    sources: tuple[ConfiguredWorkSource, ...] = (),
+    repos: tuple[ConfiguredRepository, ...] = (),
+    secrets: dict[str, RecordState] | None = None,
+    former_sources: dict[str, ConfiguredWorkSource] | None = None,
+) -> StoredConfig:
+    return StoredConfig(
+        work_sources={s.slug: s for s in sources},
+        former_work_sources=former_sources or {},
+        repositories={r.slug: r for r in repos},
+        secrets=_ACTIVE_GH if secrets is None else secrets,
+    )
+
+
+def _plan(declaration: ConfigDeclaration, stored: StoredConfig):
+    return reconcile(declaration, stored, _CTX, at=_AT)
+
+
+def test_a_missing_record_is_created_at_revision_one_with_the_apply_id() -> None:
+    plan = _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored())
+    (write,) = plan.writes
+    assert write.from_revision is None
+    assert (write.change.op, write.change.revision, write.change.door, write.change.apply_id) == (
+        ChangeOp.CREATE,
+        1,
+        Door.APPLY,
+        "apl_X",
+    )
+    assert [(o.kind, o.key, o.op) for o in plan.outcomes] == [(RecordKind.WORK_SOURCE, "demo", ChangeOp.CREATE)]
+
+
+def test_a_record_as_declared_is_unchanged_and_writes_nothing() -> None:
+    declared = _declared_source(**{n: getattr(_SOURCE, n) for n in ("provider", "locator", "annotate", "secret")})
+    plan = _plan(ConfigDeclaration(work_sources=(declared,)), _stored(sources=(_source(),)))
+    assert plan.writes == ()
+    assert [(o.op, o.diff) for o in plan.outcomes] == [(None, ())]
+
+
+def test_a_stated_field_that_differs_is_edited_and_an_omitted_one_is_left() -> None:
+    declared = _declared_source(locator="acme/other")
+    plan = _plan(ConfigDeclaration(work_sources=(declared,)), _stored(sources=(_source(),)))
+    (write,) = plan.writes
+    assert write.from_revision == 3
+    assert write.change.revision == 4
+    assert [(d.field, d.old, d.new) for d in write.change.diff] == [("locator", "acme/demo", "acme/other")]
+    assert isinstance(write.record, ConfiguredWorkSource)
+    assert write.record.fields.annotate is True
+
+
+def test_a_retired_record_is_enabled_then_edited_at_consecutive_revisions() -> None:
+    declared = _declared_source(annotate=False)
+    plan = _plan(ConfigDeclaration(work_sources=(declared,)), _stored(sources=(_source(retired=True),)))
+    assert [(w.change.op, w.from_revision, w.change.revision) for w in plan.writes] == [
+        (ChangeOp.ENABLE, 3, 4),
+        (ChangeOp.EDIT, 4, 5),
+    ]
+    assert [o.op for o in plan.outcomes] == [ChangeOp.ENABLE, ChangeOp.EDIT]
+
+
+def test_a_retired_record_stated_as_stored_is_only_enabled() -> None:
+    plan = _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored(sources=(_source(retired=True),)))
+    assert [w.change.op for w in plan.writes] == [ChangeOp.ENABLE]
+
+
+def test_a_record_the_document_omits_is_never_touched() -> None:
+    plan = _plan(ConfigDeclaration(), _stored(sources=(_source(),), repos=(_repo(retired=False),)))
+    assert plan.writes == () and plan.outcomes == ()
+
+
+def test_repositories_reconcile_the_same_way() -> None:
+    created = _declared_repo()
+    edited = _declared_repo(base_branch="main")
+    assert [o.op for o in _plan(ConfigDeclaration(repositories=(created,)), _stored()).outcomes] == [ChangeOp.CREATE]
+    plan = _plan(ConfigDeclaration(repositories=(edited,)), _stored(repos=(_repo(),)))
+    assert [(d.field, d.new) for d in plan.writes[0].change.diff] == [("base_branch", "main")]
+    enabled = _plan(ConfigDeclaration(repositories=(created,)), _stored(repos=(_repo(retired=True),)))
+    assert [w.change.op for w in enabled.writes] == [ChangeOp.ENABLE]
+
+
+def test_writes_follow_the_document_order_work_sources_first() -> None:
+    declaration = ConfigDeclaration(
+        work_sources=(_declared_source("a"), _declared_source("b", replace(_SOURCE, locator="acme/b"))),
+        repositories=(_declared_repo("r"),),
+    )
+    plan = _plan(declaration, _stored())
+    assert [(w.section, w.index) for w in plan.writes] == [
+        ("work_sources", 0),
+        ("work_sources", 1),
+        ("repositories", 0),
+    ]
+
+
+@pytest.mark.parametrize("state", [None, RecordState.RETIRED])
+def test_a_listed_secret_that_is_not_active_is_refused_at_its_entry(state: RecordState | None) -> None:
+    secrets = {} if state is None else {"gh": state}
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(secrets=("gh",), work_sources=(_declared_source(),)), _stored(secrets=secrets))
+    assert (caught.value.section, caught.value.index) == ("secrets", 0)
+    assert isinstance(caught.value.cause, SecretNotActive)
+    assert caught.value.cause.field == ""
+
+
+def test_a_name_listed_twice_is_refused_at_the_second_entry() -> None:
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(work_sources=(_declared_source(), _declared_source())), _stored())
+    assert (caught.value.section, caught.value.index) == ("work_sources", 1)
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "slug"
+
+
+def test_the_built_in_hub_slug_is_refused_on_slug() -> None:
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(work_sources=(_declared_source("hub"),)), _stored())
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "slug"
+
+
+def test_a_slug_a_source_left_is_refused_naming_that_source() -> None:
+    left = replace(_source(), slug="renamed")
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored(former_sources={"demo": left}))
+    cause = caught.value.cause
+    assert isinstance(cause, ConfigFieldError) and cause.field == "slug"
+    assert "'renamed'" in cause.message and "wsrc_demo" in cause.message
+
+
+def test_a_declared_slug_held_by_a_record_edits_it_even_when_another_left_it() -> None:
+    held = _source()
+    plan = _plan(
+        ConfigDeclaration(work_sources=(_declared_source(annotate=False),)),
+        _stored(sources=(held,), former_sources={}),
+    )
+    assert [w.change.op for w in plan.writes] == [ChangeOp.EDIT]
+    assert plan.writes[0].change.record_key == "wsrc_demo"
+
+
+def test_an_invalid_create_names_its_entry_and_field() -> None:
+    declared = _declared_source("bad", replace(_SOURCE, provider="nope"))
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(
+            ConfigDeclaration(work_sources=(_declared_source("ok", replace(_SOURCE, locator="acme/ok")), declared)),
+            _stored(),
+        )
+    assert (caught.value.section, caught.value.index) == ("work_sources", 1)
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "provider"
+
+
+def test_an_edit_that_leaves_every_field_unset_compares_nothing() -> None:
+    assert WorkSourceEdit().annotate is UNSET
+    plan = _plan(ConfigDeclaration(work_sources=(_declared_source(),)), _stored(sources=(_source(),)))
+    assert plan.writes == ()
+
+
+# --- Scopes and routines, reached through the record Protocol ---------------------
+
+
+def _scope_entry(slug: str = "core", description: str = "") -> ScopeDeclaration:
+    edit = ScopeEdit()
+    return ScopeDeclaration(name=slug, description=description, edit=edit, project_id=_PROJECT)
+
+
+class _RoutineDeclared(TypedDict, total=False):
+    graph_name: str
+    default_scope_slug: str
+
+
+def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: Unpack[_RoutineDeclared]) -> RoutineDeclaration:
+    declared: _RoutineDeclared = {"graph_name": "alpha", "default_scope_slug": "core"}
+    declared.update(fields)
+    return RoutineDeclaration(
+        name="nightly",
+        default_model=(),
+        default_effort=None,
+        default_harnesses=(),
+        edit=RoutineEdit(
+            name="nightly",
+            graph_name=declared["graph_name"],
+            default_scope_slug=ScopeSlug(declared["default_scope_slug"]),
+        ),
+        scopes=scopes,
+        project_id=_PROJECT,
+        **declared,
+    )
+
+
+def _stored_routine(*, retired: bool = False) -> Routine:
+    return Routine(
+        routine_id="rtn_1",
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug="core",
+        created_at=_AT,
+        revision=4,
+        retired=retired,
+        project_id=_PROJECT,
+    )
+
+
+def _garden(
+    *,
+    scopes: tuple[Scope, ...] = (),
+    routines: tuple[Routine, ...] = (),
+    known: frozenset[str] = frozenset({"core"}),
+    linked: dict[str, tuple[str, ...]] | None = None,
+) -> StoredConfig:
+    return StoredConfig(
+        work_sources={},
+        repositories={},
+        secrets={},
+        scopes={(s.project_id, s.slug): s for s in scopes},
+        routines={(r.project_id, r.name): r for r in routines},
+        references=DeclaredReferences(
+            scopes=frozenset((_PROJECT, slug) for slug in known),
+            enabled_graphs=frozenset({"alpha"}),
+            linked_scopes={(_PROJECT, name): slugs for name, slugs in (linked or {}).items()},
+        ),
+    )
+
+
+def test_scopes_reconcile_before_routines_and_a_stated_set_settles_after_the_create() -> None:
+    declaration = ConfigDeclaration(
+        routines=(_routine_entry(scopes=("core", "edge")),), scopes=(_scope_entry(), _scope_entry("edge"))
+    )
+    plan = _plan(declaration, _garden(known=frozenset({"core", "edge"})))
+    assert [(o.kind, o.key, o.op) for o in plan.outcomes] == [
+        (RecordKind.SCOPE, "core", ChangeOp.CREATE),
+        (RecordKind.SCOPE, "edge", ChangeOp.CREATE),
+        (RecordKind.ROUTINE, "nightly", ChangeOp.CREATE),
+        (RecordKind.ROUTINE, "nightly", ChangeOp.EDIT),
+    ]
+    settle = plan.writes[-1]
+    assert (settle.from_revision, settle.change.revision) == (1, 2)
+    assert plan.outcomes[-1].diff[0].new == ["core", "edge"]
+
+
+def test_a_stored_routine_as_declared_is_unchanged_and_a_retired_one_is_enabled() -> None:
+    linked = {"nightly": ("core",)}
+    same = _plan(
+        ConfigDeclaration(routines=(_routine_entry(scopes=("core",)),)),
+        _garden(routines=(_stored_routine(),), linked=linked),
+    )
+    assert (same.writes, [o.op for o in same.outcomes]) == ((), [None])
+    retired = _plan(
+        ConfigDeclaration(routines=(_routine_entry(),)),
+        _garden(routines=(_stored_routine(retired=True),), linked=linked),
+    )
+    assert [(w.change.op, w.from_revision) for w in retired.writes] == [(ChangeOp.ENABLE, 4)]
+
+
+def test_a_stored_scope_edits_only_a_stated_description() -> None:
+    stored = Scope(scope_id="scp_core", slug="core", description="old", created_at=_AT, revision=2, project_id=_PROJECT)
+    unstated = _plan(ConfigDeclaration(scopes=(_scope_entry(),)), _garden(scopes=(stored,)))
+    assert unstated.writes == ()
+    created = _plan(ConfigDeclaration(scopes=(_scope_entry(description="new"),)), _garden())
+    assert created.outcomes[0].op is ChangeOp.CREATE
+    stated = ScopeDeclaration(name="core", description="new", edit=ScopeEdit(description="new"), project_id=_PROJECT)
+    edited = _plan(ConfigDeclaration(scopes=(stated,)), _garden(scopes=(stored,)))
+    assert [(w.change.op, w.from_revision) for w in edited.writes] == [(ChangeOp.EDIT, 2)]
+
+
+@pytest.mark.parametrize(
+    ("entry", "known", "field"),
+    [
+        (_routine_entry(default_scope_slug="nope"), frozenset({"core"}), "default_scope_slug"),
+        (_routine_entry(scopes=("core", "nope")), frozenset({"core"}), "scopes"),
+        (_routine_entry(graph_name="missing"), frozenset({"core"}), "graph_name"),
+    ],
+)
+def test_a_routine_naming_what_does_not_resolve_is_refused_at_its_entry(
+    entry: RoutineDeclaration, known: frozenset[str], field: str
+) -> None:
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(ConfigDeclaration(routines=(entry,)), _garden(known=known))
+    assert (refused.value.section, refused.value.index) == ("routines", 0)
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == field
+
+
+def test_a_stored_routine_keeps_its_graph_even_when_that_graph_no_longer_resolves() -> None:
+    stored = replace(_stored_routine(), graph_name="retired-graph")
+    plan = _plan(ConfigDeclaration(routines=(_routine_entry(graph_name="retired-graph"),)), _garden(routines=(stored,)))
+    assert [o.op for o in plan.outcomes] == [None]
+
+
+def test_a_stored_routine_moving_to_an_unenabled_graph_is_refused_on_graph_name() -> None:
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(
+            ConfigDeclaration(routines=(_routine_entry(graph_name="missing"),)), _garden(routines=(_stored_routine(),))
+        )
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "graph_name"
+
+
+def test_two_projects_may_each_declare_a_scope_of_one_slug() -> None:
+    other = replace(_scope_entry(), project_id="proj_other")
+    plan = _plan(ConfigDeclaration(scopes=(_scope_entry(), other)), _garden())
+    assert [(w.change.project_id, o.key) for w, o in zip(plan.writes, plan.outcomes, strict=True)] == [
+        (_PROJECT, "core"),
+        ("proj_other", "core"),
+    ]
+
+
+def test_a_routine_may_name_only_a_scope_of_its_own_project() -> None:
+    entry = replace(_routine_entry(), project_id="proj_other")
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(ConfigDeclaration(routines=(entry,)), _garden(known=frozenset({"core"})))
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "default_scope_slug"
+
+
+@dataclass(frozen=True)
+class _StoodInProject:
+    project_id: str = "proj_web"
+    slug: str = "web"
+    revision: int = 1
+
+    def require_revision(self, if_match: int | None) -> None:
+        assert if_match is None or if_match == self.revision
+
+
+def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes() -> None:
+    repository = _declared_repo("r")
+    change = _plan(ConfigDeclaration(repositories=(repository,)), _stored()).writes[0].change
+    planned = ApplyPlan(
+        (PlannedWrite("projects", 0, _StoodInProject(), None, change),),
+        (EntryOutcome(RecordKind.PROJECT, "web", ChangeOp.CREATE),),
+    )
+    declaration = ConfigDeclaration(repositories=(repository,), projects=planned, scopes=(_scope_entry(),))
+    plan = _plan(declaration, _garden())
+    assert [w.section for w in plan.writes] == ["repositories", "projects", "scopes"]
+    assert [o.kind for o in plan.outcomes] == [RecordKind.REPOSITORY, RecordKind.PROJECT, RecordKind.SCOPE]

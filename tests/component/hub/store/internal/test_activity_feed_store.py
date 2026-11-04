@@ -1,0 +1,518 @@
+"""``IReadChunkEventsRepository.activity_facts_since`` / ``IReadRunnerRegistry.list_pause_facts_since``
+(component tier) — the activity feed's bounded per-source reads (AC4).
+
+One case per ``ChunkChangeCause`` member mapped to a fact table, plus the ``since``
+window and the per-source ``limit`` bound, against a real store."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import get_args
+
+import pytest
+import sqlalchemy as sa
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
+from blizzard.foundation.migration_source import MigrationSource
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition
+from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from tests.support import (
+    chunk_stores,
+    chunk_unit,
+    hub_store_connections,
+    migrate_to,
+    migrated_hub_at,
+    seed_chunk,
+    seed_graph,
+)
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _at(seconds: int) -> datetime:
+    return _T0 + timedelta(seconds=seconds)
+
+
+def _store(tmp_path: Path) -> tuple[ChunkStores, sa.Engine]:
+    _, engine = migrate_to(tmp_path, "head")
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_T0)
+        seed_graph(conn, "gr_2", at=_T0)
+        seed_chunk(conn, "ch_1", graph_id="gr_1", at=_T0)
+    return chunk_stores(engine, FixedClock(_T0)), engine
+
+
+def _seed_second_chunk(engine: sa.Engine, chunk_id: str) -> None:
+    """Seed a second chunk (e.g. a group survivor) directly — no store method mints a
+    bare ``chunks`` row with no work refs."""
+    with engine.begin() as conn:
+        seed_chunk(conn, chunk_id, graph_id="gr_1", at=_T0)
+
+
+def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: int = 50) -> ActivityEntry:
+    rows = [r for r in store.events.activity_facts_since(since, limit=limit) if r.cause == cause]
+    assert len(rows) == 1, f"expected exactly one {cause!r} row, got {rows}"
+    return rows[0]
+
+
+# --- one case per mapped ChunkChangeCause member -----------------------------
+
+
+def test_minted_reads_off_chunks_minted_at(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    row = _row_for(store, "minted")
+    assert row.type == "chunk-changed"
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key == "chunks:ch_1"
+    assert row.at == _T0
+
+
+def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.queue.record_promote("ch_1", at=_at(1))
+    row = _row_for(store, "promoted")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_promoted:")
+    assert row.at == _at(1)
+
+
+def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_second_chunk(engine, "ch_2")
+    with hub_store_connections(engine).write("seed") as conn:
+        record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(1))
+    row = _row_for(store, "grouped")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_grouped:")
+
+
+def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
+            token_hash="deadbeef",
+            at=_at(1),
+        )
+    row = _row_for(store, "claimed")
+    assert row.chunk_id == "ch_1"
+    assert row.runner_id == "runner-a"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("route_created:")
+
+
+def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.movement.record_transition(
+        transition_id="tr_1",
+        chunk_id="ch_1",
+        from_node_id=None,
+        to_node_id="nd_b",
+        choice_name="approve",
+        epoch=1,
+        runner_id="runner-a",
+        at=_at(1),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    row = _row_for(store, "node-completed")
+    assert row.chunk_id == "ch_1"
+    assert row.runner_id == "runner-a"
+    assert row.graph_id == "gr_1"
+    assert row.key == "transitions:tr_1"
+
+
+def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.movement.record_transition(
+        transition_id="tr_1",
+        chunk_id="ch_1",
+        from_node_id=None,
+        to_node_id="nd_b",
+        choice_name=None,
+        epoch=1,
+        runner_id="hub",
+        at=_at(1),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    row = _row_for(store, "hub-advanced")
+    assert row.chunk_id == "ch_1"
+    assert row.runner_id == "hub"
+    assert row.graph_id == "gr_1"
+    assert row.key == "transitions:tr_1"
+
+
+def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.movement.record_migration(
+        "ch_1",
+        from_node_id=None,
+        from_graph_id="gr_1",
+        to_graph_id="gr_2",
+        landed_node_id=None,
+        choice_name="reroute",
+        model=None,
+        epoch=1,
+        at=_at(1),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    row = _row_for(store, "migrated")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_2"  # the migration's target graph, not the one migrated out of
+    assert row.key.startswith("chunk_migrations:")
+
+
+def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.decisions.record_decision(
+        imposed_by_runner_id=None,
+        decision_id="dec_1",
+        chunk_id="ch_1",
+        node_id="nd_gate",
+        node_name="gate",
+        epoch=1,
+        choices=[DecisionChoice(name="go", description="go")],
+        at=_at(1),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    row = _row_for(store, "decision-submitted")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key == "decisions:dec_1"
+
+
+def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    store.decisions.record_decision(
+        imposed_by_runner_id=None,
+        decision_id="dec_1",
+        chunk_id="ch_1",
+        node_id="nd_gate",
+        node_name="gate",
+        epoch=1,
+        choices=[DecisionChoice(name="go", description="go")],
+        at=_at(1),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
+    )
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.decisions.record_decision_resolution(
+            "dec_1", choice="go", resolved_by="alice", at=_at(2), transaction=unit
+        )
+    row = _row_for(store, "decision-resolved")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key == "decision_resolutions:dec_1"
+
+
+def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.questions.record_question(
+        question_id="qn_1",
+        chunk_id="ch_1",
+        node_id="nd_a",
+        session_id=None,
+        runner_id="runner-a",
+        epoch=1,
+        question="continue?",
+        options=[],
+        asked_at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    row = _row_for(store, "question-asked")
+    assert row.chunk_id == "ch_1"
+    assert row.runner_id == "runner-a"
+    assert row.graph_id == "gr_1"
+    assert row.key == "questions:qn_1"
+
+
+def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    store.questions.record_question(
+        question_id="qn_1",
+        chunk_id="ch_1",
+        node_id="nd_a",
+        session_id=None,
+        runner_id="runner-a",
+        epoch=1,
+        question="continue?",
+        options=[],
+        asked_at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
+    row = _row_for(store, "question-answered")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key == "question_answers:qn_1"
+
+
+def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.escalations.record_escalation(
+        "ch_1",
+        epoch=1,
+        takeover_command="cd x && resume",
+        at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    row = _row_for(store, "escalated")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("escalations:")
+
+
+def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_requeue_locked(handle, "ch_1", at=_at(1))
+    row = _row_for(store, "requeued")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("requeues:")
+
+
+def test_detached_reads_off_route_released(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_released_locked(handle, "ch_1", at=_at(1))
+    row = _row_for(store, "detached")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("route_released:")
+
+
+def _route_and_release(
+    store: ChunkStores, *, runner_id: str, at: int, cause: RouteReleaseCause | None, reason: str | None = None
+) -> None:
+    route = Route(chunk_id="ch_1", runner_id=runner_id, workspace_id="w1", environment_ids=[], created_at=_at(at))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_locked(handle, route, token_hash="h", at=_at(at))
+        store.route.record_route_released_locked(handle, "ch_1", at=_at(at + 1), cause=cause, reason=reason)
+
+
+def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _route_and_release(store, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
+    _route_and_release(store, runner_id="rn_second", at=3, cause=RouteReleaseCause.RELEASE, reason="throttled")
+    row = _row_for(store, "released")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.runner_id == "rn_second"
+    assert row.reason == "throttled"
+    assert row.key.startswith("route_released:")
+
+
+@pytest.mark.parametrize("cause", [None, RouteReleaseCause.DETACH, RouteReleaseCause.RETIREMENT])
+def test_every_other_route_released_row_still_reads_detached(tmp_path: Path, cause: RouteReleaseCause | None) -> None:
+    store, _ = _store(tmp_path)
+    _route_and_release(store, runner_id="rn_first", at=1, cause=cause)
+    row = _row_for(store, "detached")
+    assert row.runner_id is None
+    assert row.reason is None
+
+
+def test_paused_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.lifecycle.record_pause("ch_1", paused=True, by="alice", at=_at(1))
+    row = _row_for(store, "paused")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_pause_facts:")
+
+
+def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.lifecycle.record_pause("ch_1", paused=True, by="alice", at=_at(1))
+    store.lifecycle.record_pause("ch_1", paused=False, by="alice", at=_at(2))
+    row = _row_for(store, "resumed")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_pause_facts:")
+
+
+def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="alice", at=_T0)
+    row = _row_for(store, "stopped")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_stopped:")
+
+
+def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_completion_locked(
+            handle, "ch_1", by="alice", at=_T0, close_decision=decide_close_enqueue([], lambda _: True)
+        )
+    row = _row_for(store, "completed")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_completed:")
+
+
+def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_restart_locked(
+            handle, "ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1)
+        )
+    row = _row_for(store, "restarted")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_restarts:")
+
+
+def test_deleted_reads_off_chunk_deleted(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    with hub_store_connections(engine).write("seed") as conn:
+        record_deleted_row(conn, "ch_1", by="alice", at=_at(1))
+    row = _row_for(store, "deleted")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_deleted:")
+    assert row.by == "alice"
+
+
+def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
+    """``activity_facts_since`` excludes a deleted chunk's history from every OTHER
+    block — only the ``chunk_deleted`` row itself survives the filter."""
+    store, engine = _store(tmp_path)
+    store.queue.record_promote("ch_1", at=_at(1))
+    with hub_store_connections(engine).write("seed") as conn:
+        record_deleted_row(conn, "ch_1", by="alice", at=_at(2))
+
+    causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+
+    assert causes == {"deleted"}
+
+
+def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path: Path) -> None:
+    """Grouping's own feed behavior is unchanged — only a *deleted* chunk's history
+    drops away, a *grouped* one's still shows."""
+    store, engine = _store(tmp_path)
+    _seed_second_chunk(engine, "ch_2")
+    store.queue.record_promote("ch_1", at=_at(1))
+    with hub_store_connections(engine).write("seed") as conn:
+        record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(2))
+
+    causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+
+    assert causes == {"minted", "promoted", "grouped"}
+
+
+def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
+    """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
+    store, _ = _store(tmp_path)
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.record.set_graph_locked(handle, "ch_1", graph_id="gr_2")
+        store.record.set_defaults_locked(
+            handle, "ch_1", default_model=["opus"], default_effort="high", default_harnesses=[]
+        )
+    rows = store.events.activity_facts_since(_T0, limit=50)
+    assert all(r.cause != "edited" for r in rows)
+
+
+def test_the_activity_cause_vocabulary_is_every_chunk_change_cause_but_edited() -> None:
+    """The board reads the generated ``ActivityChunkChangeCause`` to tell a live frame that is
+    an activity occurrence from one that is not."""
+    assert set(get_args(ChunkChangeCause)) - set(get_args(ActivityChunkChangeCause)) == {"edited"}
+    assert set(get_args(ActivityChunkChangeCause)) <= set(get_args(ChunkChangeCause))
+
+
+# --- the since window and the per-source limit bound -------------------------
+
+
+def test_since_window_excludes_an_older_fact(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.queue.record_promote("ch_1", at=_at(1))
+    excluded = [r for r in store.events.activity_facts_since(_at(2), limit=50) if r.cause == "promoted"]
+    assert excluded == []
+    included = [r for r in store.events.activity_facts_since(_at(1), limit=50) if r.cause == "promoted"]
+    assert len(included) == 1
+
+
+def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    for i in range(10):
+        store.lifecycle.record_pause("ch_1", paused=(i % 2 == 0), by="alice", at=_at(i))
+    rows = store.events.activity_facts_since(_T0, limit=3)
+    pause_rows = [r for r in rows if r.cause in ("paused", "resumed")]
+    assert len(pause_rows) == 3  # chunk_pause_facts' own bounded read, capped at `limit`
+
+
+# --- the runner-pause seam: IReadRunnerRegistry, never IReadChunkEventsRepository --
+
+
+def _registry_store(tmp_path: Path) -> RunnerRegistryStore:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migrated_hub_at(db_url)
+    store = RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
+    store.add(RunnerAddition("runner-a", "runner-a", "hash-runner-a", at=_T0, by="test"))
+    return store
+
+
+def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> None:
+    store = _registry_store(tmp_path)
+    store.record_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
+    store.record_pause("runner-a", paused=True, at=_at(1), by="alice")
+    store.record_local_pause("runner-a", paused=True, at=_at(2), by="operator", reason="spend cap hit")
+
+    rows = store.list_pause_facts_since(_T0, limit=50)
+
+    fleet = [r for r in rows if not r.local]
+    local = [r for r in rows if r.local]
+    assert len(fleet) == 1
+    assert fleet[0].paused
+    assert fleet[0].runner_id == "runner-a"
+    assert fleet[0].by == "alice"
+    assert fleet[0].key.startswith("runner_pause_facts:")
+    assert len(local) == 1
+    assert local[0].paused
+    assert local[0].runner_id == "runner-a"
+    assert local[0].by == "operator"
+    assert local[0].reason == "spend cap hit"
+    assert local[0].key.startswith("runner_local_pause_facts:")
+
+
+def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> None:
+    """Pause family only — ``registered``/``heartbeat`` carry no fact table."""
+    store = _registry_store(tmp_path)
+    store.record_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
+    store.touch_last_seen("runner-a", at=_at(1))
+    rows = store.list_pause_facts_since(_T0, limit=50)
+    assert rows == []
+
+
+def test_read_chunk_repository_gains_no_runner_pause_method() -> None:
+    """The seam boundary is honored: runner-pause reads live on ``IReadRunnerRegistry`` alone."""
+    assert hasattr(IReadRunnerRegistry, "list_pause_facts_since")
+    assert not hasattr(IReadChunkEventsRepository, "list_pause_facts_since")
+    assert hasattr(IReadChunkEventsRepository, "activity_facts_since")
