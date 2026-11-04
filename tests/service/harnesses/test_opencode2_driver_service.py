@@ -425,10 +425,19 @@ def test_orphan_stops_the_tree_a_killed_driver_left_running(engine: Engine, monk
     finally:
         executor.shutdown(wait=True)
     tree = {request.session_id, *(str(found["id"]) for found in client.children(request.session_id))}
-    assert not client.running_sessions() & tree
+    _wait_for_stopped(client, tree)
     children = [parse_session(found) for found in client.children(request.session_id)]
     assert children and all(found.outcome == "interrupted" for found in children)
     assert parse_session(client.session(request.session_id)).outcome == "interrupted"
+
+
+def _wait_for_stopped(client: OpenCodeServiceClient, tree: set[str], timeout: float = 30) -> None:
+    """The interrupt is a request the service acts on asynchronously, so a tree stops some moments after ``orphan`` returns."""
+    deadline = time.monotonic() + timeout
+    while client.running_sessions() & tree:
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"sessions {sorted(client.running_sessions() & tree)} still running after the orphan")
+        time.sleep(0.2)
 
 
 def _wait_for_running(client: OpenCodeServiceClient, session_id: str, timeout: float = 30) -> None:
