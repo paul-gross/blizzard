@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
+import sys
 import tempfile
+import threading
 from functools import partial
 from pathlib import Path
 
 import click
 
 from blizzard.runner.cli.children import RunnerCliCollaborators
+from blizzard.runner.cli.worker_call import WorkerCall
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityContractError
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
@@ -39,14 +43,18 @@ from blizzard.runner.harness.opencode_v2.compatibility.proof import OpenCodeTwoP
 from blizzard.runner.harness.opencode_v2.compatibility.rows import classify_row
 from blizzard.runner.harness.opencode_v2.compatibility.store_migration import StoreMigrationProbe
 from blizzard.runner.harness.opencode_v2.compatibility.subprocess_host import SubprocessProofHost
+from blizzard.runner.harness.opencode_v2.drive import TurnDriver
 from blizzard.runner.harness.opencode_v2.driver import DriverCore, ServiceIdentityError, ServiceNotRegisteredError
+from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError
 from blizzard.runner.harness.opencode_v2.registration import (
     RegistrationError,
     ServiceRegistration,
     read_registration,
     registration_path,
 )
-from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
+from blizzard.runner.harness.opencode_v2.request import DriveRequestError, take_request
+from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter
+from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableError, UrllibServiceTransport
 from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE,
     ADMITTED_OPENCODE_V2_RANGE_TEXT,
@@ -58,7 +66,8 @@ from blizzard.runner.process.child_processes import IChildProcesses
 
 @click.group("opencode")
 def opencode_group() -> None:
-    """Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version."""
+    """OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn
+    driver."""
 
 
 @opencode_group.command("compatibility")
@@ -265,4 +274,49 @@ def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration
     return registration
 
 
-__all__ = ["opencode_compatibility", "opencode_group"]
+@opencode_group.command("drive")
+@click.option(
+    "--request",
+    "request_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="The turn's request file, written by the runner; read once, then removed.",
+)
+def opencode_drive(request_path: Path) -> None:
+    """Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.
+
+    The runner launches this as the worker for every OpenCode 2 spawn, resume, judgement, and nudge; its exit ends
+    the turn. SIGINT interrupts the session tree and ends the turn interrupted."""
+    try:
+        request = take_request(request_path)
+    except DriveRequestError as exc:
+        raise click.ClickException(str(exc)) from exc
+    environment = dict(os.environ)
+    path = registration_path(environment)
+    try:
+        core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
+    except (ServiceNotRegisteredError, ServiceIdentityError, ServiceUnreachableError, RegistrationError) as exc:
+        error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
+        ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
+        return
+    worker = WorkerCall.hook("heartbeat", traced=False)
+
+    def heartbeat() -> None:
+        if worker is not None:
+            worker.soft_post(
+                "/api/heartbeat", failure="could not reach the runner", json_body={"lease_id": worker.lease_id}
+            )
+
+    stop = threading.Event()
+    driver = TurnDriver(core, request, environment, sys.stdout, heartbeat=heartbeat, stop=stop)
+
+    def interrupt(signum: int, frame: object) -> None:
+        del signum, frame
+        stop.set()
+        driver.wake.set()
+
+    signal.signal(signal.SIGINT, interrupt)
+    driver.run()
+
+
+__all__ = ["opencode_compatibility", "opencode_drive", "opencode_group"]

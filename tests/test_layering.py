@@ -2925,7 +2925,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
     "harness/opencode": frozenset({"config_table", "harness", "node_steps", "process"}),
-    "harness/opencode_v2": frozenset({"harness", "process"}),
+    "harness/opencode_v2": frozenset({"harness", "node_steps", "process"}),
     "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_ID_NODES}),
     "stores": frozenset(
         {

@@ -1202,12 +1202,31 @@
           ],
           "path": "runner opencode compatibility",
           "short_help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."
+        },
+        "drive": {
+          "help": "Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.\n\nThe runner launches this as the worker for every OpenCode 2 spawn, resume, judgement, and nudge; its exit ends\nthe turn. SIGINT interrupts the session tree and ends the turn interrupted.",
+          "params": [
+            {
+              "help": "The turn's request file, written by the runner; read once, then removed.",
+              "hidden": false,
+              "kind": "option",
+              "name": "request_path",
+              "opts": [
+                "--request"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "file"
+            }
+          ],
+          "path": "runner opencode drive",
+          "short_help": "Worker: drive one OpenCode 2 turn on the operator's managed service and print its result."
         }
       },
-      "help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version.",
+      "help": "OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn\ndriver.",
       "params": [],
       "path": "runner opencode",
-      "short_help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version."
+      "short_help": "OpenCode's admitted-version compatibility diagnostics, for either major version, and the OpenCode 2 turn driver."
     },
     "pause": {
       "help": "Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub\nunreachable. Running workers are left alone \u2014 this is not a drain \u2014 but while paused a stalled worker is not\nkilled and an exhausted retry budget does not escalate. Separate from a pause set at the hub; each is cleared\nwhere it was set.",
