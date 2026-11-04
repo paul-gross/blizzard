@@ -22,8 +22,6 @@ from blizzard.wire.clock import ClockMoveRequest
 from tests.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
 from tests.support import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
 
-pytestmark = pytest.mark.component
-
 
 @pytest.mark.asyncio
 async def test_cancelled_controlled_step_drains_a_failing_pass_before_releasing_lock() -> None:

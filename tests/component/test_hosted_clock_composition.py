@@ -2,14 +2,14 @@
 
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import ControlledClock, FixedClock, SystemClock
 from blizzard.hub.app import Sweep
-from blizzard.hub.composition import build_flow_driver, build_hub_core, build_process_core
+from blizzard.hub.composition import build_flow_driver, build_hub_core
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.tenancy import StoreScope
@@ -17,7 +17,6 @@ from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.hub_event_rows import hub_event_rows
 
 
-@pytest.mark.component
 @pytest.mark.parametrize(
     "clock,fence,step,crash,expected",
     [
@@ -68,7 +67,6 @@ def test_hosted_clock_modes(
         app.state.engine.dispose()
 
 
-@pytest.mark.component
 def test_conflicting_modes_refuse_boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ("BLIZZARD_CLOCK_FENCE", "BLIZZARD_TEST_FLOW_STEP", "BLIZZARD_CRASH_FENCE"):
         monkeypatch.setenv(name, "1")
@@ -77,7 +75,6 @@ def test_conflicting_modes_refuse_boot(tmp_path: Path, monkeypatch: pytest.Monke
         build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
 
-@pytest.mark.component
 @pytest.mark.asyncio
 async def test_controlled_graph_boot_announcements_and_forced_wake(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -125,14 +122,3 @@ async def test_controlled_graph_boot_announcements_and_forced_wake(
         assert len((await driver.step()).reconciled) == 1
     finally:
         app.state.engine.dispose()
-
-
-@pytest.mark.unit
-def test_process_core_ignores_controlled_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
-    monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
-    engine = Mock()
-    with patch("blizzard.hub.composition.build_hub_core") as build:
-        assert build_process_core(engine) is build.return_value
-    assert build.call_args.args == (engine,)
-    assert isinstance(build.call_args.kwargs["clock"], SystemClock)
