@@ -53,29 +53,34 @@ test('test_fast_forward_stands_when_second_forge_refuses_merge_method', async ({
   expect(await pulls(secondForge, second, 'open')).toHaveLength(1);
 });
 
-test('test_candidate_without_checks_exhausts_pending_timeout_without_advancing', async ({ repository, issue, api, forge, runnerHosts, workerCheckpoint }) => {
-  test.setTimeout(180_000);
-  const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'fast-forward' } })).status).toBe(200);
-  expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 2) } })).status).toBe(201);
-  const { chunk } = await issue('NO-CHECKS.md', { repository: repo });
-  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const original = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
-  let arrived = false;
-  void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
-  await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
-  const candidate = await host.originHead(repo.name, 'feature/diverged');
-  expect(candidate).toBeTruthy();
-  expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
-  workerCheckpoint.release('pushed');
-  await stepUntil(host, () => detail(api, chunk.chunk_id), (row) => row.pending?.kind === 'pending', { stallPasses: 80, progress: chunkProgress });
-  await expect.poll(async () => (await detail(api, chunk.chunk_id)).history.some((row) => row.from_node_name === 'deliver' && row.choice_name === 'failure'), { timeout: 30_000 }).toBe(true);
-  const result = await detail(api, chunk.chunk_id);
-  expect(result.landed_repos).toEqual([]);
-  const base = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
-  expect(base.body.object.sha).toBe(original.body.object.sha);
-  expect(await pulls(forge, repo)).toEqual([]);
+test.describe('the pending timeout, on the controlled clock', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  test('test_candidate_without_checks_exhausts_pending_timeout_without_advancing', async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: 'fast-forward' } })).status).toBe(200);
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 2) } })).status).toBe(201);
+    const { chunk } = await issue('NO-CHECKS.md', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    const original = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
+    let arrived = false;
+    void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+    await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
+    const candidate = await host.originHead(repo.name, 'feature/diverged');
+    expect(candidate).toBeTruthy();
+    expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+    workerCheckpoint.release('pushed');
+    const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
+    await stepUntil(host, stepped, (row) => row.pending?.kind === 'pending', { stallPasses: 80, progress: chunkProgress });
+    await clock.advance(3);
+    await stepUntil(host, stepped, (row) => row.history.some((item) => item.from_node_name === 'deliver' && item.choice_name === 'failure'), { stallPasses: 80, progress: chunkProgress });
+    const result = await detail(api, chunk.chunk_id);
+    expect(result.landed_repos).toEqual([]);
+    const base = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
+    expect(base.body.object.sha).toBe(original.body.object.sha);
+    expect(await pulls(forge, repo)).toEqual([]);
+  });
 });
 
 async function detail(api: HubApi, id: string): Promise<Wire.ChunkDetail> {

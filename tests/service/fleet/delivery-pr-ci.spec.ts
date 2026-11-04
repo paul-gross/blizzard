@@ -238,27 +238,6 @@ test('test_pr_ci_refuses_a_foreign_commit_on_the_head', async ({ repository, iss
   expect(await host.originHead(repo.name, 'main')).toBe(before);
 });
 
-test(timeoutTitle, async ({ repository, issue, api, forge, runnerHosts }) => {
-  test.slow();
-  const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  const before = await host.originHead(repo.name, 'main');
-  await lever(forge, repo, 'checks_pending');
-  await createGraph(api, repo, 'default-delivery', 4);
-  const { chunk } = await issue('pr-ci', { repository: repo });
-  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  await drive(host, api, chunk.chunk_id, (s) => s.pending !== null);
-  await expect.poll(async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body.bounces.length, { timeout: 30000 }).toBeGreaterThan(0);
-  const bounced = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
-  expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
-  expect(bounced.landed).toBe(false);
-  expect(bounced.current_node_name).toBe('build');
-  const opened = await pulls(forge, repo);
-  expect(opened.length).toBeGreaterThan(0);
-  expect(opened.some((pull) => pull.merged)).toBe(false);
-  expect(await host.originHead(repo.name, 'main')).toBe(before);
-});
-
 test('test_pr_ci_lands_an_unstable_pr_once_checks_are_green', async ({ repository, issue, api, forge, runnerHosts }) => {
   test.slow();
   const repo = await repository();
@@ -439,26 +418,59 @@ test('test_pr_ci_does_not_merge_ahead_of_a_check_that_starts_after_the_others_fi
   expect(done.status).toBe('done');
 });
 
-test('test_pr_ci_bounces_a_revision_with_no_check_at_its_poll_timeout', async ({ repository, issue, api, forge, runnerHosts }) => {
-  test.slow();
-  const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  await lever(forge, repo, 'checks_pending');
-  await createGraph(api, repo, 'default-delivery', 4);
-  const { chunk } = await issue('pr-ci', { repository: repo });
-  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  await drive(host, api, chunk.chunk_id, (s) => s.pending !== null);
-  const opened = await pulls(forge, repo);
-  expect(opened).toHaveLength(1);
-  const armed = await forge.call('POST', '/_levers/ref_checks', { repo: `${repo.owner}/${repo.name}`, ref: opened[0]!.head.ref, checks: [] });
-  expect(armed.status, JSON.stringify(armed.body)).toBe(200);
-  await lever(forge, repo, 'checks_pending', 'DELETE');
-  await expect.poll(async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body.bounces.length, { timeout: 30000 }).toBeGreaterThan(0);
-  const bounced = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
-  expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
-  const result = await pulls(forge, repo);
-  expect(result.length).toBeGreaterThan(0);
-  expect(result.some((pull) => pull.merged)).toBe(false);
+test.describe('poll timeout, on the controlled clock', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  // The hub runs no flow-driver timer here: each read takes one flow turn, and the timeout is crossed by moving the clock.
+  const stepped = async (api: HubApi, id: string) => {
+    await api.flowStep();
+    return (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
+  };
+
+  test(timeoutTitle, async ({ repository, issue, api, clock, forge, runnerHosts }) => {
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    const before = await host.originHead(repo.name, 'main');
+    await lever(forge, repo, 'checks_pending');
+    await createGraph(api, repo, 'default-delivery', 4);
+    const { chunk } = await issue('pr-ci', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.pending !== null, { stallPasses: 80, progress: chunkProgress });
+    await clock.advance(5);
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
+    const bounced = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
+    expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
+    expect(bounced.landed).toBe(false);
+    expect(bounced.current_node_name).toBe('build');
+    const opened = await pulls(forge, repo);
+    expect(opened.length).toBeGreaterThan(0);
+    expect(opened.some((pull) => pull.merged)).toBe(false);
+    expect(await host.originHead(repo.name, 'main')).toBe(before);
+  });
+
+  test('test_pr_ci_bounces_a_revision_with_no_check_at_its_poll_timeout', async ({ repository, issue, api, clock, forge, runnerHosts }) => {
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    await lever(forge, repo, 'checks_pending');
+    await createGraph(api, repo, 'default-delivery', 4);
+    const { chunk } = await issue('pr-ci', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.pending !== null, { stallPasses: 80, progress: chunkProgress });
+    const opened = await pulls(forge, repo);
+    expect(opened).toHaveLength(1);
+    const armed = await forge.call('POST', '/_levers/ref_checks', { repo: `${repo.owner}/${repo.name}`, ref: opened[0]!.head.ref, checks: [] });
+    expect(armed.status, JSON.stringify(armed.body)).toBe(200);
+    await lever(forge, repo, 'checks_pending', 'DELETE');
+    await clock.advance(1);
+    await api.flowStep();
+    await clock.advance(5);
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
+    const bounced = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
+    expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
+    const result = await pulls(forge, repo);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.some((pull) => pull.merged)).toBe(false);
+  });
 });
 });
 
