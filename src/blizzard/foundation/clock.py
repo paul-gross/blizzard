@@ -151,8 +151,12 @@ class ControlledClock:
         if by < timedelta(0):
             raise ValueError(f"cannot advance by a negative duration, got {by}")
         with self._lock:
-            move = ClockMove(previous=self._reading, now=self._reading + by)
-            self._reading = move.now
+            try:
+                moved = self._reading + by
+            except OverflowError:
+                raise ValueError(f"advancing by {by} passes the latest representable instant") from None
+            move = ClockMove(previous=self._reading, now=moved)
+            self._reading = moved
             return move
 
 

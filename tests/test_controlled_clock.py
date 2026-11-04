@@ -68,6 +68,8 @@ def test_malformed_input_is_refused_with_value_error() -> None:
     with pytest.raises(ValueError):
         clock.set(NAIVE)
     with pytest.raises(ValueError):
+        clock.advance(timedelta.max)
+    with pytest.raises(ValueError):
         ControlledClock(NAIVE)
     assert clock.now() == ANCHOR
 
