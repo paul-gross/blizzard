@@ -9,9 +9,9 @@ connection, opened under the tenant's lock as any scoped write is.
 
 The identity lock is a no-op ``UPDATE`` of the store's revision row (``bzh:sql-portable``): the one hub-level row every
 store the hub serves holds, where no identity table is guaranteed a row
-(``tests/test_identity_transaction.py::test_the_identity_lock_is_the_units_first_statement``). On SQLite the ``UPDATE``
-takes the single writer lock before any read; on Postgres it queues every other unit of work behind this one's commit,
-and each later statement reads what that commit wrote."""
+(``tests/component/hub/auth/test_identity_transaction.py::test_the_identity_lock_is_the_units_first_statement``).
+On SQLite the ``UPDATE`` takes the single writer lock before any read; on Postgres it queues every other unit of work
+behind this one's commit, and each later statement reads what that commit wrote."""
 
 from __future__ import annotations
 

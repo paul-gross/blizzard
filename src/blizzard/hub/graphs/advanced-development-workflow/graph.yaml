@@ -127,7 +127,7 @@ sessions:
 # MAINTAINERS: a prompt restates the slice of this format its node needs, and a worker reads that
 # restatement first — it retrieves the full docket only on request. So an edit to docket.md is not
 # done until it has been carried into every prompt restating the affected slice; the prompt set is
-# the census tests/test_adw_docket.py pins. This note lives here rather than in docket.md because
+# the census tests/unit/hub/graphs/test_adw_docket.py pins. This note lives here rather than in docket.md because
 # docket.md is baked into the mint verbatim and reaches worker sessions, where maintainer
 # bookkeeping is noise — YAML comments are dropped when the mint parses this file, so nothing here
 # travels with it.

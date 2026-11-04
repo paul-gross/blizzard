@@ -1,7 +1,7 @@
 """The shared SSE core — the kind-agnostic broker, the stream-response
 machinery, and the early-shutdown server wrapper both daemons bind. Domain vocabulary and
 framing text are exercised through each daemon's own broker/route instead (e.g.
-``tests/test_events.py``, ``tests/component/hub/api/test_events_stream.py``)."""
+``tests/component/hub/api/test_events.py``, ``tests/component/hub/api/test_events_stream.py``)."""
 
 from __future__ import annotations
 

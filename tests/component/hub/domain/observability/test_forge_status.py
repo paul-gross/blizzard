@@ -1,7 +1,7 @@
 """The forge-status projection — ``live_work_refs()`` and ``AnnotationReconciler.sweep()``.
 
 Both are exercised against a real, migrated chunk store with a :class:`FakeAnnotator` standing in for the forge, not the
-HTTP shaping ``tests/test_work_source.py`` already covers."""
+HTTP shaping ``tests/component/hub/work_sources/internal/test_github_work_source.py`` already covers."""
 
 from __future__ import annotations
 

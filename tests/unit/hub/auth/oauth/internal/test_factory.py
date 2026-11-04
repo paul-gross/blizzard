@@ -1,0 +1,146 @@
+"""``ProviderEntry.registry`` — provider construction, config validation, secret
+resolution from the environment (unit tier).
+"""
+
+from __future__ import annotations
+
+import httpx2
+import pytest
+
+from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
+from blizzard.hub.auth.oauth.internal.github_provider import GithubProvider
+from blizzard.hub.auth.oauth.internal.oidc_provider import OidcProvider
+from blizzard.hub.config import ConfigError, OAuthProviderConfig
+
+
+def _client() -> httpx2.Client:
+    return httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(404)))
+
+
+def test_provider_registry_builds_a_conformer_per_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_OAUTH_GITHUB_SECRET", "s1")
+    monkeypatch.setenv("BZ_OAUTH_OIDC_SECRET", "s2")
+    providers = (
+        OAuthProviderConfig(
+            name="github",
+            type="github",
+            display_name="GitHub",
+            client_id="c1",
+            client_secret_env="BZ_OAUTH_GITHUB_SECRET",
+        ),
+        OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="Example SSO",
+            client_id="c2",
+            client_secret_env="BZ_OAUTH_OIDC_SECRET",
+            issuer="https://issuer.example.com",
+        ),
+    )
+    registry = ProviderEntry.registry(providers, http_client=_client())
+
+    github = registry.get("github")
+    oidc = registry.get("oidc-co")
+    assert isinstance(github, GithubProvider)
+    assert isinstance(oidc, OidcProvider)
+    assert {p.name for p in registry.list()} == {"github", "oidc-co"}
+
+
+def test_provider_registry_rejects_an_unknown_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="bogus", type="saml", display_name="Bogus", client_id="c", client_secret_env="BZ_SECRET"
+        ),
+    )
+    with pytest.raises(ConfigError, match="unknown type"):
+        ProviderEntry.registry(providers, http_client=_client())
+
+
+def test_provider_registry_rejects_oidc_with_no_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="oidc-co", type="oidc", display_name="SSO", client_id="c", client_secret_env="BZ_SECRET"
+        ),
+    )
+    with pytest.raises(ConfigError, match="carries no issuer"):
+        ProviderEntry.registry(providers, http_client=_client())
+
+
+def test_provider_registry_rejects_an_unset_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BZ_OAUTH_GITHUB_SECRET", raising=False)
+    providers = (
+        OAuthProviderConfig(
+            name="github",
+            type="github",
+            display_name="GitHub",
+            client_id="c1",
+            client_secret_env="BZ_OAUTH_GITHUB_SECRET",
+        ),
+    )
+    with pytest.raises(ConfigError, match="BZ_OAUTH_GITHUB_SECRET"):
+        ProviderEntry.registry(providers, http_client=_client())
+
+
+def test_provider_registry_is_empty_for_no_providers() -> None:
+    registry = ProviderEntry.registry((), http_client=_client())
+    assert registry.list() == []
+    assert registry.get("anything") is None
+
+
+@pytest.mark.parametrize("authoritative", [True, False])
+def test_an_oidc_provider_carries_its_configured_email_authority(
+    monkeypatch: pytest.MonkeyPatch, authoritative: bool
+) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="SSO",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            issuer="https://issuer.example.com",
+            emails_authoritative=authoritative,
+        ),
+    )
+    oidc = ProviderEntry.registry(providers, http_client=_client()).get("oidc-co")
+
+    assert isinstance(oidc, OidcProvider)
+    assert oidc.emails_authoritative is authoritative
+
+
+def test_an_oidc_provider_is_not_authoritative_for_its_emails_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="SSO",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            issuer="https://issuer.example.com",
+        ),
+    )
+    oidc = ProviderEntry.registry(providers, http_client=_client()).get("oidc-co")
+
+    assert isinstance(oidc, OidcProvider)
+    assert oidc.emails_authoritative is False
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_a_github_provider_refuses_emails_authoritative(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="github",
+            type="github",
+            display_name="GitHub",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            emails_authoritative=value,
+        ),
+    )
+    with pytest.raises(ConfigError, match=r"'github' is type 'github'.*emails_authoritative is an oidc key"):
+        ProviderEntry.registry(providers, http_client=_client())

@@ -1,5 +1,5 @@
 """``blizzard hub run list|get`` — pure clients of the two run-reading routes, driven here with the client
-stubbed, the ``tests/test_hub_cli_routine.py`` shape."""
+stubbed, the ``tests/unit/hub/cli/test_routine.py`` shape."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Chunk delete (component tier) — ``DeleteService`` driven against a real,
 migrated store. Every case here reaches the domain service and the stores directly, the
-way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly — the
+way ``tests/component/hub/work_sources/internal/test_hub_work_source.py`` drives ``WorkItemEditService`` directly — the
 ``DELETE /chunks/{id}`` route itself is covered over HTTP by
 ``tests/component/hub/api/test_chunks_delete.py``."""
 

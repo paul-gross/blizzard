@@ -58,7 +58,8 @@ class AuthStateRepository:
 
     def consume(self, state: str) -> AuthStateEntry | None:
         # DELETE ... RETURNING keeps the delete atomic with the read (pinned by
-        # tests/test_auth_repositories.py::test_auth_state_consume_is_single_use_under_concurrent_callers).
+        # tests/component/hub/auth/internal/test_repositories.py
+        # ::test_auth_state_consume_is_single_use_under_concurrent_callers).
         with self._store.write("consume") as conn:
             row = conn.execute(
                 delete(s.auth_state).where(s.auth_state.c.state == state).returning(*s.auth_state.c)

@@ -3,7 +3,7 @@
 At most one ready entry, the first the calling principal can both work (capability
 eligibility) and claim (not dependency-blocked), with the request's hold-or-pass-over
 policy applied to both. The legacy ``GET`` is untouched (covered by
-``tests/test_fleet_auth.py``), so this file only proves the new verb."""
+``tests/component/hub/api/test_fleet_auth_partition.py``), so this file only proves the new verb."""
 
 from __future__ import annotations
 
