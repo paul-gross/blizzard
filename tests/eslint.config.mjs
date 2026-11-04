@@ -2,8 +2,9 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 // The bans a service spec keeps (blizzard-context's service-test rules): the built-in `request` fixture, the clock,
-// raw `fetch`, state set up in `beforeAll`, and any harness module but the fixtures. Static analysis sees these; the
-// rest of the rules are the tier's to hold by review and the cross-check.
+// raw `fetch`, a read of the machine's clock (`Date.now`, a bare `new Date()`), state set up in `beforeAll`, and any
+// harness module but the fixtures. Static analysis sees these; the rest of the rules are the tier's to hold by review
+// and the cross-check.
 const noRequestFixture = {
   selector: "ObjectPattern > Property[key.name='request']",
   message: "Use the harness clients (api, fleet, forge); Playwright's built-in `request` reaches no tenant.",
@@ -15,6 +16,14 @@ const noWaitForTimeout = {
 const noSharedHooks = {
   selector: "CallExpression[callee.object.name='test'][callee.property.name=/^(beforeAll|afterAll)$/]",
   message: 'Shared state across a file belongs in a fixture.',
+};
+const noMachineNow = {
+  selector: "MemberExpression[object.name='Date'][property.name='now']",
+  message: 'Read an instant from clock.now(). A spec whose subject is real elapsed time disables this line, stating why.',
+};
+const noMachineDate = {
+  selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+  message: 'Read an instant from clock.now(). A spec whose subject is real elapsed time disables this line, stating why.',
 };
 const noFetch = { name: 'fetch', message: 'Every call goes through a harness client.' };
 const noSetTimeout = { name: 'setTimeout', message: 'Wait on an event or a state the test can read, never on the clock.' };
@@ -89,6 +98,14 @@ export default tseslint.config(
     rules: {
       'no-restricted-globals': ['error', noFetch, noSetTimeout, noSetInterval],
       ...restrictedImports(sharedPaths, noRunnerTest),
+    },
+  },
+  {
+    // A later block replaces an earlier block's options for the same rule, so the bans restate.
+    files: ['service/**/*.spec.ts', 'ui/**/*.spec.ts'],
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
+    rules: {
+      'no-restricted-syntax': ['error', noRequestFixture, noWaitForTimeout, noSharedHooks, noMachineNow, noMachineDate],
     },
   },
   {

@@ -196,12 +196,12 @@ test.describe('delivery and tenant-wide findings', () => {
     expect((await read_back(g, flagged)).state).toBe('live');
   });
 
-  test('test_the_trend_is_served_over_http_and_through_the_real_cli', async ({ api, forge, repository, mockRunner, cli }) => {
+  test('test_the_trend_is_served_over_http_and_through_the_real_cli', async ({ api, clock, forge, repository, mockRunner, cli }) => {
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
     const g = await garden(api, await mockRunner('garden'), repo, commit.body.sha);
-    const t0 = new Date();
+    const t0 = clock.now();
     const shift = (days: number) => new Date(t0.getTime() + days * 86400000);
     const local = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
       + `T${[date.getHours(), date.getMinutes(), date.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')}`;
@@ -242,12 +242,12 @@ test.describe('delivery and tenant-wide findings', () => {
     expect((await api.get('/api/routines/trend', { params: { ...params, period_days: 0 } })).status).toBe(422);
   });
 
-  test('test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series', async ({ api, forge, repository, mockRunner, cli }) => {
+  test('test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series', async ({ api, clock, forge, repository, mockRunner, cli }) => {
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
     const g = await garden(api, await mockRunner('garden'), repo, commit.body.sha);
-    const t0 = new Date();
+    const t0 = clock.now();
     const shifted = (days: number) => new Date(t0.getTime() + days * 86400000);
     const local = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
       + `T${[date.getHours(), date.getMinutes(), date.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')}`;
@@ -353,16 +353,16 @@ test.describe('delivery and tenant-wide findings', () => {
 test.describe('routine and scope membership', () => {
   test.use({ isolation: 'common' });
 
-  test('test_sweeps_404s_on_an_unknown_routine_id', async ({ api }, testInfo) => {
-    const t0 = new Date();
+  test('test_sweeps_404s_on_an_unknown_routine_id', async ({ api, clock }, testInfo) => {
+    const t0 = clock.now();
     const response = await api.get(`/api/routines/rtn_ghost_${testInfo.workerIndex}/sweeps`, {
       params: { since: new Date(t0.getTime() - 86400000).toISOString(), until: new Date(t0.getTime() + 86400000).toISOString() },
     });
     expect(response.status).toBe(404);
   });
 
-  test('test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact', async ({ api }, testInfo) => {
-    const unique = `${testInfo.workerIndex}-${Date.now()}`;
+  test('test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact', async ({ api, clock }, testInfo) => {
+    const unique = `${testInfo.workerIndex}-${clock.now().getTime()}`;
     const slug = `garden-svc-retired-linked-${unique}`;
     const name = `garden-service-linked-${unique}`;
     expect((await api.post('/api/scopes', { data: { slug, description: '' } })).status).toBe(201);

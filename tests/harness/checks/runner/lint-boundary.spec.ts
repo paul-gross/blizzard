@@ -65,3 +65,24 @@ test('test is refused inside the runner folder, and expect is not', async () => 
   expect(await messages('service/hub/x.spec.ts', text)).toEqual([]);
   expect(await messages('service/runner/x.spec.ts', `import { expect, runnerTest } from '../../harness/fixtures';\nvoid expect;\nvoid runnerTest;`)).toEqual([]);
 });
+
+const CLOCK_FOLDERS = [...FOLDERS, 'service/runner/store/x.spec.ts', 'ui/x.spec.ts'];
+
+for (const folder of CLOCK_FOLDERS) {
+  test(`the machine's clock is refused in ${path.dirname(folder)}, and a converted instant is not`, async () => {
+    for (const text of [`const at = Date.now();\nvoid at;`, `const now = Date.now;\nvoid now;`, `const at = new Date();\nvoid at;`]) {
+      expect((await messages(folder, text)).join('\n'), text).toMatch(/Read an instant from clock\.now\(\)/);
+    }
+    expect(await messages(folder, `const at = new Date(0);\nvoid at;`)).toEqual([]);
+  });
+
+  test(`noRequestFixture, noWaitForTimeout, and noSharedHooks are still refused in ${path.dirname(folder)}`, async () => {
+    expect((await messages(folder, `import { test } from '../../harness/fixtures';\ntest('x', async ({ request }) => void request);`)).join('\n')).toMatch(/harness clients/);
+    expect((await messages(folder, `async function f(page: { waitForTimeout(n: number): void }) { page.waitForTimeout(1); }\nvoid f;`)).join('\n')).toMatch(/never on the clock/);
+    expect((await messages(folder, `import { test } from '../../harness/fixtures';\ntest.beforeAll(() => undefined);`)).join('\n')).toMatch(/belongs in a fixture/);
+  });
+}
+
+test('the machine\'s clock stays open to a journey spec', async () => {
+  expect(await messages('journey/x.spec.ts', `const at = Date.now();\nvoid at;`)).toEqual([]);
+});

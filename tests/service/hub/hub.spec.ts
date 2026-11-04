@@ -115,7 +115,7 @@ const RED_CHECK = [{ command: 'mise run test', passed: false }];
 const GREEN_CHECK = [{ command: 'mise run test', passed: true }];
 
 /** A whole-second UTC instant, the form the hub echoes back unchanged. */
-const wholeSecondNow = (): string => new Date(Math.floor(Date.now() / 1000) * 1000).toISOString().replace('.000Z', '+00:00');
+const wholeSecondNow = (clock: { now(): Date }): string => new Date(Math.floor(clock.now().getTime() / 1000) * 1000).toISOString().replace('.000Z', '+00:00');
 
 const ROSTER = [{ slug: 'probe', name: 'Probe', provider: 'none-such' }];
 const PROBE_ROW = { slug: 'probe', name: 'Probe', sampled_at: null, windows: [], condition: null, miss_reason: null, missed_at: null };
@@ -229,8 +229,8 @@ test.describe('on a fresh tenant', () => {
     expect(view.locally_paused).toBe(false);
   });
 
-  test('test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string_slug', async ({ api, mockRunner }) => {
-    const sampledAt = wholeSecondNow();
+  test('test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string_slug', async ({ api, clock, mockRunner }) => {
+    const sampledAt = wholeSecondNow(clock);
     const runner = await mockRunner('runner-subscriptions');
     await runner.drive('register');
     const valid = await runner.drive('report-external-usage', { slug: 'openai', name: 'OpenAI', sampled_at: sampledAt, windows: [] });
@@ -245,8 +245,8 @@ test.describe('on a fresh tenant', () => {
     ]);
   });
 
-  test('test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_wire', async ({ api, mockRunner }) => {
-    const missedAt = wholeSecondNow();
+  test('test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_wire', async ({ api, clock, mockRunner }) => {
+    const missedAt = wholeSecondNow(clock);
     const runner = await mockRunner('runner-lapsed');
     await runner.drive('register');
     const driven = await runner.drive('report-external-usage-miss', { slug: 'openai', name: 'OpenAI', missed_at: missedAt, reason: 'credential_lapsed' });
@@ -390,9 +390,11 @@ test.describe('on a fresh hub', () => {
   test('test_sigterm_returns_promptly_with_a_client_parked_on_the_stream', async ({ events, freshHub }) => {
     await events.open(); // returns once the reserved comment has arrived: the subscriber is live
 
+    // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
     const started = Date.now();
     await freshHub.stop();
 
+    // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
     expect(Date.now() - started, 'the hub took 2s or more to exit with a client parked on the stream').toBeLessThan(2000);
   });
 });

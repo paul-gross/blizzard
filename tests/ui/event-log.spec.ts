@@ -139,7 +139,7 @@ test.describe('on a fresh tenant', () => {
     expect(noOverflow, 'the page gained horizontal scroll at a narrow viewport').toBe(true);
   });
 
-  test('test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload', async ({ page, api, issue, mockRunner, bearer }) => {
+  test('test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload', async ({ page, api, clock, issue, mockRunner, bearer }) => {
     const railMessages = (): Promise<string[]> => page.getByTestId('activity-message').allTextContents();
     expect((await api.post('/api/graphs', { data: { definition_yaml: GRAPH } })).status).toBe(201);
     const { chunk } = await issue('activity burst');
@@ -205,7 +205,7 @@ test.describe('on a fresh tenant', () => {
               epoch: 2,
               question: 'Which path?',
               options: ['a', 'b'],
-              asked_at: new Date().toISOString(),
+              asked_at: clock.now().toISOString(),
             },
           },
         ],

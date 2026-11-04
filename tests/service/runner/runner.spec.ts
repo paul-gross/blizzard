@@ -523,9 +523,11 @@ test('test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream', 
   await expect.poll(async () => (await host.runners[RUNNER]!.status()).body.last_tick_at, { timeout: 30_000 }).not.toBeNull();
   const parked = await runnerStream(host.url, { reconnect: false });
 
+  // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   const started = Date.now();
   const exit = await host.stop();
   // Inside uvicorn's own 5s graceful-drain bound, and an exit rather than the fixture's kill.
+  // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   expect(Date.now() - started).toBeLessThan(2_000);
   expect(typeof exit).toBe('number');
   await parked.waitForEnd();
@@ -554,8 +556,10 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
     previous = await tickAt();
   }
 
+  // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   const started = Date.now();
   const exit = await host.stop();
+  // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   expect(Date.now() - started).toBeLessThan(20_000);
   expect(typeof exit).toBe('number');
   expect(host.log()).toContain('lease trace sweep still running at shutdown');
