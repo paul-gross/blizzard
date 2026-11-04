@@ -63,6 +63,8 @@ export function hubApi(options: {
   level: Level;
   ledger: Ledger;
   logContext: LogContext;
+  /** Awaited before each request: re-signs the session of this client's holder when the controlled clock has passed its window. */
+  beforeRequest?: () => Promise<void>;
 }): HubApi {
   const engine: Engine = {
     context: options.context,
@@ -70,6 +72,7 @@ export function hubApi(options: {
     headers: options.tenantId === undefined ? {} : { 'X-Blizzard-Tenant': options.tenantId },
     ledger: options.ledger,
     logContext: options.logContext,
+    beforeRequest: options.beforeRequest,
   };
   return {
     ...verbs(engine, options.narrow),
@@ -110,6 +113,8 @@ export function mockRunnerApi(options: { context: APIRequestContext; testInfo: T
   drive: <V extends string>(verb: V, body?: unknown) => Promise<ApiResponse<MockDriveAnswer<V>>>;
   lever: (kind: string, body?: unknown) => Promise<ApiResponse>;
   levers: () => Promise<ApiResponse<MockRunnerLeverListing>>;
+  /** `GET /_clock`: where the mock runner's controlled clock stands; `404` on a runner not started controlled. */
+  clock: () => Promise<ApiResponse>;
 } {
   const engine: Engine = {
     context: options.context,
@@ -122,6 +127,7 @@ export function mockRunnerApi(options: { context: APIRequestContext; testInfo: T
     drive: (verb, body) => send(engine, 'POST', `${options.url}/_drive/${verb}`, { data: body }, false),
     lever: (kind, body) => send(engine, 'POST', `${options.url}/_levers/${kind}`, { data: body ?? {} }, false),
     levers: () => send(engine, 'GET', `${options.url}/_levers`, {}, false),
+    clock: () => send(engine, 'GET', `${options.url}/_clock`, {}, false),
   };
 }
 

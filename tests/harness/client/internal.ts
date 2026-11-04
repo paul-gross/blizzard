@@ -11,14 +11,22 @@ export class HubInternal {
   constructor(
     readonly baseUrl: string,
     private readonly record?: CallRecorder,
-    /** The superuser's `bz_session` value, on a hub with authentication on. */
-    private readonly session?: string,
+    /**
+     * The superuser's `bz_session` value, on a hub with authentication on; a function reads it before each request, so a
+     * session the harness signed in again is the one sent.
+     */
+    private readonly session?: string | (() => Promise<string | undefined>),
   ) {}
+
+  private async sessionValue(): Promise<string | undefined> {
+    return typeof this.session === 'function' ? this.session() : this.session;
+  }
 
   async call<T>(method: string, route: string, options: { tenant?: string; body?: unknown } = {}): Promise<T> {
     const headers: Record<string, string> = {};
     if (options.tenant !== undefined) headers['X-Blizzard-Tenant'] = options.tenant;
-    if (this.session !== undefined) headers.cookie = `bz_session=${this.session}`;
+    const session = await this.sessionValue();
+    if (session !== undefined) headers.cookie = `bz_session=${session}`;
     if (options.body !== undefined) headers['content-type'] = 'application/json';
     const send = (): Promise<Response> =>
       fetch(`${this.baseUrl}${route}`, {
@@ -48,7 +56,8 @@ export class HubInternal {
 
   /** A raw answer, for the checks that assert on a refusal rather than a success. */
   async probe(method: string, route: string, headers: Record<string, string> = {}): Promise<{ status: number; body: unknown }> {
-    if (this.session !== undefined) headers = { ...headers, cookie: `bz_session=${this.session}` };
+    const session = await this.sessionValue();
+    if (session !== undefined) headers = { ...headers, cookie: `bz_session=${session}` };
     const response = await fetch(`${this.baseUrl}${route}`, { method, headers });
     const text = await response.text();
     let body: unknown = text;

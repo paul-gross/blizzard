@@ -4,6 +4,8 @@ import type { APIRequestContext, PlaywrightWorkerArgs, TestInfo } from '@playwri
 import { WORKERS_PER_HUB } from '../playwright.config';
 import { signInSuperuser, type Superuser } from './auth';
 import { base, uniqueName } from './base';
+import { clockEnv, type ClockMode, ClockStack, type Membership, RANK, type SessionHolder } from './clock-stack';
+import { hubClock, mockClock } from './client/clock';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, recorderFor } from './client/latency';
 import { hostHub, initHub } from './daemons/hub';
@@ -14,7 +16,7 @@ import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
 import { profileProject } from './projects';
 import { parse, stringify } from 'smol-toml';
-import { checkProfile, discoverProfiles, expandProfile, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
+import { checkProfile, checkStepped, discoverProfiles, expandProfile, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
 
 export { profileProject };
 
@@ -55,8 +57,21 @@ export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: R
   for (const name of Object.keys(hubEnv)) {
     if (contractSet.includes(name)) problems.push(`hubEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`);
     if (ownedByProfile.includes(name)) problems.push(`hubEnv ${name}: a hub profile sets it (harness/profiles.ts), so a test cannot change it`);
+    if (name === 'BLIZZARD_CLOCK') problems.push(`hubEnv ${name}: the fixture sets it from clockMode, so a test cannot change it`);
   }
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
+}
+
+/**
+ * A controlled stack needs a hub of the test's own, and pairs with the hub's controlled step, not its flow-step control,
+ * which the hub refuses to boot beside it. Throws before any daemon starts, naming the options.
+ */
+export function requireClockOptions(clockMode: ClockMode, served: Level, flowStepped: boolean): void {
+  if (clockMode !== 'controlled') return;
+  if (served !== 'fresh-hub') {
+    throw new Error(`clockMode "controlled" moves every clock of the hub's stack, and this test is served "${served}". Declare isolation "fresh-hub".`);
+  }
+  if (flowStepped) throw new Error('flowStepped and clockMode "controlled" cannot both be set: the controlled hub steps the flow driver itself (api.flowStep()). Drop one of the options.');
 }
 
 /** Whether a level shares its tenant with other tests, so reads are narrowed to what the test made. */
@@ -100,7 +115,8 @@ export interface FreshHub {
    * `overlay`, the hub's file first takes it, merged over what the file holds and checked as `hubConfig` is: the same
    * record under a changed configuration. Throws naming every problem, changing nothing, when the overlay is unsound.
    * An `egress.directory` the overlay names is made if it is not there. A flow-stepped hub cannot restart: its
-   * virtual clock would be lost. Use reset() to start with empty data and a new clock instead.
+   * virtual clock would be lost. Use reset() to start with empty data and a new clock instead. A controlled hub
+   * rejoins its stack, which sets it forward to the stack's instant before this resolves.
    */
   start(overlay?: TomlTable): Promise<HubCoordinates>;
   /**
@@ -126,6 +142,11 @@ export interface TestHub {
    * the setup project recorded; a fresh hub's is a walk made on first demand, in `context`, and remembered.
    */
   superuser(): Promise<Superuser | undefined>;
+  /**
+   * Signs the superuser in again when a move of a controlled stack has taken the clock past the session's window; a
+   * no-op on a stack on the system clock. `suspendSessionRefresh()` skips it once.
+   */
+  refreshSession(): Promise<void>;
   /** Whether the hub was started for this test alone. */
   fresh: boolean;
   /** A fresh hub's lifecycle; absent on a shared hub. */
@@ -177,15 +198,24 @@ export interface TestFixtures {
 }
 
 /** Merges `overlay` over a stopped hub's file, expanded as `hubConfig` is; throws before writing when it is unsound. */
-function applyOverlay(dir: string, coordinates: HubCoordinates, overlay: TomlTable): void {
+function applyOverlay(dir: string, coordinates: HubCoordinates, overlay: TomlTable, controlled: boolean): void {
   const problems = checkProfile(overlay, { placeholders: [...HUB_CONFIG_PLACEHOLDERS] }).map((problem) => `overlay ${problem}`);
   if (problems.length > 0) throw new Error(`the hub overlay is unsound:\n${problems.join('\n')}`);
   const expanded = expandProfile(overlay, { idp: coordinates.idpUrl, forge: coordinates.forgeUrl, egress: coordinates.egressPath });
   const configPath = path.join(dir, 'hub', 'blizzard-hub.toml');
   const merged = mergeProfile(parse(fs.readFileSync(configPath, 'utf8')) as TomlTable, expanded);
+  if (controlled) requireSteppedHub(merged, 'the hub overlay');
   const directory = (merged.egress as TomlTable | undefined)?.directory;
   if (typeof directory === 'string') fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(configPath, stringify(merged));
+}
+
+/** A controlled stack pairs only with stepped daemons: a sweep on a timer would run a pass part-way through a move. */
+export function requireSteppedHub(profile: TomlTable, what: string): void {
+  const problems = checkStepped(profile);
+  if (problems.length > 0) {
+    throw new Error(`clockMode "controlled" pairs only with stepped daemons, and ${what} is not:\n${problems.join('\n')}\nSet the sweep to "stepped", or declare clockMode "system".`);
+  }
 }
 
 /**
@@ -198,23 +228,74 @@ async function startFreshTestHub(options: {
   hubEnv: Record<string, string>;
   coldInit: boolean;
   testInfo: TestInfo;
+  clock: ClockStack;
 }): Promise<{ value: TestHub; dispose: () => Promise<void> }> {
-  const { playwright, hubConfig, hubEnv, coldInit, testInfo } = options;
+  const { playwright, hubConfig, hubEnv, coldInit, testInfo, clock } = options;
   const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
   const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
   const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
   // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
-  const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
-  const stack = await startStack(dir, 0, profile, env, coldInit);
+  const controlled = clock.controlled;
+  if (controlled) requireSteppedHub(profile, "the fresh hub's profile merged with hubConfig");
+  const env = { ...hubEnv, ...profileEnv(folder?.name ?? ''), ...clockEnv(controlled) };
+  const stack = await startStack(dir, 0, profile, env, coldInit, clockEnv(controlled));
   const { coordinates } = stack;
   let hubProcess = stack.hub;
+  // The superuser's session, kept alive past the hub's idle window on a controlled stack.
+  const context = await playwright.request.newContext({ baseURL: coordinates.url });
+  let current: Superuser | undefined;
+  let first: Promise<Superuser | undefined> | undefined;
+  const holder: SessionHolder = {
+    signedInAt: undefined,
+    resign: async () => {
+      current = await signInSuperuser(coordinates, context);
+      holder.signedInAt = await clock.hubReading();
+    },
+  };
+  // A hub with authentication off has no session to keep alive.
+  const registration = coordinates.auth === undefined ? { refresh: async () => undefined, release: () => undefined } : clock.register(holder);
+  const signedIn = (): Promise<Superuser | undefined> =>
+    (first ??= coordinates.auth === undefined
+      ? Promise.resolve(undefined)
+      : signInSuperuser(coordinates, context).then(async (user) => {
+          current = user;
+          holder.signedInAt ??= await clock.hubReading();
+          return user;
+        }));
+  let hubMembership: Membership | undefined;
+  let forgeMembership: Membership | undefined;
+  const leaveHub = (): void => {
+    hubMembership?.leave();
+    hubMembership = undefined;
+  };
+  const joinHub = async (): Promise<void> => {
+    if (!controlled) return;
+    // The hub's clock route needs the superuser on a hub with authentication on, so it signs in before the hub joins.
+    await signedIn();
+    hubMembership = await clock.join({
+      name: 'the hub',
+      rank: RANK.hub,
+      client: hubClock(coordinates.url, async () => {
+        // The stack's own move always refreshes: a later `advance` never fails with a 401.
+        await registration.refresh({ force: true });
+        return current?.session;
+      }),
+      joined: (reading) => {
+        holder.signedInAt ??= reading;
+      },
+    });
+  };
   const control: FreshHubControl = {
     current: () => hubProcess,
     get pid() {
       return hubProcess.pid;
     },
-    stop: () => stopLive(hubProcess),
+    stop: () => {
+      leaveHub();
+      return stopLive(hubProcess);
+    },
     kill: async () => {
+      leaveHub();
       await killLive(hubProcess);
     },
     start: async (overlay) => {
@@ -222,8 +303,9 @@ async function startFreshTestHub(options: {
       if (env.BLIZZARD_TEST_FLOW_STEP === '1' && env.BLIZZARD_CRASH_FENCE === '1') {
         throw new Error('a flow-stepped fresh hub cannot restart: its virtual clock would be lost; use reset() for empty data');
       }
-      if (overlay !== undefined) applyOverlay(dir, coordinates, overlay);
+      if (overlay !== undefined) applyOverlay(dir, coordinates, overlay, controlled);
       hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
+      await joinHub();
       return coordinates;
     },
     reset: async () => {
@@ -231,21 +313,44 @@ async function startFreshTestHub(options: {
       fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
       await initHub(dir, stack.profile);
       hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
+      // New data holds none of the old sessions: the superuser signs in anew, and claims the bootstrap again.
+      first = undefined;
+      current = undefined;
+      holder.signedInAt = undefined;
+      await joinHub();
       return coordinates;
     },
   };
-  const context = await playwright.request.newContext({ baseURL: coordinates.url });
-  let superuser: Promise<Superuser | undefined> | undefined;
+  try {
+    await joinHub();
+    if (controlled) forgeMembership = await clock.join({ name: 'the mock forge', rank: RANK.daemon, client: mockClock(coordinates.forgeUrl) });
+  } catch (error) {
+    leaveHub();
+    forgeMembership?.leave();
+    registration.release();
+    await context.dispose();
+    await stopDaemon(control.current());
+    await Promise.all(coordinates.daemons.slice(1).map(stopDaemon));
+    throw error;
+  }
   return {
     value: {
       coordinates,
       context,
-      superuser: () => (superuser ??= coordinates.auth === undefined ? Promise.resolve(undefined) : signInSuperuser(coordinates, context)),
+      superuser: async () => {
+        const user = await signedIn();
+        await registration.refresh();
+        return current ?? user;
+      },
+      refreshSession: () => registration.refresh(),
       fresh: true,
       lifecycle: control,
       logTail: () => hubLog({ logPath: coordinates.logPath, tenantId: '', fresh: true }).tail(),
     },
     dispose: async () => {
+      leaveHub();
+      forgeMembership?.leave();
+      registration.release();
       await context.dispose();
       // The hub's process now, not the one the stack started: a `start()` replaced it.
       await stopDaemon(control.current());
@@ -299,16 +404,17 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
   hubEnv: [{}, { option: true }],
   flowStepped: [false, { option: true }],
 
-  level: async ({ isolation, hubConfig, hubEnv, flowStepped }, use, testInfo) => {
+  level: async ({ isolation, hubConfig, hubEnv, flowStepped, clockMode }, use, testInfo) => {
     const level = resolveLevel(isolation, process.env.BLIZZARD_ISOLATION_RAISE === '1');
     requireHubOptions(level.served, hubConfig, hubEnv);
     if (flowStepped && level.served !== 'fresh-hub') throw new Error('flowStepped requires isolation "fresh-hub"');
+    requireClockOptions(clockMode, level.served, flowStepped);
     // The cross-check names a test by the level it declared, which the report carries only through this.
     testInfo.annotations.push({ type: 'isolation-level', description: level.declared });
     await use(level);
   },
 
-  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, coldInit, flowStepped, held, heldStacks }, use, testInfo) => {
+  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, coldInit, flowStepped, held, heldStacks, clockStack }, use, testInfo) => {
     if (level.served !== 'fresh-hub') {
       if (held !== undefined) throw new Error(`held names a stack of the block's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
       const coordinates = hub.coordinates();
@@ -322,13 +428,14 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
           }
           return { session: coordinates.auth.session, userId: coordinates.auth.userId };
         },
+        refreshSession: async () => undefined,
         fresh: false,
         logTail: (tenantId) => hubLog({ logPath: coordinates.logPath, tenantId: tenantId ?? '', fresh: false }).tail(),
       });
       return;
     }
     const env = flowStepped ? { ...hubEnv, BLIZZARD_TEST_FLOW_STEP: '1', BLIZZARD_CRASH_FENCE: '1' } : hubEnv;
-    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv: env, coldInit, testInfo });
+    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv: env, coldInit, testInfo, clock: clockStack });
     if (held !== undefined) {
       await use(await heldStacks.acquire(`hub:${held}`, open));
       return;
@@ -365,7 +472,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
         tenant = { id: created.tenant_id, name: created.name };
       } else {
         // The fresh hub's seeded tenant, the only one open.
-        const admin = new HubInternal(testHub.coordinates.url, undefined, (await testHub.superuser())?.session);
+        const admin = new HubInternal(testHub.coordinates.url, undefined, async () => (await testHub.superuser())?.session);
         const open = (await admin.listTenants()).filter((candidate) => candidate.state === 'open');
         const [seeded] = open;
         if (open.length !== 1 || seeded === undefined) throw new Error(`a fresh hub should hold one open tenant, not ${open.length}`);

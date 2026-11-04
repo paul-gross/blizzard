@@ -89,11 +89,11 @@ export interface HubStack {
 /**
  * A hub, a mock forge, and a stub IdP of its own. The forge and IdP start first, so the profile's `${forge}` and
  * `${idp}` expand to their URLs before the hub's file is written, and `${egress}` to the stack's export directory;
- * `hubEnv` reaches the hub process only. The hub restores the per-run `init` template unless `cold` asks for a real
+ * `hubEnv` reaches the hub process only, and `forgeEnv` the forge's; the IdP has no controlled clock and gets neither. The hub restores the per-run `init` template unless `cold` asks for a real
  * `blizzard-hub init`.
  */
-export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}, cold = false): Promise<HubStack> {
-  const beside = await Promise.allSettled([startForge(dir), startIdp(dir)]);
+export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}, cold = false, forgeEnv: Record<string, string> = {}): Promise<HubStack> {
+  const beside = await Promise.allSettled([startForge(dir, forgeEnv), startIdp(dir)]);
   const running = beside.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
   const failure = beside.find((outcome) => outcome.status === 'rejected');
   if (failure !== undefined) {

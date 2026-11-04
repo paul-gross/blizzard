@@ -110,6 +110,8 @@ export default tseslint.config(
   {
     files: [
       'harness/base.ts',
+      'harness/clock-stack.ts',
+      'harness/client/clock.ts',
       'harness/mock-world.ts',
       'harness/auth-stub.ts',
       'harness/daemons/mock-hub.ts',

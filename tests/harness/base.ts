@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import { test as playwrightTest, type TestInfo } from '@playwright/test';
+import { type Clock, ClockStack, type ClockMode } from './clock-stack';
 import { LATENCY_ATTACHMENT, recordsOf } from './client/latency';
 import { Ledger } from './client/ledger';
 import { type OtlpSink, startOtlpSink } from './otlp-sink';
@@ -81,6 +82,16 @@ interface BaseFixtures {
    * the harness built with the same CLIs; for a spec whose subject is what `init` produces.
    */
   coldInit: boolean;
+  /**
+   * `'controlled'` runs every daemon the test's stack starts on a controlled clock, aligned to one instant, which the
+   * `clock` fixture moves; `'system'` (the default) leaves every daemon on the machine's time. It is not called `clock`
+   * because a Playwright option set by `test.use` replaces the fixture of the same name.
+   */
+  clockMode: ClockMode;
+  /** Internal: the record behind `clock` that every daemon of the stack joins; a held block's tests share one. */
+  clockStack: ClockStack;
+  /** The one source of an instant for every spec, whatever the mode; `advance` and `set` move a controlled stack. */
+  clock: Clock;
   ledger: Ledger;
   attachLatency: void;
   /** Starts a loopback OTLP/HTTP receiver, closed when the test ends. */
@@ -104,6 +115,25 @@ export const base = playwrightTest.extend<BaseFixtures, WorkerFixtures>({
   held: [undefined, { option: true }],
 
   coldInit: [false, { option: true }],
+
+  clockMode: ['system', { option: true }],
+
+  clockStack: async ({ clockMode, held, heldStacks }, use) => {
+    if (held === undefined) {
+      await use(new ClockStack(clockMode));
+      return;
+    }
+    await use(await heldStacks.acquire(`clock:${held}`, async () => ({ value: new ClockStack(clockMode), dispose: async () => undefined })));
+  },
+
+  clock: async ({ clockStack }, use) => {
+    await use({
+      now: () => clockStack.now(),
+      advance: (seconds) => clockStack.advance(seconds),
+      set: (instant) => clockStack.set(instant),
+      suspendSessionRefresh: () => clockStack.suspendSessionRefresh(),
+    });
+  },
 
   once: async ({ held, heldStacks }, use) => {
     await use((name, produce) => {

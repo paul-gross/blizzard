@@ -7,6 +7,7 @@ import pytest
 
 from blizzard.cli.config_inputs import STRICT_CONFIG_ENVIRONMENT_VARIABLE
 from blizzard.foundation import crash
+from blizzard.foundation.clock import ENV_CLOCK, ENV_CLOCK_FENCE
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
 from blizzard.hub.cli.context import ENV_HUB_TENANT
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
@@ -45,3 +46,8 @@ def test_hub_coordinates_are_unset_and_the_token_prefix_is_stripped() -> None:
 
 def test_the_crash_point_is_unset_so_no_ambient_arming_reaches_a_daemon() -> None:
     assert crash.ENV_CRASH_POINT in DAEMON_ENV["unset"]
+
+
+def test_the_clock_fence_is_set_and_an_ambient_controlled_clock_is_unset() -> None:
+    assert DAEMON_ENV["set"][ENV_CLOCK_FENCE] == "1"
+    assert ENV_CLOCK in DAEMON_ENV["unset"]

@@ -4,6 +4,7 @@
     "BLIZZARD_RUNNER_GUARD": "1",
     "BLIZZARD_STRICT_CONFIG": "1",
     "BZ_LOG_FORMAT": "json",
+    "BLIZZARD_CLOCK_FENCE": "1",
     "GIT_CONFIG_COUNT": "2",
     "GIT_CONFIG_KEY_0": "commit.gpgsign",
     "GIT_CONFIG_VALUE_0": "false",
@@ -28,7 +29,8 @@
     "BLIZZARD_RUNNER_ASK_CMD",
     "BLIZZARD_ELICITATION",
     "BLIZZARD_TMPDIR",
-    "BLIZZARD_CRASH_POINT"
+    "BLIZZARD_CRASH_POINT",
+    "BLIZZARD_CLOCK"
   ],
   "unsetPrefixes": ["OTEL_", "BZ_HUB_TOKEN"],
   "isolatedConfigHome": true,

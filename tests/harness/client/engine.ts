@@ -46,6 +46,8 @@ export interface Engine {
   logContext: LogContext;
   /** What the log is of, in its attachment's name: the hub's unless a client of another process says otherwise. */
   logName?: string;
+  /** Awaited before each request is sent: the harness signs a session in again here once a controlled clock has passed its window. */
+  beforeRequest?: () => Promise<void>;
 }
 
 /** The route as recorded: no query, and no origin on a call that names its full URL. */
@@ -54,6 +56,7 @@ function recordedRoute(route: string): string {
 }
 
 export async function send(engine: Engine, method: string, route: string, options: CallOptions, narrow: boolean, expected?: number): Promise<ApiResponse> {
+  await engine.beforeRequest?.();
   const response = await timed(
     recorderFor(engine.testInfo),
     method,
