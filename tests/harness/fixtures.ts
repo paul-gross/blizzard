@@ -416,6 +416,7 @@ export { chunkProgress, holdingChunk, leaseProgress, runningLeaseWithWorker, SPA
 export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-worker';
 export type { VendorUsage } from './vendor-usage';
 export type { WorkerCheckpoint } from './worker-checkpoint';
+export type { Clock } from './clock-stack';
 export type { Viewport } from './ui';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';

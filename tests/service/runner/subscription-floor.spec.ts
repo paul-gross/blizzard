@@ -1,5 +1,5 @@
 import { expect, runnerTest as test } from '../../harness/fixtures';
-import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
+import type { Clock, MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // A usage limit holds every runner spending its subscription, and no other: one host, two subscriptions, two runners
 // spending the first and one the second. No runner's own brake engages; a turned-over sample opens the floor unaided, and
@@ -16,6 +16,7 @@ const C = 'runner-c';
 const RUNNERS = [A, B, C];
 const ENVIRONMENTS = Array.from({ length: 24 }, (_, index) => `e${index + 1}`);
 
+test.use({ clockMode: 'controlled' });
 test.setTimeout(240_000);
 
 /** A one-node chunk in `projectId` whose worker runs `prompt` and passes. */
@@ -46,22 +47,22 @@ function named(resetsAt: number): string {
   return `${clock} (UTC)`;
 }
 
-/** An instant `hours` ahead, aligned to the minute, in epoch seconds. */
-function minuteAhead(hours: number): number {
-  return Math.floor((Date.now() / 1000 + hours * 3_600) / 60) * 60;
+/** An instant `hours` ahead of the controlled clock, aligned to the minute, in epoch seconds. */
+function minuteAhead(clock: Clock, hours: number): number {
+  return Math.floor((clock.now().getTime() / 1000 + hours * 3_600) / 60) * 60;
 }
 
 /** One pass of every runner, in order. */
-async function pass(host: RunnerHost): Promise<void> {
-  for (const name of RUNNERS) expect((await host.step(name)).outcome).toBe('completed');
+async function pass(host: RunnerHost, runners: string[] = RUNNERS): Promise<void> {
+  for (const name of runners) expect((await host.step(name)).outcome).toBe('completed');
 }
 
 /** Passes of every runner until `read` reaches a state `reached` accepts, failing after `MAX_STEPS` with the last state. */
-async function passUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean): Promise<T> {
+async function passUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean, runners: string[] = RUNNERS): Promise<T> {
   let state = await read();
   for (let count = 0; !reached(state); count++) {
     if (count === MAX_STEPS) throw new Error(`not reached within ${MAX_STEPS} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
-    await pass(host);
+    await pass(host, runners);
     state = await read();
   }
   return state;
@@ -91,18 +92,18 @@ async function proceeded(host: RunnerHost, lease: { runner: string; chunk: strin
   return true;
 }
 
-async function expectUnbraked(host: RunnerHost): Promise<void> {
-  for (const name of RUNNERS) expect((await host.runners[name]!.status()).body.pause.local, name).toBe(false);
+async function expectUnbraked(host: RunnerHost, runners: string[] = RUNNERS): Promise<void> {
+  for (const name of runners) expect((await host.runners[name]!.status()).body.pause.local, name).toBe(false);
 }
 
-test('test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clear_opens_it', async ({ mockHub, runnerHosts, vendorUsage }, testInfo) => {
+test('test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clear_opens_it', async ({ mockHub, runnerHosts, vendorUsage, clock }, testInfo) => {
   const dir = testInfo.outputPath('vendor');
   const first = vendorUsage.mintAnthropic(dir);
   const second = vendorUsage.mintAnthropic(dir);
-  const reset = minuteAhead(2);
+  const reset = minuteAhead(clock, 2);
   const nextReset = reset + 5 * 3_600;
-  const weekly = { utilization: 30, resetsAt: minuteAhead(48) };
-  const quiet = { short: { utilization: 5, resetsAt: minuteAhead(3) }, long: { utilization: 5, resetsAt: minuteAhead(72) } };
+  const weekly = { utilization: 30, resetsAt: minuteAhead(clock, 48) };
+  const quiet = { short: { utilization: 5, resetsAt: minuteAhead(clock, 3) }, long: { utilization: 5, resetsAt: minuteAhead(clock, 72) } };
   vendorUsage.set(second.token, quiet);
   vendorUsage.set(first.token, { short: { utilization: 90, resetsAt: reset }, long: weekly });
 
@@ -194,4 +195,55 @@ test('test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_cl
   expect(floor).toMatchObject({ admits: true, hold: null, clear: { by: 'operator' } });
   await expectUnbraked(host);
   await passUntil(host, () => levers(mockHub, host, A), (seen) => seen.length === 0);
+});
+
+test('test_a_usage_limit_holds_its_subscription_s_runners_until_its_reset_opens_it', async ({ mockHub, runnerHosts, vendorUsage, clock }, testInfo) => {
+  const dir = testInfo.outputPath('vendor');
+  const sub = vendorUsage.mintAnthropic(dir);
+  const reset = minuteAhead(clock, 2);
+  const nextReset = reset + 5 * 3_600;
+  const weekly = { utilization: 30, resetsAt: minuteAhead(clock, 48) };
+  vendorUsage.set(sub.token, { short: { utilization: 90, resetsAt: reset }, long: weekly });
+
+  const project = (await mockHub.seed.project({ slug: 'p-a', name: 'p-a' })).body.project_id;
+  const host = await runnerHosts.create({
+    runnerConfig: {
+      workspace: [{ id: 'workspace-local', envs: ENVIRONMENTS, max_environments: BigInt(ENVIRONMENTS.length) }],
+      subscription: [{ slug: FIRST, name: 'First plan', provider: 'anthropic', credentials_path: sub.path, usage_api_base: '${usageBase}', sample_interval_seconds: 0n }],
+      runner: [{ name: A, subscription: FIRST, agents: 6n, projects: [{ project, workspace: 'workspace-local' }] }],
+    },
+  });
+  const only = [A];
+
+  // A sample placing the window whose reset the harness will name, before the limit.
+  expect((await host.stepHost()).outcome).toBe('completed');
+  const item = (await host.api.subscriptions()).body.items.find((entry) => entry.slug === FIRST);
+  expect(item?.ok).toBe(true);
+  const held = item?.windows.find((window) => Date.parse(window.resets_at) / 1000 === reset)?.window;
+  expect(held, 'the sample placed no window at the named reset').toBeDefined();
+
+  const limited = (await mockHub.seed.chunk(chunk(project, `usage_limited(resets_at="${named(reset)}")\n`))).body.chunk_id;
+  const mark = await passUntil(host, () => hold(host, A), (standing) => standing !== null, only);
+  const [limitedLease] = await leasesOf(host, A, limited);
+  expect(mark).toMatchObject({ kind: 'mark', window: held, lease_id: limitedLease!.lease_id });
+  const seeded = (await mockHub.seed.chunk(chunk(project))).body.chunk_id;
+
+  // One second before the reset, the counterpart still reporting the same period: the floor holds.
+  await clock.set(new Date((reset - 1) * 1000));
+  expect((await host.stepHost()).outcome).toBe('completed');
+  await passUntil(host, () => levers(mockHub, host, A), (seen) => seen.join() === 'floor', only);
+  await pass(host, only);
+  expect(await hold(host, A)).toMatchObject({ kind: 'mark', lease_id: limitedLease!.lease_id });
+  expect((await leasesOf(host, A, limited))[0]!.state).toBe('parked');
+  expect(await leasesOf(host, A, seeded)).toEqual([]);
+
+  // At the reset, the counterpart reports the next period: the floor admits and the parked lease carries on.
+  await clock.set(new Date(reset * 1000));
+  vendorUsage.set(sub.token, { short: { utilization: 20, resetsAt: nextReset }, long: { utilization: 30, resetsAt: nextReset + 48 * 3_600 } });
+  expect((await host.stepHost()).outcome).toBe('completed');
+  await passUntil(host, () => proceeded(host, { runner: A, chunk: limited }, [[A, seeded]]), Boolean, only);
+  await expectUnbraked(host, only);
+  expect(await hold(host, A)).toBeNull();
+  expect((await host.runners[A]!.status()).body.throttle?.floor.admits).toBe(true);
+  await passUntil(host, () => levers(mockHub, host, A), (seen) => seen.length === 0, only);
 });

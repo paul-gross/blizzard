@@ -1,5 +1,5 @@
 import { BILLED_ZERO_VAR, expect, PRICES, pricedChunk, pricedProfile, runnerTest as test, stepUntil } from '../../harness/fixtures';
-import type { RunnerHost, RunnerHosts } from '../../harness/fixtures';
+import type { Clock, RunnerHost, RunnerHosts } from '../../harness/fixtures';
 
 // A dollar budget throttles a runner below its ceiling: one stepped host, one runner spending a priced worker's estimate
 // and configuring a budget. A runner whose spend stands at its budget is declined, so the hub shows it declining on
@@ -10,12 +10,12 @@ const RUNNER = 'runner-local';
 // A priced worker turn estimates about $0.8, and a build spends two (spawn and judgement): both thresholds sit under that total, the budget the lower.
 const BUDGET_USD = 0.5;
 const CEILING_USD = 1;
-// Seconds the trailing window spans; spend ages out of it only by the clock, so the expiry is awaited on the runner's own read.
-const WINDOW_SECONDS = 30;
+// Seconds the trailing window spans; spend ages out of it only by the clock, which the test moves past it.
+const WINDOW_SECONDS = 3600;
 const WINDOW_HOURS = WINDOW_SECONDS / 3600;
 const PASSES = 600;
 
-test.setTimeout(180_000);
+test.use({ clockMode: 'controlled' });
 
 function pricedHost(runnerHosts: RunnerHosts, withCeiling: boolean) {
   return runnerHosts.create({
@@ -29,18 +29,16 @@ function pricedHost(runnerHosts: RunnerHosts, withCeiling: boolean) {
   });
 }
 
-/** Polls the runner's own throttle read until the budget lever admits: the spend has aged out of the window. */
-async function budgetAdmits(host: RunnerHost): Promise<void> {
+/** Moves the clock past the trailing window and reads the runner's own throttle once: the budget lever admits. */
+async function budgetAdmits(host: RunnerHost, clock: Clock): Promise<void> {
+  await clock.advance(WINDOW_SECONDS + 1);
+  await host.step();
   const runner = host.runners[RUNNER]!;
-  await expect
-    .poll(async () => (await runner.status()).body.throttle?.levers.find((lever) => lever.name === 'budget')?.admits, {
-      message: host.logTail(),
-      timeout: (WINDOW_SECONDS + 30) * 1000,
-    })
-    .toBe(true);
+  const lever = (await runner.status()).body.throttle?.levers.find((entry) => entry.name === 'budget');
+  expect(lever?.admits, host.logTail()).toBe(true);
 }
 
-test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on', async ({ mockHub, runnerHosts }) => {
+test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on', async ({ mockHub, runnerHosts, clock }) => {
   const host = await pricedHost(runnerHosts, false);
   const runner = host.runners[RUNNER]!;
   const fleet = mockHub.fleetOf(host, RUNNER);
@@ -59,6 +57,8 @@ test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on
     { stallPasses: PASSES },
   );
   await stepUntil(host, async () => (await runner.leaseUsage(spent!.lease_id)).body.items.length, (count) => count > 0, { stallPasses: PASSES });
+  // An hour's jump reaps a live worker as stalled, so the clock moves only once the spending lease has closed.
+  await stepUntil(host, async () => (await runner.leases()).body.items.find((item) => item.lease_id === spent!.lease_id)?.state, (state) => state === 'closed', { stallPasses: PASSES });
 
   // The spend stands inside the window: the runner is declined on the budget and mints no lease.
   const second = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
@@ -66,12 +66,12 @@ test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on
   expect((await runner.leases()).body.items.filter((item) => item.chunk_id === second)).toEqual([]);
 
   // The spend ages out of the window: the budget admits again and the runner carries on.
-  await budgetAdmits(host);
+  await budgetAdmits(host, clock);
   await stepUntil(host, async () => (await runner.leases()).body.items.some((item) => item.chunk_id === second), Boolean, { stallPasses: PASSES });
   await stepUntil(host, declining, (levers) => levers.length === 0, { stallPasses: PASSES });
 });
 
-test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped', async ({ mockHub, runnerHosts }) => {
+test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped', async ({ mockHub, runnerHosts, clock }) => {
   const host = await pricedHost(runnerHosts, true);
   const runner = host.runners[RUNNER]!;
   const leasesOf = async (node: string) => (await runner.leases()).body.items.filter((item) => item.node_name === node);
@@ -89,7 +89,7 @@ test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_trip
   expect(pause.local_reason).toContain('spend ceiling');
 
   // The spend ages out of the window, which would admit the budget again; the ceiling stays tripped.
-  await budgetAdmits(host);
+  await budgetAdmits(host, clock);
   await host.step();
   const status = (await runner.status()).body;
   expect(status.pause.local).toBe(true);
