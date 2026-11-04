@@ -1,7 +1,4 @@
-"""``blizzard hub tenant create|list|rename|delete`` — a hub administrator's verbs, against a real hub with sign-in on:
-create names its admin and records the CLI as the door of the tenant's default project, list shows a deletion
-underway, rename keeps the id, and delete asks first and answers each of the hub's outcomes — removed, underway,
-already deleted, and the only tenant refused."""
+"""Tenant list and delete render an underway deletion using stubbed hub responses."""
 
 from __future__ import annotations
 
