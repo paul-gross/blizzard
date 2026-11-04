@@ -12,11 +12,10 @@ export function startMockRunner(dir: string, options: { hubUrl: string; name: st
     name: `mock-runner-${options.name}`,
     cwd: dir,
     logPath: path.join(dir, `mock-runner-${options.name}.log`),
-    healthPath: '/api/health',
-    launch: (port) => ({
+    launch: (port, listeningFile) => ({
       command: binary,
       args: [
-        '--host', '127.0.0.1', '--port', String(port),
+        '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile,
         '--hub-url', options.hubUrl, '--name', options.name, '--token', options.token,
       ],
       env: daemonEnv({ BZ_HUB_URL: options.hubUrl }),

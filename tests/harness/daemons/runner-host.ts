@@ -1,32 +1,29 @@
 import * as path from 'node:path';
-import type { Launch } from './process';
 import { type LiveDaemon, startDaemon } from './process';
 
 /**
- * `blizzard-runner host --dir <dir> --loop <loop>` on the port the host file pins, its log appended to `logPath`. The
- * port is the host file's own, so a restart binds the address the first start did.
+ * `blizzard-runner host --dir <dir> --loop <loop>`, its log appended to `logPath`. Without a `port` it binds the one the
+ * host file names, `0` on a first boot; a restart pins the `port` the first boot published, so its URL holds.
  */
 export function startRunnerHost(options: {
   binary: string;
   dir: string;
-  port: number;
+  port?: number;
   loop: 'stepped' | 'timed';
   logPath: string;
   env: NodeJS.ProcessEnv;
 }): Promise<LiveDaemon> {
-  const launch = (): Launch => ({
-    command: options.binary,
-    args: ['host', '--dir', options.dir, '--loop', options.loop],
-    env: options.env,
-  });
   return startDaemon(
     {
       name: `runner-host-${path.basename(options.dir)}`,
       cwd: options.dir,
       logPath: options.logPath,
-      healthPath: '/api/health',
       group: true,
-      launch,
+      launch: (port, listeningFile) => ({
+        command: options.binary,
+        args: ['host', '--dir', options.dir, '--loop', options.loop, '--port', String(port), '--listening-file', listeningFile],
+        env: options.env,
+      }),
     },
     options.port,
   );

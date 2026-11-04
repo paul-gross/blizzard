@@ -14,10 +14,9 @@ export function startMockHub(dir: string, options: { port?: number; offerIdp?: b
       name: 'mock-hub',
       cwd: dir,
       logPath: path.join(dir, 'mock-hub.log'),
-      healthPath: '/api/health',
-      launch: (port) => ({
+      launch: (port, listeningFile) => ({
         command: binary,
-        args: ['--host', '127.0.0.1', '--port', String(port), ...(options.offerIdp === true ? ['--offer-idp'] : [])],
+        args: ['--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile, ...(options.offerIdp === true ? ['--offer-idp'] : [])],
         env: daemonEnv(),
       }),
     },

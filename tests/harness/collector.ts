@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { freePort, startDaemon, stopDaemon } from './daemons/process';
+import * as net from 'node:net';
+import { startDaemonUntil, stopDaemon } from './daemons/process';
 import { startOtlpSink, type OtlpSink } from './otlp-sink';
 
 export interface Collector {
@@ -15,18 +16,46 @@ export interface Collector {
   close(): Promise<void>;
 }
 
+/**
+ * A loopback port for one of the collector's own listeners, which takes its ports from config and publishes none: bound
+ * on `0`, read, and released. Only otelcol is started this way; every blizzard daemon takes `--port 0` and publishes.
+ */
+function otelcolFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as net.AddressInfo;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function answers(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });
+    await response.arrayBuffer();
+    return response.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 export async function startCollector(dir: string, waitSeconds: number, binary = 'otelcol-contrib'): Promise<Collector> {
   fs.mkdirSync(dir, { recursive: true });
   const received = await startOtlpSink();
   const forwarded = await startOtlpSink();
-  const port = await freePort();
+  const port = await otelcolFreePort();
+  const healthPort = await otelcolFreePort();
   const overlay = path.join(dir, 'overlay.yaml');
   fs.writeFileSync(overlay, `receivers:\n  otlp:\n    protocols:\n      http:\n        endpoint: 127.0.0.1:${port}\nprocessors:\n  tail_sampling:\n    decision_wait: ${waitSeconds}s\n    decision_cache:\n      sampled_cache_size: 10000\n      non_sampled_cache_size: 10000\n    policies:\n      - name: keep-step-roots\n        type: ottl_condition\n        ottl_condition:\n          error_mode: ignore\n          span:\n            - 'attributes["blizzard.step.outcome"] != nil'\nexporters:\n  otlphttp/received:\n    endpoint: ${received.endpoint}\n  otlphttp/forwarded:\n    endpoint: ${forwarded.endpoint}\nextensions:\n  health_check:\n    endpoint: 127.0.0.1:\${env:COLLECTOR_HEALTH_PORT}\nservice:\n  extensions: [health_check]\n  telemetry:\n    metrics:\n      level: none\n    logs:\n      level: debug\n      sampling:\n        enabled: false\n  pipelines:\n    traces:\n      processors: [tail_sampling, batch]\n      exporters: [otlphttp/forwarded]\n    traces/received:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [otlphttp/received]\n`);
   try {
-    const daemon = await startDaemon({
-      name: 'otelcol-contrib', cwd: dir, logPath: path.join(dir, 'collector.log'), healthPath: '/',
-      launch: (healthPort) => ({ command: binary, args: [`--config=${path.resolve(__dirname, '../../packaging/otel-collector/collector.yaml')}`, `--config=${overlay}`], env: { ...process.env, COLLECTOR_HEALTH_PORT: String(healthPort), TRACE_STORE_ENDPOINT: 'localhost:4317', TRACE_STORE_INSECURE: 'true', HOSTED_TRACES_ENDPOINT: 'http://localhost:4318', HOSTED_TRACES_API_KEY: 'test' } }),
-    });
+    const health = `http://127.0.0.1:${healthPort}`;
+    const daemon = await startDaemonUntil(
+      { name: 'otelcol-contrib', cwd: dir, logPath: path.join(dir, 'collector.log') },
+      { command: binary, args: [`--config=${path.resolve(__dirname, '../../packaging/otel-collector/collector.yaml')}`, `--config=${overlay}`], env: { ...process.env, COLLECTOR_HEALTH_PORT: String(healthPort), TRACE_STORE_ENDPOINT: 'localhost:4317', TRACE_STORE_INSECURE: 'true', HOSTED_TRACES_ENDPOINT: 'http://localhost:4318', HOSTED_TRACES_API_KEY: 'test' } },
+      async () => ((await answers(`${health}/`)) ? health : undefined),
+    );
     const endpoint = `http://127.0.0.1:${port}`;
     const logPath = path.join(dir, 'collector.log');
     const sendProbe = async (traceId: string): Promise<void> => {
