@@ -203,11 +203,11 @@ Either way, the same four-tier proof plus this page's own live diagnostic is owe
 1. On that exact candidate version, pass every earlier tier first:
    - `blizzard:unit-test` — the fixture suite: the committed
      `src/blizzard/runner/harness/contracts/opencode/<version>/manifest.json` and its captured probe fixtures classify
-     cleanly for the candidate (`tests/test_runner_harness_offline_compatibility.py`,
-     `tests/test_runner_harness_opencode_compatibility.py`).
+     cleanly for the candidate (`tests/unit/runner/harness/test_offline_compatibility.py`,
+     `tests/unit/runner/harness/opencode/test_compatibility.py`).
    - `blizzard:component-test` — the generic OpenCode selftest: the runner's per-harness selftest checks
-     (`tests/test_runner_selftest.py`) pass against the candidate's CLI surface, independent of the live compatibility
-     diagnostic above.
+     (`tests/component/runner/test_selftest.py`) pass against the candidate's CLI surface, independent of the live
+     compatibility diagnostic above.
    - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
      (`tests/service/runner/opencode.spec.ts`, `tests/service/harnesses/test_opencode_compatibility_service.py`,
      `tests/service/runner/mixed-harness-dispatch.spec.ts`).

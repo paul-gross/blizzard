@@ -1,0 +1,312 @@
+"""Provider-overload backoff — loop component tier.
+
+A worker/judge exit an adapter classifies overloaded is not judged, spends no retry, and
+keeps its epoch: short of the streak limit, the lease backs off and wakes the same session
+once ``resume_after`` passes. Real (tmp sqlite) store, fakes at the seams — mirrors
+``tests/test_runner_paused.py``'s usage-limit tests."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
+from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.overload import BACKOFF_LIMIT, backoff_delay
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.loop.steps import Advance
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_context,
+    make_envelope,
+    make_store,
+)
+
+_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
+_CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
+
+
+def _store(tmp_path: Path):
+    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _seed_exited_lease(store: SqlAlchemyRunnerStore):
+    """A build lease spawned into env e1; the worker has already exited (no probe entry)."""
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _ctx(store: SqlAlchemyRunnerStore, harness: FakeHarness, *, clock: FixedClock | None = None):
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    return hub, make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=clock if clock is not None else FixedClock(_NOW),
+    )
+
+
+# --- A single overload backs off -------------------------------
+
+
+def test_a_single_overload_backs_off_the_worker_generation_without_judging(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    Advance(ctx).run()
+
+    assert harness.judged == []  # never judged — an overload is not a verdict to elicit
+    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert store.overload_streak("lease_1", 1) == 1
+    facts = store.open_overload_facts()
+    assert len(facts) == 1
+    assert facts[0].resume_after == _NOW + backoff_delay(1)
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
+
+
+def test_backing_off_is_a_no_op_until_resume_after_elapses(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    Advance(ctx).run()  # records the fact, backs off
+    Advance(ctx).run()  # still short of resume_after — no wake, nothing re-recorded
+
+    assert harness.resumed == []
+    assert store.overload_streak("lease_1", 1) == 1
+
+    clock.advance(backoff_delay(1) - timedelta(seconds=1))
+    Advance(ctx).run()  # one second short — still a no-op
+
+    assert harness.resumed == []
+
+
+def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_delay(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    Advance(ctx).run()  # records, backs off
+    clock.advance(backoff_delay(1))
+    harness.overload = None  # the harness recovered — the resumed generation must not re-overload
+    Advance(ctx).run()  # resume_after has passed — wakes in place
+
+    assert harness.resumed == [("/ws/e1", "sess-a", "# The provider was overloaded; retrying automatically.")]
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # same epoch, same session
+    assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
+
+
+def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past_resume_after(tmp_path: Path):
+    """The runner's own brake starts no process — a due wake is a resume, so it waits for the brake."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+    Advance(ctx).run()  # records, backs off
+    store.record_local_pause(
+        paused=True,
+        at=clock.now(),
+        by="operator",
+        report_kind=RUNNER_LOCALLY_PAUSED,
+        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+    )
+    clock.advance(backoff_delay(1))
+    harness.overload = None
+
+    Advance(ctx).run()
+
+    assert harness.resumed == []
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"
+
+
+# --- Consecutive overloads escalate, then fall through -----
+
+
+def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path: Path):
+    """Reconstructs the whole streak: ordinals 1-4 each back off for double the last delay,
+    and the 5th (:data:`BACKOFF_LIMIT`) falls through to an ordinary judged completion."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    for streak_ordinal in range(1, BACKOFF_LIMIT):
+        Advance(ctx).run()  # this generation's exit, classified overloaded — backs off
+        assert store.overload_streak("lease_1", 1) == streak_ordinal
+        facts = store.open_overload_facts()
+        assert len(facts) == 1
+        assert facts[0].streak_ordinal == streak_ordinal
+        assert facts[0].resume_after == clock.now() + backoff_delay(streak_ordinal)
+        clock.advance(backoff_delay(streak_ordinal))
+        Advance(ctx).run()  # resume_after has passed — wakes the same lease in place
+
+    assert len(harness.resumed) == BACKOFF_LIMIT - 1
+    assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed across the whole streak
+
+    Advance(ctx).run()  # the 5th consecutive exit — streak limit reached, falls through and launches
+
+    assert store.overload_streak("lease_1", 1) == BACKOFF_LIMIT
+    assert store.open_overload_facts() == []  # the fall-through fact carries no resume_after
+    assert len(harness.judged) == 1  # judged as usual — the streak limit's own fall-through
+
+    Advance(ctx).run()  # collects the verdict elicitation launched above
+
+    completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert len(completions) == 1
+    assert store.attempt_count("ch_1", "nd_build") == 1  # the fall-through itself spends no retry either
+
+
+# --- A clean exit resets an open streak --------------------
+
+
+def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    Advance(ctx).run()  # overloaded once — backs off
+    clock.advance(backoff_delay(1))
+    harness.overload = None  # recovered
+    Advance(ctx).run()  # wakes in place
+
+    assert store.overload_streak("lease_1", 1) == 1
+
+    Advance(ctx).run()  # this resumed generation exits clean — no overload this time; launches
+
+    assert store.overload_streak("lease_1", 1) == 0  # the open streak was reset
+    assert len(harness.judged) == 1  # the fresh verdict elicitation, launched (not yet collected)
+
+    # A later overload starts a new streak at ordinal 1 — advanced a tick so the reset and
+    # this fact never land on the exact same instant (the supersession compares `>=`).
+    clock.advance(timedelta(seconds=1))
+    harness.overload = overload
+    Advance(ctx).run()
+
+    facts = store.open_overload_facts()
+    assert len(facts) == 1
+    assert facts[0].streak_ordinal == 1
+
+
+# --- A judge elicitation's own overload -------------------------
+
+
+def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitation(tmp_path: Path):
+    """The worker's own turn already finished before its verdict elicitation overloaded —
+    the wake re-runs `Judgement`, launching a fresh elicitation, never the plain worker
+    wake message (mirrors the usage-limit judge park's own handling)."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    # 1st classify call: the worker's own, must read unoverloaded so the judge launches;
+    # 2nd: the judge's own collect.
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload, overload_from_call=2)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+
+    Advance(ctx).run()  # launches the detached elicitation — not overloaded yet
+    assert store.in_flight_elicitation("lease_1", 1) is not None
+
+    Advance(ctx).run()  # collects it — the fake judge pid reads dead by default; overloaded
+
+    assert len(harness.judged) == 1  # only the first (overloaded) elicitation launch so far
+    assert store.overload_streak("lease_1", 1) == 1
+    assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing, not cleared
+    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+
+    Advance(ctx).run()  # still backing off — re-polled, nothing changes
+    assert harness.judged == harness.judged[:1]
+
+    clock.advance(backoff_delay(1))
+    harness.overload = None  # the harness recovered — the fresh elicitation must not re-overload
+    Advance(ctx).run()  # resume_after has passed — relaunches a fresh elicitation
+
+    assert harness.resumed == []  # never the plain worker wake — nothing left to "continue"
+    assert len(harness.judged) == 2  # a fresh elicitation, not a relaunch of the stale one
+
+    Advance(ctx).run()  # collects the fresh elicitation — a real verdict this time
+
+    completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert len(completions) == 1
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
+
+
+def test_a_replayed_judge_backoff_resume_over_the_same_stale_elicitation_records_one_advance(tmp_path: Path):
+    """A crash before the fresh elicitation launches leaves the overloaded one standing: the
+    retry carries the same identity, so it appends nothing a second time."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", overload=ProviderOverload(detail="Overloaded: 529"), overload_from_call=2
+    )
+    _hub, ctx = _ctx(store, harness, clock=FixedClock(_NOW))
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — overloaded, left standing
+    lease = store.active_lease("lease_1")
+    standing = store.in_flight_elicitation("lease_1", 1)
+    assert lease is not None and standing is not None
+    key = iso_utc(standing.first_launched_at)
+    harness.overload = None
+
+    DormantSession(ctx, lease).resume_judge_overload_backoff(_NOW + timedelta(minutes=1), superseded_invocation=key)
+    first = store.current_start("lease_1", 1, "judge")
+    DormantSession(ctx, lease).resume_judge_overload_backoff(_NOW + timedelta(minutes=2), superseded_invocation=key)
+    replayed = store.current_start("lease_1", 1, "judge")
+
+    assert first is not None and replayed == first
+    assert first.at == _NOW + timedelta(minutes=1)

@@ -1,0 +1,994 @@
+"""Runner usage telemetry — recording, buffering, and cleanup (epic #57).
+
+ADVANCE records one append-only usage fact per attempt invocation and buffers each
+fact's outbound report on the same store-and-forward rails as ``lease.minted``. When
+no envelope survived, the fallback sums the raw transcript with ``cost_usd`` left
+absent, never fabricated. Facts, not aggregates: a chunk's total is the hub's job."""
+
+from __future__ import annotations
+
+import json
+from concurrent.futures import Executor
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.fact_kinds import USAGE_RECORDED
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
+from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.transcript import TranscriptPosition
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
+from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.throttle.pause import PausePark
+from blizzard.runner.usage.recorder import UsageRecorder
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
+    make_context,
+    make_envelope,
+    make_store,
+    make_stores,
+    single_workspace,
+)
+from tests.support_child_launch import CHILDREN, version_probe
+
+_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
+_CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
+
+
+def _store(tmp_path: Path):
+    return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _build_envelope(chunk: str = "ch_1"):
+    return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
+
+
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    session: str = "sess-a",
+    epoch: int = 1,
+    harness_id: str = CLAUDE_CODE_HARNESS_ID,
+    resolved_model: str | None = None,
+) -> None:
+    """A build lease already spawned into env e1, plus its binding."""
+    store.record_lease(
+        NewLease(
+            lease_id=lease,
+            chunk_id=chunk,
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=epoch,
+            retries_max=2,
+            resolved_model=resolved_model,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(harness_id, session),
+        spawned_at=_NOW,
+    )
+    # The generation-1 spawn's own worker-starting boundary — the
+    # range-read fallback needs one to recover past its own stdout envelope at all.
+    store.record_boundary_open(
+        lease_id=lease,
+        chunk_id=chunk,
+        node_id="nd_build",
+        epoch=epoch,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
+    )
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _write_stdout(stdout_dir: Path, lease_id: str, generation: int, content: str = "<envelope>") -> None:
+    (stdout_dir / f"{lease_id}.{generation}.stdout").write_text(content)
+
+
+def _usage_payloads(store: SqlAlchemyRunnerStore):
+    return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
+
+
+def test_advance_records_spawn_and_judge_usage_facts(tmp_path: Path):
+    """The happy path: an exited worker's own invocation (kind=spawn, generation 1) and
+    the judgement resume (kind=judge) each land their own fact, buffered outbound."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    spawn_sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=5,
+        cache_create_tokens=6,
+        cost_usd=0.42,
+    )
+    judge_sample = UsageSample(
+        kind="judge",
+        model="claude-x",
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.01,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": spawn_sample, "judge": judge_sample})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 2
+    assert {p["kind"] for p in payloads} == {"spawn", "judge"}
+    assert all(p["chunk_id"] == "ch_1" and p["node_id"] == "nd_build" and p["epoch"] == 1 for p in payloads)
+    totals = store.usage_since(_NOW)
+    assert totals.input_tokens == 110  # 100 (spawn) + 10 (judge)
+    assert totals.cost_partial is False
+
+
+def test_advance_carries_an_estimate_on_the_outbound_payload_and_into_the_runner_window(
+    tmp_path: Path,
+) -> None:
+    """An estimate rides the outbound payload beside, never inside, the billed figure;
+    ``usage_since`` sums it as its own column and does not mark the window PARTIAL."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    spawn_sample = UsageSample(
+        kind="spawn",
+        model="openai/gpt-5.6-luna",
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=5,
+        cache_create_tokens=6,
+        cost_usd=None,
+        estimated_cost_usd=0.0308,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": spawn_sample, "judge": spawn_sample})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
+    assert spawn_payload["cost_usd"] is None
+    assert spawn_payload["estimated_cost_usd"] == pytest.approx(0.0308)
+    totals = store.usage_since(_NOW)
+    assert totals.cost_usd == 0.0
+    assert totals.estimated_cost_usd is not None
+    assert totals.cost_partial is False
+
+
+_SIGINT_ENVELOPE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "error_during_execution",
+        "is_error": True,
+        "session_id": "sess-a",
+        "model": "claude-opus-4-8",
+        "usage": {
+            "input_tokens": 80,
+            "output_tokens": 12,
+            "cache_read_input_tokens": 5,
+            "cache_creation_input_tokens": 0,
+        },
+        "total_cost_usd": 0.019,
+    }
+)
+
+
+def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(
+    tmp_path: Path, spawn_executor: Executor
+):
+    """The drain's own SIGINT leaves this envelope on stdout — through the REAL
+    adapter, `record_worker` still reads its real cost, not the NULL-cost fallback."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1, _SIGINT_ENVELOPE)
+    worker_files = WorkerStdoutFiles(str(stdout_dir), store)
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    )
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
+    )
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=worker_files,
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
+        harnesses=registry,
+        invocation_boundaries=store,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    recorder.record_worker(lease, bindings=[])
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 1
+    assert payloads[0]["cost_usd"] == 0.019
+    assert payloads[0]["input_tokens"] == 80
+
+
+def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omits_it(
+    tmp_path: Path, spawn_executor: Executor
+):
+    store = _store(tmp_path)
+    _seed_running_lease(store, resolved_model="claude-opus-5")
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="judge-start",
+        opened_at=_NOW,
+    )
+
+    class RangeSource(FakeTranscriptSource):
+        def read_raw_lines(
+            self,
+            session_id: str,
+            *,
+            spawn_cwd: str | None,
+            start: TranscriptPosition | None = None,
+            end: TranscriptPosition | None = None,
+        ) -> list[str]:
+            super().read_raw_lines(session_id, spawn_cwd=spawn_cwd, start=start, end=end)
+            model = "claude-fable-5-1" if start == TranscriptPosition("judge-start") else "claude-opus-5"
+            return [json.dumps({"type": "assistant", "message": {"model": model, "usage": {"input_tokens": 1}}})]
+
+    transcript = RangeSource(tail_positions_by_session={"sess-a": TranscriptPosition("judge-end")})
+    probe = FakeProbe()
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        transcript_source=transcript,
+        versions=version_probe(),
+    )
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=WorkerStdoutFiles("", store),
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
+        harnesses=registry,
+        invocation_boundaries=store,
+        transcripts_wired=True,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    output = json.dumps(
+        {
+            "type": "result",
+            "usage": {"input_tokens": 5},
+            "total_cost_usd": 0.2,
+            "modelUsage": {"claude-opus-5": {"inputTokens": 20}, "claude-fable-5-1": {"inputTokens": 5}},
+        }
+    )
+
+    recorder.record_attempt(lease, store.bindings_for_chunk("ch_1"), judge_output=output)
+
+    judge = next(p for p in _usage_payloads(store) if p["kind"] == "judge")
+    assert judge["model"] == "claude-fable-5-1"
+    assert judge["cost_usd"] == 0.2
+    assert store.usage_since(_NOW).cost_usd == pytest.approx(0.2)
+    assert (
+        "sess-a",
+        TranscriptPosition("judge-start"),
+        TranscriptPosition("judge-end"),
+    ) in transcript.read_raw_lines_calls
+
+
+class _LunaPriceCatalog:
+    """One priced OpenCode model, dollars per 1,000,000 tokens — never file I/O."""
+
+    def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
+        if (provider, model) != ("openai", "gpt-5.6-luna"):
+            return None
+        return OpenCodeModelPrice(base=OpenCodeRate(input=0.20, output=1.20, cache_read=0.02, cache_write=0.25))
+
+
+def _opencode_step_finish(part_id: str, *, cost: float, input_tokens: int, output_tokens: int) -> str:
+    return json.dumps(
+        {
+            "type": "step_finish",
+            "sessionID": "ses_a",
+            "part": {
+                "id": part_id,
+                "sessionID": "ses_a",
+                "messageID": f"msg_{part_id}",
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": cost,
+                "tokens": {
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "reasoning": 0,
+                    "cache": {"read": 0, "write": 0},
+                },
+            },
+        }
+    )
+
+
+def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_billed_steps(
+    tmp_path: Path, spawn_executor: Executor
+):
+    """Through the REAL OpenCode adapter and a priced catalog, `record_worker` puts a billed
+    step's cost on ``cost_usd`` and a subscription step's estimate on ``estimated_cost_usd``
+    of the one outbound payload — each step priced alone, neither folded into the other."""
+    store = _store(tmp_path)
+    _seed_running_lease(store, harness_id=OPENCODE_HARNESS_ID)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    stdout = "\n".join(
+        [
+            _opencode_step_finish("prt_billed", cost=0.004, input_tokens=100, output_tokens=20),
+            _opencode_step_finish("prt_subscription", cost=0, input_tokens=40, output_tokens=8),
+        ]
+    )
+    _write_stdout(stdout_dir, "lease_1", 1, stdout)
+    probe = FakeProbe()
+    transcript = FakeTranscriptSource(lines_by_session={"sess-a": ["would require an export"]})
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        model="openai/gpt-5.6-luna",
+        price_catalog=_LunaPriceCatalog(),
+        transcript_source=transcript,
+        versions=version_probe(),
+    )
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=WorkerStdoutFiles(str(stdout_dir), store),
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
+        harnesses=registry,
+        invocation_boundaries=store,
+        transcripts_wired=True,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    recorder.record_worker(lease, bindings=[])
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 1
+    assert payloads[0]["cost_usd"] == pytest.approx(0.004)
+    assert payloads[0]["estimated_cost_usd"] == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+    assert payloads[0]["input_tokens"] == 140
+    assert transcript.read_raw_lines_calls == []  # successful usage must not export the session
+
+
+def test_advance_records_resume_kind_on_a_later_generation(tmp_path: Path):
+    """A resume within the same lease (a later spawn generation) records kind=resume —
+    a genuinely new fact, distinct from a fresh lease's kind=spawn."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    # Simulate a restart/answer/pause resume: a second spawn generation, same lease.
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 2)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    resume_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=20,
+        output_tokens=10,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.05,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"resume": resume_sample})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 20
+
+
+def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_generations(tmp_path: Path):
+    """A generation-2 resume that exits with no envelope of its own must fall through
+    to the transcript-sum fallback, never replay generation 1's still-present file."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    # Simulate a restart/answer/pause resume that landed generation 2, same lease.
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    # Generation 2's own resume boundary — its recovery range's start.
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        kind="resume",
+        start_position=None,
+        opened_at=_NOW,
+    )
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    # If readback misread generation 1's leftover file for generation 2, the fake would
+    # hand back this sample for kind=resume, standing in for the stale re-parse.
+    contamination_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=999,
+        output_tokens=999,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=9.99,
+    )
+    fallback_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=3,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    harness = FakeHarness(
+        handle=_HANDLE,
+        verdict="pass",
+        usage_by_kind={"resume": contamination_sample},
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+    # Generation 1's envelope file is still on disk; generation 2 never wrote its own.
+    # Written via the path-builder so a collapsed path would write where 2 reads.
+    with open(ctx.worker_files.stdout_path("lease_1", 1), "w") as f:
+        f.write("<generation-1's own envelope>")
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 3  # the honest transcript fallback...
+    assert resume_payload["cost_usd"] is None  # ...never generation 1's envelope, replayed
+    assert store.usage_since(_NOW).cost_partial is True
+
+
+def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path: Path):
+    """A worker killed/reaped before writing a result envelope: ADVANCE sums the raw
+    session transcript instead, cost left absent — never fabricated."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    # No stdout file at all — envelope-less exit.
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    fallback_sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=7,
+        output_tokens=3,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    harness = FakeHarness(
+        handle=_HANDLE,
+        verdict="pass",
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
+    assert spawn_payload["cost_usd"] is None
+    assert spawn_payload["input_tokens"] == 7
+    totals = store.usage_since(_NOW)
+    assert totals.cost_partial is True
+
+
+def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_path: Path):
+    """No envelope and no transcript lines: no fact at all — never a fabricated zero."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),  # no worker_stdout_dir, no transcripts
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    assert _usage_payloads(store) == []
+
+
+def test_usage_replay_after_crash_is_idempotent(tmp_path: Path):
+    """A crash between the usage write and the completion buffer, replayed by the next
+    tick reaching the same exited worker again, records nothing a second time."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=9,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.1,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": sample})
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    bindings = store.bindings_for_chunk("ch_1")
+
+    ctx.usage.record_attempt(lease, bindings, judge_output="<judged output>")
+    ctx.usage.record_attempt(lease, bindings, judge_output="<judged output>")  # the replay
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 1  # the spawn fact only — not doubled by the replay
+    assert store.usage_since(_NOW).input_tokens == 9
+
+
+def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path: Path):
+    """A worker that asked-and-exited burned its spawn tokens: ADVANCE parks the chunk
+    and also records that spawn usage; no judgement ran, so no judge fact."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Which API?",
+        options=["rest", "graphql"],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    spawn_sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=77,
+        output_tokens=11,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.33,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": spawn_sample})
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()
+
+    # Parked on the question, no verdict elicited — a park is not a judgement.
+    assert store.parked_lease_ids() == {"lease_1"}
+    assert harness.judged == []
+    # But the spawn invocation that asked-and-exited is accounted for, once.
+    payloads = _usage_payloads(store)
+    assert [p["kind"] for p in payloads] == ["spawn"]
+    assert payloads[0]["input_tokens"] == 77
+    assert store.usage_since(_NOW).input_tokens == 77
+
+
+def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path: Path):
+    """Re-reaching the ask-park site (a crash between the usage write and the park,
+    replayed next tick) records the worker's spawn usage only once — keyed on
+    ``(lease, generation, kind)``, so the re-park drops the duplicate."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=12,
+        output_tokens=3,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.02,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": sample})
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Q",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    ask = store.unforwarded_ask("lease_1")
+    assert ask is not None
+    DormantSession(ctx, lease).park_on_ask(ask)
+    DormantSession(ctx, lease).park_on_ask(ask)  # the replay
+
+    assert len(_usage_payloads(store)) == 1
+    assert store.usage_since(_NOW).input_tokens == 12
+
+
+def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path: Path):
+    """A dead worker with no parseable ``<Choice>`` fails and requeues, but burned the
+    same spawn + judge invocations a passing one does, so ADVANCE records both first."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    spawn_sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=60,
+        output_tokens=20,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.5,
+    )
+    judge_sample = UsageSample(
+        kind="judge",
+        model="claude-x",
+        input_tokens=8,
+        output_tokens=2,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.01,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict=None, usage_by_kind={"spawn": spawn_sample, "judge": judge_sample})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    # It failed the attempt: no completion buffered, the attempt requeued.
+    completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert completions == []
+    # ...but both burned invocations are accounted for before the fail.
+    payloads = _usage_payloads(store)
+    assert {p["kind"] for p in payloads} == {"spawn", "judge"}
+    totals = store.usage_since(_NOW)
+    assert totals.input_tokens == 68  # 60 (spawn) + 8 (judge)
+
+
+def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path: Path):
+    """A killed/reaped worker that also fails verdict-less: no envelope survived, so its
+    spawn usage sums from the raw transcript with cost absent (never fabricated) — and it
+    is still recorded rather than lost to the requeue."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    fallback_sample = UsageSample(
+        kind="spawn",
+        model="claude-x",
+        input_tokens=5,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    harness = FakeHarness(
+        handle=_HANDLE,
+        verdict=None,
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(
+            runner_name="r1",
+            runner_id=FIXTURE_RUNNER_ID,
+            worker_stdout_dir=str(tmp_path / "missing"),
+        ),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    spawn_payload = next(p for p in _usage_payloads(store) if p["kind"] == "spawn")
+    assert spawn_payload["cost_usd"] is None
+    assert spawn_payload["input_tokens"] == 5
+    assert store.usage_since(_NOW).cost_partial is True
+
+
+def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path: Path):
+    """Tenure-end release no longer removes any lease's per-generation stdout file
+    — only the periodic age-based sweep prunes it now
+    (`tests/test_runner_retention_step.py`)."""
+    store = _store(tmp_path)
+    _seed_running_lease(store, lease="lease_1", epoch=1)
+    # lease_1 resumed once (generation 2) before it closed.
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
+    _seed_running_lease(store, lease="lease_2", epoch=2)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    _write_stdout(stdout_dir, "lease_1", 2)
+    _write_stdout(stdout_dir, "lease_2", 1)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
+    )
+
+    ctx.env_release.release_chunk("ch_1")
+
+    assert (stdout_dir / "lease_1.1.stdout").exists()
+    assert (stdout_dir / "lease_1.2.stdout").exists()
+    assert (stdout_dir / "lease_2.1.stdout").exists()
+
+
+def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path: Path):
+    """No ``worker_stdout_dir`` (the default) — release still runs cleanly."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    ctx.env_release.release_chunk("ch_1")  # must not raise
+
+    assert store.held_environment_ids() == []
+
+
+# Crash-detected resume records the crashed generation's own usage —
+# without their own `record_worker` call, `on_unpause`/`_restart` never record it at all.
+
+
+def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    fallback_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=9,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    transcript_source = FakeTranscriptSource(
+        lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+        tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+    )
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", transcript_usage=fallback_sample, transcript_source=transcript_source
+    )
+    harness.resume_pid = 4321
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    park = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
+    DormantSession(ctx, lease).on_unpause(
+        park,
+        None,
+        bindings=store.bindings_for_chunk("ch_1"),
+        ask_parked=False,
+        brakes=Spawner(ctx).brakes(),
+    )
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 9
+
+
+def test_restart_resume_records_the_crashed_generations_usage_before_waking(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    fallback_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=13,
+        output_tokens=2,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    transcript_source = FakeTranscriptSource(
+        lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+        tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+    )
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", transcript_usage=fallback_sample, transcript_source=transcript_source
+    )
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 13

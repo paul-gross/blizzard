@@ -214,7 +214,7 @@ class Resume(Check):
         # Bounded wait first so a fast-finishing resume flushes its stdout before it is reaped.
         worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
-        # (tests/test_runner_selftest.py).
+        # (tests/component/runner/test_selftest.py).
         worker.reap()
         return verdict
 
