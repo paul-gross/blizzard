@@ -1,0 +1,155 @@
+[
+  {
+    "id": "msg_1a3e9079a001rULnEenbnzHBZr",
+    "text": "Use the read tool exactly once to read `README.md`. If it is refused, do not retry and do not use any other tool; reply REFUSED. Otherwise reply with its first line.",
+    "time": {
+      "created": 1793751320499
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "rs_00d29c3e94eb41ee016aea791a189487d2862de61693c2f010",
+          "reasoningEncryptedContent": "gAAAAABq6nkaGJV7g9gUd3aRn33MKYuu_MqpI7BQdxTMaOty35uuT55JenI5Q6txbYeDyO74ANnoycwWxnyDM1IuERvwcMjkO817FSP8x_dvg0blnBOX2pUB6wN7XTN-wSyeTj1Hbsc2Qv7k6Tjx_pnUtltc7IX4-mK2D3qAefnXmbdvKXgPpl9wOYDhnU_mlbst-dZWT0M8EntX_n6ZmZDZZca0Ii0Gt6VhhQnmyO028MKbqIRRz2RB_isX5xBqSWS3meAUs9eAXxW5sp1u3ai29kI04-GZN6fmMv91r0ghg-tMMekWNqUWknXNdedRZw6mT5im_dplhPDDfVXq4iknQVs3b9wgHJfhYY6SB0wAg0k1QKpyA0rmx9pSZSL8u0y70tohskh2JtcaSdxIsH0MCK1QByTEfVFKqSDjXDv7RSQvcY4zn431KEwSA-uavBzNPMie-eyzAcB01HL4jwK9bEIwMxO8fwFJ9YorDBOkOgJKypQWk-0o8UIS27VpBFWmbHJ8PvaqJIS7L1i5tpVTABmryaR8LnRXYsqTRSVqatwCkcMjN_57xnbPaMoL-b_x8uQz9cRtjMFEbS7wIKPZ3mR9cSB-pmuHyUeyvBqq66a_T0w4kAnihpa7Unsvm-xYOgDtytBLTSXSqSbWCJv1OGLUbSvDPQDLdGyk1fkZE5h0wmUOCkq-TJ9UbeZibwjLL4aYrtwhK1g2mlu8bwzXYnA1JDb-PItlwsmut1B6gZ9VIVprZpF6VnUyJrQ7Zw5AY8GW9SNJ5ODXlJ1q4_XMGfZAVmiegaRsuUQfdBcJiZJ-jLZglxQZfmWyiUUrLnmVfPyxoc49guCbNEEsnN1p2qoJE9mqdlY1rqevWiyzzmgOflbWh2EfO-01KSXLSvVASa_Ca2-PaogF83MsWY3CAUJnj7PD8_HZRrJi33afKENOTDwZTRQXT7MSrcLRXtYNlKimvViB2jT8Qt433YFxZnMAZnwoF--uulVdeQgRHI9yAJM4k0AJ440tb6-cLNpbaTHFLdzg2fFK9n3LJuOZMMmNUJg2bcGyw93Cvy1JeRqxuPFruQ8nJFToztcK3YeTPuhoAfL1vSQfCHoxZTZn7Nc44iKNnTiRHsEmE3Xo17ybC2YUWndP6OVQGTHAmu6DC7WwZcHPYyw0bIHz4skLBUn3iT2GxECnOesn2Q7mw2oE4Bx1AV64lO8Yj5GqPAYymd1XSreiyankSywlS1LIkgjyLYrVaFJPjspisO9l4F38AO4f4Pm4L5fcBhfDaMfzV___yEo-ILLhN8pRNL8uMiptwxAZI2dQgHH5-_L5CKp7aEZajjY="
+        },
+        "text": "**Checking README access**",
+        "time": {
+          "completed": 1793751329904,
+          "created": 1793751322123
+        },
+        "type": "reasoning"
+      },
+      {
+        "native": {
+          "itemId": "rs_00d29c3e94eb41ee016aea791a189487d2862de61693c2f010",
+          "reasoningEncryptedContent": "gAAAAABq6nkhq9UaBM7_PrAFt5ZebOWwzgihTR8KLCDgMiy9FXuLCs8n9hIdGphZBnvN9jib-8zZSf5tqxEjWwXUL1qh19BLfooSUkw6A0UF3Hm2CpV9MOw9fUb47MsQJl_38uPRPnUz2hjmViZzZ7NVsZOdwy7DSAMvNJYTR0kFVC_H0Owye8m7MiSPLcSVxvmb0Pgp1Z23GxJka2t9wiEhxAWmWforQpUaUXONX4poIH83w3Uf99Gz3wq4BRVVUfLh-2TP98MPG96YCkFSuU3x3JPpioi-Z61HNnv0aEovPZ7AEnGEU-AKBpSjKp0soE0uZHkeUpsYQRU4gaq2QjzywV2Tb1CyQVgGjSZZI8oDDfcSyRAF8d4t6TvGAOuekNFq07Ld5cUvCTcqj2sh0lIjr6HLLAnrx-Ndartq39oi-TRFj_IDrXEWvYmlxk0LDlS51lyEscHfzFrcpYG-LnHmUJVcsWhD9AbhiFwnACoNC5ZEyuxfbZ3XSCJqeQ4P2CXZRDNn4B09l45kn3AuLZoHGdO0SnPv_tgHxK0C9P6oMKXgfiD_-WSW4FoalXKNQFxqpLe79BzxUhrkeHFf9zaxbgYw00WkZLmZ9SEUh5UDppyFJcMkOsw_sgf17W4ElwsBkvpMj2uRfDJvwyEMzYzz3BS6QYLDBFh86U2egLMd9WUT-bR81vzXZ3GNKeu6OOhbBycJwaZqu_z04tqkwZR0cPHL0riuj_G4CTID7SnmeWwzhysNiqFPNSImpeuzeFUsWIx-ytwdGm6EvXGEF-OKT7MJ1OceZGM7ZoIOFJjc2F17a28KFY92t8cOcRWplNoNiGfUjF_5APBYQwgtD3TFq1DOBc6jLYeh0v8Mq4J6cppMP4GHsFm-a7hdx2ttQ_SLEXio--gqCfPfO53Aca46YLoUcr8QvEqV7lWETGHCkXX0pWOJDqibY8Q48XXBvTTgJaM7Rmih3Mymc0rboqRdB8bwBJRbJ-a_bdwqxHZSDKock8u30MEAiVSyXbrxKO_hL9xYdGK-yNkkkAppJfs3PdgJlp1ueKIksDOz_79JiL3H51rOOjAlPMlbpg-5WpFEP7juFrEDzCW3w_4QfrwZAUZ91U2kgl6xKbXUQ4tpHc4WZsESfuiMyHu4ffTiYnsyGydCZ49NEurPWoKF-KqtYZPKh0l9pvWD1I9u2diFu-qNX4XwRF7CRgw_fLlJTERdPNSHvW8IR2CYRxbpc2eSpzEaZCT_iXbJJGl6VHHV2_dKFGw8YM2IkOvRDVNznqYEbcyC0KXMCMCCpF0re1Jb8GtNHsEEL8TwPt-nhv7_zWM0LJe8KZ_oQ9zzUAv7qZwzzBI_he-R5iTt66MQEJsILhlLtXGKVJ4tCkg6_api-YlAENlFbQ4YREXAa6aRBuE4kiH-hMXz4uBQpe5RyNVwAzfHY9zJrw-S8Xu-9xaz80ZArb2BwD2heJjZR0OivpKV-MyRkTtcHy7yIX1eA7jzs1uTs4fikNkzhINwHBN2oVXl9yhWC2Kb_ia1RW7zHAFAPLhcUFrh1dgu7qak7YVIzd6zcxEtaUBuvrg1Qb1RpO4JDewUWje22i4F3tlHcctVxUfUvX-AW7oQ33hjlu1PAGNUSWb1T_ILXQy2tvVzEvpkMz9WmaBbI19AFxqGTw8YbD35WSgay80y7vPrhpwr_FdtecBUbjC4wJPwYkQY2uqX6NoHNZBt2M7QtXQUcWF2mvsZ1rVss7y6wDvBxGUTS-0Bt_juGDkiqLopSYtsaZCZglkSUXOCiyP-ql6XV7QumWLwtnwNxEp97i2Nn4Ot54j3d4YlkUcnHUxwsPH3MuwLCSBzrVTfAsh_zZxdSfym8GO4LwfCNupGwWtPqK-r6r5XZRIYplhZthgUw_OtGfOKaOsPckFnMEdmFKbEbru40P2XWth5ErDoYITB5v98Zzm4kpQUXUON4i0H4X6FA-ovfObkgtZDW10r7t5hKNoMJc0sR46Uq7DvrcrdOY7FX41CKwncgP5qL16KbQlP9AVSI_Wjn-v1fGBxwQIsMFX2AIm8f-8amAfgcUv-sFGkk84-iWriisU1Tymlayi9Nj9GjH3bcBF2WEQu2ucyUbBzukZRTI949pSJOulOeqPd0b3hAHtS2_5Gzl1aGWfQRWRSZ2_OD995fbvg5b_AOE2-fkOTt7pRFtylA88YzJxNCgHtqSMRvpVWUKvdXg2sq5zQhVOI8znQ4qJkdN9mV-ZqazPAkmtDzdvnwVgOxEUtopK58ZsNGdKwu5zatwYDpT2Ch6ZwVsdMGz8zNYWrDVc_C_ZNN_9CZZogjpFtuOfPr6URCa5CD2ya29h59oNHCbe1o64IXDSzQkGi9D1PU3TrEPwgoa6t908dTG8zxlJgsIXy2DoKP76fdIH4XcSBXYeV8lhXuloul4DZFVlDzp7k52Rjk1aWOUYu77vxza3putkL2OzNhb8WkUxDoSt11xS-lfYrk6YqeP1QaK_IL-5RBGsT8KAH1hqGHcp_WJEyj7Zkb5xWgOdL_rwC_7SEqtBV-qxPqEYWlXEFu4DJ6IU1cSZMTwVY4NhtOEPwYxUvJgGHGmqiTXw2XMKuWPgjBvrf7DKRmT1SOYxx9KW6Q0E9nsIajVlzvZW-r5N8_O1XYhoqI43aERji-j_4w-RwoNF7PFckicRi24c-IRlp0-r-aJS-97chd23yX8lkWtooKWCe_lKFwrSzF5LkciwECfFzDJrGAwYShYow9XcCL6Sazyq9nW3vonM6ZaiIAiGtoeIyZm6d-ic4LUaZJqEOEtyhGLsg3igvGjvtwLbCPEihSuAOv1nk3tWveRi2lCLoI0SGJNKvDoKUDsBtDE2cJxmaksW22GuzKI7Blw9KrEf9w0moHRC7xP9PtynXGmMDhn_s565ZCokL-Tu9911dpKFlZGqea3Z6cmQ4R6PelS97dgAuncYW3ziIHBwu_IUyTcS6FufVlF2v9cnI_QHPzMZORZImmG0pnOhJt1pLyfNQe12AkVCE99Q7Q3XuLi8sEbIHXOWzCKP5S_GLfyYZbQBPWfvlQSxYcTaCNx-XW4LUADn8teFjZbnlZ7pBCPsFVGcU_a3iM0GslTIjGGToiUdnEK0kIiYOUEVXMjsqz2Wv4wWdAMNdh9AlehSyX3Zq8_fd0NTSOEjmml2IeIqoODvK-HgIBgHYxzzrbDUyShmKyQKc-Tg3PWBxqpR7mQ8428TG1ile-E2BTGKy4r2fskixTnzWzUA5znH_Iy33M7myBJKYM70Fc3WiRv0VnNvfk99XariNm5gwJEHV5DHR6yvEXuOyDy6MSfeYa1LkbNx-8DuR7TpR2oZ7-_8SKIPreGjUAkOpb7Yigze0SKILeKITGjTa0qOPnPsr5vLlLoe1evCgTKxcy5Enrb1nx6iIv_OUfy83FCYGOOS6TNJdjPXA2S9wysP6keDZc9dsbgbueTIASWRDRs5IG1ZAtXMhR8VZPWrpqg784-EF289QJBAFoegrTPuASSZEkhdgSlcMj7Ii-yZ6KS6DsEW-IjvHgt2oRUOroZHRICIHpN6wtxJle32DPzNO-TjYZbREo1REtYWGG09EAzwc5yI_Q5yUxxIC_cw-FRhh8oNftdKg3YL3LFSIybJdTttDovlHgsFcPq0-qM7Cs5BCTl9YEM-kvgXCMBHzlBZk-QLBl_NjwV-6EzYLASAxUziBJuPZk-OT5KXvSw3ykXQaLs84O65qC_xErQvi5BqT11hmlRu5etN__F6oD47s8WJqB2CUlHRQfbr8IdQHWBYCvk4Gaw_SMbt1WhCV29LiYg50tna2g5bOARar_I0sqavx6jKrkmbxyyuhJQ1pzaXJH5J7BCab9EjjvxBvUW9Y5S4bHblDtX_uf4oMijzLf2gssOwXd5r_cFfxmuPtec-zjYv3DYxOunJVNtVGs4Wen1914VIGZtNuaVF1S_yrxyNlV1-o9VCEKtPLz6S0dJS-MTcghCNZ-0RV39oOeA=="
+        },
+        "text": "**Reading README.md**",
+        "time": {
+          "completed": 1793751329913,
+          "created": 1793751329908
+        },
+        "type": "reasoning"
+      },
+      {
+        "executed": false,
+        "id": "call_a9b1e71d514346d49577d8d456612d46",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_00d29c3e94eb41ee016aea7921d6f087d28b39172226928794"
+        },
+        "state": {
+          "content": [
+            {
+              "text": "blizzard compatibility proof\n",
+              "type": "text"
+            }
+          ],
+          "input": {
+            "command": "head -n 1 README.md"
+          },
+          "metadata": {
+            "exit": 0,
+            "status": "completed",
+            "truncated": false
+          },
+          "status": "completed"
+        },
+        "time": {
+          "completed": 1793751330316,
+          "created": 1793751330212,
+          "ran": 1793751330244
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3e907bf001ERZSqkmEetoqaz",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_00d29c3e94eb41ee016aea791913d887d285a765ab3d26b93b",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751330332,
+      "created": 1793751320531,
+      "streamed": 1793751330321
+    },
+    "tokens": {
+      "cache": {
+        "read": 0,
+        "write": 0
+      },
+      "input": 6394,
+      "output": 25,
+      "reasoning": 187
+    },
+    "type": "assistant"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_00d29c3e94eb41ee016aea792349a487d29deb705661d01c4f",
+          "phase": "final_answer"
+        },
+        "text": "blizzard compatibility proof",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e92e2e001BOuUDecZ16i2wC",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_00d29c3e94eb41ee016aea7922d4b887d2861bffde537ceb58",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751331425,
+      "created": 1793751330366,
+      "streamed": 1793751331410
+    },
+    "tokens": {
+      "cache": {
+        "read": 6272,
+        "write": 0
+      },
+      "input": 349,
+      "output": 8,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e93268001cj0h3h4J6eBu0S",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751331432
+    },
+    "type": "idle"
+  }
+]

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from packaging.version import Version
 
 from blizzard.hub.domain.observability.analytics.dialects import DIALECTS
 from blizzard.runner.harness.wiring import declared_normalizer_versions
@@ -69,7 +70,8 @@ def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
         for item in _json_array(node) or []:
             _walk(item)
 
-    for version_dir in sorted(p for p in corpus_dir.iterdir() if p.is_dir()):
+    # OpenCode 2 captures are not `opencode-export/1` evidence.
+    for version_dir in sorted(p for p in corpus_dir.iterdir() if p.is_dir() and Version(p.name).major == 1):
         synthetic = _synthetic_fixtures(version_dir)
         for path in version_dir.glob("*.json"):
             if path.name != "manifest.json" and path.name not in synthetic:

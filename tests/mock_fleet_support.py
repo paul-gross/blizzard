@@ -68,6 +68,20 @@ def require_opencode_cli_surface(bin_dir: Path) -> Path:
     return mock_opencode
 
 
+def require_opencode2_cli_surface(bin_dir: Path) -> Path:
+    """``bin_dir``'s ``mock-opencode-2`` binary, proven live by a real ``emit``, or skip — an older-provisioned sibling
+    ``blizzard-mock`` worktree carries none."""
+    mock_opencode2 = bin_dir / "mock-opencode-2"
+    if not mock_opencode2.is_file():
+        pytest.skip("the provisioned sibling blizzard-mock has no mock-opencode-2 (run `winter provision <env>`)")
+    with tempfile.TemporaryDirectory() as probe_dir:
+        probe_out = Path(probe_dir) / "probe-opencode2"
+        probe = subprocess.run([str(mock_opencode2), "emit", "--out", str(probe_out)], capture_output=True, text=True)
+        if probe.returncode != 0 or not probe_out.is_file():
+            pytest.skip("the provisioned sibling blizzard-mock's mock-opencode-2 cannot emit (run `winter provision`)")
+    return mock_opencode2
+
+
 def require_codex_app_server_surface(bin_dir: Path) -> Path:
     """``bin_dir``'s ``mock-codex`` binary, with the ``app-server`` verb live, or skip — an
     older-provisioned sibling ``blizzard-mock`` worktree may carry ``mock-codex`` without

@@ -1,0 +1,77 @@
+{
+  "added_tables": [
+    "instruction_blob",
+    "instruction_entry",
+    "instruction_state",
+    "kv",
+    "session_inbox",
+    "session_pending",
+    "session_v2",
+    "worktree"
+  ],
+  "counts_after": {
+    "account": 0,
+    "account_state": 0,
+    "control_account": 0,
+    "credential": 0,
+    "event": 0,
+    "event_sequence": 1,
+    "instruction_blob": 0,
+    "instruction_entry": 0,
+    "instruction_state": 0,
+    "kv": 1,
+    "message": 2,
+    "migration": 50,
+    "part": 4,
+    "permission": 0,
+    "project": 1,
+    "project_directory": 0,
+    "session": 1,
+    "session_inbox": 0,
+    "session_message": 0,
+    "session_pending": 0,
+    "session_share": 0,
+    "session_v2": 0,
+    "todo": 0,
+    "workspace": 0,
+    "worktree": 0
+  },
+  "counts_before": {
+    "account": 0,
+    "account_state": 0,
+    "control_account": 0,
+    "credential": 0,
+    "data_migration": 0,
+    "event": 16,
+    "event_sequence": 1,
+    "message": 2,
+    "migration": 38,
+    "part": 4,
+    "permission": 0,
+    "project": 1,
+    "project_directory": 0,
+    "session": 1,
+    "session_context_epoch": 0,
+    "session_input": 0,
+    "session_message": 0,
+    "session_share": 0,
+    "todo": 0,
+    "workspace": 0
+  },
+  "dropped_tables": [
+    "data_migration",
+    "session_context_epoch",
+    "session_input"
+  ],
+  "opencode1_exports_after": true,
+  "opencode1_lists_after": true,
+  "opencode1_version": "1.18.33",
+  "opened_exit_code": 0,
+  "same_file": true,
+  "signal": {
+    "migration.v1-v2": {
+      "phase": "sessions"
+    }
+  },
+  "v1_tables_unchanged": true
+}

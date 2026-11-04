@@ -6,6 +6,9 @@ corpus stays the reference. It pins the tool names and input keys OpenCode actua
 `read` / `filePath`, `skill` / `name`, and `task` / `subagent_type`.
 
 - `root_export.json` — the root's `opencode export`, trimmed to the messages holding `read`, `skill`, and `task` parts.
+- `store_migration.json` — a different provenance: what the OpenCode 2 compatibility proof saw when OpenCode 2.1.4
+  opened a disposable store this 1.18.33 CLI had seeded — the schema, row counts, and `kv` migration signal before and
+  after, and whether OpenCode 1 still listed and exported the session.
 
 Prompt, output, text, reasoning, title and path content is replaced; tool names, input keys, the `skill` name and the
 `task` `subagent_type` values, ids, times, tokens and key structure are verbatim.

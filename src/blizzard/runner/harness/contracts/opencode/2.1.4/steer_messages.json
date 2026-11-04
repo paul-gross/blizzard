@@ -1,0 +1,140 @@
+[
+  {
+    "id": "msg_1a3e81ecd001VZh7sFeUTjdxyC",
+    "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
+    "time": {
+      "created": 1793751260894
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "executed": false,
+        "id": "call_1792ea83bbae43b29c8626532272561f",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_05dd2a2f31d06bf4016aea78df183487d2a58050b21d7bf261"
+        },
+        "state": {
+          "content": [
+            {
+              "text": "SLEPT\n",
+              "type": "text"
+            }
+          ],
+          "input": {
+            "command": "echo $$ > proof-sleep.pid; sleep 40; echo SLEPT",
+            "timeout": 50000
+          },
+          "metadata": {
+            "exit": 0,
+            "status": "completed",
+            "truncated": false
+          },
+          "status": "completed"
+        },
+        "time": {
+          "completed": 1793751303797,
+          "created": 1793751263262,
+          "ran": 1793751263717
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3e81ee7001NuwXildfcqAnrw",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_05dd2a2f31d06bf4016aea78de883087d2a8fc5d224e890f73",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751303811,
+      "created": 1793751260923,
+      "streamed": 1793751263728
+    },
+    "tokens": {
+      "cache": {
+        "read": 0,
+        "write": 0
+      },
+      "input": 6567,
+      "output": 37,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e82a92001lyFUuTwGq3RKQA",
+    "text": "Stop what you are doing and reply with the word STEERED and nothing else.",
+    "time": {
+      "created": 1793751303827
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_05dd2a2f31d06bf4016aea790879e487d2a624b80a44d0f15d",
+          "phase": "final_answer"
+        },
+        "text": "STEERED",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e8c6a0001DttQlXmECT4mSd",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_05dd2a2f31d06bf4016aea7908103487d2b78a3e64e83ca54f",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751304642,
+      "created": 1793751303859,
+      "streamed": 1793751304629
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 239,
+      "output": 7,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e8c9c7001qyMoDduuzgToQ2",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751304647
+    },
+    "type": "idle"
+  }
+]

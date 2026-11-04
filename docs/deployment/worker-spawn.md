@@ -32,8 +32,8 @@ transcript" outcome, never a crash, for whichever future capability gap reintrod
 `owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
-tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits today: the
-compatibility proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is
+tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode 1 version the runner admits today:
+the compatibility proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is
 never something a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the
 full probe table and its classification policy). This is a fact of the committed corpora inside the admitted range, not
 a blanket guarantee — the binding's declared degradations (`OpenCodeHealthProbe.declared_degradations`,

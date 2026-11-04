@@ -1,0 +1,43 @@
+{
+  "cost": 0,
+  "id": "ses_e390868b6b5cabf9636d61acf9",
+  "location": {
+    "directory": "<scratch>/repo"
+  },
+  "metadata": {
+    "blizzard": {
+      "proof": "compatibility",
+      "row": "interrupt",
+      "run": "df12f60f"
+    }
+  },
+  "model": {
+    "id": "gpt-6-luna",
+    "providerID": "openai",
+    "variant": "high"
+  },
+  "outcome": "interrupted",
+  "permissions": [
+    {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+    }
+  ],
+  "projectID": "global",
+  "time": {
+    "created": 1793751229069,
+    "idle": 1793751237136,
+    "updated": 1793751237130
+  },
+  "title": "blizzard compatibility proof interrupt",
+  "tokens": {
+    "cache": {
+      "read": 0,
+      "write": 0
+    },
+    "input": 6567,
+    "output": 39,
+    "reasoning": 34
+  }
+}

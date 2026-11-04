@@ -1,0 +1,204 @@
+[
+  {
+    "id": "msg_1a3e7e603001apM1vbXnVXNDVR",
+    "text": "Reply with the word RESUMED and nothing else.",
+    "time": {
+      "created": 1793751246360
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_09abf81673e7fd2e016aea78cf787c87d29a402d1f92a7f436",
+          "phase": "final_answer"
+        },
+        "text": "RESUMED",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e7e624001QQzB5fCqMUrfEv",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_09abf81673e7fd2e016aea78cefa9c87d29c1d04487eeb2599",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751247845,
+      "created": 1793751246390,
+      "streamed": 1793751247833
+    },
+    "tokens": {
+      "cache": {
+        "read": 0,
+        "write": 0
+      },
+      "input": 6543,
+      "output": 7,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e7ebe9001Hk27N6CjkvtBlW",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751247849
+    },
+    "type": "idle"
+  },
+  {
+    "id": "msg_1a3e7ee38001ElQ1QLtH8Zesy7",
+    "text": "Use the shell tool exactly once to run `echo tool-output-not-the-verdict`. Then reply with exactly `<Choice>pass</Choice>` followed by one sentence of assessment.",
+    "time": {
+      "created": 1793751248452
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "executed": false,
+        "id": "call_556dd9c7498344e98a1963cd33aa256a",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_09abf81673e7fd2e016aea78d15bf887d2b8d6c17290c10540"
+        },
+        "state": {
+          "content": [
+            {
+              "text": "tool-output-not-the-verdict\n",
+              "type": "text"
+            }
+          ],
+          "input": {
+            "command": "echo tool-output-not-the-verdict"
+          },
+          "metadata": {
+            "exit": 0,
+            "status": "completed",
+            "truncated": false
+          },
+          "status": "completed"
+        },
+        "time": {
+          "completed": 1793751249654,
+          "created": 1793751249419,
+          "ran": 1793751249579
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "finish": "tool-calls",
+    "id": "msg_1a3e7ee4a0012j8IGV7eNt7h5K",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_09abf81673e7fd2e016aea78d0ad5487d29984b52e1206dc9b",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751249664,
+      "created": 1793751248470,
+      "streamed": 1793751249635
+    },
+    "tokens": {
+      "cache": {
+        "read": 0,
+        "write": 0
+      },
+      "input": 6591,
+      "output": 23,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "rs_09abf81673e7fd2e016aea78d270b887d29a481e18d122f605",
+          "reasoningEncryptedContent": "gAAAAABq6njXEMVIeXayOErOTcWx-4N7IzfeJbSjzx_dpCIin_CpkSMJL-sX4EN5d-MSRAuR1qcyWFCGk2icXoHdRT_JdrEQMkOjCuDHS0RPl7BokL9SYQte_giG8EfPcSTAMCg14yJANMZ-e-maqlSYqDL0iv1UYZDfYvBYfqWfN6MYob4m6TpaB6wC2z3v8qOljyXSAHMM9jOrF37pxmKf8N7yrSnbE8Xuw2c62zzPtcTMA-kY0_Y0-D5NLBygFz1AFlNEbJOGWdnbQRwxIjwTznL11wt6NpxkZdJ_MZOYleFfKAoWO_NiecJYb7j3NsrNT97NlP5BSy0K1Dzce-e_LZvGDK6u0hpIyuBRNgKu1nAjFW6h_as5WxdPgCHdkcr_pfHyVWHvUQYGHRx7nr9RDbkPK3KDsvQTUpfB_qCdEGVAXFx9-G_zK-977lrXM18cp2Xzi7feOxFYqJ2wk57hZ5_za7wSgU-8sqnHVonPDRSNK5VWr1Gy--DY8tQKzjMtjHawZ98B3eyrIQWcUiRjp5kWRSUEzeW_2z6wNNdSen_ZUeckz6aOYHfqa6LWlgv0p_DPajHkRMhe2Uv44FMTP6AMx40gW5hllEae05s16ylo39SqaDvtwAAzebcLf87QoO6lGSUjT6wnuwPICq9N7onSWjo0q6bASmsqqpYgVU8rMxyUJRssR3gJH4PEkYz2VUnksfbPW5k1tjXSTwYXWA7j_mmaaOSKYE5NXDXFFb-dN2L7qFOxvoXbA5NjR8_I9wKophyoNiH_h-AKBBM6EASgAStJoGhxUHzo5vIcBdzMRwpZ7NIHrmZkXossPLtlFssc5Z36Q6tUXgvHL5pHugKj7W3lFGrgdW61dChoaMdctac_HuZCxkORVWA5e5qF_M3AsVevZANyVd3Erfec81ZF9uAIibChtzCDNjEiDlNALBszJ2vHrjo_ROuehJAxjpLyOM7_Er0uNBFfpPDpMIAlbB4lApVjfjomNmF9J6lbTqxnViRlHiVseqnan106j-ED_UY1PR8oxkx-C3jhavd7xadjAiEewHJ5awzOqQhgrNZ2SCnaStKSKhWDXABx0RxaMLrYv0MUaKDNIUnMHFQA_aVklCIOTW9_YPhBWeHtCfOzNEDLRDLZAhWdH9W-ORojGhxt4u-sA-Y_JzpU4Pv7iJDdzGtLcwiVUX0BBY-65eVHmiRtyfjR0giinYu1WgruC6ic2QKs-VOCddEsukz97y-Tp2Qg2VQiUOfXCy7wMjbOaNtejFnfqgb7XbOeqLDT8E-mThtofvQzHtVmwqWFwYGBOkAeK2v_WtCefGJaqeeC6BPE2GG0ksZCD7-zQfx3OT4CxegYI39QRcRfhJEZu4U8Y3tB-R2v0Vaeg1jFGnorFt6g2kqanbMn6--rdhhkOzHCn_AgfXFrCfJ6IH2sX7Qsj-IX1Hx9swICOx9ysgH2z4TXVQIUbxPJCZiChP4kI1lMz8gIn7AtywwtOMsUfSkYiapA9LRJakZDBfCfhC4j9WGDhB59UtYxN8KT4OuM-ElQWFybFYcTK85HjBFVBPUbUzS9S_vHimUsb8eWV6geMUHXKkSuKkOXej58IB-06iG2IDu8CIKZ4_buQKBUoNsVHZK5PaVVLYyKF7uwhxLTo_u4Vo80T2WSlDByEiPf9DqKChdok6C0WWeocy-HwPfl9vAEzHgvjuYyhT3VeIq4y4PJFAx847turidZO8jSA7SWsAqZyY6yyXgzchtmoQCligcxVaOQEVZCdhHCEkNEh0IQE6nKaGeFKi_7vOI4qkmkOWK-44VCUV6WL7r4xZZc8nilxkqm7PXtnAv1zlJIi9bnzWYJUu7jLi4Skjd37jx_woLHC0LdrXIQRdJ-eZMcXhn_2AAqPSrIwbGZTFOgETuBt7zsOgMpJMoLoUv2zY8hL4aRXdlaXqL6y97DSJ-LhpERhB5Nun0oHwykjqlagiqAG5JjxQZ6e6HyJvpNZGGaQMFj6htjfcVCsjj47WOuiA511LXoktx7FSUfZihCCRUR4lCCYa8YT2ft6rPZQwpU_ljPBEPDwZI-JM-6absrDQ=="
+        },
+        "text": "",
+        "time": {
+          "completed": 1793751255153,
+          "created": 1793751250548
+        },
+        "type": "reasoning"
+      },
+      {
+        "native": {
+          "itemId": "msg_09abf81673e7fd2e016aea78d703b487d2bc2d4cdb9642a67b",
+          "phase": "final_answer"
+        },
+        "text": "<Choice>pass</Choice> The shell command ran as requested.",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3e7f30f001Dq7sRDsRQEt2kX",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_09abf81673e7fd2e016aea78d1eb1087d2b395214c5e4e61e8",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751255174,
+      "created": 1793751249692,
+      "streamed": 1793751255163
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 231,
+      "output": 20,
+      "reasoning": 41
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3e80889001f5AecYPBPeLc77",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751255177
+    },
+    "type": "idle"
+  }
+]

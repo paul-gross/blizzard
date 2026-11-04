@@ -1,0 +1,47 @@
+[
+  {
+    "agent": "general",
+    "cost": 0,
+    "id": "ses_e5c168a23ffeIH47dq5ahCMu54",
+    "location": {
+      "directory": "<scratch>/repo"
+    },
+    "metadata": {
+      "blizzard": {
+        "proof": "compatibility",
+        "row": "children",
+        "run": "df12f60f"
+      }
+    },
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "outcome": "succeeded",
+    "parentID": "ses_afe274938086854d5607021195",
+    "permissions": [
+      {
+        "action": "question",
+        "effect": "deny",
+        "resource": "*"
+      }
+    ],
+    "projectID": "global",
+    "time": {
+      "created": 1793751348722,
+      "idle": 1793751351375,
+      "updated": 1793751351371
+    },
+    "title": "Report child environment",
+    "tokens": {
+      "cache": {
+        "read": 12800,
+        "write": 0
+      },
+      "input": 373,
+      "output": 33,
+      "reasoning": 0
+    }
+  }
+]

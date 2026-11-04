@@ -1,20 +1,24 @@
 # OpenCode compatibility
 
-Use this procedure to run and interpret the runner's compatibility diagnostic for OpenCode. The runner admits a declared
-semver *range* of OpenCode versions — currently `>=1.18.25,<2.0` — and the diagnostic checks the observed binary's
-version for membership in that range, never equality against one pinned literal or membership in an enumerated list.
-Pre-release versions are always excluded, regardless of whether they would otherwise fall inside the range. It changes
-neither runner or hub state nor the caller's checkout: the proof creates a temporary initialized git repository, may
-commit its scratch work there, and removes that repository when the run ends. The runner may copy the account's normal
-OpenCode credential file byte-for-byte into an isolated disposable data root after the version gate; OpenCode receives
-only that isolated copy, and the runner never parses or retains credential values. This is diagnostic evidence for an
-external seam, not production adapter selection or a claim that a provider is available to a fleet. A pass is
-established by the command's observed output and retained evidence, not by this page. Version preflight uses empty
-isolated XDG data and provisions disposable auth only after the observed version is admitted.
+Use this procedure to run and interpret the runner's compatibility diagnostic for OpenCode. The diagnostic reads the
+binary's version and runs the proof for its major version: OpenCode 1 (`>=1.18.25,<2.0`) is described first, and
+OpenCode 2 (`>=2.0,<3.0`) in [OpenCode 2](#opencode-2) below. A version neither range admits is reported as outside
+every admitted range, and nothing is probed. For OpenCode 1, the runner admits a declared semver *range* of versions and
+the diagnostic checks the observed binary's version for membership in that range, never equality against one pinned
+literal or membership in an enumerated list. Pre-release versions are always excluded, regardless of whether they would
+otherwise fall inside the range. It changes neither runner or hub state nor the caller's checkout: the proof creates a
+temporary initialized git repository, may commit its scratch work there, and removes that repository when the run ends.
+The runner may copy the account's normal OpenCode credential file byte-for-byte into an isolated disposable data root
+after the version gate; OpenCode receives only that isolated copy, and the runner never parses or retains credential
+values. This is diagnostic evidence for an external seam, not production adapter selection or a claim that a provider is
+available to a fleet. A pass is established by the command's observed output and retained evidence, not by this page.
+Version preflight uses empty isolated XDG data and provisions disposable auth only after the observed version is
+admitted.
 
 ## Before you run
 
-Have these ready:
+This section and the next five are for OpenCode 1; OpenCode 2 has its own in [OpenCode 2](#opencode-2). Have these
+ready:
 
 - A `blizzard` installation containing `runner opencode compatibility`.
 - An OpenCode executable at an explicit path. The diagnostic observes its version and checks it for membership in the
@@ -126,7 +130,8 @@ The deterministic policy is:
 - `observed` makes a probe `supported`.
 - `absent` is `degraded` only for `root_hook`, `usage_cost`, or `child_sessions`.
 - `failed`, `ambiguous`, and every other `absent` result are `blocking`.
-- A version outside the admitted range makes the report `blocking`, regardless of probe results.
+- A version outside every admitted range is refused before any probe runs: the command prints `OpenCode version:` and a
+  `compatibility: blocking — outside every admitted range` line naming both ranges, writes no evidence, and exits one.
 
 The final classification is `supported` when the observed version is admitted and every probe is supported. It is
 `degraded` when the observed version is admitted and only the allowed neutral absences occur. Both classifications exit
@@ -157,12 +162,19 @@ Treat the run as failed or unusable when:
 - required options are missing, `--binary` is not an existing file, or the explicit live opt-in is absent;
 - the scratch repository or OpenCode process cannot complete, required output is malformed or unsupported, or evidence
   cannot be written;
-- the report is incomplete, the observed version is not in the admitted range, or any probe is `blocking`.
+- the observed version is outside every admitted range (nothing is probed or written), the report is incomplete, or any
+  probe is `blocking`.
 
 Do not infer success from an individual OpenCode process exit or from a partial report. Use the final classification,
 exit status, and the sanitized evidence together.
 
 ## Admitting a candidate version
+
+This section covers OpenCode 1. OpenCode 2 admits by `ADMITTED_OPENCODE_V2_RANGE`
+(`src/blizzard/runner/harness/opencode_v2/version.py`), normalized by `normalize_opencode_v2_version`; its corpus lives
+at the same `src/blizzard/runner/harness/contracts/opencode/<version>/` path with `"major_version": 2` in its manifest,
+and `tests/test_runner_harness_opencode_v2_compatibility.py` and `tests/service/test_opencode2_compatibility_service.py`
+judge it.
 
 This page's live diagnostic (above) runs against a version already inside the runner's admitted range —
 `ADMITTED_OPENCODE_RANGE` (`src/blizzard/runner/harness/opencode/compatibility/probe.py`), a
@@ -220,3 +232,88 @@ Either way, the same four-tier proof plus this page's own live diagnostic is owe
    final classification, and completeness/admissibility. It does not record whether the four earlier tiers passed; there
    is no separate record-keeping mechanism for the admission decision as a whole beyond the commit that lands the range
    bound and/or corpus fixture.
+
+## OpenCode 2
+
+An OpenCode 2 binary runs a different proof. OpenCode 2 runs as a managed service the operator owns, and the proof
+drives that service through its `/api/*` operations. These are the same operations the runner's OpenCode 2 driver core
+uses. The isolated disposable data root and credential copy described above apply to OpenCode 1 only; OpenCode 2 uses
+the operator's own service, login, and configuration.
+
+### Before you run OpenCode 2
+
+- Start the operator's service first (`opencode service start`). The proof finds it through the registration OpenCode
+  writes under `XDG_STATE_HOME` (or `~/.local/state`) and authenticates with the password recorded there. The password
+  never appears in output or evidence. With no service registered, the command fails before any row runs.
+- The proof restarts the service once to prove a restart is recognized, and only when no other session is running. With
+  any other session running, the `service_restart` row is reported `ambiguous`, so the run is blocking; rerun it with
+  the service idle.
+- The proof works in a disposable git repository under the system temporary directory. Every session it creates carries
+  `blizzard` proof metadata, and it interrupts and removes each one on every exit path. It leaves the operator's own
+  sessions untouched.
+- To settle `store_migration`, have an OpenCode 1 binary and a model it can run. The row seeds a disposable 1.x store
+  under an isolated home with that binary, lets OpenCode 2 open it, and has OpenCode 1 read it again. It never touches
+  the operator's own store.
+
+### Invocation for OpenCode 2
+
+The required options are the same as for OpenCode 1. Two more options are optional:
+
+- `--opencode1-binary PATH` — the OpenCode 1 executable that seeds the disposable store.
+- `--opencode1-model TEXT` — the `provider/model` that OpenCode 1 seeds it with.
+
+```bash
+umask 077
+blizzard runner opencode compatibility \
+  --binary /path/to/opencode \
+  --model openai/gpt-6-luna \
+  --variant high \
+  --evidence-dir /var/tmp/blizzard-opencode2-compatibility \
+  --live-provider \
+  --opencode1-binary /path/to/opencode1 \
+  --opencode1-model opencode/pulse-alpha-free
+```
+
+Without both OpenCode 1 options, `store_migration` reports `ambiguous`, so the run is blocking.
+
+### OpenCode 2 rows
+
+The output has the same line shapes as the OpenCode 1 report: one line per row, then
+`compatibility: supported|degraded|blocking`. The rows are:
+
+- `version`, `managed_service` — `--version` matches the version the service reports, and `service start` returns and
+  registers.
+- `caller_named_session`, `session_environment`, `concurrent_sessions` — sessions keep a runner-minted id, rules, model,
+  and metadata. A session's environment reaches its shell tools and no other session's, and sessions running at once
+  share nothing.
+- `prompt_and_completion`, `judgement`, `queue_and_steer`, `transcript_read` — prompts arrive verbatim, settling is
+  observed by polling alone, the final text carries `<Choice>`, `queue` and `steer` deliveries behave, and messages read
+  back with stable ids.
+- `interrupt`, `service_restart` — an interrupt stops a tree, its running children included, and ends their tool
+  processes. A restart is recognized by its changed registration `id` and `pid`, and any turn the restarted service
+  resumes is interrupted.
+- `usage_and_cost`, `pricing`, `errors_and_limits`, `model_and_variant`, `compaction` — usage is reported per session
+  and per message, the model listing carries prices, unknown models and variants fail as `provider.no-route`, the model
+  and variant hold, and compaction is recorded.
+- `permission_rules`, `permission_requests` — deny rules hold, `ask` requests hold their turn until answered, and forms
+  wait until they are cancelled.
+- `events`, `child_agents`, `takeover` — every event carries its session id, child sessions link to their root, and
+  `opencode --session <id>` continues a session.
+- `store_migration` — OpenCode 2 marks a migrated 1.x store with the `kv` key `migration.v1-v2`, and OpenCode 1 can
+  still read the store.
+
+`observed` makes a row `supported`. An `absent` result is `degraded` only for `pricing` and `events`; every other result
+is `blocking`. The evidence directory receives `report.json`, `manifest.json` (major version, each row's result, and the
+declared degradations), and one sanitized fixture per capture. The OpenCode 1 store fixture goes under `opencode1/`.
+
+**Pricing under a subscription login.** OpenCode lists no prices for a model covered by an OpenAI ChatGPT-plan login,
+and lists zero prices for its own free models. So on such a login `pricing` is `absent` and the run is `degraded`. That
+is a property of the login, not a defect in the binary.
+
+### OpenCode 2 offline rehearsal
+
+From a provisioned `blizzard-mock` checkout, emit an OpenCode 2 artifact: `uv run mock-opencode-2 emit --out <path>`.
+Run it with an isolated `HOME` and `XDG_*` directories exported in the shell. Start its service with
+`<path> service start`, then run the invocation above with `--binary` pointed at the emitted path. With the OpenCode 1
+options pointing at a disposable OpenCode 1, every row is `supported`. Stop the service afterwards with
+`<path> service stop`. A rehearsal proves the diagnostic runs end to end; it is not evidence about real OpenCode 2.

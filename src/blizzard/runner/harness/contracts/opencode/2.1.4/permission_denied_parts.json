@@ -1,0 +1,27 @@
+[
+  {
+    "executed": false,
+    "id": "call_4122c2fb8b6f4a39a1c4da296a96e0be",
+    "name": "shell",
+    "native": {
+      "itemId": "fc_04a6bdc988a88ba0016aea7915925487d2a4e6af1f67e6b51f"
+    },
+    "state": {
+      "error": {
+        "message": "Permission denied: shell",
+        "type": "permission.rejected"
+      },
+      "input": {
+        "command": "touch proof-denied-shell",
+        "workdir": "<scratch>/repo"
+      },
+      "status": "error"
+    },
+    "time": {
+      "completed": 1793751318106,
+      "created": 1793751317619,
+      "ran": 1793751318102
+    },
+    "type": "tool"
+  }
+]

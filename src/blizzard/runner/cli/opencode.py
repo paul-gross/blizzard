@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
+from functools import partial
 from pathlib import Path
 
 import click
 
 from blizzard.runner.cli.children import RunnerCliCollaborators
+from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityContractError
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
 from blizzard.runner.harness.opencode.compatibility.compaction import SubprocessOpenCodeCompactor
 from blizzard.runner.harness.opencode.compatibility.diagnostic import run_opencode_compatibility
 from blizzard.runner.harness.opencode.compatibility.evidence import OpenCodeEvidence, OpenCodeEvidenceError
 from blizzard.runner.harness.opencode.compatibility.probe import (
+    ADMITTED_OPENCODE_RANGE,
+    ADMITTED_OPENCODE_RANGE_DISPLAY,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     OpenCodeCompatibilityProbe,
     OpenCodeProbeError,
@@ -21,12 +27,38 @@ from blizzard.runner.harness.opencode.compatibility.probe import (
 from blizzard.runner.harness.opencode.compatibility.process import SubprocessOpenCodeProcess, stop_started_process
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
+from blizzard.runner.harness.opencode_v2.client import ModelReference
+from blizzard.runner.harness.opencode_v2.compatibility.corpus import (
+    CorpusError,
+    ProofEvidence,
+    Sanitizer,
+    validate_evidence_directory,
+)
+from blizzard.runner.harness.opencode_v2.compatibility.proof import OpenCodeTwoProof
+from blizzard.runner.harness.opencode_v2.compatibility.rows import classify_row
+from blizzard.runner.harness.opencode_v2.compatibility.store_migration import StoreMigrationProbe
+from blizzard.runner.harness.opencode_v2.compatibility.subprocess_host import SubprocessProofHost
+from blizzard.runner.harness.opencode_v2.driver import DriverCore, ServiceIdentityError, ServiceNotRegisteredError
+from blizzard.runner.harness.opencode_v2.registration import (
+    RegistrationError,
+    ServiceRegistration,
+    read_registration,
+    registration_path,
+)
+from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
+from blizzard.runner.harness.opencode_v2.version import (
+    ADMITTED_OPENCODE_V2_RANGE,
+    ADMITTED_OPENCODE_V2_RANGE_TEXT,
+    normalize_opencode_v2_version,
+)
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 
 
 @click.group("opencode")
 def opencode_group() -> None:
-    """Read-only diagnostics for OpenCode's admitted-version compatibility contract."""
+    """Read-only diagnostics for OpenCode's admitted-version compatibility contract, for either major version."""
 
 
 @opencode_group.command("compatibility")
@@ -54,6 +86,17 @@ def opencode_group() -> None:
     required=True,
     help="Required explicit opt-in to provider-reaching probes.",
 )
+@click.option(
+    "--opencode1-binary",
+    "opencode1_binary",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True, path_type=Path),
+    help="OpenCode 2 only: an OpenCode 1 executable that seeds the disposable store the migration row opens.",
+)
+@click.option(
+    "--opencode1-model",
+    "opencode1_model",
+    help="OpenCode 2 only: the provider/model OpenCode 1 seeds that store with.",
+)
 @click.pass_context
 def opencode_compatibility(
     ctx: click.Context,
@@ -62,11 +105,42 @@ def opencode_compatibility(
     variant: str,
     evidence_directory: Path,
     live_provider: bool,
+    opencode1_binary: Path | None,
+    opencode1_model: str | None,
 ) -> None:
-    """Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."""
+    """Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.
+
+    The binary's major version selects the proof: OpenCode 1 runs in an isolated scratch home, OpenCode 2 on the
+    operator's own managed service."""
+    provider, _, model_id = model.partition("/")
+    if not provider or not model_id:
+        raise click.BadParameter("expected provider/model", param_hint="--model")
+    carrier = RunnerCliCollaborators.of(ctx)
+    children = carrier.children
+    tool_env = AllowlistedEnv.of(_OPENCODE_DIRECTORY_VARIABLES).tool()
+    raw = _isolated_version(children, binary)
+    v1_version, v2_version = normalize_opencode_version(raw), normalize_opencode_v2_version(raw)
+    if v2_version is not None and version_admitted(v2_version, ADMITTED_OPENCODE_V2_RANGE):
+        _opencode_two_compatibility(
+            children,
+            tool_env,
+            binary,
+            ModelReference(provider, model_id, variant),
+            evidence_directory,
+            opencode1_binary,
+            opencode1_model,
+        )
+        return
+    if v1_version is None or not version_admitted(v1_version, ADMITTED_OPENCODE_RANGE):
+        observed = v1_version or v2_version or raw.strip() or "no version"
+        click.echo(f"OpenCode version: {observed}")
+        click.echo(
+            f"compatibility: blocking — outside every admitted range "
+            f"(OpenCode 1 {ADMITTED_OPENCODE_RANGE_DISPLAY}, OpenCode 2 {ADMITTED_OPENCODE_V2_RANGE_TEXT}); "
+            "nothing was probed"
+        )
+        raise click.exceptions.Exit(1)
     try:
-        carrier = RunnerCliCollaborators.of(ctx)
-        children = carrier.children
         process = SubprocessOpenCodeProcess(children)
         transport = carrier.loopback
         probe = OpenCodeCompatibilityProbe(
@@ -101,6 +175,94 @@ def opencode_compatibility(
     click.echo(f"compatibility: {report.classification.value}")
     if not report.admissible:
         raise click.exceptions.Exit(1)
+
+
+#: The directories OpenCode resolves its config, store, and service registration from; the operator's, passed through.
+_OPENCODE_DIRECTORY_VARIABLES = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
+
+
+def _opencode_two_compatibility(
+    children: IChildProcesses,
+    tool_env: ChildEnv,
+    binary: Path,
+    model: ModelReference,
+    evidence_directory: Path,
+    opencode1_binary: Path | None,
+    opencode1_model: str | None,
+) -> None:
+    passwords: set[str] = set()
+    source = partial(_registration, registration_path(os.environ), passwords)
+    host = SubprocessProofHost(children, tool_env)
+    scratch_root = Path(tempfile.mkdtemp(prefix="blizzard-opencode2-proof-"))
+    try:
+        scratch = scratch_root / "repo"
+        scratch.mkdir()
+        (scratch / "README.md").write_text("blizzard compatibility proof\n")
+        host.run(["git", "init", "-q", "."], cwd=scratch, timeout=30)
+        transport = UrllibServiceTransport()
+        proof = OpenCodeTwoProof(
+            binary=str(binary),
+            model=model,
+            scratch=scratch,
+            host=host,
+            core_factory=lambda: DriverCore(source, transport),
+            migration=StoreMigrationProbe(
+                binary=str(binary),
+                opencode1=str(opencode1_binary) if opencode1_binary else None,
+                opencode1_model=opencode1_model,
+                root=scratch_root / "store-migration",
+                host=host,
+            ),
+        )
+        validate_evidence_directory(evidence_directory)
+        report = proof.run()
+        source()
+        home = os.environ.get("HOME", "")
+        evidence = ProofEvidence(
+            evidence_directory,
+            Sanitizer(
+                secrets=tuple(sorted(passwords)),
+                replacements=(
+                    (str(scratch_root), "<scratch>"),
+                    (str(evidence_directory), "<evidence>"),
+                    *(((home, "<home>"),) if home else ()),
+                ),
+            ),
+        )
+        evidence.write(report, proof.captures, model=f"{model.provider_id}/{model.id}#{model.variant}")
+    except (CorpusError, RegistrationError, ServiceNotRegisteredError, ServiceIdentityError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        shutil.rmtree(scratch_root, ignore_errors=True)
+    click.echo(f"OpenCode version: {report.observed_version}")
+    for observation in report.observations:
+        click.echo(
+            f"{observation.row.value}: {classify_row(observation).value} ({observation.state.value}) — "
+            f"{observation.summary}"
+        )
+    click.echo(f"compatibility: {report.classification().value}")
+    if not report.admissible():
+        raise click.exceptions.Exit(1)
+
+
+def _isolated_version(children: IChildProcesses, binary: Path) -> str:
+    """The binary's raw ``--version`` output, read before either proof is chosen: in a scratch directory with a
+    disposable home and empty XDG roots, so no binary touches the operator's OpenCode state until its proof runs."""
+    with tempfile.TemporaryDirectory(prefix="blizzard-opencode-version-") as isolated:
+        root = Path(isolated)
+        roots = {name: root / name.lower() for name in ("HOME", *_OPENCODE_DIRECTORY_VARIABLES)}
+        for directory in roots.values():
+            directory.mkdir(mode=0o700)
+        env = AllowlistedEnv.of(()).tool().adding({name: str(path) for name, path in roots.items()})
+        return children.run([str(binary), "--version"], cwd=roots["HOME"], env=env, timeout=30).stdout
+
+
+def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration | None:
+    """The registration now, its password remembered so every service lifetime the run saw is redacted."""
+    registration = read_registration(path) if path is not None else None
+    if registration is not None:
+        passwords.add(registration.password)
+    return registration
 
 
 __all__ = ["opencode_compatibility", "opencode_group"]

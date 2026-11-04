@@ -1,0 +1,35 @@
+[
+  {
+    "executed": false,
+    "id": "call_a63624f9900143b08048ab41d8fd47b3",
+    "name": "subagent",
+    "native": {
+      "itemId": "fc_0b346368336485de016aea7933fb0887d2b0c252a69f21e874"
+    },
+    "state": {
+      "content": [
+        {
+          "text": "<subagent sessionID=\"ses_e5c168a23ffeIH47dq5ahCMu54\" state=\"completed\">\nCHILD=\n</subagent>",
+          "type": "text"
+        }
+      ],
+      "input": {
+        "agent": "general",
+        "description": "Report child environment",
+        "prompt": "Use the shell tool exactly once to run `echo CHILD=${BLZ_PROOF_ENV:-}` and report its exact output."
+      },
+      "metadata": {
+        "sessionID": "ses_e5c168a23ffeIH47dq5ahCMu54",
+        "status": "completed",
+        "truncated": false
+      },
+      "status": "completed"
+    },
+    "time": {
+      "completed": 1793751351378,
+      "created": 1793751348000,
+      "ran": 1793751348697
+    },
+    "type": "tool"
+  }
+]

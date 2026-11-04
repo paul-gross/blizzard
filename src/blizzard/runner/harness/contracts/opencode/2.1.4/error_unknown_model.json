@@ -1,0 +1,4 @@
+{
+  "message": "Model unavailable: openai/no-such-model-blizzard",
+  "type": "provider.no-route"
+}

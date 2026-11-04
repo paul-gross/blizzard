@@ -1,0 +1,18 @@
+[
+  {
+    "action": "shell",
+    "id": "per_1a3e79c1a001rZut75htBWQp3a",
+    "resources": [
+      "touch proof-lane-$BLZ_PROOF_ENV"
+    ],
+    "save": [
+      "touch *"
+    ],
+    "sessionID": "ses_33546efa08942eb906237c36c1",
+    "source": {
+      "id": "call_2a6d601e9b8b4974aaeaa5e50608cd4a",
+      "messageID": "msg_1a3e797ff001zqc07zT9PQUZ9M",
+      "type": "tool"
+    }
+  }
+]

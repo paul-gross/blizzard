@@ -1,0 +1,16 @@
+{
+  "action": "shell",
+  "id": "per_1a3e939dc001HVlH967KrkRwO1",
+  "resources": [
+    "touch proof-asked"
+  ],
+  "save": [
+    "touch *"
+  ],
+  "sessionID": "ses_2760256dbdb82bda3085e25a87",
+  "source": {
+    "id": "call_c25937d39f0e46709955b63b726b6156",
+    "messageID": "msg_1a3e93413001sEhHJsm5iD07aB",
+    "type": "tool"
+  }
+}

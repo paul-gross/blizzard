@@ -1,0 +1,96 @@
+[
+  {
+    "id": "msg_1a3ea8597001dXsGWBA3ALIiZI",
+    "text": "Reply with the word SEED and nothing else.",
+    "time": {
+      "created": 1793751418279
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_092dfe6fc7993392016aea797bcdb487d2b85be1fc69d2a845",
+          "phase": "final_answer"
+        },
+        "text": "SEED",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3ea85c3001l7nSkj791C4NQ1",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_092dfe6fc7993392016aea797b061487d291fb6655885f29b2",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751419961,
+      "created": 1793751418325,
+      "streamed": 1793751419947
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 142,
+      "output": 6,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3ea8c3f001RbVChaDKDaJxGp",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751419967
+    },
+    "type": "idle"
+  },
+  {
+    "cost": 0,
+    "id": "msg_1a3ea8dd9001gGH9akcCxJNKCH",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "reason": "manual",
+    "status": "completed",
+    "summary": "## Objective\n- Reply to the user with the exact word `SEED`.\n\n## Requirements\n- Output `SEED` and nothing else.\n\n## Decisions\n- (none)\n\n## Work State\n### Completed\n- Replied `SEED`.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n\n## Relevant Files\n- (none)\n\n## Important Context\n- (none)",
+    "time": {
+      "created": 1793751420386
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 713,
+      "output": 96,
+      "reasoning": 49
+    },
+    "type": "compaction"
+  },
+  {
+    "id": "msg_1a3ea9f7e001BP5JmlhA3D3Bv5",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751424894
+    },
+    "type": "idle"
+  }
+]

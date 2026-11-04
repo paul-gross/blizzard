@@ -1,0 +1,73 @@
+[
+  {
+    "agent": "build",
+    "id": "msg_1a3eaf197001bRtrUUYwpM7MSJ",
+    "time": {
+      "created": 1793751445911
+    },
+    "type": "agent-switched"
+  },
+  {
+    "agents": [],
+    "files": [],
+    "id": "msg_1a3eaf19d001kU87b6zgdwjoHN",
+    "text": "Reply with the word TAKEN and nothing else.",
+    "time": {
+      "created": 1793751445959
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "native": {
+          "itemId": "msg_08ca24137b345e7c016aea799696d887d2aef3170612612fab",
+          "phase": "final_answer"
+        },
+        "text": "TAKEN",
+        "type": "text"
+      }
+    ],
+    "cost": 0,
+    "finish": "stop",
+    "id": "msg_1a3eaf1d2001YUZNMxw2SEAqGb",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_08ca24137b345e7c016aea7996268487d295383c9947a3fb77",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "files": [],
+      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+    },
+    "time": {
+      "completed": 1793751446702,
+      "created": 1793751445994,
+      "streamed": 1793751446693
+    },
+    "tokens": {
+      "cache": {
+        "read": 6400,
+        "write": 0
+      },
+      "input": 166,
+      "output": 6,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  },
+  {
+    "id": "msg_1a3eaf4b2001TgctEhaHdQItcO",
+    "outcome": "succeeded",
+    "time": {
+      "created": 1793751446706
+    },
+    "type": "idle"
+  }
+]

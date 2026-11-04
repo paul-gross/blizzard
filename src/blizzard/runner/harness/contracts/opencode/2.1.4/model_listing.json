@@ -1,0 +1,802 @@
+[
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "video",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "id": "crouton-alpha-free",
+    "limit": {
+      "context": 1048576,
+      "output": 270000
+    },
+    "modelID": "crouton-alpha-free",
+    "name": "Crouton Alpha Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1793664000000
+    },
+    "variants": [
+      {
+        "id": "minimal",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "id": "pulse-alpha-free",
+    "limit": {
+      "context": 1048576,
+      "output": 131072
+    },
+    "modelID": "pulse-alpha-free",
+    "name": "Pulse Alpha Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1793577600000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false,
+      "tools": true
+    },
+    "cost": [],
+    "enabled": true,
+    "family": "gpt-terra",
+    "headers": {
+      "chatgpt-account-id": "0e1c5883-201e-4e05-b3d7-32dbb3b4209f",
+      "originator": "opencode",
+      "x-codex-beta-features": "remote_compaction_v2"
+    },
+    "id": "gpt-6.1-terra",
+    "limit": {
+      "context": 628000,
+      "input": 500000,
+      "output": 128000
+    },
+    "modelID": "gpt-6.1-terra",
+    "name": "GPT-6.1 Terra",
+    "package": "@opencode/ai/providers/openai",
+    "providerID": "openai",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1792972800000
+    },
+    "variants": [
+      {
+        "id": "none",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "flint",
+    "id": "flint-40b-free",
+    "limit": {
+      "context": 262144,
+      "output": 65536
+    },
+    "modelID": "flint-40b-free",
+    "name": "Flint 40B Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1792540800000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "nemotron",
+    "id": "nemotron-3.5-super-vl-free",
+    "limit": {
+      "context": 1048576,
+      "input": 1048576,
+      "output": 131072
+    },
+    "modelID": "nemotron-3.5-super-vl-free",
+    "name": "Nemotron 3.5 Super VL Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1792022400000
+    },
+    "variants": [
+      {
+        "id": "none",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "minimal",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "beam",
+    "id": "beam-free",
+    "limit": {
+      "context": 1048576,
+      "output": 131072
+    },
+    "modelID": "beam-free",
+    "name": "Beam Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1791158400000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false,
+      "tools": true
+    },
+    "cost": [],
+    "enabled": true,
+    "family": "gpt-sol",
+    "headers": {
+      "chatgpt-account-id": "0e1c5883-201e-4e05-b3d7-32dbb3b4209f",
+      "originator": "opencode",
+      "x-codex-beta-features": "remote_compaction_v2"
+    },
+    "id": "gpt-6.1-sol",
+    "limit": {
+      "context": 628000,
+      "input": 500000,
+      "output": 128000
+    },
+    "modelID": "gpt-6.1-sol",
+    "name": "GPT-6.1 Sol",
+    "package": "@opencode/ai/providers/openai",
+    "providerID": "openai",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1790640000000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "audio",
+        "video"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "mimo",
+    "id": "mimo-v2.6-flash-free",
+    "limit": {
+      "context": 200000,
+      "output": 32000
+    },
+    "modelID": "mimo-v2.6-flash-free",
+    "name": "MiMo-V2.6-Flash Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1790035200000
+    },
+    "variants": []
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false,
+      "tools": true
+    },
+    "cost": [],
+    "enabled": true,
+    "family": "gpt-luna",
+    "headers": {
+      "chatgpt-account-id": "0e1c5883-201e-4e05-b3d7-32dbb3b4209f",
+      "originator": "opencode",
+      "x-codex-beta-features": "remote_compaction_v2"
+    },
+    "id": "gpt-6-luna",
+    "limit": {
+      "context": 400000,
+      "input": 272000,
+      "output": 128000
+    },
+    "modelID": "gpt-6-luna",
+    "name": "GPT-6 Luna",
+    "package": "@opencode/ai/providers/openai",
+    "providerID": "openai",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1790035200000
+    },
+    "variants": [
+      {
+        "id": "none",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "deepseek-flash",
+    "id": "deepseek-v4.1-flash-free",
+    "limit": {
+      "context": 200000,
+      "output": 32000
+    },
+    "modelID": "deepseek-v4.1-flash-free",
+    "name": "DeepSeek V4.1 Flash Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1788998400000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false,
+      "tools": true
+    },
+    "cost": [],
+    "enabled": true,
+    "family": "gpt-astra",
+    "headers": {
+      "chatgpt-account-id": "0e1c5883-201e-4e05-b3d7-32dbb3b4209f",
+      "originator": "opencode",
+      "x-codex-beta-features": "remote_compaction_v2"
+    },
+    "id": "gpt-6-astra",
+    "limit": {
+      "context": 400000,
+      "input": 272000,
+      "output": 128000
+    },
+    "modelID": "gpt-6-astra",
+    "name": "GPT-6 Astra",
+    "package": "@opencode/ai/providers/openai",
+    "providerID": "openai",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1788480000000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "xhigh",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "glm-flash",
+    "id": "glm-5.3-flash-free",
+    "limit": {
+      "context": 200000,
+      "output": 32000
+    },
+    "modelID": "glm-5.3-flash-free",
+    "name": "GLM-5.3-Flash Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1787702400000
+    },
+    "variants": [
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "nemotron",
+    "id": "nemotron-3.5-lightning-free",
+    "limit": {
+      "context": 262144,
+      "output": 262144
+    },
+    "modelID": "nemotron-3.5-lightning-free",
+    "name": "Nemotron 3.5 Lightning Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1786406400000
+    },
+    "variants": []
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "big-pickle",
+    "id": "big-pickle",
+    "limit": {
+      "context": 200000,
+      "input": 160000,
+      "output": 32000
+    },
+    "modelID": "big-pickle",
+    "name": "Big Pickle",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1760659200000
+    },
+    "variants": []
+  }
+]

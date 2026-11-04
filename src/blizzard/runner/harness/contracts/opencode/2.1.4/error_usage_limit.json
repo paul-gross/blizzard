@@ -1,0 +1,9 @@
+{
+  "message": "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+  "response": {
+    "body": "{\"type\":\"error\",\"error\":{\"type\":\"FreeUsageLimitError\",\"message\":\"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go\"}}"
+  },
+  "retryAfterMs": 18748000,
+  "status": 429,
+  "type": "provider.free-limit"
+}
