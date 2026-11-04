@@ -20,8 +20,6 @@ from exemplar.hub.domain.permits.model import (
     RevocationNoteRequired,
 )
 
-pytestmark = pytest.mark.unit
-
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _AT = datetime(2026, 2, 1, tzinfo=UTC)
 

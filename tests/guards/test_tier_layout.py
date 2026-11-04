@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -54,7 +55,7 @@ def _layout(tests: Path, package: Path) -> tuple[tuple[Path, Path, frozenset[str
 
 
 def _apply(*items: _Item) -> None:
-    suite_plugin._apply_folder_layout(list(items))  # type: ignore[arg-type]
+    suite_plugin.apply_folder_layout(cast("list[pytest.Item]", list(items)))
 
 
 def test_a_tier_folder_gives_its_tier(tmp_path: Path) -> None:
@@ -97,7 +98,7 @@ def test_a_folder_mirroring_no_package_is_refused_except_under_guards(tmp_path: 
 
 def test_the_layout_step_marks_a_test_with_its_folders_tier(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tests, package = _tree(tmp_path)
-    monkeypatch.setattr(suite_plugin, "_LAYOUT_TREES", _layout(tests, package))
+    monkeypatch.setattr(suite_plugin, "LAYOUT_TREES", _layout(tests, package))
     unit, component = _Item(tests / "unit" / "hub" / "test_a.py"), _Item(tests / "component" / "test_b.py")
     _apply(unit, component)
     assert (unit.added, component.added) == (["unit"], ["component"])
@@ -116,7 +117,7 @@ def test_the_layout_step_refuses_a_misplaced_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str, markers: tuple[str, ...], reason: str
 ) -> None:
     tests, package = _tree(tmp_path)
-    monkeypatch.setattr(suite_plugin, "_LAYOUT_TREES", _layout(tests, package))
+    monkeypatch.setattr(suite_plugin, "LAYOUT_TREES", _layout(tests, package))
     with pytest.raises(pytest.UsageError, match=reason):
         _apply(_Item(tests / relative, markers))
 
@@ -126,7 +127,7 @@ def test_the_layout_step_refuses_a_folder_that_is_not_a_package(
 ) -> None:
     tests, package = _tree(tmp_path)
     (tests / "guards" / "bare").mkdir()
-    monkeypatch.setattr(suite_plugin, "_LAYOUT_TREES", _layout(tests, package))
+    monkeypatch.setattr(suite_plugin, "LAYOUT_TREES", _layout(tests, package))
     with pytest.raises(pytest.UsageError, match=r"no __init__\.py"):
         _apply(_Item(tests / "guards" / "bare" / "test_a.py"))
 

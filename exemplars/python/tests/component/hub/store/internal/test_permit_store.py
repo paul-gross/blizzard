@@ -32,8 +32,6 @@ from tests.support import (
     seed_project,
 )
 
-pytestmark = pytest.mark.component
-
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
 _PERMIT_REVISION = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")
 _T0 = datetime(2026, 3, 1, tzinfo=UTC)

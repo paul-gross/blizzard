@@ -9,8 +9,6 @@ import asyncio
 from datetime import UTC, datetime
 from types import MappingProxyType
 
-import pytest
-
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
@@ -25,8 +23,6 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.forge.landing import Mergeability
 from exemplar.hub.delivery.actions.land_clean import LandClean
 from tests.github_double import DoubleRepo, GitHubDouble, change
-
-pytestmark = pytest.mark.component
 
 _WIDGET = "acme/widget"
 _GADGET = "acme/gadget"

@@ -8,16 +8,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
-
 from blizzard.foundation.clock import FixedClock
 from exemplar.runner.disk.floor import DiskFloorCheck
 from exemplar.runner.disk.model import DiskBrakeFact, DiskFloorMove, IWriteDiskBrakeRepository
 from exemplar.runner.disk.probe import DiskUnreadable, IDiskProbe
 from exemplar.runner.loop.context import LoopConfig, LoopContext
 from exemplar.runner.stores import RunnerStores
-
-pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 10, 15, 12, 0, 0, tzinfo=UTC)
 _ROOT = Path("/ws")
