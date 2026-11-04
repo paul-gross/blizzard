@@ -1,0 +1,893 @@
+"""Chunk status derivation (unit tier) — the status precedence ladder, facts only.
+
+Builds ``ChunkFacts`` directly — no store, no tokens. Walks the live path (ready ->
+running -> delivering -> done) and pins the precedence edges: an escalation superseded
+by a later lease is no longer ``needs_human``, and a released route re-derives ``ready``."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import TypedDict, Unpack
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunk.model import (
+    BounceFact,
+    ChunkFacts,
+    DecisionFact,
+    EscalationFact,
+    LeaseFact,
+    MigrationFact,
+    PauseFact,
+    QuestionFact,
+    RestartFact,
+    RouteCreatedFact,
+    RouteHistory,
+    RouteReleasedFact,
+    RouteTokenMintedFact,
+    TransitionFact,
+)
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _at(seconds: int) -> datetime:
+    return _T0 + timedelta(seconds=seconds)
+
+
+def test_minted_with_no_facts_is_not_ready() -> None:
+    # Ingest mints a chunk in the not-ready resting state: visible, never claimed
+    # until promoted. Un-promoted with no other facts falls through to not_ready.
+    assert ChunkFacts(minted=True).status() is ChunkStatus.NOT_READY
+
+
+def test_promoted_chunk_with_no_route_is_ready() -> None:
+    # The ``chunk.promoted`` fact flips the resting state to ready — now claimable.
+    assert ChunkFacts(minted=True, promoted=True).status() is ChunkStatus.READY
+
+
+def test_live_route_wins_over_not_ready() -> None:
+    # A live route derives running even without promotion: the route check sits above the
+    # not_ready fall-through, so a claimed chunk always reads its post-claim state.
+    facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_paused_promoted_unclaimed_chunk_is_ready_but_for_pause() -> None:
+    facts = ChunkFacts(minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert facts.is_ready_but_for_pause()
+
+
+def test_paused_unpromoted_chunk_is_not_ready_but_for_pause() -> None:
+    facts = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert not facts.is_ready_but_for_pause()
+
+
+def test_paused_chunk_with_a_live_route_is_not_ready_but_for_pause() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        pauses=[PauseFact(paused=True, set_at=_at(2), set_by="operator")],
+    )
+    assert not facts.is_ready_but_for_pause()
+
+
+def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        routes_released=[RouteReleasedFact(released_at=_at(2))],
+    )
+    assert facts.status() is ChunkStatus.READY
+
+
+class _DetachedRouteFields(TypedDict, total=False):
+    escalations: list[EscalationFact]
+    questions: list[QuestionFact]
+
+
+def _detached_route(**extra: Unpack[_DetachedRouteFields]) -> ChunkFacts:
+    """A route created then released — detach's fact shape: one write, no
+    supersession, no epoch bump. Used to pin that detach clears only the running
+    branch and leaves every higher-precedence branch untouched."""
+    return ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        routes_released=[RouteReleasedFact(released_at=_at(2))],
+        **extra,
+    )
+
+
+def test_detached_route_with_no_other_facts_re_derives_ready() -> None:
+    assert _detached_route().status() is ChunkStatus.READY
+
+
+def test_detached_route_with_an_open_escalation_still_derives_needs_human() -> None:
+    # Detach releases the route only; it does not supersede the escalation (that is
+    # requeue's job), so a detached, still-escalated chunk stays needs_human.
+    facts = _detached_route(escalations=[EscalationFact(epoch=1, recorded_at=_at(3))])
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+
+
+def test_detached_route_with_an_open_question_still_derives_waiting_on_human() -> None:
+    # Same shape, an open ask instead of an escalation — explicit acceptance criterion
+    # of the detach issue: the ask/answer park survives a detach.
+    facts = _detached_route(questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)])
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_stopped_wins_over_not_ready() -> None:
+    # An operator can abandon a chunk before promoting it — stopped still wins.
+    assert ChunkFacts(minted=True, stopped=True).status() is ChunkStatus.STOPPED
+
+
+def test_reclaimed_after_release_is_running_again() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1)), RouteCreatedFact(created_at=_at(3))],
+        routes_released=[RouteReleasedFact(released_at=_at(2))],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_same_instant_detach_takes_effect() -> None:
+    """A release recorded after the create in real write order — its
+    ``seq`` is higher — wins a same-instant tie, so the chunk derives out of
+    ``running`` even though ``created_at == released_at``."""
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1), seq=1)],
+        routes_released=[RouteReleasedFact(released_at=_at(1), seq=2)],
+    )
+    assert facts.status() is ChunkStatus.READY
+
+
+def test_same_instant_reclaim_still_derives_running() -> None:
+    """A fresh ``route.created`` with a higher ``seq`` than a same-instant prior release
+    still wins the tie, so no live route is lost."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1), seq=1), RouteCreatedFact(created_at=_at(2), seq=3)],
+        routes_released=[RouteReleasedFact(released_at=_at(2), seq=2)],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+# Route capability token derivation — newest-fact-wins, as above.
+# --------------------------------------------------------------------------- #
+
+
+def test_unclaimed_chunk_has_no_live_token() -> None:
+    assert RouteHistory().newest_token is None
+
+
+def test_live_route_with_no_token_facts_has_no_live_token() -> None:
+    # Should not happen in practice (the hub mints the token atomically with the
+    # route), but the derivation must not fabricate one.
+    routes_created = [RouteCreatedFact(created_at=_at(1))]
+    assert RouteHistory(routes_created).newest_token is None
+
+
+def test_freshly_claimed_route_has_its_own_live_token() -> None:
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
+    live = RouteHistory(routes_created, [], tokens).newest_token
+    assert live is not None
+    assert live.token_hash == "hash-a"
+
+
+def test_released_route_has_no_live_token() -> None:
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    routes_released = [RouteReleasedFact(released_at=_at(2), seq=3)]
+    tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
+    assert RouteHistory(routes_created, routes_released, tokens).newest_token is None
+
+
+def test_earlier_acquisitions_token_is_excluded_after_reclaim() -> None:
+    """A released acquisition's token must not leak as the live token of the chunk's
+    *next* acquisition — only a token minted at/after the live route's own seq counts."""
+    routes_created = [
+        RouteCreatedFact(created_at=_at(1), seq=1),  # first acquisition
+        RouteCreatedFact(created_at=_at(3), seq=4),  # reclaim, now live
+    ]
+    routes_released = [RouteReleasedFact(released_at=_at(2), seq=3)]
+    tokens = [
+        RouteTokenMintedFact(token_hash="hash-old", minted_at=_at(1), seq=2),  # first acquisition's
+        RouteTokenMintedFact(token_hash="hash-new", minted_at=_at(3), seq=5),  # the reclaim's
+    ]
+    live = RouteHistory(routes_created, routes_released, tokens).newest_token
+    assert live is not None
+    assert live.token_hash == "hash-new"
+
+
+def test_a_rekey_fact_supersedes_the_original_token() -> None:
+    """Re-key: a second token_minted fact for the same live route, minted
+    later, must win — newest-fact-wins, no separate revocation needed."""
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    tokens = [
+        RouteTokenMintedFact(token_hash="hash-original", minted_at=_at(1), seq=2),
+        RouteTokenMintedFact(token_hash="hash-rekeyed", minted_at=_at(5), seq=6),
+    ]
+    live = RouteHistory(routes_created, [], tokens).newest_token
+    assert live is not None
+    assert live.token_hash == "hash-rekeyed"
+
+
+def test_newest_transition_into_hub_node_is_delivering() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+    )
+    assert facts.status() is ChunkStatus.DELIVERING
+
+
+def test_runner_node_transition_stays_running_not_delivering() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_at(5)),
+        ],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_delivery_landed_is_done_over_a_live_route() -> None:
+    # DONE derives from *reaching* the terminal transition (#63), not the landed fact
+    # alone; the default graph's ``finalize_delivery`` always writes both atomically.
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=2, recorded_at=_at(5)),
+        ],
+    )
+    assert facts.status() is ChunkStatus.DONE
+
+
+def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
+    # A whole-chunk ``delivery.landed`` fact with no terminal transition (unreachable via
+    # ``finalize_delivery``) must NOT derive DONE — it falls through to the live route below.
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_merged_but_running_derives_running_not_done() -> None:
+    # An authored ``merged -> <node>`` edge retains the route via a non-terminal
+    # transition; the chunk derives its live running state, not DONE.
+    facts = ChunkFacts(
+        minted=True,
+        landed_repos=frozenset({"acme/widget"}),
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_postmerge", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5)),
+        ],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.has_landed_repos() is True
+
+
+def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
+    # The post-merge node exhausted retries: the chunk derives BOTH needs_human (status)
+    # and landed (detail), represented honestly rather than hidden or un-merged.
+    facts = ChunkFacts(
+        minted=True,
+        landed_repos=frozenset({"acme/widget"}),
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_postmerge", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5)),
+        ],
+        escalations=[EscalationFact(epoch=2, recorded_at=_at(6))],
+    )
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+    assert facts.has_landed_repos() is True
+
+
+def test_has_landed_repos_false_with_no_landed_facts_at_all() -> None:
+    assert ChunkFacts(minted=True).has_landed_repos() is False
+
+
+def test_stopped_wins_over_everything() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, delivery_landed=True)
+    assert facts.status() is ChunkStatus.STOPPED
+
+
+def test_open_escalation_is_needs_human() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+    )
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+
+
+def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        leases=[LeaseFact(epoch=2, minted_at=_at(6))],  # requeue + re-lease supersedes
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_escalation_closed_by_a_later_stop_is_no_longer_open() -> None:
+    # The operator resolved it out-of-band and abandoned the chunk (#292); no lease
+    # mint ever follows a stop, so this is the only supersession available.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        stopped=True,
+        stopped_at=_at(6),
+    )
+    assert facts.open_escalation() is None
+
+
+def test_a_stop_preceding_the_escalation_leaves_it_open() -> None:
+    # Supersession is ordered: an earlier stop is not a resolution of a later hold.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(6))],
+        stopped=True,
+        stopped_at=_at(4),
+    )
+    assert facts.open_escalation() is not None
+
+
+def test_escalation_closed_by_reaching_done_is_no_longer_open() -> None:
+    # A chunk requeued away, claimed elsewhere and landed mints no later lease here (#293),
+    # so completion is the only thing that can supersede its escalation.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(6))
+        ],
+    )
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.open_escalation() is None
+
+
+def test_a_completion_preceding_the_escalation_leaves_it_open() -> None:
+    # Ordered, like every other arm: an earlier landing is not a resolution of a later hold.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(4))
+        ],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(6))],
+    )
+    assert facts.open_escalation() is not None
+
+
+def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
+    # An open ask parks the chunk: a live route would derive running,
+    # but the unanswered question wins the higher-precedence waiting_on_human slot.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)],
+    )
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+    assert [q.question_id for q in facts.open_questions()] == ["qn_1"]
+
+
+def test_answered_question_flips_back_to_running() -> None:
+    # The answer row alone flips the chunk out of waiting_on_human.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=True)],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.open_questions() == []
+
+
+def test_open_decision_is_waiting_on_human() -> None:
+    # The gate track writes DecisionFacts against this shape; an unresolved one parks.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=False)],
+    )
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_resolved_decision_no_longer_waits() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=True)],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_needs_human_wins_over_an_open_question() -> None:
+    # Precedence: needs_human sits above waiting_on_human.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(5), answered=False)],
+    )
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+
+
+def test_open_question_wins_over_a_hub_node_transition() -> None:
+    # waiting_on_human sits above delivering: a chunk that asked at a hub node still parks.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(6), answered=False)],
+    )
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_current_node_and_latest_epoch_derive_from_facts() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=1, minted_at=_at(1)), LeaseFact(epoch=3, minted_at=_at(3))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_at(2)),
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=3, recorded_at=_at(4)),
+        ],
+    )
+    assert facts.current_node_id() == "nd_deliver"
+    assert facts.latest_epoch() == 3
+
+
+def test_current_node_and_epoch_none_before_any_fact() -> None:
+    facts = ChunkFacts(minted=True)
+    assert facts.current_node_id() is None
+    assert facts.latest_epoch() is None
+
+
+# --- Operator restart --------------------------------------------
+
+
+def _restart(node_id: str, *, executor: Executor = Executor.RUNNER, at: int, epoch: int) -> RestartFact:
+    return RestartFact(
+        to_node_id=node_id,
+        from_node_id="nd_build",
+        graph_id="gr_1",
+        epoch=epoch,
+        recorded_at=_at(at),
+        to_node_executor=executor,
+        restarted_by="operator",
+    )
+
+
+def test_a_restart_is_the_chunks_current_node_and_its_latest_epoch() -> None:
+    """The move re-aims the chunk and raises the fence, with no lease behind either."""
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=3, minted_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=3, recorded_at=_at(2))
+        ],
+        restarts=[_restart("nd_plan", at=5, epoch=4)],
+    )
+    assert facts.current_node_id() == "nd_plan"
+    assert facts.latest_epoch() == 4
+    assert facts.entered_by_restart()
+
+
+def test_a_transition_after_a_restart_supersedes_it() -> None:
+    """The forced visit ends the moment the chunk moves off it under its own steam."""
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=5, minted_at=_at(6))],
+        transitions=[
+            TransitionFact(to_node_id="nd_review", to_node_executor=Executor.RUNNER, epoch=5, recorded_at=_at(7))
+        ],
+        restarts=[_restart("nd_plan", at=5, epoch=4)],
+    )
+    assert facts.current_node_id() == "nd_review"
+    assert not facts.entered_by_restart()
+
+
+def test_a_restart_supersedes_a_terminal_transition_it_follows() -> None:
+    """Only a transition can be terminal, and a later movement of any kind supersedes it."""
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_at(2))
+        ],
+        restarts=[_restart("nd_build", at=3, epoch=2)],
+    )
+    assert not facts.newest_transition_is_terminal()
+    assert facts.status() is not ChunkStatus.DONE
+
+
+def test_a_restart_onto_a_hub_node_derives_delivering() -> None:
+    """The target's executor governs exactly as an arriving transition's would."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        restarts=[_restart("nd_deliver", executor=Executor.HUB, at=3, epoch=2)],
+    )
+    assert facts.status() is ChunkStatus.DELIVERING
+
+
+def test_a_restart_supersedes_an_open_escalation() -> None:
+    """Closed by supersession, the way a requeue closes one — no resolution fact exists."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        restarts=[_restart("nd_build", at=3, epoch=2)],
+    )
+    assert facts.open_escalation() is None
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_a_migration_still_wins_a_tie_against_the_transition_it_supersedes() -> None:
+    """The pre-restart tie-break is unchanged: same instant and epoch, migration wins."""
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5))
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id="nd_build",
+                from_graph_id="gr_1",
+                to_graph_id="gr_2",
+                landed_node_id="nd_landed",
+                choice_name="pass",
+                model=None,
+                epoch=2,
+                recorded_at=_at(5),
+            )
+        ],
+    )
+    assert facts.current_node_id() == "nd_landed"
+
+
+# --- Pause --------------------------------------------------------
+
+
+def test_paused_wins_over_delivering() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        pauses=[PauseFact(paused=True, set_at=_at(6), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_running() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        pauses=[PauseFact(paused=True, set_at=_at(2), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_not_ready() -> None:
+    facts = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert facts.status() is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_ready() -> None:
+    facts = ChunkFacts(minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert facts.status() is ChunkStatus.PAUSED
+
+
+def test_waiting_on_human_wins_over_paused() -> None:
+    # An operator may pause a chunk already parked on a question (§0.3): the chunk is
+    # first, still, waiting on a human — pausing does not preempt the human gate.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=False)],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_needs_human_wins_over_paused() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+
+
+def test_done_wins_over_paused() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(1)),
+        ],
+        pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.DONE
+
+
+def test_stopped_wins_over_paused() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert facts.status() is ChunkStatus.STOPPED
+
+
+def test_operator_completion_after_a_stop_derives_done() -> None:
+    # The motivating case: a later hand-completion outranks the stop it follows.
+    facts = ChunkFacts(
+        minted=True, stopped=True, stopped_at=_at(4), operator_completed=True, operator_completed_at=_at(6)
+    )
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(6)
+
+
+def test_stop_with_no_completion_fact_still_derives_stopped() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(4))
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(4)
+
+
+def test_operator_completion_before_a_stop_does_not_outrank_it() -> None:
+    # Ordered, like every other arm: an earlier completion is not a resolution of a later stop.
+    facts = ChunkFacts(
+        minted=True, stopped=True, stopped_at=_at(6), operator_completed=True, operator_completed_at=_at(4)
+    )
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(6)
+
+
+def test_operator_completion_at_the_same_instant_as_the_stop_outranks_it() -> None:
+    # Ties go to the completion (the FixedClock-default case) — >=, not >, against stopped_at.
+    at = _at(5)
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=at, operator_completed=True, operator_completed_at=at)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == at
+
+
+def test_operator_completion_with_no_stop_derives_done() -> None:
+    facts = ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_at(3))
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(3)
+
+
+def test_resumed_chunk_no_longer_paused() -> None:
+    # Newest-fact-wins: a resume appended after the pause flips it back.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+        ],
+    )
+    assert facts.status() is ChunkStatus.READY
+
+
+def test_re_pause_after_resume_derives_paused_again() -> None:
+    # Pause -> resume -> pause again: the newest fact (a second pause) must win.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+            PauseFact(paused=True, set_at=_at(3), set_by="operator"),
+        ],
+    )
+    assert facts.status() is ChunkStatus.PAUSED
+
+
+# `open_pause` is the wire's sole pause source (§4) and must never be
+# rewritten in terms of `derive_chunk_status`, which is a lossy read of PAUSED.
+
+
+def _paused_and_asking() -> ChunkFacts:
+    """Paused **and** parked on an open question — the overlap §0.3 deliberately allows."""
+    return ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=False)],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="alice")],
+    )
+
+
+def test_open_pause_survives_a_status_that_hides_the_pause() -> None:
+    """THE keystone: status is waiting_on_human, yet the pause fact is still legible.
+
+    If it ever regresses, a paused chunk parked on a question reads as un-paused."""
+    facts = _paused_and_asking()
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN  # the status hides it...
+    pause = facts.open_pause()
+    assert pause is not None, "a status-keyed open_pause would return None here — the P4 trap"
+    assert pause.set_by == "alice"
+    assert pause.set_at == _at(3)
+
+
+def test_open_pause_survives_needs_human_too() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+    assert facts.open_pause() is not None
+
+
+def test_open_pause_is_none_without_any_pause_fact() -> None:
+    assert ChunkFacts(minted=True, promoted=True).open_pause() is None
+
+
+def test_open_pause_is_none_after_a_resume() -> None:
+    # Newest-fact-wins: the tail reads paused=False, so no pause is open — even though a
+    # pause fact exists in the list.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+        ],
+    )
+    assert facts.open_pause() is None
+
+
+def test_open_pause_returns_the_newest_pause_after_a_re_pause() -> None:
+    # Pause(alice) -> resume -> pause(bob): the view must carry *bob*, the newest setter,
+    # not the first one. Reading the head of the list would answer "alice".
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="alice"),
+            PauseFact(paused=False, set_at=_at(2), set_by="alice"),
+            PauseFact(paused=True, set_at=_at(3), set_by="bob"),
+        ],
+    )
+    pause = facts.open_pause()
+    assert pause is not None
+    assert pause.set_by == "bob"
+    assert pause.set_at == _at(3)
+
+
+def _bounce(epoch: int, *, at: datetime, cause: str = "conflict") -> BounceFact:
+    return BounceFact(epoch=epoch, cause=cause, envelope=f'{{"cause": "{cause}"}}', recorded_at=at)
+
+
+def test_bounce_count_zero_with_no_bounces() -> None:
+    assert ChunkFacts(minted=True).bounce_count() == 0
+
+
+def test_bounce_count_counts_every_recorded_bounce() -> None:
+    facts = ChunkFacts(minted=True, bounces=[_bounce(2, at=_at(1)), _bounce(4, at=_at(2)), _bounce(6, at=_at(3))])
+    assert facts.bounce_count() == 3
+
+
+def test_bounces_over_cap_false_at_the_cap() -> None:
+    # A cap of 5 tolerates exactly 5 bounces — the cap counts bounces survived, not a
+    # zero-indexed budget, so the 5th does not cross it.
+    facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(5)])
+    assert facts.bounce_count() == 5
+    assert facts.bounces_over_cap(5) is False
+
+
+def test_bounces_over_cap_true_once_crossed() -> None:
+    # The 6th bounce crosses a cap of 5.
+    facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(6)])
+    assert facts.bounce_count() == 6
+    assert facts.bounces_over_cap(5) is True
+
+
+def test_bounce_is_informational_never_a_status() -> None:
+    # A bounced-but-still-routed chunk derives `running` regardless of bounce count —
+    # a bounce is contention, not failure, and never drives the status ladder.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(2)),
+        ],
+        bounces=[_bounce(n, at=_at(n)) for n in range(5)],
+    )
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.bounce_count() == 5
+
+
+def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
+    # `done` outranks `paused` in the derivation, so a status-keyed read loses the pause
+    # here too — the same lossiness as the human-gated states, one rank further up.
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(1)),
+        ],
+        pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
+    )
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.open_pause() is not None
+
+
+# derive_completed_at mirrors derive_chunk_status's branch order.
+# --------------------------------------------------------------------------- #
+
+
+def test_completed_at_is_none_for_every_non_terminal_status() -> None:
+    assert ChunkFacts(minted=True).completed_at() is None
+    facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.completed_at() is None
+
+
+def test_completed_at_is_the_stop_instant_for_stopped() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(9))
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(9)
+
+
+def test_completed_at_is_the_terminal_transitions_instant_for_done() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+    )
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(5)
+
+
+def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal() -> None:
+    # The newest movement is a migration after the terminal transition, so it is
+    # superseded; `derive_completed_at` must not report that transition's instant.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        transitions=[
+            TransitionFact(
+                to_node_id=RESERVED_TERMINAL,
+                to_node_executor=Executor.HUB,
+                epoch=1,
+                recorded_at=_at(5),
+                graph_id="gr_a",
+            ),
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id=RESERVED_TERMINAL,
+                from_graph_id="gr_a",
+                to_graph_id="gr_b",
+                landed_node_id="nd_landed",
+                choice_name="migrate",
+                model=None,
+                epoch=1,
+                recorded_at=_at(6),
+            ),
+        ],
+    )
+    assert facts.status() is not ChunkStatus.DONE
+    assert facts.completed_at() is None

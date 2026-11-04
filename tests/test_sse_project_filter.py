@@ -3,7 +3,7 @@
 A frame stamped with a chunk's project passes only for that project; a runner's frames pass when the runner serves
 it, by a served set read off the event loop at subscribe and again on a ``runner-changed`` that can change it;
 every other frame passes. The replay tail is filtered as the live frames are. The handler is called directly, as in
-``tests/test_events_stream.py``, since a test client buffers an endless stream."""
+``tests/component/hub/api/test_events_stream.py``, since a test client buffers an endless stream."""
 
 from __future__ import annotations
 

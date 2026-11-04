@@ -83,7 +83,7 @@ class TrustedProxies:
         """The effective client IP: behind a trusted ``direct_peer``, the **rightmost untrusted hop**
         of ``X-Forwarded-For`` — the leftmost entry is forgeable, the first hop we do not control is
         not. Otherwise ``direct_peer`` stands (pinned by
-        tests/test_forwarded.py::test_client_ip_stops_at_the_first_untrusted_hop_from_the_right)."""
+        tests/unit/foundation/test_forwarded.py::test_client_ip_stops_at_the_first_untrusted_hop_from_the_right)."""
         if not self._trusts(direct_peer) or not forwarded_for:
             return direct_peer
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]

@@ -34,7 +34,7 @@ class RepoRef:
         """The ``owner/name`` coordinate ``origin_url`` encodes, or ``None`` if it encodes none.
 
         ``None`` is a real answer, not a failure (pinned by
-        ``tests/test_repo_ref.py::test_returns_none_when_the_origin_names_no_owner``). Only the last two
+        ``tests/unit/foundation/test_repo_ref.py::test_returns_none_when_the_origin_names_no_owner``). Only the last two
         path segments matter, so a nested group path yields the immediate parent as the owner."""
         url = origin_url.strip().rstrip("/")
         if not url:

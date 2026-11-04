@@ -7,7 +7,7 @@ the sites recording it in ``hub_event_log``. It borrows only
 vocabulary: this census's subject is the event kinds, not
 :class:`~blizzard.runner.stores.IWriteRunnerStore`, and it names no member of
 ``WRITE_PROTOCOL_CENSUS`` or the SSE broker's ``EVENT_TYPES``. Exhaustiveness is carried by
-``tests/test_event_log_kind_census.py``, this module's only reader — which is also why it
+``tests/guards/test_event_log_kind_census.py``, this module's only reader — which is also why it
 lives under ``tests/``, not ``src/``: no runtime importer."""
 
 from __future__ import annotations

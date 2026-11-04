@@ -72,7 +72,7 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
 # `[[work_source]]`'s pre-rename name — deliberately *not* aliased; pinned by
-# `tests/test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
+# `tests/unit/test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
 RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
@@ -220,7 +220,7 @@ def _work_sources(document: ConfigView) -> tuple[WorkSourceConfig, ...]:
             )
         annotate = entry.get("annotate", False)
         if not isinstance(annotate, bool):
-            # Pinned: `tests/test_config.py::test_work_source_annotate_non_bool_raises_naming_the_source`.
+            # Pinned: `tests/unit/test_config.py::test_work_source_annotate_non_bool_raises_naming_the_source`.
             raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
         api_base = str(entry.get("api_base")) if entry.get("api_base") else None
         web_base = str(entry.get("web_base")) if entry.get("web_base") else None
@@ -777,7 +777,7 @@ class HubConfig:
             raise ConfigError(f"produces_mode must be one of {sorted(_KNOWN_PRODUCES_MODES)}, got {produces_mode!r}")
         follow_latest = raw.get("follow_latest", DEFAULT_FOLLOW_LATEST)
         if not isinstance(follow_latest, bool):
-            # Pinned: `tests/test_config.py::test_follow_latest_non_boolean_raises`.
+            # Pinned: `tests/unit/test_config.py::test_follow_latest_non_boolean_raises`.
             raise ConfigError(f"follow_latest must be a boolean, got {follow_latest!r}")
         close_forge_writes_enabled = raw.get("close_forge_writes_enabled", DEFAULT_CLOSE_FORGE_WRITES_ENABLED)
         if not isinstance(close_forge_writes_enabled, bool):

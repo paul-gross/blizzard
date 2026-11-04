@@ -2,7 +2,7 @@
 migrated store. Every case here reaches the domain service and the stores directly, the
 way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly — the
 ``DELETE /chunks/{id}`` route itself is covered over HTTP by
-``tests/test_chunk_delete_route.py``."""
+``tests/component/hub/api/test_chunks_delete.py``."""
 
 from __future__ import annotations
 

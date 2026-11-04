@@ -3,7 +3,7 @@
 Stamps one fact, ``route.released``, so the chunk re-derives ``ready`` at its current
 node; facts append, status derives (``bzh:facts-not-status``). It writes no
 ``requeue.recorded`` fact, so it supersedes no escalation and bumps no epoch — pinned by
-tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalation_still_derives_needs_human."""
+tests/unit/hub/domain/chunk/test_model_status_derivation.py::test_detached_route_with_an_open_escalation_still_derives_needs_human."""
 
 from __future__ import annotations
 

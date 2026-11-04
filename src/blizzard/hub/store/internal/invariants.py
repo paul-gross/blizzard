@@ -584,7 +584,7 @@ class MigrationsAtomic(HubQueryCheck):
                     )
                 )
             # **Membership**, not equality against `[model_after]` — the list may
-            # legitimately grow afterwards (pinned by tests/test_invariant_checker.py).
+            # legitimately grow afterwards (pinned by tests/component/tools/test_invariants.py).
             elif m.model_after is not None and m.model_after not in DEFAULT_MODEL.decode(chunk.default_model):
                 violations.append(
                     Violation(

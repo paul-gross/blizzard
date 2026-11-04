@@ -19,8 +19,9 @@ listed. A deprecated key is still read — to refuse it, graduate it, or honor i
 
 `blizzard-export-contracts` builds the documents from each daemon's config registry (`blizzard.hub.config_keys`,
 `blizzard.runner.config_keys`), so the merge gate's `contract drift` step turns red when a registry changes without a
-regenerated document. `blizzard:config-contract` (`uv run pytest tests/test_config_contract.py`) holds each committed
-document to its registry. A test run reads config only through those registries: an undeclared key read raises.
+regenerated document. `blizzard:config-contract` (`uv run pytest tests/guards/test_config_contract.py`) holds each
+committed document to its registry. A test run reads config only through those registries: an undeclared key read
+raises.
 
 Regenerate after an intended change:
 

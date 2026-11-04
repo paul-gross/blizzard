@@ -38,7 +38,7 @@ class GraphLifecycleService:
         """Append this graph's follow-latest policy — the tri-state.
 
         ``None`` reverts to inheriting the configured default; clearing an override is an
-        appended fact like any other (pinned by tests/test_follow_latest_policy.py).
+        appended fact like any other (pinned by tests/component/hub/api/test_graphs_follow_latest.py).
         """
         fact = graph.policy_fact(follow_latest=follow_latest, at=self._clock.now(), by=by)
         self._graphs.record_policy(fact.graph_id, follow_latest=fact.follow_latest, at=fact.at, by=fact.by)

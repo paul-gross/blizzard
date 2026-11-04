@@ -19,7 +19,7 @@ ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 class LiveStderr:
     """A file-like proxy resolving ``sys.stderr`` fresh on every write (pinned by
-    ``tests/test_logging.py::test_a_cached_logger_survives_a_replaced_stderr``)."""
+    ``tests/unit/foundation/test_logging.py::test_a_cached_logger_survives_a_replaced_stderr``)."""
 
     def write(self, message: str) -> None:
         sys.stderr.write(message)

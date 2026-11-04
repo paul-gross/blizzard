@@ -72,7 +72,7 @@ only by being republished later with its reason, and never earlier.
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
-`tests/test_store_migrations.py::test_migrate_up_and_down`.
+`tests/unit/foundation/store/test_migrations.py::test_migrate_up_and_down`.
 
 Response enums are open from `0.3.0`, the first release whose clients tolerate a value they do not know; `0.2.0`'s
 clients do not. A consumer of a response must tolerate an unknown enum value — show it, skip it, or defer to the

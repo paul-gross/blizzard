@@ -1,4 +1,4 @@
-"""What ``RunnerConfig.to_toml`` emits for ``tests/test_config.py``'s legacy-shaped runner document —
+"""What ``RunnerConfig.to_toml`` emits for ``tests/unit/test_config.py``'s legacy-shaped runner document —
 the operator-facing TOML shape, pinned byte for byte."""
 
 LEGACY_EMITTED = """# blizzard-runner runtime configuration (blizzard runner init)

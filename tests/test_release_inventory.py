@@ -1,5 +1,5 @@
 """``scripts/release-inventory.sh`` — assembles the files a release attaches and sums
-them. Unit-tested beside ``tests/test_export_requirements.py`` because the file names,
+them. Unit-tested beside ``tests/guards/test_export_requirements.py`` because the file names,
 the image line, and the checksum coverage are what a verifier of a release depends on.
 """
 

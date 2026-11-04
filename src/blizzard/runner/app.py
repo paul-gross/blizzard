@@ -436,7 +436,7 @@ def create_app(
     if workspaces is None:
         workspaces = tuple(_served_workspace(workspace, workspace_registry) for workspace in config.workspaces)
 
-    # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
+    # No framework exporters: tests/component/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
         title="blizzard-runner",
         version=__version__,

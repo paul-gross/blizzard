@@ -1,0 +1,264 @@
+"""``derive_liveness`` — the newest-fact-wins finding read (unit tier):
+no facts reads live with nothing seen; a plain add/observe history stays live; a `gone`
+takes it out of the live bucket; a later fact after `gone` restores it; and
+`observed_count` counts only `observed` facts, never the initial `add`; and ``finding_exit``
+classifies a state as an outflow, a withdrawal, or not exited."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+
+from blizzard.foundation.findings import FindingExit, FindingState
+from blizzard.hub.domain.garden.findings.model import (
+    FindingFact,
+    FindingFactSummary,
+    derive_liveness,
+    finding_exit,
+    liveness_of,
+    summarize_facts,
+)
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_T1 = datetime(2026, 1, 8, tzinfo=UTC)
+_T2 = datetime(2026, 1, 15, tzinfo=UTC)
+
+
+def test_no_facts_reads_live_with_nothing_seen() -> None:
+    state = derive_liveness([])
+
+    assert state.live is True
+    assert state.first_observed_at is None
+    assert state.last_seen_at is None
+    assert state.observed_count == 0
+
+
+def test_first_observed_at_is_the_add_facts_own_instant() -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind="observed", recorded_at=_T2)]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T0
+    assert state.last_seen_at == _T2
+
+
+def test_first_observed_at_reads_off_recorded_at_not_insertion_order() -> None:
+    """The same out-of-order guarantee `last_seen_at` carries: both ends of the
+    add/observed span come from `recorded_at`, so ingesting facts out of order still
+    derives the true first and last instants."""
+    facts = [FindingFact(kind="observed", recorded_at=_T2), FindingFact(kind="add", recorded_at=_T0)]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T0
+    assert state.last_seen_at == _T2
+
+
+def test_an_exit_verb_does_not_move_first_observed_at() -> None:
+    """An exit is not an observation — only `add`/`observed` bound the span."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T1),
+        FindingFact(kind="resolved", recorded_at=_T2, note="fixed", actor="usr_1"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T1
+
+
+def test_a_freshly_added_finding_is_live() -> None:
+    state = derive_liveness([FindingFact(kind="add", recorded_at=_T0)])
+
+    assert state.live is True
+    assert state.last_seen_at == _T0
+    assert state.observed_count == 0
+
+
+def test_an_observed_finding_updates_last_seen_and_the_observed_count() -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind="observed", recorded_at=_T1)]
+
+    state = derive_liveness(facts)
+
+    assert state.live is True
+    assert state.last_seen_at == _T1
+    assert state.observed_count == 1
+
+
+def test_a_gone_fact_takes_it_out_of_the_live_bucket() -> None:
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="gone", recorded_at=_T1, note="no longer reproduces"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.live is False
+    assert state.last_seen_at == _T0  # last seen is the newest non-gone fact
+    assert state.observed_count == 0
+
+
+def test_a_delivered_fact_folds_to_its_own_state_not_resolved() -> None:
+    """A delivery-triggered closure is `delivered`, distinct from
+    `resolved` — never live, but not the human-settled state either."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="delivered", recorded_at=_T1, actor="usr_1"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.state == "delivered"
+    assert state.live is False
+
+
+def test_a_later_fact_after_gone_restores_liveness() -> None:
+    """`gone` does not close the finding
+    (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
+    reversible) — a later `observed` restores it."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="gone", recorded_at=_T1, note="not found this run"),
+        FindingFact(kind="observed", recorded_at=_T2),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.live is True
+    assert state.last_seen_at == _T2
+    assert state.observed_count == 1
+
+
+def test_a_later_fact_after_delivered_restores_liveness_too() -> None:
+    """`delivered`'s own revival mirror — an `observed` after it reads as
+    the delivery having been wrong or premature, restoring the finding to `live` exactly
+    like reviving a merely-`gone` one."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="delivered", recorded_at=_T1, actor="usr_1"),
+        FindingFact(kind="observed", recorded_at=_T2),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.live is True
+    assert state.state == "live"
+    assert state.last_seen_at == _T2
+    assert state.observed_count == 1
+
+
+_NOTE = "why"
+
+
+@pytest.mark.parametrize("kind", ["add", "observed", "reopened"])
+def test_a_live_kind_newest_derives_live_with_its_note_and_actor(kind: str) -> None:
+    state = derive_liveness([FindingFact(kind=kind, recorded_at=_T0, note=_NOTE, actor="pat")])
+
+    assert (state.state, state.live, state.note, state.actor) == ("live", True, _NOTE, "pat")
+
+
+def test_a_gone_newest_derives_the_gone_state_with_its_note_and_no_actor() -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind="gone", recorded_at=_T1, note=_NOTE)]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.live, state.note, state.actor) == ("gone", False, _NOTE, None)
+
+
+@pytest.mark.parametrize("kind", ["delivered", "resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"])
+def test_every_other_kind_newest_derives_its_own_kind_as_the_state(kind: str) -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind=kind, recorded_at=_T1, note=_NOTE, actor="pat")]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.live, state.note, state.actor) == (kind, False, _NOTE, "pat")
+
+
+def test_the_note_and_actor_come_from_the_newest_fact_not_an_earlier_one() -> None:
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0, note="old", actor="old-actor"),
+        FindingFact(kind="observed", recorded_at=_T1),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.note, state.actor) == (None, None)
+
+
+def test_a_recorded_at_tie_keeps_the_later_inserted_fact() -> None:
+    facts = [
+        FindingFact(kind="observed", recorded_at=_T1, note="first"),
+        FindingFact(kind="gone", recorded_at=_T1, note="second"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.note) == ("gone", "second")
+
+
+def test_newest_is_by_recorded_at_not_insertion_order() -> None:
+    facts = [FindingFact(kind="gone", recorded_at=_T2, note=_NOTE), FindingFact(kind="observed", recorded_at=_T1)]
+
+    state = derive_liveness(facts)
+
+    assert (state.state, state.note) == ("gone", _NOTE)
+
+
+def test_the_empty_case_asserts_the_full_result() -> None:
+    state = derive_liveness([])
+
+    assert (state.state, state.live, state.note, state.actor) == ("live", True, None, None)
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (None, None, 0)
+
+
+def test_the_seen_span_is_min_and_max_over_add_and_observed_only() -> None:
+    facts = [
+        FindingFact(kind="observed", recorded_at=_T1),
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="observed", recorded_at=_T2),
+        FindingFact(kind="gone", recorded_at=datetime(2026, 3, 1, tzinfo=UTC)),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (_T0, _T2, 2)
+
+
+def test_facts_with_nothing_seen_leave_the_span_unset() -> None:
+    state = derive_liveness([FindingFact(kind="gone", recorded_at=_T1)])
+
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (None, None, 0)
+
+
+@pytest.mark.parametrize("state", [FindingState.RESOLVED, FindingState.GONE_CONFIRMED])
+def test_an_outflow_state_exits_as_outflow(state: FindingState) -> None:
+    assert finding_exit(state) is FindingExit.OUTFLOW
+
+
+@pytest.mark.parametrize("state", [FindingState.WONT_FIX, FindingState.NOT_A_FINDING, FindingState.SUPERSEDED])
+def test_a_withdrawing_state_exits_as_withdrawn(state: FindingState) -> None:
+    assert finding_exit(state) is FindingExit.WITHDRAWN
+
+
+@pytest.mark.parametrize("state", [FindingState.LIVE, FindingState.GONE, FindingState.DELIVERED])
+def test_a_state_that_has_not_exited_has_no_exit(state: FindingState) -> None:
+    assert finding_exit(state) is None
+
+
+def test_the_empty_summary_derives_what_no_facts_do() -> None:
+    assert liveness_of(summarize_facts([])) == derive_liveness([])
+    assert liveness_of(FindingFactSummary(None, None, None, 0)).live
+
+
+def test_a_summary_derives_state_from_its_newest_fact_and_carries_the_aggregates() -> None:
+    summary = FindingFactSummary(
+        newest=FindingFact(kind="wont-fix", recorded_at=_T1, note=_NOTE, actor="pat"),
+        first_observed_at=_T0,
+        last_seen_at=_T0,
+        observed_count=4,
+    )
+
+    state = liveness_of(summary)
+
+    assert (state.state.value, state.live, state.note, state.actor) == ("wont-fix", False, _NOTE, "pat")
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (_T0, _T0, 4)

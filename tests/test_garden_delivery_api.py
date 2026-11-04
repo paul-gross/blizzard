@@ -2,7 +2,7 @@
 Seeds a chunk via ``seed_work_item`` (its own resting chunk),
 records a run context through ``RunContextStore``, and posts delta/proposal
 artifacts recorded via ``services.chunks.record_hub_artifact`` — the
-``test_hub_marker_auth`` shape, minus the OAuth gate (``build_hub``'s default
+``tests/component/hub/api/test_chunks_marker_auth.py`` shape, minus the OAuth gate (``build_hub``'s default
 ``auth_mode=none`` grants everything without a session)."""
 
 from __future__ import annotations

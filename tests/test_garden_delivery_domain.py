@@ -3,7 +3,7 @@ each artifact parses and matches its wire shape, every finding id named is well-
 and live on the run's routine, a transformation stays inside the run's declared scope,
 a cited commit is well-formed and (when addressable) resolves, and a `gone` fact
 carries a note. Plain unit tests over hand-built objects — this module takes no I/O
-(``bzh:domain-takes-objects``, the ``tests/test_garden_proposals_domain.py`` shape)."""
+(``bzh:domain-takes-objects``, the ``tests/unit/hub/domain/garden/proposals/test_model.py`` shape)."""
 
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def _add(
     *, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None, ref: str | None = None
 ) -> FindingAddOp:
     # `class` is a pydantic alias (`FindingAddOp.class_`), so this builds via
-    # `model_validate` rather than the `class_=` kwarg — `tests/test_finding_wire.py`'s shape.
+    # `model_validate` rather than the `class_=` kwarg — `tests/unit/wire/test_finding.py`'s shape.
     payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
     if introduced is not None:
         payload["introduced"] = introduced
