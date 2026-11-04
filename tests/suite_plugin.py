@@ -15,12 +15,20 @@ from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.head_replay_guard import install_head_replay_guard
-from tests.repo_files import install_repo_read_guard
+from tests.repo_files import install_repo_read_guard, repo_root
 from tests.revision_age import (
     InvalidRevisionTest,
     Retired,
     colocated_versions,
     decide_colocated,
+)
+from tests.root_test_modules import ROOT_TEST_MODULES
+from tests.tier_layout import (
+    declared_layout_marker,
+    misplaced_root_module,
+    non_package_folder,
+    tier_of,
+    unmirrored_folder,
 )
 
 # Install before test-module imports so collection-time reads are covered too.
@@ -44,14 +52,27 @@ UNMARKED_TEST_NODEIDS: list[str] = []
 SHARD_ENV = "BLIZZARD_TEST_SHARD"
 
 
+#: The two trees the folder layout governs: tests root, the package root its folders mirror, and the flat modules
+#: still allowed directly under the root. The exemplar tree admits none.
+_LAYOUT_TREES: tuple[tuple[Path, Path, frozenset[str]], ...] = (
+    (repo_root() / "tests", repo_root() / "src" / "blizzard", ROOT_TEST_MODULES),
+    (repo_root() / "exemplars" / "python" / "tests", repo_root() / "exemplars" / "python" / "exemplar", frozenset()),
+)
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Record every collected test that carries none of the tier markers, then keep only
-    this run's shard.
+    """Apply the folder layout, record every collected test that carries none of the tier
+    markers, then keep only this run's shard.
+
+    The layout step runs first, so a folder's tier marker is on each item before pytest's ``-m``
+    deselection and before the unmarked record.
 
     An unmarked test still runs in the default suite but is invisible to both ``-m
     unit`` and ``-m component`` -- a gap neither tier's total would catch. The record is
     taken before sharding, so whichever shard runs the marker check sees the whole suite.
     """
+    _apply_folder_layout(items)
     UNMARKED_TEST_NODEIDS[:] = [
         item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
     ]
@@ -64,6 +85,32 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = [item for item in items if shard_of(item.nodeid, count) == index]
+
+
+def _apply_folder_layout(items: list[pytest.Item]) -> None:
+    """Give each test under a tier folder that folder's tier; refuse a misplaced or self-marked file.
+
+    Refusals are judged on the collected items, so a narrowed run judges only what it collects.
+    """
+    for item in items:
+        for tests_root, package_root, root_modules in _LAYOUT_TREES:
+            if misplaced_root_module(item.path, tests_root, root_modules):
+                raise pytest.UsageError(
+                    f"{item.nodeid}: a flat test module under {tests_root.name}/; place it in unit/, component/ or guards/"
+                )
+            tier = tier_of(item.path, tests_root)
+            if tier is None:
+                continue
+            declared = declared_layout_marker(mark.name for mark in item.iter_markers())
+            if declared is not None:
+                raise pytest.UsageError(
+                    f"{item.nodeid}: declares the {declared!r} marker; its folder gives the tier, so drop the marker"
+                )
+            if (folder := non_package_folder(item.path, tests_root)) is not None:
+                raise pytest.UsageError(f"{item.nodeid}: {folder} has no __init__.py; every tier folder is a package")
+            if (folder := unmirrored_folder(item.path, tests_root, package_root)) is not None:
+                raise pytest.UsageError(f"{item.nodeid}: {folder} mirrors no package under {package_root.name}/")
+            item.add_marker(getattr(pytest.mark, tier))
 
 
 def _retire_aged_revision_tests(items: list[pytest.Item]) -> None:

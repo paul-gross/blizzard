@@ -8,6 +8,20 @@ from pathlib import Path
 from blizzard.foundation.store.migrations import MigrationRunner
 from tests.repo_files import repo_root
 
+#: The folders under ``tests/`` whose modules the guard covers beside the ones directly at the root.
+_TIER_FOLDERS = ("unit", "component", "guards")
+
+
+def _in_test_tree(caller: Path, tests: Path) -> bool:
+    """True for a module directly under ``tests/`` or anywhere beneath a tier folder."""
+    if caller.parent == tests:
+        return True
+    try:
+        relative = caller.relative_to(tests)
+    except ValueError:
+        return False
+    return relative.parts[0] in _TIER_FOLDERS
+
 
 def install_head_replay_guard() -> None:
     """Keep migration-chain replay in migration tests and test-support builders."""
@@ -21,7 +35,7 @@ def install_head_replay_guard() -> None:
         caller = Path((caller_frame.f_globals.get("__file__") if caller_frame else None) or "").resolve()
         if (
             revision == "head"
-            and caller.parent == tests
+            and _in_test_tree(caller, tests)
             and caller.name.startswith("test_")
             and caller.suffix == ".py"
             and "migration" not in caller.name

@@ -12,6 +12,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner as hub_migration_runner
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
+from tests.repo_files import repo_root
 from tests.support import hub_migration_prototype, migrate_to
 from tests.test_pin_migration_prototype import test_the_hub_prototype_matches_a_fresh_migration
 
@@ -28,6 +29,17 @@ def test_an_ordinary_test_cannot_replay_from_empty(tmp_path: Path, tree: str, he
     with pytest.raises(AssertionError, match=f"test_head_replay_guard.py.*{helper}"):
         runner.upgrade("head")
     assert runner.current_revision() is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("folder", ["unit", "component", "guards", "unit/hub"])
+def test_a_module_under_a_tier_folder_cannot_replay_from_empty(tmp_path: Path, folder: str) -> None:
+    url = f"sqlite:///{tmp_path / 'store.db'}"
+    runner = hub_migration_runner(HubConfig(root=tmp_path, db_url=url))
+    module_file = repo_root() / "tests" / folder / "test_replays.py"
+    namespace = {"__file__": str(module_file), "runner": runner}
+    with pytest.raises(AssertionError, match=r"test_replays\.py.*migrated_hub_at"):
+        exec(compile("runner.upgrade('head')", str(module_file), "exec"), namespace)
 
 
 @pytest.mark.unit
