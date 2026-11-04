@@ -1,0 +1,81 @@
+"""The harness transcript seam's values and null source.
+
+Covers :class:`TranscriptPosition`'s opaque round-trip, :class:`NullTranscriptSource`'s
+absent-but-healthy shape, and that :class:`ClaudeCodeAdapter` binds it by default —
+pinned separately in ``tests/unit/runner/harness/claude_code/test_transcript.py``.
+"""
+
+from __future__ import annotations
+
+from concurrent.futures import Executor
+
+from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.transcript import (
+    NullTranscriptSource,
+    TranscriptPosition,
+)
+from blizzard.runner.process.child_env import AllowlistedEnv
+from tests.runner_fakes import FakeProbe
+from tests.support_child_launch import CHILDREN, version_probe
+
+
+def test_transcript_position_round_trips_its_opaque_token() -> None:
+    position = TranscriptPosition(token='{"main.jsonl": 1024}')
+    assert position.token == '{"main.jsonl": 1024}'
+    # Equal tokens compare equal — a frozen dataclass, not an identity-only value.
+    assert position == TranscriptPosition(token='{"main.jsonl": 1024}')
+    assert position != TranscriptPosition(token='{"main.jsonl": 2048}')
+
+
+def test_null_transcript_source_turns_since_matches_absent_but_healthy_shape() -> None:
+    batch = NullTranscriptSource().turns_since("sid-1", spawn_cwd=None, since=None)
+    assert batch.session_id == "sid-1"
+    assert batch.available is False
+    assert batch.reason == "not_found"
+    assert batch.turns == []
+    assert batch.unlinked_sidechains == []
+    assert batch.next_position is None
+    assert batch.complete is True
+    assert batch.truncated is False
+    assert batch.harness_version is None
+
+
+def test_null_transcript_source_read_raw_lines_is_empty() -> None:
+    assert NullTranscriptSource().read_raw_lines("sid-1", spawn_cwd=None) == []
+    position = TranscriptPosition(token="anything")
+    assert NullTranscriptSource().read_raw_lines("sid-1", spawn_cwd=None, start=position, end=position) == []
+
+
+def test_null_transcript_source_tail_position_is_none() -> None:
+    assert NullTranscriptSource().tail_position("sid-1", spawn_cwd=None) is None
+
+
+def test_null_transcript_source_size_bytes_is_unknown_not_zero() -> None:
+    # `None` is the unknown that leaves a rotation head standing — never `0`, which
+    # would read as "well under bound" and make the threshold inert.
+    assert NullTranscriptSource().size_bytes("sid-1", spawn_cwd=None) is None
+
+
+def test_claude_code_adapter_defaults_to_the_null_transcript_source(spawn_executor: Executor) -> None:
+    probe = FakeProbe()
+    source = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    ).transcript_source()
+    assert isinstance(source, NullTranscriptSource)
+
+
+def test_claude_code_adapter_returns_the_injected_transcript_source(spawn_executor: Executor) -> None:
+    injected = NullTranscriptSource()
+    probe = FakeProbe()
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        transcript_source=injected,
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    )
+    assert adapter.transcript_source() is injected

@@ -1,5 +1,5 @@
-"""A minimal fake ``opencode`` CLI for ``tests/test_runner_harness_opencode_adapter.py``'s
-own unit/component tests — distinct from the compatibility diagnostic's own proof
+"""A minimal fake ``opencode`` CLI for ``tests/unit/runner/harness/opencode/test_adapter.py`` and
+``tests/component/runner/harness/opencode/test_adapter.py``'s own tests — distinct from the compatibility diagnostic's own proof
 scaffolding (``tests/service/harnesses/test_opencode_compatibility_service.py``,
 ``bzh:external-cli-fake-is-service-tier``, driven off a real ``mock-opencode emit``
 artifact instead)."""
@@ -78,7 +78,8 @@ def worker_binary(
     capture_path: Path | None = None,
 ) -> str:
     """A minimal, well-behaved fake ``opencode`` CLI for the adapter's own unit/component
-    tests (``tests/test_runner_harness_opencode_adapter.py``)."""
+    tests (``tests/unit/runner/harness/opencode/test_adapter.py``,
+    ``tests/component/runner/harness/opencode/test_adapter.py``)."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     source = _FAKE_WORKER_OPENCODE.replace(
         "MALFORMED_FIRST_LINE = False", f"MALFORMED_FIRST_LINE = {malformed_first_line}"

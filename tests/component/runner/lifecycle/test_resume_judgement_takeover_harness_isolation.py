@@ -1,7 +1,7 @@
 """Two harnesses sharing one raw session-id text never collide in RESUME, JUDGEMENT, or
 TAKEOVER — each dispatches through its own recorded owner, keyed by the FULL
 ``SessionReference`` (harness + raw id), never the raw id alone. Same shape as
-``tests/test_usage_recorder_harness_isolation.py``: two leases seeded under the same raw
+``tests/component/runner/usage/test_recorder_harness_isolation.py``: two leases seeded under the same raw
 session id but different ``harness_id``, each bound to its own fake adapter, so dropping
 ``harness_id`` from any of the three resolvers this file targets turns one assertion red."""
 

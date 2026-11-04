@@ -111,7 +111,7 @@ def test_is_meta_record_is_filtered(tmp_path: Path) -> None:
 def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
     """An unresolvable ``isSidechain`` record surfaces as its own top-level ``"sidechain"``
     turn — the unlinked routing itself is pinned in
-    ``tests/test_runner_harness_claude_code_normalizer.py``."""
+    ``tests/unit/runner/harness/claude_code/test_normalizer.py``."""
     _write(tmp_path, [fx.sidechain_record()])
     transcript = _read(tmp_path)
 
