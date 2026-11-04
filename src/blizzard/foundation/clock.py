@@ -106,7 +106,7 @@ class ClockBackwards(Exception):
     caller maps this refusal to its own status, apart from the malformed-input ones."""
 
     def __init__(self, current: datetime, asked: datetime) -> None:
-        super().__init__(f"the clock reads {current.isoformat()}; it cannot move back to {asked.isoformat()}")
+        super().__init__(f"the clock reads {current}; it cannot move back to {asked}")
         self.current = current
         self.asked = asked
 
@@ -122,7 +122,7 @@ class ClockMove:
 
 def _require_aware(instant: datetime, what: str) -> None:
     if instant.tzinfo is None or instant.utcoffset() is None:
-        raise ValueError(f"{what} must be timezone-aware, got naive {instant.isoformat()}")
+        raise ValueError(f"{what} must be timezone-aware, got naive {instant}")
 
 
 class ControlledClock:
