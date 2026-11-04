@@ -67,7 +67,7 @@ def _record(
 
 def _seed_enrolled(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
-    ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
+    ``tests/component/hub/api/test_fleet_auth_partition.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
     register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
     return enroll_runner(hub, runner_id)

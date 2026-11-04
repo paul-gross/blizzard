@@ -120,7 +120,7 @@ class Route:
 def inherited(base_red: bool | None) -> bool:
     """Whether a head-failing check is inherited from the base, given the base's own reading of that same
     check name; a degraded base read (``None``) is not inherited
-    (``tests/test_land_action.py::test_a_degraded_base_read_charges_a_head_failure_to_the_chunk``)."""
+    (``tests/component/hub/delivery/actions/test_land.py::test_a_degraded_base_read_charges_a_head_failure_to_the_chunk``)."""
     return base_red is True
 
 
@@ -147,8 +147,8 @@ async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
 async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> RerunOutcome | None:
     """Ask the forge once to re-run ``check``, then record its signature marker when it accepted. The forge's
     outcome; ``None`` when it did not answer (pinned by
-    ``tests/test_land_action.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``). A refusal is
-    logged with the forge's own status and message."""
+    ``tests/component/hub/delivery/actions/test_land.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``).
+    A refusal is logged with the forge's own status and message."""
     try:
         rerun = await repo.ask(repo.forge.checks.rerun_check(check.id))
     except (ForgeRejected, ForgeNotFound) as exc:

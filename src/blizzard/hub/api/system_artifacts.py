@@ -2,7 +2,7 @@
 time straight off the packaged set, never a chunk, a lease, or a store row. See
 ``bzh:system-scope-reads-live`` and ``bzh:app-agnostic-graphs``. The packaged set is injected
 (``HubServices.system_artifacts``, ``bzh:dependency-injection``); pinned by
-``tests/test_hub_system_artifacts_route.py::test_list_serves_the_full_published_set``."""
+``tests/component/hub/api/test_system_artifacts.py::test_list_serves_the_full_published_set``."""
 
 from __future__ import annotations
 

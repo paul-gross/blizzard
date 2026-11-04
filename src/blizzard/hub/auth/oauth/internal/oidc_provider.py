@@ -136,7 +136,8 @@ class OidcProvider:
 
     def _trusted_algorithms(self, jwk: dict[str, object]) -> list[str]:
         # SAFETY: algorithms come from the issuer, never the attacker-supplied token header (RS256-to-HS256 confusion);
-        # tests/test_auth_oauth_providers.py::test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg
+        # tests/unit/hub/auth/oauth/internal/test_providers.py
+        # ::test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg
         jwk_alg = jwk.get("alg")
         if jwk_alg:
             return [str(jwk_alg)]

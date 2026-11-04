@@ -40,7 +40,7 @@ def ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, poin
 
 def enrolled_runner_token(tmp_path: Path) -> str:
     """A runner token enrolled through its own throwaway hub over ``tmp_path``, for the caller's
-    oauth hub to read — the same two-hub-instances-over-one-store shape ``tests/test_fleet_auth.py``'s
+    oauth hub to read — the same two-hub-instances-over-one-store shape ``tests/component/hub/api/test_fleet_auth_partition.py``'s
     own ``_seed_enrolled`` uses."""
     seed_hub = build_hub(tmp_path)
     register_runner(seed_hub, runner_id="runner-a", workspace_id="ws-a")

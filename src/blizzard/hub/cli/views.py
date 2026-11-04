@@ -70,7 +70,7 @@ def pointer_label(row: dict[str, object]) -> str:
 @dataclass(frozen=True)
 class Cost:
     """A response's ``cost`` object read as the one spend figure (:class:`~blizzard.foundation.spend.SpendFigure`),
-    which owns its rendering; renderings pinned by tests/test_hub_cli_views.py."""
+    which owns its rendering; renderings pinned by tests/unit/hub/cli/test_views.py."""
 
     cost_usd: float
     estimated_cost_usd: float | None
@@ -152,7 +152,7 @@ class RunnerLine:
     @property
     def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Name which brake is on (pinned by
-        tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
+        tests/component/hub/cli/test_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
         brakes: list[str] = []
         if self.row.get("hub_paused"):
             brakes.append("hub")

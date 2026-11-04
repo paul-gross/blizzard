@@ -1,0 +1,194 @@
+"""``blizzard hub runner-host …`` and ``blizzard hub runner add --host`` — the rendering half with the client stubbed
+(unit tier)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+import httpx2
+import pytest
+
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.runner_host import token_lines
+from tests.support_hub_cli_runner import ENV, HUB_URL
+from tests.worker_http import Bound, bind_stubs
+
+_ADDED: dict[str, object] = {
+    "host_id": "hs_01JC4Z8Q3XKQ1V5W2M7N9P0R6T",
+    "host_name": "box",
+    "token": "sekrit-token",
+    "adopted": [],
+}
+
+
+def _respond(status_code: int, payload: object) -> httpx2.Response:
+    return httpx2.Response(status_code, json=payload, request=httpx2.Request("GET", HUB_URL))
+
+
+def _recording(calls: list[dict[str, Any]], response: httpx2.Response) -> Callable[..., httpx2.Response]:
+    def fake(url: str, **kwargs: Any) -> httpx2.Response:
+        calls.append({"url": url, **kwargs})
+        return response
+
+    return fake
+
+
+def _stub(verb: str, response: httpx2.Response) -> tuple[Bound, list[dict[str, Any]]]:
+    calls: list[dict[str, Any]] = []
+    return bind_stubs(**{verb: _recording(calls, response)}), calls
+
+
+def _row(host_id: str, name: str, **fields: Any) -> dict[str, Any]:
+    return {"host_id": host_id, "host_name": name, "connection": "never_connected", "online": False, **fields}
+
+
+def test_add_posts_the_name_and_adoptions_and_prints_the_id_and_the_token_once() -> None:
+    bound, calls = _stub("post", _respond(201, {**_ADDED, "adopted": ["rn_a", "rn_b"]}))
+
+    result = bound.runner.invoke(
+        hub_group, ["runner-host", "add", "box", "--adopt", "rn_a", "--adopt", "rn_b"], env=ENV
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts"
+    assert calls[0]["json"] == {"name": "box", "adopt": ["rn_a", "rn_b"]}
+    assert f"added host {_ADDED['host_id']} (box) — never connected" in result.output
+    assert "adopted: rn_a, rn_b" in result.output
+    assert "BZ_HOST_TOKEN=sekrit-token" in result.output.splitlines()
+    assert result.output.count("sekrit-token") == 1
+
+
+def test_add_names_the_refusal_of_a_taken_name() -> None:
+    bound, _ = _stub("post", _respond(409, {"detail": "a live host is already named 'box'"}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "add", "box"], env=ENV)
+
+    assert result.exit_code != 0
+    assert "already named 'box'" in result.output
+
+
+def test_list_shows_each_hosts_id_beside_its_name_and_a_never_connected_one_as_such() -> None:
+    body = {"hosts": [_row("hs_a", "box", runner_ids=["rn_1", "rn_2"]), _row("hs_b", "other")]}
+    bound, calls = _stub("get", _respond(200, body))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "list"], env=ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts"
+    lines = result.output.splitlines()
+    assert any(line.startswith("hs_a  box") and "never-connected" in line and "runners=2" in line for line in lines)
+    assert any(line.startswith("hs_b  other") and "runners=0" in line for line in lines)
+
+
+def test_list_all_asks_for_retired_hosts_and_marks_them() -> None:
+    body = {"hosts": [_row("hs_a", "box", retired=True, retired_at="2026-10-12T00:00:00Z", retired_by="op")]}
+    bound, calls = _stub("get", _respond(200, body))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "list", "--all"], env=ENV)
+
+    assert calls[0]["params"] == {"include_retired": "true"}
+    assert "[retired 2026-10-12T00:00:00Z by op]" in result.output
+
+
+def test_an_empty_registry_says_how_to_add_a_host() -> None:
+    bound, _ = _stub("get", _respond(200, {"hosts": []}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "list"], env=ENV)
+
+    assert "no hosts — add one with `blizzard hub runner-host add <name>`" in result.output
+
+
+def test_show_renders_a_never_connected_host_without_none() -> None:
+    body = _row("hs_a", "box", added_at="2026-10-12T00:00:00Z", enrolled=True, runner_ids=[])
+    bound, _ = _stub("get", _respond(200, body))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "get", "hs_a"], env=ENV)
+
+    assert result.exit_code == 0, result.output
+    assert "None" not in result.output
+
+
+def test_show_of_an_unknown_host_exits_unknown() -> None:
+    bound, _ = _stub("get", _respond(404, {"detail": "unknown host hs_x"}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "get", "hs_x"], env=ENV)
+
+    assert result.exit_code == 1
+    assert "unknown host hs_x" in result.output
+
+
+@pytest.mark.parametrize(("verb", "path"), [("adopt", "adoptions"), ("release", "releases")])
+def test_adopt_and_release_post_the_runner_ids(verb: str, path: str) -> None:
+    bound, calls = _stub("post", _respond(200, _row("hs_a", "box")))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", verb, "hs_a", "rn_1", "rn_2", "--by", "op"], env=ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/{path}"
+    assert calls[0]["json"] == {"by": "op", "runner_ids": ["rn_1", "rn_2"]}
+
+
+def test_adopt_needs_at_least_one_runner() -> None:
+    assert bind_stubs().runner.invoke(hub_group, ["runner-host", "adopt", "hs_a"], env=ENV).exit_code == 2
+
+
+def test_enroll_prints_the_new_token_once() -> None:
+    bound, calls = _stub("post", _respond(201, {"host_id": "hs_a", "token": "fresh"}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "enroll", "hs_a"], env=ENV)
+
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/enrollments"
+    assert "BZ_HOST_TOKEN=fresh" in result.output.splitlines()
+    assert result.output.count("fresh") == 1
+
+
+def test_revoke_token_posts_to_the_revocations() -> None:
+    bound, calls = _stub("post", _respond(201, {"host": _row("hs_a", "box")}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "revoke-token", "hs_a"], env=ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/token-revocations"
+    assert "revoked hs_a's token" in result.output
+
+
+def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
+    bound, calls = _stub("post", _respond(200, {"host": _row("hs_a", "box"), "released_chunk_ids": ["ch_1"]}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "retire", "hs_a", "--force", "--by", "op"], env=ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["url"] == f"{HUB_URL}/api/hosts/hs_a/retire"
+    assert calls[0]["json"] == {"by": "op", "force": True}
+    assert "released: ch_1" in result.output
+
+
+def test_retire_surfaces_the_holdings_refusal() -> None:
+    bound, _ = _stub("post", _respond(409, {"detail": "host hs_a has runners holding chunks — runner rn_a: ch_1"}))
+
+    result = bound.runner.invoke(hub_group, ["runner-host", "retire", "hs_a"], env=ENV)
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+
+
+def test_runner_add_host_sends_the_host_id_and_names_an_unknown_one() -> None:
+    bound, calls = _stub("post", _respond(404, {"detail": "unknown host hs_x"}))
+
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r", "--host", "hs_x"], env=ENV)
+
+    assert calls[0]["json"] == {"name": "r", "host_id": "hs_x"}
+    assert result.exit_code != 0
+    assert "unknown host hs_x" in result.output
+    assert "predates" not in result.output
+
+
+def test_the_daemon_launcher_keeps_the_host_name() -> None:
+    names = hub_group.list_commands(__import__("click").Context(hub_group))
+    assert "host" in names and "runner-host" in names
+
+
+def test_the_printed_env_line_names_the_host_token_variable() -> None:
+    assert token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"

@@ -1,0 +1,65 @@
+"""The ``--json`` output shape on the noun-group operator verbs: a read
+verb prints the raw response body, and a write verb echoes its typed response the same
+way.
+"""
+
+from __future__ import annotations
+
+import json
+
+import httpx2
+
+from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, payload: object | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> object:
+        if self._payload is None:
+            raise ValueError("no JSON body")
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
+
+
+def test_json_on_a_read_verb_prints_the_raw_response_body() -> None:
+    payload: list[dict[str, object]] = [
+        {
+            "chunk_id": "ch_1",
+            "status": "ready",
+            "current_node_id": None,
+            "default_model": ["blizzard:basic"],
+            "cost": {},
+        }
+    ]
+
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        return _FakeResponse(200, {"chunks": payload, "next_cursor": None})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == payload
+
+
+def test_json_on_a_write_verb_prints_the_raw_response_body() -> None:
+    payload = {"chunk_id": "ch_42", "status": "ready", "graph_id": "gr_1", "default_model": ["blizzard:basic"]}
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(202, payload)
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "promote", "ch_42", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == payload

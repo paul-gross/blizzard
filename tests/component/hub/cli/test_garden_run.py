@@ -1,4 +1,4 @@
-"""``blizzard hub run list|get`` against a real, wired app (``tests/test_cli_analytics_events_component.py``'s relay
+"""``blizzard hub run list|get`` against a real, wired app (``tests/component/hub/cli/test_analytics_events.py``'s relay
 shape)."""
 
 from __future__ import annotations

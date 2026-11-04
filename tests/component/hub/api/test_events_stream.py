@@ -2,7 +2,7 @@
 
 The stream is an infinite live fan-out, so Starlette's ``TestClient`` (which buffers the whole
 body) reads one only once its broker closes and ends it; the other tests call the route handler or
-the stream's generator directly. Replay/live semantics are covered in ``tests/test_events.py``.
+the stream's generator directly. Replay/live semantics are covered in ``tests/component/hub/api/test_events.py``.
 """
 
 from __future__ import annotations

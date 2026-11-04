@@ -1,0 +1,253 @@
+"""``CliContext``'s transport seam directly: the streaming method, the unnamed-403 branch,
+and the tenant a call names — ahead of any verb consuming them."""
+
+from __future__ import annotations
+
+import contextlib
+from collections.abc import Generator, Iterator
+from dataclasses import replace
+
+import click
+import httpx2
+import pytest
+
+from blizzard.cli.operator_trace import UNTRACED
+from blizzard.hub.cli.context import TENANT_HEADER, CliContext
+from tests.worker_http import Bound, bind_stubs
+
+
+class _FakeSessionReader:
+    def load(self, hub_url: str) -> str | None:
+        return None
+
+
+_HUB_URL = "http://hub.local:8421"
+
+
+def _ctx(bound: Bound | None = None) -> CliContext:
+    """A context whose requests go through the bound collaborators (none bound: any request fails)."""
+    bound = bound or bind_stubs()
+    return CliContext(
+        hub_url=_HUB_URL,
+        session_reader=_FakeSessionReader(),
+        trace=UNTRACED,
+        client_factory=bound.collaborators.client_factory,
+    )
+
+
+_CTX = _ctx()
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, payload: object | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> object:
+        if self._payload is None:
+            raise ValueError("no JSON body")
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
+
+
+def _response(status_code: int, payload: object | None = None) -> httpx2.Response:
+    """A real response for :meth:`CliContext.check`, with a JSON body only when ``payload`` is given."""
+    request = httpx2.Request("GET", f"{_HUB_URL}/x")
+    if payload is None:
+        return httpx2.Response(status_code, request=request)
+    return httpx2.Response(status_code, json=payload, request=request)
+
+
+class _FakeStreamResponse(_FakeResponse):
+    """Adds the lazy-body surface :meth:`CliContext.stream` reads: unread until
+    :meth:`read` is called, then :meth:`iter_lines` yields the body a line at a time."""
+
+    def __init__(self, status_code: int, lines: list[str] | None = None, payload: object | None = None) -> None:
+        super().__init__(status_code, payload)
+        self._lines = lines or []
+        self.read_called = False
+
+    def read(self) -> None:
+        self.read_called = True
+
+    def iter_lines(self) -> Iterator[str]:
+        yield from self._lines
+
+
+def _stream_returning(resp: _FakeStreamResponse, sent: list[dict[str, object]] | None = None):
+    @contextlib.contextmanager
+    def fake_stream(method: str, url: str, **kwargs: object) -> Generator[_FakeStreamResponse]:
+        if sent is not None:
+            sent.append(kwargs)
+        yield resp
+
+    return fake_stream
+
+
+# --- CliContext.stream ---------------------------------------------------------
+
+
+def test_stream_yields_the_body_line_by_line() -> None:
+    resp = _FakeStreamResponse(200, lines=["a", "b", "c"])
+    bound = bind_stubs(stream=_stream_returning(resp))
+
+    assert list(_ctx(bound).stream("/api/analytics/events/ndjson", "GET /analytics/events/ndjson")) == ["a", "b", "c"]
+    assert resp.read_called is False  # the streaming benefit: a 200 body is never buffered whole
+
+
+def test_stream_surfaces_a_refusals_detail_before_yielding_any_line() -> None:
+    resp = _FakeStreamResponse(
+        403, lines=["should never be reached"], payload={"detail": "missing permission 'transcript:read'"}
+    )
+    bound = bind_stubs(stream=_stream_returning(resp))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        next(iter(_ctx(bound).stream("/api/analytics/events/ndjson", "GET /analytics/events/ndjson")))
+
+    assert exc_info.value.message == "missing permission 'transcript:read'"
+    assert resp.read_called is True
+
+
+def test_stream_surfaces_a_bare_401_with_the_login_hint() -> None:
+    resp = _FakeStreamResponse(401)
+    bound = bind_stubs(stream=_stream_returning(resp))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        next(iter(_ctx(bound).stream("/api/analytics/events/ndjson", "GET /analytics/events/ndjson")))
+
+    assert "blizzard hub login" in exc_info.value.message
+
+
+# --- CliContext.check's unnamed-403 branch --------------------------------------
+
+
+def test_check_surfaces_an_unnamed_403s_detail() -> None:
+    resp = _response(403, {"detail": "missing permission 'transcript:read'"})
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _CTX.check(resp, "GET /x")
+
+    assert exc_info.value.message == "missing permission 'transcript:read'"
+
+
+def test_check_falls_back_to_a_generic_message_when_the_403_body_has_no_detail() -> None:
+    resp = _response(403, None)
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _CTX.check(resp, "GET /x")
+
+    assert exc_info.value.message == "forbidden"
+
+
+def test_check_a_named_on_status_entry_still_wins_over_the_bare_403_branch() -> None:
+    resp = _response(403, None)
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _CTX.check(resp, "GET /x", on_status={403: "named fallback"})
+
+    assert exc_info.value.message == "named fallback"
+
+
+def test_check_leaves_a_200_alone() -> None:
+    _CTX.check(_response(200), "GET /x")  # must not raise
+
+
+# --- the tenant a call names ------------------------------------------------------
+
+_BRAVO = "ten_01BRAVO"
+_TENANT_REQUIRED = {"detail": {"code": "tenant_required", "message": "name the tenant to act in"}}
+_ME: dict[str, list[dict[str, object]]] = {
+    "tenants": [
+        {"tenant_id": "ten_01ALPHA", "name": "alpha", "role": "admin", "permissions": []},
+        {"tenant_id": _BRAVO, "name": "bravo", "role": "guest", "permissions": []},
+    ]
+}
+
+
+def _get_answering(answers: dict[str, _FakeResponse], sent: list[dict[str, object]]):
+    def fake_get(url: str, **kwargs: object) -> _FakeResponse:
+        sent.append(kwargs)
+        return answers[url.removeprefix(_HUB_URL)]
+
+    return fake_get
+
+
+def test_a_call_naming_no_tenant_sends_no_tenant_header() -> None:
+    sent: list[dict[str, object]] = []
+    bound = bind_stubs(get=_get_answering({"/api/x": _FakeResponse(200, {})}, sent))
+
+    _ctx(bound).send("get", "/api/x")
+
+    assert "headers" not in sent[0]
+
+
+def test_a_call_naming_its_tenant_sends_it() -> None:
+    sent: list[dict[str, object]] = []
+    bound = bind_stubs(get=_get_answering({"/api/x": _FakeResponse(200, {})}, sent))
+
+    replace(_ctx(bound), tenant=_BRAVO).send("get", "/api/x")
+
+    assert sent[0]["headers"] == {TENANT_HEADER: _BRAVO}
+
+
+def test_stream_sends_the_tenant_the_call_names() -> None:
+    sent: list[dict[str, object]] = []
+    bound = bind_stubs(stream=_stream_returning(_FakeStreamResponse(200, lines=["a"]), sent))
+
+    assert list(replace(_ctx(bound), tenant=_BRAVO).stream("/api/x", "GET /x")) == ["a"]
+    assert sent[0]["headers"] == {TENANT_HEADER: _BRAVO}
+
+
+def test_tenant_required_lists_the_callers_tenants_whatever_the_verb_does_with_409s() -> None:
+    sent: list[dict[str, object]] = []
+    answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(200, _ME)}
+    bound = bind_stubs(get=_get_answering(answers, sent))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).send("get", "/api/x")
+
+    assert exc_info.value.message.splitlines() == [
+        "you belong to several tenants — name the one to act in with --tenant <tenant_id>",
+        "your tenants:",
+        "  ten_01ALPHA  alpha  (admin)",
+        f"  {_BRAVO}  bravo  (guest)",
+    ]
+
+
+def test_tenant_required_still_asks_for_tenant_when_me_cannot_be_read() -> None:
+    sent: list[dict[str, object]] = []
+    answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(500)}
+    bound = bind_stubs(get=_get_answering(answers, sent))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).send("get", "/api/x")
+
+    assert exc_info.value.message == "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
+
+
+def test_a_verbs_own_409_is_left_to_the_verb() -> None:
+    sent: list[dict[str, object]] = []
+    conflict = _FakeResponse(409, {"detail": "already held"})
+    bound = bind_stubs(get=_get_answering({"/api/x": conflict}, sent))
+
+    assert _ctx(bound).send("get", "/api/x") is conflict
+    assert len(sent) == 1
+
+
+def test_stream_surfaces_tenant_required_with_the_callers_tenants() -> None:
+    sent: list[dict[str, object]] = []
+    bound = bind_stubs(
+        stream=_stream_returning(_FakeStreamResponse(409, payload=_TENANT_REQUIRED)),
+        get=_get_answering({"/api/me": _FakeResponse(200, _ME)}, sent),
+    )
+
+    with pytest.raises(click.ClickException) as exc_info:
+        next(iter(_ctx(bound).stream("/api/x", "GET /x")))
+
+    assert f"  {_BRAVO}  bravo  (guest)" in exc_info.value.message.splitlines()

@@ -549,7 +549,8 @@ def create_app(
     app.include_router(project_findings_router)
     app.include_router(project_garden_proposals_router)
     app.include_router(project_garden_runs_router)
-    # Outside the fleet gate — pinned: `tests/test_fleet_identity.py::test_no_token_is_refused_as_missing`.
+    # Outside the fleet gate — pinned:
+    # `tests/component/hub/api/test_fleet_identity.py::test_no_token_is_refused_as_missing`.
     app.include_router(fleet_identity_router)
     # The runner-authenticated fleet router; see `src/blizzard/hub/api/fleet.py`.
     app.include_router(fleet_host_router)

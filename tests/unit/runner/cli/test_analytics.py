@@ -23,7 +23,7 @@ from tests.worker_http import bind_stubs
 @contextlib.contextmanager
 def _local_timezone(tz: str) -> Generator[None]:
     """Pins the wall-clock zone ``--since``/``--until`` are read against — the same
-    fixture ``tests/test_cli_analytics_events.py`` uses for the operator CLI's own
+    fixture ``tests/unit/hub/cli/test_analytics_events.py`` uses for the operator CLI's own
     conversion, since the conversion is genuinely machine-local otherwise."""
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz

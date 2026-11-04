@@ -1,0 +1,139 @@
+"""``blizzard.hub.cli_login`` — the loopback listener + paste-code mechanics (#96).
+
+No real hub: ``webbrowser.open`` and the exchange's client are stubbed.
+The loopback case drives a real HTTP GET at the ephemeral port ``Loopback`` binds, proving the listener itself, not just the seam around it.
+"""
+
+from __future__ import annotations
+
+import threading
+from urllib.parse import parse_qs, urlparse
+
+import httpx2
+import pytest
+
+from blizzard.hub.cli import login as cli_login
+from tests.worker_http import bind_stubs
+
+_NO_HTTP = bind_stubs().collaborators.client_factory
+
+
+class _FakeTokenResponse:
+    def __init__(self, status_code: int, body: dict[str, object]) -> None:
+        self.status_code = status_code
+        self._body = body
+
+    def json(self) -> dict[str, object]:
+        return self._body
+
+
+def _hit_loopback_in_background(redirect_uri: str, *, code: str | None, state: str, error: str | None = None) -> None:
+    params = {"state": state}
+    if code is not None:
+        params["code"] = code
+    if error is not None:
+        params["error"] = error
+
+    def _hit() -> None:
+        httpx2.get(redirect_uri, params=params, timeout=5.0)
+
+    threading.Thread(target=_hit, daemon=True).start()
+
+
+def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_exchange: dict[str, object] = {}
+
+    def fake_open(url: str) -> bool:
+        query = parse_qs(urlparse(url).query)
+        assert query["client"] == ["cli"]
+        assert query["code_challenge_method"] == ["S256"]
+        _hit_loopback_in_background(query["redirect_uri"][0], code="the-code", state=query["state"][0])
+        return True
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
+        captured_exchange.update(json)
+        assert url == "http://hub.example/api/auth/cli/token"
+        return _FakeTokenResponse(200, {"token": "the-session-token"})
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
+
+    token = cli_login.Login.loopback("http://hub.example", client_factory=factory).token()
+
+    assert token == "the-session-token"
+    assert captured_exchange["code"] == "the-code"
+    redirect_uri = captured_exchange["redirect_uri"]
+    assert isinstance(redirect_uri, str)
+    assert redirect_uri.startswith("http://127.0.0.1:")
+    # The verifier the exchange sends must hash to the challenge the authorize URL carried.
+    code_verifier = captured_exchange["code_verifier"]
+    assert isinstance(code_verifier, str)
+    assert cli_login.Pkce(code_verifier).challenge
+
+
+def test_loopback_login_rejects_a_state_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_open(url: str) -> bool:
+        query = parse_qs(urlparse(url).query)
+        _hit_loopback_in_background(query["redirect_uri"][0], code="the-code", state="not-the-real-state")
+        return True
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
+
+    with pytest.raises(cli_login.LoginError):
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP).token()
+
+
+def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_open(url: str) -> bool:
+        query = parse_qs(urlparse(url).query)
+        _hit_loopback_in_background(query["redirect_uri"][0], code=None, state=query["state"][0], error="access_denied")
+        return True
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
+
+    with pytest.raises(cli_login.LoginError, match="access_denied"):
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP).token()
+
+
+def test_loopback_login_times_out_when_no_browser_shows_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_browser(url: str) -> bool:
+        return True
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", no_browser)
+
+    with pytest.raises(cli_login.LoginError, match="timed out"):
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP, timeout=0.2).token()
+
+
+def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_open(url: str) -> bool:
+        query = parse_qs(urlparse(url).query)
+        _hit_loopback_in_background(query["redirect_uri"][0], code="the-code", state=query["state"][0])
+        return True
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
+        return _FakeTokenResponse(400, {"detail": "invalid or expired code"})
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
+
+    with pytest.raises(cli_login.LoginError, match="rejected the login exchange"):
+        cli_login.Login.loopback("http://hub.example", client_factory=factory).token()
+
+
+def test_paste_code_login_exchanges_the_pasted_code() -> None:
+    captured_exchange: dict[str, object] = {}
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
+        captured_exchange.update(json)
+        return _FakeTokenResponse(200, {"token": "the-session-token"})
+
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
+
+    token = cli_login.Login.paste_code(
+        "http://hub.example", client_factory=factory, prompt_for_code=lambda: "pasted-code"
+    ).token()
+
+    assert token == "the-session-token"
+    assert captured_exchange["code"] == "pasted-code"
+    assert captured_exchange["redirect_uri"] == cli_login.OOB_REDIRECT_URI

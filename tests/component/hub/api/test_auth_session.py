@@ -1,0 +1,253 @@
+"""Session-cookie/bearer resolution + ``require(<permission>)`` gating.
+
+A ``pending`` identity reaches only ``GET /api/me`` and is refused on the SSE stream; a
+``guest`` reaches every ``fleet:view`` read but is refused every mutation; an
+expired/absent session is 401; attribution lands the session identity under real gating.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+
+from blizzard.auth_core import Role
+from blizzard.hub.auth.hashing import SessionId
+from tests.support import build_hub, pointer_token, seed_session, seed_user
+
+_POINTER = {"source": "default", "ref": "7"}
+
+_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: done
+"""
+
+
+def _cookie(token: str) -> dict[str, str]:
+    return {"Cookie": f"bz_session={token}"}
+
+
+def _bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+# --- No session presented ------------------------------------------------------
+
+
+def test_no_session_is_401_on_a_permission_gated_route(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    resp = hub.client.get("/api/chunks")
+    assert resp.status_code == 401
+
+
+def test_no_session_is_401_on_the_me_route(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    resp = hub.client.get("/api/me")
+    assert resp.status_code == 401
+
+
+# --- pending: only /api/me (and the not-yet-landed login/logout surface) ------
+
+
+def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
+
+    me = hub.client.get("/api/me", headers=_cookie(token))
+    assert me.status_code == 200, me.text
+    assert (me.json()["role"], me.json()["tenants"], me.json()["hub_admin"]) == (None, [], False)
+    assert me.json()["permissions"] == []
+    assert me.json()["assignable_roles"] == [r.value for r in Role if r is not Role.SUPERUSER]
+
+    denied = hub.client.get("/api/chunks", headers=_cookie(token))
+    assert denied.status_code == 404
+
+
+def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
+
+    resp = hub.client.get("/api/events/stream", headers=_cookie(token))
+    assert resp.status_code == 404
+
+
+def test_pending_is_refused_ingest(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
+
+    resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
+    assert resp.status_code == 404
+
+
+# --- guest: every fleet:view read, refused on every mutation -------------------
+
+
+def test_guest_reads_chunks_and_events_but_is_refused_ingest(tmp_path: Path) -> None:
+    """The SSE stream shares the same ``FLEET_VIEW`` gate as this bounded read (see
+    ``tests/test_route_classification.py``); it isn't called directly here since its handler
+    streams indefinitely."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    guest = seed_user(hub, username="reader", role=Role.GUEST)
+    token = seed_session(hub, guest)
+
+    me = hub.client.get("/api/me", headers=_cookie(token))
+    assert me.status_code == 200, me.text
+    assert me.json()["role"] == "guest"
+    assert me.json()["permissions"] == ["fleet:view"]
+
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    assert hub.client.get("/api/events", headers=_cookie(token)).status_code == 200
+
+    denied = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
+    assert denied.status_code == 403
+
+
+# --- contributor: the operating surface, denied admin-tier writes -------------
+
+
+def test_contributor_grants_operating_permissions_denies_admin_tier(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="cara", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    assert (
+        hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(token)).status_code == 403
+    )
+    assert hub.client.post("/api/runners/ghost/pause", json={"by": "cara"}, headers=_cookie(token)).status_code == 403
+
+
+def test_contributor_can_ingest_and_answer(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
+    admin_token = seed_session(hub, admin)
+    assert (
+        hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token)).status_code
+        == 201
+    )
+
+    contributor = seed_user(hub, username="cara", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    ingested = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}, headers=_cookie(token))
+    assert ingested.status_code == 201, ingested.text
+
+
+# --- admin: the fleet-identity + graph-authoring + user-admin tier ------------
+
+
+def test_admin_grants_runner_pause_and_graph_edit(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    token = seed_session(hub, admin)
+
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(token))
+    assert minted.status_code == 201, minted.text
+
+    paused = hub.client.post("/api/runners/ghost/pause", json={"by": "ada"}, headers=_cookie(token))
+    assert paused.status_code == 404  # gate granted; the route's own 404 (unknown runner) fires next
+
+
+# --- expired session -----------------------------------------------------------
+
+
+def test_expired_session_is_401(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    user = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, user)
+
+    hub.clock.advance(timedelta(days=2))  # past the default idle TTL
+    resp = hub.client.get("/api/chunks", headers=_cookie(token))
+    assert resp.status_code == 401
+
+
+# --- conditional touch (sub-granularity reads skip the session write) ---------
+
+
+def test_a_second_read_within_touch_granularity_issues_no_session_write(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    user = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, user)
+    id_hash = SessionId(token).hash
+
+    hub.clock.advance(timedelta(hours=1))  # slide well past the default touch_granularity
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    touched = hub.hub_services.sessions.get_by_hash(id_hash)
+    assert touched is not None
+
+    hub.clock.advance(timedelta(minutes=1))  # under the default touch_granularity
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    still = hub.hub_services.sessions.get_by_hash(id_hash)
+    assert still is not None
+    assert still.expires_at == touched.expires_at
+    assert still.last_seen_at == touched.last_seen_at
+
+
+# --- bearer header path (the CLI's future transport, #96) ---------------------
+
+
+def test_bearer_header_resolves_the_same_as_the_cookie(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    user = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, user)
+
+    resp = hub.client.get("/api/chunks", headers=_bearer(token))
+    assert resp.status_code == 200
+
+
+# --- attribution overwrite under real gating -----------------------------------
+
+
+def test_answer_attribution_lands_the_session_identity_not_the_spoofed_body(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
+    admin_token = seed_session(hub, admin)
+    assert (
+        hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token)).status_code
+        == 201
+    )
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token(_POINTER)]}, headers=_cookie(admin_token)
+    ).json()["chunk_id"]
+    hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=_cookie(admin_token))
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "ws1", "environment_ids": ["env1"]},
+    )
+    assert claim.status_code == 201, claim.text
+
+    hub.client.post(
+        "/api/questions",
+        json={
+            "question_id": "qn_1",
+            "chunk_id": chunk_id,
+            "runner_id": "r1",
+            "epoch": 1,
+            "question": "Which way?",
+            "asked_at": "2026-07-13T00:00:00+00:00",
+        },
+        headers=_cookie(admin_token),
+    )
+
+    contributor = seed_user(hub, username="cara", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    answered = hub.client.post(
+        "/api/questions/qn_1/answers",
+        json={"answer": "left", "answered_by": "someone-else-entirely"},
+        headers=_cookie(token),
+    )
+    assert answered.status_code == 201, answered.text
+    assert answered.json()["answered_by"] == "cara"

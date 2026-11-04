@@ -1,4 +1,4 @@
-"""Constants the unit and component halves of the hub runner CLI tests share."""
+"""Constants the unit and component halves of the hub runner CLI tests share — the runner verbs and the runner-host verbs."""
 
 from __future__ import annotations
 
