@@ -551,6 +551,10 @@ class OpenCodeAdapter:
         argv = self._command.takeover_argv(session_id=session_id, model=model, variant=effort)
         return f"cd {session_cwd} && {' '.join(argv)}"
 
+    def orphan(self, session_id: str) -> None:
+        """A no-op: the worker owns its turn's processes, so killing it stopped the turn."""
+        del session_id
+
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
     ) -> dict[str, str]:

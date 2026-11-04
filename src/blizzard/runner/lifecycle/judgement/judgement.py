@@ -35,6 +35,7 @@ from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
+from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.usage_limit import classify_judge_usage_limit, mark_and_park_judge
 from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
@@ -350,6 +351,8 @@ class Judgement:
             lease_id=lease.lease_id,
             relaunch_count=elicitation.relaunch_count,
         )
+        # The lost judge's turn may still run on the session the relaunch prompts again.
+        orphan_session(self.ctx, lease, via="judge-lost")
         self._relaunch(elicitation)
 
     def _relaunch(self, elicitation: PendingElicitation) -> None:
@@ -492,6 +495,7 @@ class Judgement:
             # A plain raise never disarms the trampoline on its own — kill it explicitly, as `Spawner.spawn`
             # does; an `ElicitationNotRecorded` leaves nothing to track the judge by, so it is reaped too.
             self.ctx.process.kill_group(handle.pgid)
+            orphan_session(self.ctx, lease, via="judge-record-failed")
             raise
         # Disarm only now this record is durable — `collect` can re-adopt it past here.
         handle.confirm_durable()

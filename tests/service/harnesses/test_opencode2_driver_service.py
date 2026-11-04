@@ -2,8 +2,8 @@
 the managed service under each test's own isolated home (``bzh:external-cli-fake-is-service-tier``). Each prompt is
 the engine's script, run only inside its fence: the variable rides the driver's environment, which the driver applies
 to the root, and the service's own, which every child runs under; the marker sits in the session's directory. Most
-turns run the real ``blizzard runner opencode drive``; one runs through the adapter and the real launcher, and one is
-taken over through the adapter's composed ``attend`` command."""
+turns run the real ``blizzard runner opencode drive``; one runs through the adapter and the real launcher, one is
+taken over through the adapter's composed ``attend`` command, and one is killed and orphaned through the adapter."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
-from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient
+from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient, ServiceRequestError
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.registration import read_registration
 from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind, DriveRequest, write_request
@@ -405,3 +405,39 @@ def _wait_for_text(
             return
         time.sleep(0.2)
     raise AssertionError(f"session {session_id} never answered {text!r}")
+
+
+def test_orphan_stops_the_tree_a_killed_driver_left_running(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(engine.home))
+    for name in _XDG:
+        monkeypatch.delenv(name, raising=False)
+    child = "hang()"
+    request = engine.request(f"subagent({child!r}, background=True)\nhang()")
+    worker = engine.start(request)
+    client = engine.client()
+    _wait_for_running(client, request.session_id)
+    worker.kill()
+    worker.communicate(timeout=30)
+    assert request.session_id in client.running_sessions()
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        _adapter(engine, executor).orphan(request.session_id)
+    finally:
+        executor.shutdown(wait=True)
+    tree = {request.session_id, *(str(found["id"]) for found in client.children(request.session_id))}
+    assert not client.running_sessions() & tree
+    children = [parse_session(found) for found in client.children(request.session_id)]
+    assert children and all(found.outcome == "interrupted" for found in children)
+    assert parse_session(client.session(request.session_id)).outcome == "interrupted"
+
+
+def _wait_for_running(client: OpenCodeServiceClient, session_id: str, timeout: float = 30) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if session_id in client.running_sessions() and client.children(session_id):
+                return
+        except ServiceRequestError:
+            pass  # the driver has not created the session yet
+        time.sleep(0.2)
+    raise AssertionError(f"session {session_id} and its child never ran")

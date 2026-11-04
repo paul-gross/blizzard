@@ -711,7 +711,10 @@ def _wire_hosted_app(
         host_invariants=host.invariants,
         flags=host.flags,
     )
-    resumes = tuple(ResumeMarking(runner.stores, host.host_stores, host.clock, host.process) for runner in host.runners)
+    resumes = tuple(
+        ResumeMarking(runner.stores, host.host_stores, host.clock, host.process, runner.harnesses)
+        for runner in host.runners
+    )
     return HostedApp(
         app,
         resumes,

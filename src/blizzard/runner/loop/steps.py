@@ -62,6 +62,7 @@ from blizzard.runner.lifecycle.model import (
     reap_move,
     resumable,
 )
+from blizzard.runner.lifecycle.orphan import orphan_resultless_exit
 from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
@@ -565,6 +566,8 @@ class Advance(Step):
         # itself reporting it could not run at all. Both read the one `output`/`lines` pair.
         generation = ctx.stores.liveness.lease_generation(lease.lease_id)
         output = ctx.worker_files.read_stdout(lease.lease_id, generation)
+        # Ahead of every move below: a worker gone without its result may have left its turn running past it.
+        orphan_resultless_exit(ctx, lease, output, via="exit")
         lines = ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
         limit = classify_worker_usage_limit(ctx, lease, output, lines)
         overload = None if limit is not None else classify_worker_overload(ctx, lease, output, lines)

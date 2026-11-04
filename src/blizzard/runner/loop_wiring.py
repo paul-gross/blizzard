@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import Protocol, TypeVar
 
 import httpx2
@@ -26,6 +27,7 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
@@ -40,6 +42,7 @@ from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
+from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.lifecycle.takeover import TakeoverRecovery
@@ -299,6 +302,12 @@ class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
 
 
 @dataclass(frozen=True)
+class _OrphanScope:
+    harnesses: IHarnessRegistry
+    stores: RunnerStores
+
+
+@dataclass(frozen=True)
 class ResumeMarking:
     """The ``host`` command's two restart-resume hooks (#12, #13), each over its own store.
 
@@ -308,6 +317,8 @@ class ResumeMarking:
     host_stores: HostStores
     clock: IClock
     process: IProcessProbe
+    #: The runner's harness owners, each killed survivor's session is orphaned through.
+    harnesses: IHarnessRegistry
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
     sleep: Callable[[float], None] = time.sleep
 
@@ -324,7 +335,8 @@ class ResumeMarking:
     def _drain(self) -> None:
         marked_ids = self.stores.resume_intent.resume_intent_lease_ids()
         leases = [lease for lease in self.stores.lease_record.list_active_leases() if lease.lease_id in marked_ids]
-        ShutdownDrain(process=self.process, clock=self.clock, sleep=self.sleep).run(leases)
+        orphan = partial(orphan_session, _OrphanScope(self.harnesses, self.stores), via="shutdown")
+        ShutdownDrain(process=self.process, clock=self.clock, sleep=self.sleep, orphan=orphan).run(leases)
 
     def on_startup(self) -> int:
         """Mark the sessions a crash orphaned, before the loop starts — the ungraceful

@@ -11,7 +11,7 @@ import json
 import shlex
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx2
@@ -34,18 +34,20 @@ from blizzard.runner.config import (
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
+from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking
@@ -63,6 +65,7 @@ from tests.host_files import load_runner_config, one_workspace, write_minimal_ho
 from tests.runner_client import runner_client, runner_seams
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
+    FakeHarness,
     FakeHub,
     FakeProbe,
     loop_context,
@@ -74,6 +77,7 @@ from tests.runner_fakes import (
 )
 from tests.support import InMemoryTraceExporter
 
+_NO_HARNESSES = HarnessRegistry({})
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
@@ -734,7 +738,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
     """No real process and no wall clock: the marking hook is driven entirely off a
     virtual clock and a scripted probe, both supplied as constructor dependencies."""
     store = _seeded_running_lease_store(tmp_path)
-    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe())
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(), _NO_HARNESSES)
 
     marked = marking.on_shutdown()
 
@@ -761,7 +765,7 @@ def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_
         sleeps.append(seconds)
         probe.groups_alive.discard(100)  # the worker exits on the SIGINT this drain just sent
 
-    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), probe, sleep)
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), probe, _NO_HARNESSES, sleep)
 
     marked = marking.on_shutdown()
 
@@ -771,11 +775,40 @@ def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_
     assert sleeps == [0.5]
 
 
+def test_resume_marking_on_shutdown_orphans_a_survivor_through_its_harness_owner(tmp_path: Path) -> None:
+    store = _seeded_running_lease_store(tmp_path)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        pgid=100,
+    )
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})
+    clock = FixedClock(_NOW)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+    )
+    marking = ResumeMarking(
+        make_stores(store),
+        make_host_stores(store),
+        clock,
+        probe,
+        HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
+        lambda seconds: clock.advance(timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE + seconds)),
+    )
+
+    marking.on_shutdown()
+
+    assert probe.killed_groups == [100] and harness.orphaned == ["sess-a"]
+
+
 def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:
     store = _seeded_running_lease_store(tmp_path)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
     marking = ResumeMarking(
-        make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(alive=set())
+        make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(alive=set()), _NO_HARNESSES
     )  # the pid is dead
 
     marked = marking.on_startup()

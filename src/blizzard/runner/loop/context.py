@@ -279,6 +279,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.identity_check import IdentityCheckContext
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
+    from blizzard.runner.lifecycle.orphan import OrphanContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
@@ -308,6 +309,8 @@ if TYPE_CHECKING:
     _spawn_conforms: type[SpawnContext] = LoopContext
 
     _attempt_conforms: type[AttemptContext] = LoopContext
+
+    _orphan_conforms: type[OrphanContext] = LoopContext
 
     _held_chunk_conforms: type[HeldChunkContext] = LoopContext
 

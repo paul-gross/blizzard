@@ -1,9 +1,9 @@
 """The graceful-shutdown worker drain — ``ResumeMarking.on_shutdown``'s step.
 
 SIGINTs every marked lease's process group, waits at most :data:`SHUTDOWN_DRAIN_DEADLINE`
-in total (one shared budget, not one per worker), then SIGKILLs any survivor. Makes no
-durable write: it only waits for the worker's own envelope to reach the stdout file the
-next startup's usage recording reads back."""
+in total (one shared budget, not one per worker), then SIGKILLs any survivor and orphans its
+session, each orphan held to its harness's own bound. Makes no durable write: it only waits for
+the worker's own envelope to reach the stdout file the next startup's usage recording reads back."""
 
 from __future__ import annotations
 
@@ -31,14 +31,17 @@ class ShutdownDrain:
     process: IOwnedProcessControl
     clock: IClock
     sleep: Callable[[float], None]
+    #: Called with each killed survivor's lease, so a turn that outlives its worker is stopped.
+    orphan: Callable[[Lease], None]
     deadline_seconds: float = SHUTDOWN_DRAIN_DEADLINE
 
     def run(self, leases: Sequence[Lease]) -> None:
-        pgids: set[int] = set()
+        signalled: dict[int, Lease] = {}
         for lease in leases:
             if self._interrupt(lease):
                 assert lease.pgid is not None  # `_interrupt` only signals a recorded group
-                pgids.add(lease.pgid)
+                signalled[lease.pgid] = lease
+        pgids = set(signalled)
         if not pgids:
             return
         deadline = self.clock.now().timestamp() + self.deadline_seconds
@@ -50,6 +53,7 @@ class ShutdownDrain:
         survivors = pgids - exited
         for pgid in survivors:
             self.process.kill_group(pgid)
+            self.orphan(signalled[pgid])
         _log.info(
             "shutdown drain complete",
             signalled=len(pgids),
