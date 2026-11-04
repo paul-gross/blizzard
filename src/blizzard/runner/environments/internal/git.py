@@ -1,7 +1,7 @@
 """Git plumbing shared by the workspace bindings (package-private).
 
 Removes the previous tenant's **untracked** files. Ignored files stay
-(``tests/test_pin_runner_misc.py`` pins it).
+(``tests/component/runner/test_pin_runner_misc.py`` pins it).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class SubprocessEnvGit:
         """``git remote get-url origin`` read **in the repo's own worktree**.
 
         Git walks *up* from cwd to find an enclosing repository, so standing anywhere else
-        yields a plausible-looking URL for another repo (tests/test_pin_runner_misc.py).
+        yields a plausible-looking URL for another repo (tests/component/runner/test_pin_runner_misc.py).
         """
         return self.capture(repo_workdir, "remote", "get-url", "origin").strip()
 

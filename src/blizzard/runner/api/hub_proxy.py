@@ -26,7 +26,7 @@ from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 HUB_TIMEOUT = 15.0
 # The whole-forward bound a caller-less ``GET`` retries within; pinned at
-# tests/test_pin_runner_misc.py::test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room.
+# tests/unit/runner/test_pin_runner_misc.py::test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room.
 HUB_RETRY_CEILING = 25.0
 # A gateway restart answers one of these while it is mid-swap; a `GET` retries past them.
 _RETRYABLE_STATUSES = frozenset(

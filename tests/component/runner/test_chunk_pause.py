@@ -164,7 +164,7 @@ def _make_ctx(
 def _pause_locally(store: SqlAlchemyRunnerStore, ctx: LoopContext, *, paused: bool) -> None:
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
-    The twin of `tests/test_runner_paused.py`'s helper, kept local rather than imported across
+    The twin of `tests/support_paused.py`'s helper, kept local rather than imported across
     test modules.
     """
     store.record_local_pause(

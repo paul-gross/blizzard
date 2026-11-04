@@ -195,7 +195,7 @@ class Bounce:
         """``SameSite``/``Secure``: ``None`` + ``Secure`` wherever a browser will accept ``Secure`` (an
         https or loopback origin), so the cookie survives the cross-site ``form_post`` callback; ``Lax``
         elsewhere, where a ``Secure`` cookie cannot be held at all (pinned by
-        tests/test_runner_federation.py::test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner)."""
+        tests/component/runner/api/test_federation.py::test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner)."""
         if self.origin.secure or (self.request.url.hostname or "").lower() in _LOOPBACK_HOSTS:
             return "none", True
         return "lax", False

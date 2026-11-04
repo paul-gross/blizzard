@@ -324,7 +324,7 @@ def runner_seams(
     # The runner's own health diagnostics; absent, the route and dashboard refuse.
     seams.harness_health = harness_health
     # This default must **not** reach the network — pinned by
-    # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
+    # tests/unit/runner/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     seams.hub_proxy_client = hub_proxy_client or httpx2.Client(
         transport=httpx2.MockTransport(lambda _request: httpx2.Response(404)),
         base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
@@ -495,7 +495,7 @@ def create_app(
         SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
     )
     # This default must **not** reach the network — pinned by
-    # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
+    # tests/unit/runner/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     hub_http_client = hub_http_client or httpx2.Client(
         transport=httpx2.MockTransport(lambda _request: httpx2.Response(404)),
         # A fixed placeholder: `config.hub_url` may be empty or not a valid absolute

@@ -216,7 +216,7 @@ def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_local
 def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(tmp_path: Path) -> None:
     """The composed route's own outbound call is bounded well below a human-tolerable
     read latency — distinct from ``/api/fleet-summary``'s own call, which keeps the
-    module default (proven by ``tests/test_fleet_summary_proxy.py``)."""
+    module default (proven by ``tests/component/runner/api/test_fleet_summary_proxy.py``)."""
     seen_timeouts: list[float] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -240,7 +240,7 @@ def test_the_dashboards_own_unreachable_hub_line_logs_below_error(tmp_path: Path
     """A hub outage here is tolerated degradation — the eight local sections still stand —
     so this route's own unreachable-hub line logs below the module
     default ``error``, distinct from ``/api/fleet-summary``'s own call, which keeps it
-    (proven by ``tests/test_fleet_summary_proxy.py``)."""
+    (proven by ``tests/component/runner/api/test_fleet_summary_proxy.py``)."""
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         raise httpx2.ConnectError("connection refused")
