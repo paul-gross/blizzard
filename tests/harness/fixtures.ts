@@ -418,6 +418,7 @@ export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-wo
 export type { VendorUsage } from './vendor-usage';
 export type { Clock } from './clock-stack';
 export type { WorkerCheckpoint } from './worker-checkpoint';
+export type { Clock } from './clock-stack';
 export type { Viewport } from './ui';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';
