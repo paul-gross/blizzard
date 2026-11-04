@@ -299,3 +299,34 @@ def test_an_unwired_readiness_service_degrades_to_none_rather_than_refusing() ->
     wired = State()
     wired.readiness = sentinel = object()
     assert RunnerWiring(wired).maybe_readiness() is sentinel
+
+
+# --- The fenced clock routes ---------------------------------------------------------------
+
+
+def _fenced_oauth_client() -> TestClient:
+    from blizzard.foundation.clock import ControlledClock
+
+    config = RunnerConfig(
+        root=Path("/tmp/runner-gating-guard"),
+        db_url="sqlite://",
+        name="runner-guard",
+        hub_url="http://hub.example",
+        public_urls=("https://runner-guard.example",),
+    )
+    app = create_runner_app(
+        config,
+        hub_http_client=_oauth_hub_client(),
+        identity=registered_identity(),
+        clock=ControlledClock(_GATE_NOW),
+    )
+    return TestClient(app)
+
+
+def test_the_fenced_clock_routes_are_human_lane_gated_over_tcp_and_open_to_the_socket_peer() -> None:
+    client = _fenced_oauth_client()
+    assert client.get("/api/host/clock").status_code == 401
+    assert client.post("/api/host/clock", json={"advance_seconds": 1}).status_code == 401
+    # A socket peer carries no client address (`host.sock`): the gate lets it through to the handler.
+    socket_peer = TestClient(client.app, client=None)  # type: ignore[arg-type]
+    assert socket_peer.get("/api/host/clock").status_code == 200

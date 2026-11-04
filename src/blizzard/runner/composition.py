@@ -21,7 +21,7 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock, local_zone
+from blizzard.foundation.clock import IClock, SystemClock, local_zone, resolve_clock
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_held_keys, warn_ignored_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
@@ -195,7 +195,7 @@ class HostProcess:
     #: Every workspace the host declares, each with its own provider, spawn root, standing prompt and lock.
     workspaces: IWorkspaces
     events: EventBroker | None
-    clock: SystemClock
+    clock: IClock
     #: The host's local zone, with its daylight-saving rules, that the schedule lever reads the wall clock in.
     zone: tzinfo
     process: LinuxProcessProbe
@@ -318,7 +318,7 @@ class RunnerProcess:
         return self.host.workspaces
 
     @property
-    def clock(self) -> SystemClock:
+    def clock(self) -> IClock:
         return self.host.clock
 
     @property
@@ -439,7 +439,7 @@ def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) ->
 def credential_renewal_pass(
     declarations: Sequence[SubscriptionDeclaration],
     host_stores: HostStores,
-    clock: SystemClock,
+    clock: IClock,
     *,
     children: IChildProcesses,
     env: ChildEnv,
@@ -463,7 +463,7 @@ def credential_renewal_pass(
 def _external_usage_sample_pass(
     declarations: Sequence[SubscriptionDeclaration],
     host_stores: HostStores,
-    clock: SystemClock,
+    clock: IClock,
     http_client: LazyUsageHttpClient,
     runners: Callable[[], tuple[RunnerProcess, ...]],
     *,
@@ -556,6 +556,7 @@ def build_host_process(
         subscriptions=host.subscriptions,
         events=events,
         environ=environ,
+        clock=resolve_clock(os.environ if environ is None else environ),
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
@@ -612,6 +613,7 @@ def build_runner_process(
         subscriptions=config.subscriptions,
         events=events,
         environ=environ,
+        clock=SystemClock(),
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=False,
@@ -667,6 +669,7 @@ def _build_host_graph(
     subscriptions: Sequence[SubscriptionDeclaration],
     events: EventBroker | None,
     environ: Mapping[str, str] | None,
+    clock: IClock,
     platform_tracing: IPlatformTracing | None,
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
@@ -701,7 +704,6 @@ def _build_host_graph(
         )
         errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
         connections = RunnerStoreConnections(engine, errors)
-        clock = SystemClock()
         host_stores = _build_host_stores(connections, clock)
         usage_http_client = LazyUsageHttpClient()
         span_limiter = SpanRateLimiter(clock)
