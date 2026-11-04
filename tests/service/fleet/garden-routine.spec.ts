@@ -132,7 +132,7 @@ docket_marker.write_text('threaded')
 
 test.use({ isolation: 'fresh-tenant' });
 
-test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repository, runnerHosts }) => {
+test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, clock, repository, runnerHosts }) => {
   test.setTimeout(240000);
   const target = await repository();
   const listed = await api.get<{ graph_id: string; name: string }[]>('/api/graphs');
@@ -192,7 +192,7 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repos
     return response.body.sets[0]!;
   };
 
-  const since = new Date(Date.now() - 5 * 60_000).toISOString();
+  const since = new Date(clock.now().getTime() - 5 * 60_000).toISOString();
   const found = await run('found', FOUND, [['survey', 'found'], ['reconcile', 'converged'], ['propose', 'none'], ['deliver', 'recorded']]);
   const foundRows = await findings(FOUND);
   expect(foundRows.map((row) => [row.class, row.locus])).toEqual(expect.arrayContaining([
@@ -203,7 +203,7 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repos
   expect(await proposals()).toEqual([]);
   const runs = await api.get<{ chunk_id: string; routine_name: string; scope_slug: string; mode: string;
     outcome: string; delivered: { finding_set_id: string }[] }[]>('/api/runs', {
-    params: { since, until: new Date(Date.now() + 5 * 60_000).toISOString() },
+    params: { since, until: new Date(clock.now().getTime() + 5 * 60_000).toISOString() },
   });
   expect(runs.status).toBe(200);
   const row = runs.body.find((item) => item.chunk_id === found);

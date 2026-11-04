@@ -30,7 +30,7 @@ function tree(root: string): Record<string, string> {
 }
 
 /** A pre-host runner's store at `data/runner.db` — its identity row naming the pre-host runner — and its token under the unsuffixed variable. */
-function leftBehind(dir: string): void {
+function leftBehind(dir: string, registeredAt: Date): void {
   fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
   const store = new DatabaseSync(path.join(dir, 'data', 'runner.db'));
   store.exec(`CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)`);
@@ -46,7 +46,7 @@ function leftBehind(dir: string): void {
   )`);
   store
     .prepare('INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (?, ?, ?)')
-    .run(PRE_HOST_RUNNER_ID, 'runner-local', new Date().toISOString());
+    .run(PRE_HOST_RUNNER_ID, 'runner-local', registeredAt.toISOString());
   store.close();
   fs.writeFileSync(path.join(dir, '.env'), `BZ_HUB_TOKEN=${PRE_HOST_TOKEN}\n`);
 }
@@ -61,11 +61,11 @@ function identityIds(file: string): string[] {
   }
 }
 
-test('test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the_host_starts', async ({ mockHub, scratchDirs, runnerHosts }) => {
+test('test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the_host_starts', async ({ clock, mockHub, scratchDirs, runnerHosts }) => {
   // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
   test.slow();
   const dir = scratchDirs.make('left');
-  leftBehind(dir);
+  leftBehind(dir, clock.now());
   const before = tree(dir);
 
   const refused = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
