@@ -41,6 +41,11 @@ Unset, the variable keeps the whole suite; the local commands below run unsharde
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
 
+Pyright checks repository-owned Python in strict mode, including root scripts and colocated migration tests; dependency,
+cache, dot-directory and generated build output are excluded. The structural gate applies the suppression rule across
+the same owned scope. `mise run unused-ignores` is a separate, local-only check for inert suppressions in tests and the
+two store migration test trees by default; pass paths to select a different scope.
+
 ```bash
 uv sync
 uv run ruff format --check .

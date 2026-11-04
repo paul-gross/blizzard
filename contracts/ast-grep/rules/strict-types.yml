@@ -4,15 +4,28 @@ id: bzh:strict-types
 language: Python
 severity: error
 message: >-
-  Everything under `src`, `tests`, and `exemplars/python`, the store migration tests included, type-checks under strict
-  pyright. A `# type: ignore` silences every rule on its line and a `# pyright: basic` or `# pyright: standard` header takes the
+  Repository Python type-checks under strict pyright. A `# type: ignore` silences every rule on its line and a
+  `# pyright: basic` or `# pyright: standard` header takes the
   whole file out of strict; waive one named rule at its line with `# pyright: ignore[<rule>]` and a trailing reason
   instead (`bzh:strict-types`,
   blizzard-context:/standards/python.md).
 files:
-  - src/**
-  - tests/**
-  - exemplars/python/**
+  - '**/*.py'
+ignores:
+  - '**/node_modules/**'
+  - '**/__pycache__/**'
+  - '**/.*/**'
+  - 'mutants/**'
+  - 'build/**'
+  - 'dist/**'
+  - 'web/dist/**'
+  - 'web/tmp/**'
+  - 'web/out-tsc/**'
+  - 'web/bazel-out/**'
+  - 'web/coverage/**'
+  - 'web/typings/**'
+  - 'src/blizzard/static/hub/**'
+  - 'src/blizzard/static/runner/**'
 rule:
   kind: comment
   any:

@@ -215,6 +215,7 @@ also_copy = [
     ".github/actions/resolve-mock-ref",
     "contracts/ast-grep/rules/domain-takes-objects.yml",
     "contracts/ast-grep/rules/seam-answers-binding-facts.yml",
+    "contracts/ast-grep/rules/strict-types.yml",
     "contracts/cli",
     "contracts/config",
     "contracts/egress",
@@ -281,8 +282,12 @@ also_copy = [
 ]
 
 [tool.pyright]
-include = ["src", "tests", "exemplars/python"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tests/node_modules"]
+include = ["."]
+exclude = [
+    "**/node_modules", "**/__pycache__", "**/.*", "mutants",
+    "build", "dist", "web/dist", "web/tmp", "web/out-tsc", "web/bazel-out", "web/coverage", "web/typings",
+    "src/blizzard/static/hub", "src/blizzard/static/runner",
+]
 extraPaths = ["src", "exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
