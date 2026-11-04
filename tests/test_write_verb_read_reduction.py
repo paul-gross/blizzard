@@ -31,7 +31,9 @@ from tests.support import (
     serve_default_tenant,
 )
 from tests.test_decisions_api import GATE_YAML
-from tests.test_questions_api import ask_question
+from tests.test_questions_api import (
+    ask_question,
+)
 
 pytestmark = pytest.mark.component
 

@@ -12,6 +12,7 @@ import pytest
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
+from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES
@@ -64,7 +65,11 @@ def _settings(tmp_path: Path, env: Mapping[str, str]) -> str:
 
 
 def _plan(
-    config: RunnerConfig, *, runner_environ: Mapping[str, str] = RUNNER_ENV, enabled: bool = True, bundle=None
+    config: RunnerConfig,
+    *,
+    runner_environ: Mapping[str, str] = RUNNER_ENV,
+    enabled: bool = True,
+    bundle: BundleSnapshot | None = None,
 ) -> HarnessTelemetryPlan:
     return combined_telemetry_plan(
         config.harness_settings(NO_TRACING),

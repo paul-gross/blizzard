@@ -387,7 +387,7 @@ class _Rehearsal:
 
     def _views(self, client: httpx2.Client) -> dict[str, Any]:
         schema = response_schema(self.openapi, _CHUNK_VIEW)
-        views = {}
+        views: dict[str, Any] = {}
         for chunk_id in self.seeded_chunks:
             response = client.get(f"/api/chunks/{chunk_id}")
             views[chunk_id] = project(response.json(), schema, self.openapi) if response.status_code == 200 else None

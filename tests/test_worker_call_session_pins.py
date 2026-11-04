@@ -31,8 +31,12 @@ _ENV = {
 def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     """Collaborators whose client factory hands out ``client`` — a fresh stub when none is given."""
     handed = client or StubClient({})
+
+    def factory(**_: object) -> StubClient:
+        return handed
+
     return CliCollaborators(
-        client_factory=lambda **_: handed,
+        client_factory=factory,
         clock=Clock(),
         wall_clock=SystemClock(),
         monotonic_clock=SystemMonotonicClock(),

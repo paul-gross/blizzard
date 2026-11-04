@@ -410,7 +410,7 @@ def test_an_active_source_that_cannot_be_built_raises_on_closer(
         records=_tenant(services).work_source_records,
         objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(cast(FastAPI, client.app).state.engine))),
         build=unbuildable,
-        built_in=_sources(services).get("hub"),  # type: ignore[arg-type]
+        built_in=_sources(services).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
     )
 
     with pytest.raises(WorkSourceError):

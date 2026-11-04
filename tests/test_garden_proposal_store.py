@@ -17,7 +17,12 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts, GardenProposalEdit, RoutineProposalState
+from blizzard.hub.domain.garden.proposals.model import (
+    GardenProposal,
+    GardenProposalCounts,
+    GardenProposalEdit,
+    RoutineProposalState,
+)
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -175,7 +180,8 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
 
     fetched = store.get("gprop_1")
     assert fetched == created
-    assert set(fetched.findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
+    assert fetched is not None
+    assert set(fetched.findings) == {"fin_1", "fin_2"}
 
 
 def test_create_with_no_findings_writes_no_link_rows(tmp_path: Path) -> None:
@@ -634,8 +640,11 @@ def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Pa
         at=_NOW,
     )
 
-    assert set(store.get("gprop_1").findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
-    assert set(store.get("gprop_2").findings) == {"fin_1"}  # type: ignore[union-attr]
+    first, second = store.get("gprop_1"), store.get("gprop_2")
+    assert first is not None
+    assert second is not None
+    assert set(first.findings) == {"fin_1", "fin_2"}
+    assert set(second.findings) == {"fin_1"}
 
 
 def test_list_all_and_list_for_routine_query_count_is_independent_of_proposal_count(tmp_path: Path) -> None:
@@ -717,7 +726,7 @@ def test_routine_page_followed_to_its_end_equals_list_for_routine(tmp_path: Path
     project = default_project(engine)
     _seed_routine_docket(store, engine, open_count=3, closed_count=4)
 
-    collected = []
+    collected: list[GardenProposal] = []
     cursor = None
     while True:
         page = store.list_page(limit=2, project_id=project, routine_name="nightly", state=state, cursor=cursor)
@@ -731,14 +740,14 @@ def test_routine_page_followed_to_its_end_equals_list_for_routine(tmp_path: Path
 
 
 def test_routine_page_cost_is_flat_in_closed_proposal_count(tmp_path: Path) -> None:
-    measured = []
+    measured: list[tuple[int, int]] = []
     for closed in (2, 15):
         (tmp_path / f"c{closed}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"c{closed}")
         project = default_project(engine)
         _seed_routine_docket(store, engine, open_count=3, closed_count=closed)
 
-        def read(store: GardenProposalStore = store, project: str = project):
+        def read(store: GardenProposalStore = store, project: str = project) -> object:
             return store.list_page(limit=2, project_id=project, routine_name="nightly", state=RoutineProposalState.ALL)
 
         measured.append((count_queries(engine, read), count_rows_read(engine, read)))

@@ -89,7 +89,7 @@ def _push_usage(
 
 def _usage_facts(chunk_id: str, node_id: str, seqs: range) -> list[PushedFact]:
     """One ``usage.recorded`` fact per seq, each costing ``seq`` cents, so a row names the seq it landed for."""
-    facts = []
+    facts: list[PushedFact] = []
     for seq in seqs:
         payload = _usage_payload(node_id, epoch=1, cost_usd=seq / 100)
         payload["chunk_id"] = chunk_id

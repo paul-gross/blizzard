@@ -673,16 +673,19 @@ def test_the_no_newline_marker_is_content() -> None:
     assert not _matches(merged, base_side, feature)
 
 
+_TAMPERS: list[Callable[[FileChange], FileChange]] = [
+    lambda f: replace(f, patch=None),
+    lambda f: replace(f, additions=f.additions + 1),
+    lambda f: replace(f, deletions=f.deletions + 1),
+    lambda f: replace(f, patch="@@ -1,3 +1 @@\n-a\n+b"),
+    lambda f: replace(f, patch="junk"),
+    lambda f: replace(f, previous_path="old.txt"),
+]
+
+
 @pytest.mark.parametrize(
     "tamper",
-    [
-        lambda f: replace(f, patch=None),
-        lambda f: replace(f, additions=f.additions + 1),
-        lambda f: replace(f, deletions=f.deletions + 1),
-        lambda f: replace(f, patch="@@ -1,3 +1 @@\n-a\n+b"),
-        lambda f: replace(f, patch="junk"),
-        lambda f: replace(f, previous_path="old.txt"),
-    ],
+    _TAMPERS,
     ids=["no-patch", "additions-off", "deletions-off", "header-off", "junk", "rename"],
 )
 @pytest.mark.parametrize("which", [0, 1, 2])

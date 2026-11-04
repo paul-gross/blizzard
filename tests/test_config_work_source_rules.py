@@ -100,7 +100,7 @@ def test_an_edit_to_hub_is_refused_naming_the_slug() -> None:
 @pytest.mark.parametrize("field", ["slug", "name"])
 def test_an_explicit_none_is_refused_on_the_slug_and_the_name(field: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        _record().edit(WorkSourceEdit(**{field: None}), _CTX, if_match=None, at=_AT)  # type: ignore[arg-type]
+        _record().edit(WorkSourceEdit(**{field: None}), _CTX, if_match=None, at=_AT)  # pyright: ignore[reportArgumentType]  # an explicit None on a non-nullable field is the refusal under test
     assert caught.value.field == field
 
 
@@ -134,7 +134,7 @@ def test_an_explicit_none_clears_a_nullable_field_and_an_absent_one_is_left() ->
 @pytest.mark.parametrize("field", ["provider", "locator", "annotate"])
 def test_none_on_a_non_nullable_field_is_refused_naming_it(field: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        merge(_FIELDS, WorkSourceEdit(**{field: None}))  # type: ignore[arg-type]
+        merge(_FIELDS, WorkSourceEdit(**{field: None}))  # pyright: ignore[reportArgumentType]  # an explicit None on a non-nullable field is the refusal under test
     assert caught.value.field == field
 
 

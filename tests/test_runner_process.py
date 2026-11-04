@@ -14,7 +14,10 @@ import time
 
 import pytest
 
-from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe, _read_stat
+from blizzard.runner.process.internal.linux_process_probe import (
+    LinuxProcessProbe,
+    _read_stat,  # pyright: ignore[reportPrivateUsage]  # the zombie read has no public accessor; these tests pin it
+)
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from tests.runner_fakes import FakeProbe
 

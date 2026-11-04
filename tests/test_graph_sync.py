@@ -12,10 +12,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from typing_extensions import TypeIs
 
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
-from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
+from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub
 
@@ -50,11 +51,11 @@ def _packaged(tmp_path: Path, name: str, *, prompt: str = "do the work", body: s
     return graph_yaml
 
 
-def _sync(hub: HubHarness, paths: list[Path]):
+def _sync(hub: HubHarness, paths: list[Path]) -> list[GraphSyncOutcome]:
     return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
 
 
-def _statuses(outcomes) -> list[tuple[str, str]]:
+def _statuses(outcomes: list[GraphSyncOutcome]) -> list[tuple[str, str]]:
     return [(o.name, o.status.value) for o in outcomes]
 
 
@@ -402,23 +403,32 @@ _PRE_ACTION_RUN = {
 }
 
 
+def _string_keyed(node: object) -> TypeIs[dict[str, object]]:
+    return isinstance(node, dict)
+
+
 def _pre_action_body(body: dict[str, object]) -> dict[str, object]:
     """``body`` as the packaged set shipped it before its hub nodes named actions: each action back to its
     step, each land node's wait back to thirty minutes, and ``resolve`` reading the step's own log."""
     nodes = body["nodes"]
-    assert isinstance(nodes, dict)
+    assert _string_keyed(nodes)
     for node in nodes.values():
+        assert _string_keyed(node)
         action = node.pop("action", None)
         if action is None:
             continue
+        assert isinstance(action, str)
         node.pop("with", None)
         node["run"] = _PRE_ACTION_RUN[action]
         if "poll_timeout" in node:
             node["poll_timeout"] = 1800
     resolve = nodes.get("resolve")
     if resolve is not None:
-        assert "the `hub-log.land` log" in resolve["prompt"]
-        resolve["prompt"] = resolve["prompt"].replace("the `hub-log.land` log", "the `hub-log.land-every-repo` log")
+        assert _string_keyed(resolve)
+        prompt = resolve["prompt"]
+        assert isinstance(prompt, str)
+        assert "the `hub-log.land` log" in prompt
+        resolve["prompt"] = prompt.replace("the `hub-log.land` log", "the `hub-log.land-every-repo` log")
     return body
 
 
@@ -459,10 +469,12 @@ def test_a_store_holding_the_packaged_set_with_its_actions_as_run_reconciles_up_
     for graph in PACKAGED.files:
         body = graph.body
         nodes = body["nodes"]
-        assert isinstance(nodes, dict)
+        assert _string_keyed(nodes)
         for node in nodes.values():
+            assert _string_keyed(node)
             action = node.pop("action", None)
             if action is not None:
+                assert isinstance(action, str)
                 node.pop("with", None)
                 node["run"] = _PRE_ACTION_RUN[action]
         hub.services.graph_mint.mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())

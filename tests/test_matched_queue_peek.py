@@ -18,7 +18,7 @@ from tests.test_fleet_auth import bearer, enroll_runner, register_runner
 pytestmark = pytest.mark.component
 
 
-def _token(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
+def _token(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
     return enroll_runner(hub, runner_id)
 

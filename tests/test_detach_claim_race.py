@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.execution import detach as detach_module
+from blizzard.hub.domain.runners.route import Route
 from tests.support import build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -28,7 +30,7 @@ def test_a_claim_blocks_while_a_detach_holds_the_row_lock_mid_write(
     release_write = threading.Event()
     real_refuse_detach = detach_module.refuse_detach
 
-    def _blocking_refuse_detach(chunk_id, route, status):
+    def _blocking_refuse_detach(chunk_id: str, route: Route | None, status: ChunkStatus | None) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the detach's write"
         real_refuse_detach(chunk_id, route, status)

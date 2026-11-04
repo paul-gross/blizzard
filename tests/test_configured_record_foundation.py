@@ -53,12 +53,17 @@ def test_projection_and_change_row() -> None:
 
 
 def test_labels_and_slug_left() -> None:
-    parsers = {"parse_slug": ForgeSlug.parse, "parse_name": ForgeName.parse}
-    assert merge_labels("old", "Name", UNSET, UNSET, **parsers) == ("old", "Name")
-    assert merge_labels("old", "Name", "new", "Other", **parsers) == ("new", "Other")
+    assert merge_labels("old", "Name", UNSET, UNSET, parse_slug=ForgeSlug.parse, parse_name=ForgeName.parse) == (
+        "old",
+        "Name",
+    )
+    assert merge_labels("old", "Name", "new", "Other", parse_slug=ForgeSlug.parse, parse_name=ForgeName.parse) == (
+        "new",
+        "Other",
+    )
     with pytest.raises(ConfigFieldError, match="slug: must not be null"):
-        merge_labels("old", "Name", None, UNSET, **parsers)
+        merge_labels("old", "Name", None, UNSET, parse_slug=ForgeSlug.parse, parse_name=ForgeName.parse)
     with pytest.raises(ConfigFieldError):
-        merge_labels("old", "Name", UNSET, "", **parsers)
+        merge_labels("old", "Name", UNSET, "", parse_slug=ForgeSlug.parse, parse_name=ForgeName.parse)
     assert slug_left_for("old", "new") == "old"
     assert slug_left_for("old", "old") is None

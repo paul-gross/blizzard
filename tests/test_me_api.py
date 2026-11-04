@@ -13,7 +13,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS, expand
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission, expand
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantId
 from tests.support import (
@@ -45,7 +45,9 @@ def _me(hub: HubHarness, headers: dict[str, str], tenant: TenantId | str | None 
 
 
 def _permissions(role: Role | None, *, hub_admin: bool) -> list[str]:
-    held = (set() if role is None else set(expand(role))) | (set(HUB_PERMISSIONS) if hub_admin else set())
+    held: set[Permission] = (set[Permission]() if role is None else set(expand(role))) | (
+        set(HUB_PERMISSIONS) if hub_admin else set[Permission]()
+    )
     return sorted(permission.value for permission in held)
 
 
@@ -80,7 +82,7 @@ def test_every_membership_is_listed_with_its_own_role_and_permissions(tmp_path: 
                 "permissions": _permissions(Role.ADMIN, hub_admin=True),
             },
         ],
-        key=lambda tenant: tenant["tenant_id"],
+        key=lambda tenant: str(tenant["tenant_id"]),
     )
 
 

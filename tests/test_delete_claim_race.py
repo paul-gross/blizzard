@@ -7,9 +7,11 @@ can't interleave with the delete's own guard-check-then-write."""
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Connection
 
 from blizzard.hub.store.internal import chunk_record_store as work_item_store_module
 from tests.support import added_runner, build_hub, ingest, seed_runner
@@ -37,7 +39,7 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     release_write = threading.Event()
     real_record_deleted_row = work_item_store_module.record_deleted_row
 
-    def _blocking_record_deleted_row(conn, chunk_id, *, by, at):
+    def _blocking_record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> int:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the delete's write"
         return real_record_deleted_row(conn, chunk_id, by=by, at=at)

@@ -3,6 +3,7 @@ nothing projects to, and what a scaffold and a round trip write."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -51,9 +52,7 @@ def test_a_name_is_stripped_and_a_blank_one_is_a_host_error(tmp_path: Path) -> N
 def test_a_name_with_toml_metacharacters_round_trips(tmp_path: Path) -> None:
     scaffold = HostConfig.scaffold(tmp_path)
     (entry,) = scaffold.runners
-    renamed = type(scaffold)(
-        **{**scaffold.__dict__, "runners": (type(entry)(**{**entry.__dict__, "name": 'r "q" \\ n'}),)}
-    )
+    renamed = replace(scaffold, runners=(replace(entry, name='r "q" \\ n'),))
     (tmp_path / "blizzard-host.toml").write_text(renamed.to_toml())
     assert load_host_config(tmp_path).sole_runner().name == 'r "q" \\ n'
 

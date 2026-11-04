@@ -315,7 +315,7 @@ def test_a_comparison_carries_what_the_head_gate_and_base_merge_read() -> None:
 
 def test_a_comparison_shorter_than_its_total_or_at_the_file_cap_says_so() -> None:
     files = [{"filename": f"f{n}", "status": "modified", "additions": 0, "deletions": 0} for n in range(300)]
-    payload = {
+    payload: dict[str, object] = {
         "status": "diverged",
         "ahead_by": 300,
         "behind_by": 1,
@@ -559,19 +559,24 @@ def test_any_other_4xx_is_rejected_with_the_forges_message() -> None:
     assert raised.value.reason == "A pull request already exists"
 
 
+type _ForgeCall = Callable[[GitHubLanding], Awaitable[object]]
+
+_NAMED_NOT_FOUND: list[tuple[tuple[str, str], _ForgeCall, ForgeObject]] = [
+    (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7), ForgeObject.CHANGE),
+    (
+        ("PUT", f"{REPO}/pulls/7/merge"),
+        lambda forge: forge.merge(7, "h", MergeMethod.MERGE, "m"),
+        ForgeObject.CHANGE,
+    ),
+    (("PUT", f"{REPO}/pulls/7/update-branch"), lambda forge: forge.update_from_base(7, "h"), ForgeObject.CHANGE),
+    (("GET", f"{REPO}/compare/a...b"), lambda forge: forge.compare("a", "b"), ForgeObject.REVISION),
+    (("GET", f"{REPO}/commits/h/check-runs"), lambda forge: forge.checks("h"), ForgeObject.REVISION),
+]
+
+
 @pytest.mark.parametrize(
     ("route", "call", "what"),
-    [
-        (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7), ForgeObject.CHANGE),
-        (
-            ("PUT", f"{REPO}/pulls/7/merge"),
-            lambda forge: forge.merge(7, "h", MergeMethod.MERGE, "m"),
-            ForgeObject.CHANGE,
-        ),
-        (("PUT", f"{REPO}/pulls/7/update-branch"), lambda forge: forge.update_from_base(7, "h"), ForgeObject.CHANGE),
-        (("GET", f"{REPO}/compare/a...b"), lambda forge: forge.compare("a", "b"), ForgeObject.REVISION),
-        (("GET", f"{REPO}/commits/h/check-runs"), lambda forge: forge.checks("h"), ForgeObject.REVISION),
-    ],
+    _NAMED_NOT_FOUND,
     ids=["change", "merge", "update-branch", "compare", "checks"],
 )
 def test_a_404_with_the_repository_present_names_what_the_call_asked_for(
@@ -585,13 +590,16 @@ def test_a_404_with_the_repository_present_names_what_the_call_asked_for(
     assert raised.value.what is what
 
 
+_MISSING_REPOSITORY: list[tuple[tuple[str, str], _ForgeCall]] = [
+    (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7)),
+    (("GET", f"{REPO}/git/ref/heads/main"), lambda forge: forge.branch_tip("main")),
+    (("GET", f"{REPO}/commits/c1"), lambda forge: forge.commit_exists("c1")),
+]
+
+
 @pytest.mark.parametrize(
     ("route", "call"),
-    [
-        (("GET", f"{REPO}/pulls/7"), lambda forge: forge.change(7)),
-        (("GET", f"{REPO}/git/ref/heads/main"), lambda forge: forge.branch_tip("main")),
-        (("GET", f"{REPO}/commits/c1"), lambda forge: forge.commit_exists("c1")),
-    ],
+    _MISSING_REPOSITORY,
     ids=["change", "branch_tip", "commit_exists"],
 )
 def test_a_404_with_the_repository_missing_too_is_a_missing_repository(

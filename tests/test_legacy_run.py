@@ -161,13 +161,13 @@ def test_every_packaged_graph_stored_with_its_hub_nodes_as_run_parses_as_package
     steps = {action: run for run, action, _ in _SHIPPED_RUN_BODIES[::-1]}
     for graph in PACKAGED.files:
         body = graph.body
-        nodes = body["nodes"]
+        nodes = cast("dict[str, dict[str, object]]", body["nodes"])  # parsed YAML: nodes map name -> mapping
         assert isinstance(nodes, dict)
         for node in nodes.values():
             action = node.pop("action", None)
             if action is not None:
                 node.pop("with", None)
-                node["run"] = [] if action == "pass" else steps[action]
+                node["run"] = [] if action == "pass" else steps[str(action)]
         assert _parsed(body) == graph.doc, graph.doc.name
 
 

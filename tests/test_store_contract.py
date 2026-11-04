@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from typing_extensions import TypeIs
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -30,11 +31,19 @@ _STORES = {
 }
 
 
+def _string_keyed(node: object) -> TypeIs[dict[str, object]]:
+    return isinstance(node, dict)
+
+
+def _listed(node: object) -> TypeIs[list[object]]:
+    return isinstance(node, list)
+
+
 def _without_deprecated(node: object) -> object:
     """Reflection cannot see ``info={"deprecated": ...}``, so the comparison drops it."""
-    if isinstance(node, dict):
+    if _string_keyed(node):
         return {key: _without_deprecated(value) for key, value in node.items() if key != "deprecated"}
-    if isinstance(node, list):
+    if _listed(node):
         return [_without_deprecated(item) for item in node]
     return node
 

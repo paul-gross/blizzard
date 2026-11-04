@@ -8,11 +8,15 @@ chunk mid-restart can't interleave with the restart's own read-then-write."""
 from __future__ import annotations
 
 import threading
+from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
+from sqlalchemy import Connection
 
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from tests.support import build_hub, ingest
 
@@ -35,12 +39,37 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
     movement = cast(ChunkMovementStore, hub.services.chunks.movement)
     real_record_restart_conn = movement.record_restart_conn
 
-    def _blocking_record_restart_conn(conn, cid, **kwargs):
+    def _blocking_record_restart_conn(
+        conn: Connection,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        to_node_id: str,
+        by: str,
+        at: datetime,
+        decision_id: str | None,
+        answered_question_ids: Sequence[str],
+        answer: str,
+        to_graph_id: str | None,
+        note: str | None,
+    ) -> LeverWrite:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the restart's write"
-        return real_record_restart_conn(conn, cid, **kwargs)
+        return real_record_restart_conn(
+            conn,
+            chunk_id,
+            from_node_id=from_node_id,
+            to_node_id=to_node_id,
+            by=by,
+            at=at,
+            decision_id=decision_id,
+            answered_question_ids=answered_question_ids,
+            answer=answer,
+            to_graph_id=to_graph_id,
+            note=note,
+        )
 
-    movement.record_restart_conn = _blocking_record_restart_conn  # type: ignore[method-assign]
+    movement.record_restart_conn = _blocking_record_restart_conn
 
     restart_result: dict[str, int] = {}
 

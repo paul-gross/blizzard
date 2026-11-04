@@ -341,7 +341,9 @@ def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
     assert registry.get(beta_pointer.source) is beta
     assert registry.get("alpha") is alpha
     # The label follows the named binding, not registration order.
-    assert registry.get(beta_pointer.source).label(beta_pointer) == "beta#7"  # type: ignore[union-attr]
+    beta_source = registry.get(beta_pointer.source)
+    assert beta_source is not None
+    assert beta_source.label(beta_pointer) == "beta#7"
     # A name no binding declares resolves to None — the 422 at ingest, the null label at read.
     assert registry.get("gamma") is None
 
@@ -659,7 +661,9 @@ _CLOSING_KEYWORD = re.compile(r"\b(close[sd]?|fix(es|ed)?|resolve[sd]?)\b", re.I
 
 
 def _trace_comments(double: ForgeDouble, key: str = "acme/widget#1") -> list[str]:
-    return [c for c in forge_state(double)["issues"][key]["comments"] if "blizzard-delivery:ch_9" in c]  # type: ignore[index]
+    issue = forge_state(double)["issues"][key]
+    assert "comments" in issue
+    return [c for c in issue["comments"] if "blizzard-delivery:ch_9" in c]
 
 
 def _closer_over(issues: dict[str, ForgeIssue]) -> tuple[ForgeDouble, GitHubWorkSource]:

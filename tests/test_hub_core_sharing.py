@@ -42,7 +42,7 @@ def test_the_garden_proposal_closure_and_the_hub_source_share_one_edit_service(t
     assert hub_editor is not None
 
     assert isinstance(hub_editor, HubWorkSource)
-    assert hub_editor._edits is hub.services.garden_proposal_closure.items
+    assert hub_editor._edits is hub.services.garden_proposal_closure.items  # pyright: ignore[reportPrivateUsage]  # the shared instance is wiring, observable only on the private seam
 
 
 def test_the_harness_serves_the_default_tenants_cached_services(tmp_path: Path) -> None:
@@ -85,8 +85,10 @@ def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) ->
     first = core.open(StoreScope(default_tenant(hub.engine)))
     second = core.open(StoreScope(add_tenant(hub.engine, "other")))
 
-    assert first.delete._transactions is first.transactions
-    assert first.chunk_stores.exclusive._transactions is first.transactions  # type: ignore[attr-defined]
+    exclusive = first.chunk_stores.exclusive
+    assert isinstance(exclusive, ChunkExclusiveWrites)
+    assert first.delete._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
+    assert exclusive._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
     assert second.transactions is not first.transactions
 
 

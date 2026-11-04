@@ -193,7 +193,7 @@ def test_a_fault_inside_the_mint_transaction_leaves_no_lease_owner_token_or_fact
         lease=mint.lease,
         harness_id=mint.harness_id,
         token_hash=mint.token_hash,
-        fact_kind=None,  # type: ignore[arg-type]  # NOT NULL column: the outbox insert, last of the four, fails
+        fact_kind=None,  # pyright: ignore[reportArgumentType]  # deliberately ill-typed: NOT NULL column: the outbox insert, last of the four, fails
         fact_payload=mint.fact_payload,
     )
 

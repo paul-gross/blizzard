@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.project_colors import ProjectColor
@@ -170,7 +170,10 @@ def test_a_slug_another_project_holds_is_refused(world: _World) -> None:
 def test_a_slug_taken_by_a_concurrent_write_is_refused_by_the_unique(
     world: _World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(SlugTables, "refuse_held", lambda self, conn, record_id, slug: None)
+    def admit_any(self: SlugTables, conn: Connection, record_id: str, slug: str) -> None:
+        return None
+
+    monkeypatch.setattr(SlugTables, "refuse_held", admit_any)
     with pytest.raises(ProjectSlugTaken):
         world.authoring().create("default", "Raced", OP)
 

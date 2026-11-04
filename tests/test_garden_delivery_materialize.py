@@ -60,7 +60,7 @@ _NODE = Node(
 
 @dataclass
 class _FakeGardenDeliveryRepo:
-    delivered: list[DeliveryPlan] = field(default_factory=list)
+    delivered: list[DeliveryPlan] = field(default_factory=list[DeliveryPlan])
     outcome: DeliveryOutcome = DeliveryOutcome.RECORDED
 
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:

@@ -30,8 +30,8 @@ class _Thing:
 class _Things:
     """An in-memory tenant's records and former slugs, as a store answers them."""
 
-    current: dict[str, _Thing] = field(default_factory=dict)
-    former: dict[str, _Thing] = field(default_factory=dict)
+    current: dict[str, _Thing] = field(default_factory=dict[str, _Thing])
+    former: dict[str, _Thing] = field(default_factory=dict[str, _Thing])
 
     def add(self, slug: str) -> _Thing:
         thing = _Thing(_ThingId(Id.mint_at(IdPrefix.CHUNK, _AT).value), slug)

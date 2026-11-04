@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from starlette.requests import Request
+from starlette.types import Scope
 
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.api.auth_session import TENANT_HEADER
@@ -28,13 +30,14 @@ from tests.support import add_tenant, build_hub, default_tenant, parse_sse_frame
 pytestmark = pytest.mark.component
 
 
-class _FakeRequest:
-    """The minimal request surface ``events_stream`` reads (app.state, headers, query)."""
+def _scope() -> Scope:
+    """The minimal HTTP scope ``events_stream`` reads (app.state, headers, query)."""
+    return {"type": "http", "app": SimpleNamespace(state=SimpleNamespace()), "headers": [], "query_string": b""}
 
+
+class _FakeRequest(Request):
     def __init__(self) -> None:
-        self.app = SimpleNamespace(state=SimpleNamespace())
-        self.headers: dict[str, str] = {}
-        self.query_params: dict[str, str] = {}
+        super().__init__(_scope())
 
     async def is_disconnected(self) -> bool:
         return True
@@ -48,7 +51,7 @@ def _services(broker: EventBroker) -> SimpleNamespace:
 async def test_stream_endpoint_returns_an_sse_response() -> None:
     # Direct call bypasses FastAPI's dependency resolution — the tenant's services (normally
     # resolved via `Depends`) are supplied directly here.
-    response = await events_stream(_FakeRequest(), _services(EventBroker()))  # type: ignore[arg-type]
+    response = await events_stream(_FakeRequest(), _services(EventBroker()))  # pyright: ignore[reportArgumentType]  # only the broker field the stream reads
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
     # The generator opens with the reserved comment so an EventSource connects cleanly.
@@ -75,7 +78,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
         return _capturing_stream
 
     monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing(real_stream))
-    await events_stream(_FakeRequest(), _services(EventBroker()))  # type: ignore[arg-type]
+    await events_stream(_FakeRequest(), _services(EventBroker()))  # pyright: ignore[reportArgumentType]  # only the broker field the stream reads
     assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 
 
@@ -91,12 +94,15 @@ async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None
     broker = EventBroker()
     shutdown = asyncio.Event()
 
-    class _ConnectedRequest:
+    class _ConnectedRequest(Request):
+        def __init__(self) -> None:
+            super().__init__(_scope())
+
         async def is_disconnected(self) -> bool:
             return False  # the client stays connected — only the shutdown signal ends this
 
     async def _drain() -> None:
-        stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, shutdown)  # type: ignore[arg-type]
+        stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, shutdown)
         async for _ in stream.frames():
             pass
 
@@ -111,7 +117,10 @@ async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None
     assert broker.subscriber_count() == 0
 
 
-class _ConnectedRequest:
+class _ConnectedRequest(Request):
+    def __init__(self) -> None:
+        super().__init__(_scope())
+
     async def is_disconnected(self) -> bool:
         return False  # the client stays connected — only the broker's close ends the stream
 
@@ -129,7 +138,7 @@ async def test_dropping_a_tenants_broker_ends_its_open_stream_after_what_it_hold
     brokers = TenantBrokers()
     dropped, kept = brokers.for_tenant(TenantId("ten_A")), brokers.for_tenant(TenantId("ten_B"))
     streams = [
-        Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, keepalive_seconds=30.0).frames()  # type: ignore[arg-type]
+        Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, keepalive_seconds=30.0).frames()
         for broker in (dropped, kept)
     ]
     for frames in streams:
@@ -145,7 +154,9 @@ async def test_dropping_a_tenants_broker_ends_its_open_stream_after_what_it_hold
         kept.publish_queue_changed()
         assert b"queue-changed" in await asyncio.wait_for(streams[1].__anext__(), timeout=1.0)
     finally:
-        await streams[1].aclose()  # type: ignore[attr-defined]
+        kept_frames = streams[1]
+        assert isinstance(kept_frames, AsyncGenerator)
+        await kept_frames.aclose()
 
 
 async def _rest(frames: AsyncIterator[bytes]) -> list[bytes]:
@@ -157,7 +168,7 @@ async def test_a_stream_opened_on_a_closed_broker_replays_its_tail_and_ends() ->
     broker.publish_queue_changed()
     broker.close()
 
-    stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT)  # type: ignore[arg-type]
+    stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT)
     frames = await asyncio.wait_for(_rest(stream.frames()), timeout=1.0)
 
     assert frames[0] == RESERVED_COMMENT.encode()

@@ -44,7 +44,8 @@ class _FakeAuth:
 
     def mint_session(self, user: User) -> tuple[str, Session]:
         self.minted.append(user)
-        return "plaintext", None  # type: ignore[return-value]
+        at = datetime(2026, 1, 1, tzinfo=UTC)
+        return "plaintext", Session(id_hash="hash", user_id=user.user_id, created_at=at, expires_at=at, last_seen_at=at)
 
     def accept_invitation(
         self, identity: ProviderIdentity, *, provider_name: str, invitation: TenantInvitation
@@ -64,7 +65,10 @@ class _FakeInvitations:
 
 
 def _sign_in(auth: _FakeAuth, resolves: TenantInvitation | None = _INVITATION) -> SignIn:
-    return SignIn(auth=auth, invitations=_FakeInvitations(resolves))  # type: ignore[arg-type]
+    return SignIn(
+        auth=auth,  # pyright: ignore[reportArgumentType]  # a fake of the three AuthService calls SignIn composes
+        invitations=_FakeInvitations(resolves),
+    )
 
 
 def _admit(sign_in: SignIn, token_hash: str | None) -> InvitationAccepted | PlainSignIn | SignInRefusal:

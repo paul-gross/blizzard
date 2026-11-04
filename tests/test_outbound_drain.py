@@ -5,6 +5,7 @@ far and then still handled one at a time by its own arm."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -14,10 +15,11 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.hub.client import FactPushAck, PushedFact
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.lifecycle import drain as drain_module
 from blizzard.runner.lifecycle.drain import OutboundDrain
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
@@ -52,7 +54,7 @@ _COMPLETION_PAYLOAD = json.dumps(
 )
 
 
-def _ctx(hub: FakeHub, *, store: SqlAlchemyRunnerStore | None = None):
+def _ctx(hub: FakeHub, *, store: SqlAlchemyRunnerStore | None = None) -> LoopContext:
     store = store if store is not None else make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
@@ -66,13 +68,13 @@ def _ctx(hub: FakeHub, *, store: SqlAlchemyRunnerStore | None = None):
     )
 
 
-def _enqueue_generic(ctx, *, kind: str = "event.recorded", chunk_id: str = "ch_1") -> int:
+def _enqueue_generic(ctx: LoopContext, *, kind: str = "event.recorded", chunk_id: str = "ch_1") -> int:
     return ctx.stores.outbound.enqueue_outbound(
         kind=kind, chunk_id=chunk_id, lease_id=None, payload="{}", created_at=_NOW
     )
 
 
-def _enqueue_completion(ctx, *, chunk_id: str = "ch_1", lease_id: str = "lease_gone") -> int:
+def _enqueue_completion(ctx: LoopContext, *, chunk_id: str = "ch_1", lease_id: str = "lease_gone") -> int:
     """Buffers a completion whose lease never exists locally — `_completion` reads that as
     already advanced on an earlier flush and returns early, so this drives the drain's own
     run-then-arm sequencing without standing up a full lease/attempt fixture."""
@@ -158,7 +160,7 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
 
     real_push_facts = hub.push_facts
 
-    def _reject_middle(facts):
+    def _reject_middle(facts: Sequence[PushedFact]) -> FactPushAck:
         ack = real_push_facts(facts)
         return replace(ack, applied=[s for s in ack.applied if s != seqs[1]], rejected=[seqs[1]])
 
@@ -178,7 +180,7 @@ def test_run_logs_a_route_ended_rejection_at_warning_and_any_other_at_error() ->
 
     real_push_facts = hub.push_facts
 
-    def _reject_two(facts):
+    def _reject_two(facts: Sequence[PushedFact]) -> FactPushAck:
         ack = real_push_facts(facts)
         return replace(ack, applied=[seqs[0]], rejected=[seqs[1], seqs[2]], route_ended=[seqs[1]])
 
@@ -199,10 +201,10 @@ def test_run_contains_a_non_transport_failure_so_pull_returns_and_the_tick_goes_
     ctx = _ctx(hub)
     seqs = [_enqueue_generic(ctx) for _ in range(2)]
 
-    def explode(batch):
+    def explode(facts: Sequence[PushedFact]) -> FactPushAck:
         raise RuntimeError("not a transport failure")
 
-    hub.push_facts = explode  # type: ignore[method-assign]
+    hub.push_facts = explode
 
     with capture_logs() as logs:
         OutboundDrain(ctx).run()

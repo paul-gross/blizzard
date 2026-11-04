@@ -7,7 +7,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 
 import pytest
 
@@ -44,7 +44,7 @@ class _FakeResponse:
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz
     time.tzset()
@@ -96,6 +96,7 @@ def test_every_flag_maps_onto_its_query_parameter() -> None:
     assert params["severity"] == "warning"
     assert params["runner_id"] == "r1"
     assert params["chunk_id"] == "ch_a"
+    assert isinstance(params["since"], str)
     assert params["since"].startswith("2026-08-12T09:00:00")
     assert params["limit"] == "7"
 

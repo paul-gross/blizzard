@@ -52,10 +52,17 @@ def _entry(target: str, count: int = 1, *, file: str = "src/a.py", symbol: str =
     return {"file": file, "symbol": symbol, "target": target, "count": count, "kind": "generated", "reason": "r"}
 
 
-def _check(tmp_path: Path, doc: str, *, extra: dict[str, str] | None = None, **kw) -> list[str]:
+def _check(
+    tmp_path: Path,
+    doc: str,
+    *,
+    extra: dict[str, str] | None = None,
+    untracked: dict[str, str] | None = None,
+    entries: list[dict[str, object]] | None = None,
+) -> list[str]:
     files = {"src/a.py": f'"""{doc}"""\n', "src/real.py": "", "docs/guide/x.md": "", **(extra or {})}
-    root = _repo(tmp_path, files, untracked=kw.pop("untracked", None))
-    return rp.check(root, _exemptions(tmp_path, kw.pop("entries", None)))
+    root = _repo(tmp_path, files, untracked=untracked)
+    return rp.check(root, _exemptions(tmp_path, entries))
 
 
 def test_a_pointer_at_a_tracked_file_passes(tmp_path: Path) -> None:

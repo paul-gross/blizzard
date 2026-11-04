@@ -65,7 +65,7 @@ def test_every_durable_path_is_a_named_volume() -> None:
 
 def test_hub_waits_on_postgres_health_before_migrating() -> None:
     hub = _compose()["services"]["hub"]
-    depends_on = hub.get("depends_on")
+    depends_on: dict[str, Any] | None = hub.get("depends_on")
     assert isinstance(depends_on, dict) and "postgres" in depends_on, (
         "hub must declare a depends_on: postgres condition, not an unconditional dependency"
     )
@@ -78,7 +78,7 @@ def test_postgres_declares_a_pg_isready_healthcheck() -> None:
     postgres = _compose()["services"]["postgres"]
     healthcheck = postgres.get("healthcheck")
     assert healthcheck, "postgres must declare a healthcheck for hub's depends_on to gate on"
-    test = healthcheck.get("test")
+    test: list[str] | str = healthcheck.get("test")
     test_str = " ".join(test) if isinstance(test, list) else str(test)
     assert "pg_isready" in test_str
 

@@ -8,7 +8,7 @@ under any dialect (static proof, no live postgres), and sqlite never duplicates.
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,7 +51,7 @@ class _FakeResult:
 
 
 @contextmanager
-def _scoped_connection() -> Iterator[Connection]:
+def _scoped_connection() -> Generator[Connection]:
     """A connection a scoped read yields over an empty in-memory store — what the allocator's
     statements recover their scope from; nothing runs on it."""
     connections = ScopedConnections(
@@ -65,7 +65,7 @@ def test_next_artifact_seq_locks_the_chunk_row_before_reading_the_max() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
-        assert next_artifact_seq(conn, "ch_1") == 1  # type: ignore[arg-type]
+        assert next_artifact_seq(conn, "ch_1") == 1  # pyright: ignore[reportArgumentType]  # a statement-capturing double; a real Connection would execute against a store with no tables
 
     assert len(conn.statements) == 2  # the lock, then the max read
     lock_stmt = conn.statements[0]

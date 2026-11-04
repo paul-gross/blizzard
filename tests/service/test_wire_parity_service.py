@@ -10,6 +10,7 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx2
@@ -247,6 +248,6 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
         assert still_seeded.status_code == 200, still_seeded.text
 
 
-def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
+def _tick_then(config: RunnerConfig, fenced: dict[str, str], check: Callable[[], object]) -> bool:
     _drive(config, fenced, ticks=1)
     return bool(check())

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, event
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -62,7 +64,7 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
         # passed every other test here. Attached before the first connection so every
         # connection this engine ever opens, seeding included, enforces FKs.
         @event.listens_for(engine, "connect")
-        def _enable_fk(dbapi_connection, connection_record) -> None:
+        def _enable_fk(dbapi_connection: sqlite3.Connection, connection_record: ConnectionPoolEntry) -> None:
             dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
     with engine.begin() as conn:

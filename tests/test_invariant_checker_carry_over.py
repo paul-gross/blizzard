@@ -9,14 +9,14 @@ from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_invariant_checker import NOW, insert
 from tests.support import default_project, default_tenant, hub_scoped, stamp
 from tests.test_invariant_checker import (
-    _flow,
-    _forge_repository,
-    _hub_engine,
-    _link,
-    _open_turn,
-    _seed_at_deliver,
-    _submit,
-    _terms,
+    _flow,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _link,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _submit,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
+    _terms,  # pyright: ignore[reportPrivateUsage]  # shared fixture helpers of the sibling invariant-checker test module
 )
 
 pytestmark = pytest.mark.component

@@ -3,11 +3,12 @@ head-migrated store (unit tier)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert
+from sqlalchemy import Connection, Engine, insert
 
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
@@ -50,7 +51,7 @@ def _engine(tmp_path: Path) -> Engine:
     return engine
 
 
-def _read(engine: Engine, fn):
+def _read[T](engine: Engine, fn: Callable[[Connection], T]) -> T:
     with hub_store_connections(engine).read("test") as conn:
         return fn(conn)
 
@@ -88,7 +89,7 @@ def test_newest_fact_select_returns_each_keys_highest_id_row_whatever_its_retire
     engine = _engine(tmp_path)
     facts = s.repository_lifecycle_facts
 
-    def read(conn):
+    def read(conn: Connection) -> dict[str, datetime]:
         stmt = newest_fact_select(statements_of(conn), facts, facts.c.repository_id, ["k2", "k3"], facts.c.set_at)
         return {r.repository_id: r.set_at for r in conn.execute(stmt.add_columns(facts.c.repository_id))}
 

@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
 from tests.support import TEST_CATALOGUE
@@ -20,8 +21,20 @@ pytestmark = pytest.mark.unit
 _GRAPH = PACKAGED.named("ideation")
 
 
-def _doc():
+def _doc() -> GraphDoc:
     return _GRAPH.doc
+
+
+def _node(name: str) -> NodeDoc:
+    node = _doc().node(name)
+    assert node is not None
+    return node
+
+
+def _prompt(name: str) -> str:
+    prompt = _node(name).prompt
+    assert prompt is not None
+    return prompt
 
 
 def test_ideation_validates_with_no_errors_or_warnings() -> None:
@@ -39,10 +52,10 @@ def test_ideation_shape_is_survey_reconcile_propose_deliver() -> None:
     assert doc.name == "ideation"
     assert doc.entry == "survey"
     assert [n.name for n in doc.nodes] == ["survey", "reconcile", "propose", "deliver"]
-    assert doc.node("survey").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("reconcile").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("propose").executor is Executor.RUNNER  # type: ignore[union-attr]
-    assert doc.node("deliver").executor is Executor.HUB  # type: ignore[union-attr]
+    assert _node("survey").executor is Executor.RUNNER
+    assert _node("reconcile").executor is Executor.RUNNER
+    assert _node("propose").executor is Executor.RUNNER
+    assert _node("deliver").executor is Executor.HUB
 
 
 def test_ideation_has_no_person_in_the_run() -> None:
@@ -73,76 +86,75 @@ def test_ideation_bakes_classes_as_its_only_graph_scoped_artifact() -> None:
 
 
 def test_ideation_prompts_read_the_formats_from_system_scope() -> None:
-    doc = _doc()
-    assert "garden/finding-format" in doc.node("survey").prompt  # type: ignore[union-attr, operator]
-    assert "garden/proposal-format" in doc.node("propose").prompt  # type: ignore[union-attr, operator]
+    assert "garden/finding-format" in _prompt("survey")
+    assert "garden/proposal-format" in _prompt("propose")
 
 
 def test_ideation_propose_states_the_closed_three_class_vocabulary() -> None:
     """`class` is not the proposer's own taxonomy to invent — it is drawn from exactly
     three closed values, distinct from `garden-routine`'s four."""
-    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
+    prompt = _prompt("propose")
     for cls in ("`direction`", "`tweak`", "`retire`"):
-        assert cls in prompt  # type: ignore[operator]
-    assert "closed set of three" in prompt  # type: ignore[operator]
+        assert cls in prompt
+    assert "closed set of three" in prompt
     for cls in ("`remediate`", "`prevent`", "`mechanize`", "`escalate`"):
-        assert cls not in prompt  # type: ignore[operator]
+        assert cls not in prompt
 
 
 def test_ideation_propose_points_at_the_classes_artifact() -> None:
     """The register's full text lives in the graph-scoped `classes` artifact; `propose.md`
     briefly restates it and names the fetch, with the fallback every graph-scope pointer
     owes (`bzh:graph-artifact-pointer-fallback`)."""
-    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
-    assert "blizzard runner artifact get classes --scope graph --content" in prompt  # type: ignore[operator]
-    assert "fails or comes back empty" in prompt  # type: ignore[operator]
+    prompt = _prompt("propose")
+    assert "blizzard runner artifact get classes --scope graph --content" in prompt
+    assert "fails or comes back empty" in prompt
 
 
 def test_ideation_propose_findings_are_always_empty() -> None:
     """This graph never cites a finding — it has none — so every proposal's `findings`
     is asserted `[]` in the prompt itself, not left to the worker's own judgment."""
-    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
-    assert "this graph has no\nfindings to cite" in prompt  # type: ignore[operator]
-    assert "always `[]` here" in prompt  # type: ignore[operator]
+    prompt = _prompt("propose")
+    assert "this graph has no\nfindings to cite" in prompt
+    assert "always `[]` here" in prompt
 
 
 def test_ideation_propose_keeps_the_docket_and_delta_publish_and_no_hub_verb() -> None:
-    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
-    assert "blizzard runner artifact create --name docket" in prompt  # type: ignore[operator]
-    assert "blizzard runner artifact create --name delta" in prompt  # type: ignore[operator]
-    assert "blizzard hub" not in prompt  # type: ignore[operator]
+    prompt = _prompt("propose")
+    assert "blizzard runner artifact create --name docket" in prompt
+    assert "blizzard runner artifact create --name delta" in prompt
+    assert "blizzard hub" not in prompt
 
 
 def test_ideation_survey_always_sweeps_full_scope() -> None:
     """Unlike `garden-routine`, this graph has no delta mode: survey ignores the charge's
     own mode and reads the target as it stands, every run."""
-    prompt = _doc().node("survey").prompt  # type: ignore[union-attr]
-    assert "Always full" in prompt  # type: ignore[operator]
-    assert "no delta mode" in prompt  # type: ignore[operator]
+    prompt = _prompt("survey")
+    assert "Always full" in prompt
+    assert "no delta mode" in prompt
 
 
 def test_ideation_survey_undeclared_axis_uses_ask_not_a_bail_out_candidate() -> None:
     """Departs from `garden-routine`'s `no-strategy` on purpose: it asks a person via
     `blizzard runner ask` rather than filing a bail-out finding, and — the schema having
     no `to: escalate` target — reaches the reserved terminal directly."""
-    prompt = _doc().node("survey").prompt  # type: ignore[union-attr]
-    assert "blizzard runner ask" in prompt  # type: ignore[operator]
-    assert "blizzard runner chunk asks" in prompt  # type: ignore[operator]
+    prompt = _prompt("survey")
+    assert "blizzard runner ask" in prompt
+    assert "blizzard runner chunk asks" in prompt
 
 
 def test_ideation_reconcile_reads_proposals_not_findings() -> None:
     """Reconcile matches survey candidates against the routine's own proposal history,
     never a findings bucket — this graph has no findings at all."""
-    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
-    assert "blizzard runner garden proposals --state all" in prompt  # type: ignore[operator]
-    assert "garden findings" not in prompt  # type: ignore[operator]
+    prompt = _prompt("reconcile")
+    assert "blizzard runner garden proposals --state all" in prompt
+    assert "garden findings" not in prompt
 
 
 def test_ideation_reconcile_judgement_selects_neither_choice_on_a_failed_proposals_read() -> None:
     """The opposite of `garden-routine`'s own reconcile, which degrades a bad proposals
     read to `converged`: here a failed read must select no choice at all, since without it
     novelty cannot be judged."""
-    judgement = _doc().node("reconcile").judgement  # type: ignore[union-attr]
+    judgement = _node("reconcile").judgement
     assert judgement is not None
     prompt = judgement.prompt
     assert prompt is not None
@@ -158,11 +170,11 @@ def test_ideation_session_policy_is_load_bearing() -> None:
     assert set(doc.sessions) == {"sweep", "match"}
     assert doc.sessions["sweep"].model == ["blizzard:advanced"]
     assert doc.sessions["match"].model == ["blizzard:advanced"]
-    assert (doc.node("survey").session, doc.node("survey").session_source) == (SessionMode.FRESH, "sweep")  # type: ignore[union-attr]
-    assert (doc.node("reconcile").session, doc.node("reconcile").session_source) == (SessionMode.FRESH, "match")  # type: ignore[union-attr]
-    assert (doc.node("propose").session, doc.node("propose").session_source) == (SessionMode.RESUME, "match")  # type: ignore[union-attr]
+    assert (_node("survey").session, _node("survey").session_source) == (SessionMode.FRESH, "sweep")
+    assert (_node("reconcile").session, _node("reconcile").session_source) == (SessionMode.FRESH, "match")
+    assert (_node("propose").session, _node("propose").session_source) == (SessionMode.RESUME, "match")
     # `propose` resumes `reconcile`'s own lineage — the shortlist it read never leaves context.
-    assert doc.node("propose").session_source == doc.node("reconcile").session_source  # type: ignore[union-attr]
+    assert _node("propose").session_source == _node("reconcile").session_source
 
 
 def test_ideation_survey_routes_the_three_ways_out() -> None:
@@ -241,9 +253,9 @@ def test_ideation_produces_lists_and_never_a_commit() -> None:
         ("shortlist", ArtifactKind.ASSET),
         ("docket", ArtifactKind.ASSET),
     }
-    assert [p.name for p in doc.node("survey").produces] == ["survey", "delta"]  # type: ignore[union-attr]
-    assert [p.name for p in doc.node("reconcile").produces] == ["shortlist"]  # type: ignore[union-attr]
-    assert [p.name for p in doc.node("propose").produces] == ["docket", "delta"]  # type: ignore[union-attr]
+    assert [p.name for p in _node("survey").produces] == ["survey", "delta"]
+    assert [p.name for p in _node("reconcile").produces] == ["shortlist"]
+    assert [p.name for p in _node("propose").produces] == ["docket", "delta"]
 
 
 def test_ideation_every_runner_node_escapes_to_escalation() -> None:

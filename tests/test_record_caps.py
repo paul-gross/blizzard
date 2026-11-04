@@ -57,13 +57,13 @@ def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: st
     )
 
 
-@pytest.mark.parametrize(
-    ("rendered", "who"),
-    [
-        (lambda p: HubConfig(root=p, db_url=HubConfig.default_db_url(p)).to_toml(), "hub"),
-        (lambda p: HostConfig.scaffold(p).to_toml(), "runner"),
-    ],
-)
+_RENDERERS: list[tuple[Callable[[Path], str], str]] = [
+    (lambda p: HubConfig(root=p, db_url=HubConfig.default_db_url(p)).to_toml(), "hub"),
+    (lambda p: HostConfig.scaffold(p).to_toml(), "runner"),
+]
+
+
+@pytest.mark.parametrize(("rendered", "who"), _RENDERERS)
 def test_each_scaffolded_config_warns_an_operator_about_the_cap_ordering(
     rendered: Callable[[Path], str], who: str, tmp_path: Path
 ) -> None:

@@ -25,9 +25,9 @@ _IN_PROGRESS = WorkStatusMarker.IN_PROGRESS
 @pytest.mark.parametrize(
     ("desired", "actual", "action"),
     [
-        (None, frozenset(), "skip"),
+        (None, frozenset[WorkStatusMarker](), "skip"),
         (None, frozenset({_INGESTED}), "clear"),
-        (_INGESTED, frozenset(), "set"),
+        (_INGESTED, frozenset[WorkStatusMarker](), "set"),
         (_INGESTED, frozenset({_INGESTED}), "skip"),
         (_INGESTED, frozenset({_IN_PROGRESS}), "set"),
         (_INGESTED, frozenset({_INGESTED, _IN_PROGRESS}), "set"),

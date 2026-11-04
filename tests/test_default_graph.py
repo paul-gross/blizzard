@@ -28,7 +28,9 @@ def test_default_graph_is_a_single_triage_router() -> None:
     assert doc.name == "default-delivery"  # the ingest default pin resolves by this name
     assert doc.entry == "triage"
     assert [n.name for n in doc.nodes] == ["triage"]
-    assert doc.node("triage").executor is Executor.RUNNER  # type: ignore[union-attr]
+    triage = doc.node("triage")
+    assert triage is not None
+    assert triage.executor is Executor.RUNNER
 
 
 def test_default_graph_triage_routes_to_lanes_done_or_escalation() -> None:

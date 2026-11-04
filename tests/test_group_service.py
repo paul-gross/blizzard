@@ -8,7 +8,7 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -77,7 +77,7 @@ def _running_facts() -> ChunkFacts:
 class _FakeWorkRefsRepo:
     """Only ``add_work_refs_locked`` is live — see module docstring."""
 
-    added: list[tuple[str, list[WorkRef]]] = field(default_factory=list)
+    added: list[tuple[str, list[WorkRef]]] = field(default_factory=list[tuple[str, list[WorkRef]]])
 
     def add_work_refs_locked(
         self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
@@ -92,8 +92,8 @@ class _FakeWorkRefsRepo:
 class _FakeDependenciesRepo:
     """Only ``list_standing_edges``/``record_fold_locked`` are live — see module docstring."""
 
-    edges: list[DependencyEdge] = field(default_factory=list)
-    folds: list[dict[str, Any]] = field(default_factory=list)
+    edges: list[DependencyEdge] = field(default_factory=list[DependencyEdge])
+    folds: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     fold_calls: int = 0
     _next_id: int = 1
 
@@ -193,7 +193,7 @@ class _FakeExclusiveWrites:
     dependencies_repo: _FakeDependenciesRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.record_repo, self.facts_repo, self.dependencies_repo))
 
 

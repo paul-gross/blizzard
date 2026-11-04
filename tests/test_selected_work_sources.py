@@ -42,9 +42,9 @@ def test_selected_bindings_share_fallback_slug_without_caching_pointer_labels_or
     for n in range(20):
         pointer = WorkRef("configured", str(n))
         assert selected.label(pointer) == f"original#{n}"
-        assert selected.source(pointer.source).web_url(pointer, live_holder=None) == (  # type: ignore[union-attr]
-            f"http://forge.local/acme/widget/issues/{n}"
-        )
+        source = selected.source(pointer.source)
+        assert source is not None
+        assert source.web_url(pointer, live_holder=None) == (f"http://forge.local/acme/widget/issues/{n}")
         assert selected.label(WorkRef("missing", str(n))) == f"retired#{n}"
     assert selected.source("missing") is None
     assert registry.slug_calls == ["configured", "missing"]

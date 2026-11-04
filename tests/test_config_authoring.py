@@ -437,9 +437,7 @@ def test_a_taken_repository_name_or_coordinate_is_refused_naming_the_holder(worl
     with pytest.raises(RepositoryCoordinateTaken) as caught:
         world.authoring.create_repository("demo2", None, _REPO, OP)
     assert caught.value.holder == "demo"
-    other = world.authoring.create_repository(
-        "other", None, RepositoryFields(**{**_REPO.__dict__, "repo": "other"}), OP
-    )
+    other = world.authoring.create_repository("other", None, replace(_REPO, repo="other"), OP)
     with pytest.raises(RepositoryCoordinateTaken):
         world.authoring.edit_repository(other, RepositoryEdit(repo="demo"), OP)
     assert world.count() == before + 1
@@ -448,9 +446,7 @@ def test_a_taken_repository_name_or_coordinate_is_refused_naming_the_holder(worl
 def test_a_repository_with_a_missing_or_retired_secret_is_refused(world: _World) -> None:
     before = world.count()
     with pytest.raises(RepositorySecretUnavailable, match="unknown") as caught:
-        world.authoring.create_repository(
-            "demo", None, RepositoryFields(**{**_REPO.__dict__, "secret_name": "nope"}), OP
-        )
+        world.authoring.create_repository("demo", None, replace(_REPO, secret_name="nope"), OP)
     assert caught.value.field == "secret_name"
     record = world.authoring.create_repository("demo", None, _REPO, OP)
     retired = world.authoring.retire_repository(record, OP)
@@ -583,7 +579,9 @@ def test_a_dry_run_writes_nothing_and_returns_the_outcomes_of_the_real_apply(wor
 
 
 def test_a_dry_run_reaches_the_refusals_a_real_apply_reaches(world: _World) -> None:
-    world.authoring.retire_secret(world.secrets.get("gh"), OP)  # type: ignore[arg-type]
+    secret = world.secrets.get("gh")
+    assert secret is not None
+    world.authoring.retire_secret(secret, OP)
     before = world.count()
     for dry_run in (True, False):
         with pytest.raises(ApplyEntryRefused) as caught:

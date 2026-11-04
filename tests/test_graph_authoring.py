@@ -296,7 +296,7 @@ def test_reify_carries_checks_gating_fields() -> None:
 
 
 #: Each packaged graph's hub nodes, by name, and the action and ``with:`` each names.
-_PACKAGED_HUB_NODES = {
+_PACKAGED_HUB_NODES: dict[str, dict[str, tuple[str, dict[str, tuple[str, ...]]]]] = {
     "advanced-development-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},
     "basic-development-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},
     "basic-harness-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},

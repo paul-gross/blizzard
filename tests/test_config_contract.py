@@ -104,7 +104,7 @@ def test_a_fixed_variable_has_no_name_rule_and_the_hub_declares_no_env() -> None
 
 
 #: Modules under ``src/blizzard`` that write ``.env`` or create ``runners/<name>``, with the verbs the contract names.
-_ENV_WRITER_MODULES = {
+_ENV_WRITER_MODULES: dict[str, set[str]] = {
     "runner/cli/runners.py": {"add"},
     "runner/cli/runtime.py": {"init", "host"},
     "runner/ingest.py": {"ingest"},
@@ -128,7 +128,7 @@ def test_the_env_writers_are_the_modules_that_write_the_env_file() -> None:
     # src/blizzard/runner/composition.py only wires the writer into ingest and the daemon; it is not a verb of its own.
     found = _modules_containing(_ENV_WRITE_MARKERS) - {"runner/composition.py"}
     assert found == set(_ENV_WRITER_MODULES)
-    verbs = set().union(*_ENV_WRITER_MODULES.values())
+    verbs = set[str]().union(*_ENV_WRITER_MODULES.values())
     assert verbs == set(_row(".env")["written_by"])
 
 

@@ -15,14 +15,14 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx2
 import pytest
-from sqlalchemy import Engine, Row, insert, select
+from sqlalchemy import Connection, Engine, Row, insert, select
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
@@ -928,7 +928,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
                     )
                 ).all()
             assert len(rows) == 1, "the attachment was not durably recorded before the crash"
-            row = rows[0]._mapping
+            row = rows[0]._mapping  # pyright: ignore[reportPrivateUsage]  # Row._mapping is SQLAlchemy's documented public mapping view
             assert (row["chunk_id"], row["node_id"], row["epoch"], row["name"]) == (
                 "ch_attach",
                 "nd_review",
@@ -1076,7 +1076,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
                     )
                 ).all()
             assert len(rows) == 1, "the declaration was not durably recorded before the crash"
-            row = rows[0]._mapping
+            row = rows[0]._mapping  # pyright: ignore[reportPrivateUsage]  # Row._mapping is SQLAlchemy's documented public mapping view
             assert (row["chunk_id"], row["node_id"], row["epoch"]) == ("ch_declare_commit", "nd_build", 4), (
                 "the declaration's provenance did not survive intact"
             )
@@ -1508,7 +1508,7 @@ def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
 
 
 @contextlib.contextmanager
-def _audit_connection(runner_dir: Path) -> Iterator[Any]:
+def _audit_connection(runner_dir: Path) -> Generator[Connection]:
     """A read connection over every runner's rows in the runner's sqlite, as the invariant checker's audit opens one."""
     engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
@@ -3117,7 +3117,8 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 detail = hub.get(f"/api/chunks/{chunk_id}")
-                if detail.status_code == 200 and (detail.json().get("pending") or {}).get("kind") == "awaiting-merge":
+                pending: dict[str, object] = detail.json().get("pending") or {}
+                if detail.status_code == 200 and pending.get("kind") == "awaiting-merge":
                     break
                 time.sleep(0.25)
             else:
@@ -4184,7 +4185,7 @@ _TEARDOWN_HISTORY_AT = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _BYSTANDER_FILLER_ROWS = 50
 
 #: The rows each point's kill leaves the deletion fact counting, given the rows the drain removes in all.
-_REMOVED_AT_KILL = {
+_REMOVED_AT_KILL: dict[str, Callable[[int], int]] = {
     "teardown.after-close.before-drain": lambda total: 0,
     "teardown.after-batch.before-next": lambda total: DRAIN_BATCH_ROWS,
     "teardown.after-drain.before-complete": lambda total: total,
@@ -4457,6 +4458,7 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         finally:
             engine.dispose()
         before = _ingest_end_state(here, there, moving_id)
+        here_runners_before = sorted((r.name, r.id) for r in load_host_config(here).runners)
         ingest = ("ingest", str(there), "--runner", _INGEST_MOVING, "--workspace-id", _INGEST_WORKSPACE)
 
         killed = _runner_cli(hub_url, *ingest, "--dir", str(here), crash_point=point)
@@ -4489,7 +4491,7 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         "there": {name: [] for name in RUNNER_TABLES},
         "here violations": [],
         "there violations": [],
-        "here runners": sorted([*before["here runners"], (_INGEST_MOVING, moving_id)]),  # type: ignore[misc]
+        "here runners": sorted([*here_runners_before, (_INGEST_MOVING, moving_id)]),
         "there runners": before["there runners"],
         "here workspaces": ["workspace-local", _INGEST_WORKSPACE],
         "there workspaces": ["workspace-local"],

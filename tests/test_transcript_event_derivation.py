@@ -18,8 +18,9 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Chunk, decide_close_enqueue
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
@@ -233,7 +234,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_for_calls = 0
         self.movement_facts_for_calls = 0
 
-    def load_facts(self, chunk_id: str, *, transaction=None):
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
         return super().load_facts(chunk_id, transaction=transaction)
 
@@ -252,7 +253,7 @@ class _CountingRecordStore(ChunkRecordStore):
         self.get_calls = 0
         self.graph_id_of_many_calls = 0
 
-    def get(self, chunk_id: str, *, transaction=None):
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
         self.get_calls += 1
         return super().get(chunk_id, transaction=transaction)
 

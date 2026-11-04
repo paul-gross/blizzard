@@ -16,13 +16,15 @@ backend."""
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
@@ -54,7 +56,9 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     dependencies = _writable_dependencies(hub)
     real_record_fold_locked = dependencies.record_fold_locked
 
-    def _blocking_record_fold_locked(handle, targets, *, grouped_into, by, at):
+    def _blocking_record_fold_locked(
+        handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    ) -> dict[str, int]:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
         return real_record_fold_locked(handle, targets, grouped_into=grouped_into, by=by, at=at)

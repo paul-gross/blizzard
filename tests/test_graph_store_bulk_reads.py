@@ -185,7 +185,8 @@ def test_reify_returns_equal_choices_and_its_query_count_does_not_grow_with_node
     reloaded = store.get(many.graph_id)
     assert reloaded is not None
     assert [n.node_id for n in reloaded.nodes] == [n.node_id for n in many.nodes]
-    assert all(reloaded.node_by_id(n.node_id).choices == n.choices for n in many.nodes)  # type: ignore[union-attr]
+    reloaded_by_id = {n.node_id: n for n in reloaded.nodes}
+    assert all(reloaded_by_id[n.node_id].choices == n.choices for n in many.nodes)
 
 
 # --- graph_id_of_enabled_name ---------------------------------------------------- #

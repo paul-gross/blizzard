@@ -5,7 +5,7 @@ built apps and their specs, so a model added later without the wire base fails h
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import Any, get_args
+from typing import Any, cast, get_args
 
 import pytest
 from fastapi import FastAPI
@@ -26,7 +26,7 @@ _REF_PREFIX = "#/components/schemas/"
 _FRAMEWORK_SCHEMAS = frozenset({"HTTPValidationError", "ValidationError"})
 
 
-def _subclasses(cls: type) -> Iterator[type]:
+def _subclasses(cls: type[object]) -> Iterator[type[object]]:
     for sub in cls.__subclasses__():
         yield sub
         yield from _subclasses(sub)
@@ -35,14 +35,23 @@ def _subclasses(cls: type) -> Iterator[type]:
 def _refs(node: object) -> Iterator[str]:
     """Every component schema name ``$ref``-ed anywhere under ``node``."""
     if isinstance(node, dict):
-        for key, value in node.items():
+        mapping = cast("dict[object, object]", node)
+        for key, value in mapping.items():
             if key == "$ref" and isinstance(value, str) and value.startswith(_REF_PREFIX):
                 yield value.removeprefix(_REF_PREFIX)
             else:
                 yield from _refs(value)
     elif isinstance(node, list):
-        for item in node:
+        items = cast("list[object]", node)
+        for item in items:
             yield from _refs(item)
+
+
+def _request_body(operation: object) -> object:
+    if not isinstance(operation, dict):
+        return {}
+    mapping = cast("dict[object, object]", operation)
+    return mapping.get("requestBody", {})
 
 
 def _closure(roots: set[str], schemas: dict[str, dict[str, Any]]) -> set[str]:
@@ -70,8 +79,7 @@ def _request_reached(spec: dict[str, Any]) -> set[str]:
             name
             for operations in spec["paths"].values()
             for operation in operations.values()
-            if isinstance(operation, dict)
-            for name in _refs(operation.get("requestBody", {}))
+            for name in _refs(_request_body(operation))
         }
     )
     return _closure(bodies, schemas)

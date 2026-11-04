@@ -4,6 +4,7 @@ decision — each over loaded objects and a passed instant, with no repository o
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -366,7 +367,7 @@ def test_detach_refuses_closed_then_empty_then_repeat_then_not_linked() -> None:
 
 def test_pairing_by_state() -> None:
     a = _proposal()
-    b = GardenProposal(**{**a.__dict__, "proposal_id": "gprop_2"})
+    b = replace(a, proposal_id="gprop_2")
     closures = {"gprop_2": _PASSED}
 
     assert pair_with_closures([a, b], closures, RoutineProposalState.OPEN) == [(a, None), (b, None)]

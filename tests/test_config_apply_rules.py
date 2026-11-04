@@ -150,7 +150,8 @@ def test_a_stated_field_that_differs_is_edited_and_an_omitted_one_is_left() -> N
     assert write.from_revision == 3
     assert write.change.revision == 4
     assert [(d.field, d.old, d.new) for d in write.change.diff] == [("locator", "acme/demo", "acme/other")]
-    assert write.record.fields.annotate is True  # type: ignore[union-attr]
+    assert isinstance(write.record, ConfiguredWorkSource)
+    assert write.record.fields.annotate is True
 
 
 def test_a_retired_record_is_enabled_then_edited_at_consecutive_revisions() -> None:

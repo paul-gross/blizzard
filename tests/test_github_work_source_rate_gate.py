@@ -64,7 +64,11 @@ class _World:
     def source(self, secret: str | None = "gh") -> GitHubWorkSource:
         gate = self.budgets.sweeping(_FORGE, secret, "github")
         client = httpx2.Client(base_url="http://forge", transport=httpx2.MockTransport(self._handle))
-        client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
+
+        def learn(response: httpx2.Response) -> None:
+            gate.learn(response.headers)
+
+        client.event_hooks["response"].append(learn)
         return GitHubWorkSource(client, source_id="widget", slug="widget", repo="acme/widget", web_base="x", gate=gate)
 
 
@@ -115,6 +119,14 @@ def test_a_forge_rate_refusal_sets_retry_after_and_spends_the_shared_budget() ->
         world.budgets.admit(_KEY, ForgePriority.LANDING)
 
 
+def _server_error(_request: httpx2.Request) -> httpx2.Response:
+    return httpx2.Response(500, json={"message": "boom"})
+
+
+def _forbidden_with_budget(_request: httpx2.Request) -> httpx2.Response:
+    return httpx2.Response(403, json={"message": "Resource not accessible"}, headers=_rate(50))
+
+
 def _unreachable(request: httpx2.Request) -> httpx2.Response:
     raise httpx2.ConnectError("unreachable", request=request)
 
@@ -122,8 +134,8 @@ def _unreachable(request: httpx2.Request) -> httpx2.Response:
 @pytest.mark.parametrize(
     "answer",
     [
-        lambda _request: httpx2.Response(500, json={"message": "boom"}),
-        lambda _request: httpx2.Response(403, json={"message": "Resource not accessible"}, headers=_rate(50)),
+        _server_error,
+        _forbidden_with_budget,
         _unreachable,
     ],
     ids=["server-error", "forbidden-with-budget", "unreachable"],

@@ -49,7 +49,7 @@ _NODE = Node(
 
 @dataclass
 class _FakeReviewFindingsRepo:
-    delivered: list[ReviewFindingsPlan] = field(default_factory=list)
+    delivered: list[ReviewFindingsPlan] = field(default_factory=list[ReviewFindingsPlan])
     outcome: ReviewFindingsOutcome = ReviewFindingsOutcome.RECORDED
 
     def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:

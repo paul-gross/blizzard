@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -405,7 +405,7 @@ class _RegistryOf:
 
 class _UnenterableExclusiveWrites:
     @contextmanager
-    def locked(self, chunk_ids: object) -> Iterator[object]:
+    def locked(self, chunk_ids: object) -> Generator[object]:
         raise AssertionError("the claim entered the lock for a runner refused on its own standing")
         yield
 

@@ -7,7 +7,7 @@ import asyncio
 import socket
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -34,7 +34,7 @@ async def _answering(scope: dict[str, Any], receive: Any, send: Any) -> None:
 
 
 @contextmanager
-def _serving(port: int) -> Iterator[None]:
+def _serving(port: int) -> Generator[None]:
     server = build_early_shutdown_server(_answering, host="127.0.0.1", port=port, shutdown_signal=asyncio.Event())
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
 
+from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedWorkRefRead
+from blizzard.hub.domain.graph.model import Graph, ILockedGraphNameRead
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
@@ -37,7 +41,7 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
     record: Any = hub.services.chunks.record
     real_mint_locked = record.mint_locked
 
-    def _blocking_mint_locked(handle, chunk):
+    def _blocking_mint_locked(handle: ILockedWorkRefRead, chunk: Chunk) -> None:
         entered.set()
         assert release.wait(timeout=60), "test never released the first ingest"
         return real_mint_locked(handle, chunk)
@@ -100,7 +104,9 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     release = threading.Event()
     real_mint_locked = graph_store.mint_locked
 
-    def _blocking_mint_locked(handle, graph, *, definition_yaml, at):
+    def _blocking_mint_locked(
+        handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime
+    ) -> None:
         entered.set()
         assert release.wait(timeout=60), "test never released the first mint"
         return real_mint_locked(handle, graph, definition_yaml=definition_yaml, at=at)

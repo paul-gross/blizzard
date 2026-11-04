@@ -151,6 +151,7 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
         )
 
     assert items.get("hub", pointer.ref) is None
-    assert chunks.facts.load_facts("ch_collide") is not None
-    assert not chunks.facts.load_facts("ch_collide").promoted  # type: ignore[union-attr]
+    collided = chunks.facts.load_facts("ch_collide")
+    assert collided is not None
+    assert not collided.promoted
     assert run_context.for_chunk(colliding_chunk) is None

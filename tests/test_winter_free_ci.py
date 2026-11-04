@@ -67,11 +67,17 @@ def _local_action_steps(step: dict[str, Any]) -> list[dict[str, Any]]:
     return action.get("runs", {}).get("steps") or []
 
 
+def _with(step: dict[str, Any]) -> dict[str, Any]:
+    return step.get("with") or {}
+
+
 def _test_running_checkouts() -> list[tuple[str, str, dict[str, Any]]]:
-    found = []
+    found: list[tuple[str, str, dict[str, Any]]] = []
     for workflow in _WORKFLOWS:
-        for job_name, job in yaml.safe_load(workflow.read_text()).get("jobs", {}).items():
-            steps = [inner for step in job.get("steps") or [] for inner in (step, *_local_action_steps(step))]
+        jobs: dict[str, dict[str, Any]] = yaml.safe_load(workflow.read_text()).get("jobs", {})
+        for job_name, job in jobs.items():
+            job_steps: list[dict[str, Any]] = job.get("steps") or []
+            steps = [inner for step in job_steps for inner in (step, *_local_action_steps(step))]
             if not any(_RUNS_TESTS.search(str(step.get("run", ""))) for step in steps):
                 continue
             found += [
@@ -84,9 +90,7 @@ def _test_running_checkouts() -> list[tuple[str, str, dict[str, Any]]]:
 
 def test_the_scan_follows_the_mock_checkout_into_the_composite_action() -> None:
     mock_checkouts = [
-        step
-        for _, _, step in _test_running_checkouts()
-        if (step.get("with") or {}).get("repository") == "paul-gross/blizzard-mock"
+        step for _, _, step in _test_running_checkouts() if _with(step).get("repository") == "paul-gross/blizzard-mock"
     ]
     assert len(mock_checkouts) >= 5
 
@@ -107,6 +111,6 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
     ("workflow", "job", "step"), _test_running_checkouts(), ids=lambda value: value if isinstance(value, str) else ""
 )
 def test_a_test_running_checkout_does_not_persist_credentials(workflow: str, job: str, step: dict[str, Any]) -> None:
-    assert (step.get("with") or {}).get("persist-credentials") is False, (
+    assert _with(step).get("persist-credentials") is False, (
         f"{workflow}:{job} checks out {step.get('name') or step.get('with')} without persist-credentials: false"
     )

@@ -8,7 +8,7 @@ portable no-op-``UPDATE`` lock ``next_route_seq`` uses for the same shape of haz
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,7 +59,7 @@ class _FakeResult:
 
 
 @contextmanager
-def _scoped_connection() -> Iterator[Connection]:
+def _scoped_connection() -> Generator[Connection]:
     """A connection a scoped read yields over an empty in-memory store; nothing runs on it."""
     connections = ScopedConnections(
         create_engine("sqlite://"), HubStoreErrorFactory(get_logger("test")), StoreScope(TenantId("ten_test"))
@@ -80,7 +80,7 @@ def test_is_closed_locks_the_proposal_row_before_reading_closures() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
-        GardenProposalStore(store=None).is_closed(conn, "gprop_1")  # type: ignore[arg-type]
+        GardenProposalStore(store=None).is_closed(conn, "gprop_1")  # pyright: ignore[reportArgumentType]  # is_closed runs on the passed connection, never the store
 
     assert len(conn.statements) == 2  # the lock, then the closures read
     _assert_locks_garden_proposals_row(conn.statements[0])
@@ -91,7 +91,7 @@ def test_insert_closure_row_locks_the_proposal_row_before_reading_closures() -> 
         conn = _CapturingConn(scoped)
 
         insert_garden_proposal_closure_row(
-            conn,  # type: ignore[arg-type]
+            conn,  # pyright: ignore[reportArgumentType]  # a capturing fake connection, so the lock statement is recorded, not run
             proposal_id="gprop_1",
             closure=GardenProposalClosureKind.PASSED,
             reason="r",

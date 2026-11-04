@@ -26,6 +26,7 @@ from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import (
     FakeAnnotator,
     FakeWorkSource,
+    ForgeDouble,
     HubHarness,
     WorkSourceRegistry,
     build_hub,
@@ -319,7 +320,7 @@ def test_a_hub_that_never_annotated_clears_nothing(tmp_path: Path) -> None:
 @pytest.fixture
 def hosted(
     tmp_path: Path, request: pytest.FixtureRequest
-) -> Iterator[tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str]]:
+) -> Iterator[tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str]]:
     """A hosted hub whose work sources are store records the registry reads on use, so retiring a
     source or its secret through the hub's own routes reaches the very next sweep — beside the
     served forge double its sources talk HTTP to."""
@@ -334,31 +335,31 @@ def hosted(
 
 @pytest.mark.component
 def test_a_retired_source_has_its_labels_cleared_once(
-    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
+    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str],
 ) -> None:
     client, services, memory, double, forge_url = hosted
     source_id = create(client, services, forge_url, annotate=True)
     promote(client, "widget:1")
     assert services.annotation is not None
     services.annotation.sweep()
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
     assert memory.annotated_sources() == {source_id}
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
     services.annotation.sweep()
 
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()
     assert memory.annotated_sources() == frozenset()
 
     # Once: a label put back by hand after the departure is never cleared again.
-    forge_state(double)["issue_labels"]["acme/widget#1"] = {"blizzard:ingested"}  # type: ignore[index]
+    forge_state(double)["issue_labels"]["acme/widget#1"] = {"blizzard:ingested"}
     services.annotation.sweep()
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
 
 
 @pytest.mark.component
 def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
-    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, TestClient, str],
+    hosted: tuple[TestClient, HubServices, ForgeAnnotationStore, ForgeDouble, str],
 ) -> None:
     """With no credential left there is no clearer to reach the forge: the departure is
     forgotten rather than retried forever, and the labels stay as they were."""
@@ -373,7 +374,7 @@ def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
     assert client.post("/api/secrets/gh/retire").status_code == 200
     services.annotation.sweep()
 
-    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}
     assert memory.annotated_sources() == frozenset()
 
 

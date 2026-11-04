@@ -22,12 +22,14 @@ from blizzard.runner.leases.elicitation import (
     ELICITATION_STALENESS_THRESHOLD,
     ElicitationNotRecorded,
     ElicitationVerb,
+    PendingElicitation,
 )
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation
 from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.throttle.usage_limits import FloorClear
 from tests.runner_fakes import (
@@ -53,20 +55,20 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _build_envelope(chunk="ch_1"):
+def _build_envelope(chunk: str = "ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
 def _seed_running_lease(
     store: SqlAlchemyRunnerStore,
     *,
-    chunk="ch_1",
-    lease="lease_1",
-    pid=100,
-    start="start-100",
-    session="sess-a",
-    epoch=1,
-):
+    chunk: str = "ch_1",
+    lease: str = "lease_1",
+    pid: int = 100,
+    start: str = "start-100",
+    session: str = "sess-a",
+    epoch: int = 1,
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -89,7 +91,9 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store: SqlAlchemyRunnerStore, *, harness, probe, clock=None):
+def _ctx(
+    store: SqlAlchemyRunnerStore, *, harness: FakeHarness, probe: FakeProbe, clock: FixedClock | None = None
+) -> LoopContext:
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
@@ -136,7 +140,7 @@ def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitat
     probe = FakeProbe()
     ctx = _ctx(store, harness=harness, probe=probe)
 
-    def _raise(*args, **kwargs):
+    def _raise(*args: object, **kwargs: object) -> None:
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_elicitation_started", _raise)
@@ -417,9 +421,11 @@ def test_a_record_cleared_under_a_launch_reaps_the_judge(tmp_path: Path, monkeyp
     ctx = _ctx(store, harness=harness, probe=probe)
     started = store.record_elicitation_started
 
-    def _cleared_first(lease_id, epoch, **kwargs):
+    def _cleared_first(
+        lease_id: str, epoch: int, *, pid: int, process_start_time: str, pgid: int | None = None
+    ) -> None:
         store.clear_elicitation(lease_id, epoch)
-        started(lease_id, epoch, **kwargs)
+        started(lease_id, epoch, pid=pid, process_start_time=process_start_time, pgid=pgid)
 
     monkeypatch.setattr(store, "record_elicitation_started", _cleared_first)
 
@@ -505,7 +511,9 @@ def _usage_limit_judge_park(tmp_path: Path):
     return store, harness, probe, ctx, lease, elicitation
 
 
-def _unpause(ctx, store: SqlAlchemyRunnerStore, lease, elicitation):
+def _unpause(
+    ctx: LoopContext, store: SqlAlchemyRunnerStore, lease: Lease, elicitation: PendingElicitation | None
+) -> None:
     DormantSession(ctx, lease).on_unpause(
         store.open_pause_parks()["lease_1"],
         elicitation,

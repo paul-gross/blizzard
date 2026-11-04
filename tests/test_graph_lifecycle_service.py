@@ -27,7 +27,7 @@ _GRAPH = Graph(graph_id="gr_1", name="alpha", entry_node_id="nd_1", nodes=[], ed
 class _FakeGraphRepo:
     """Only ``record_lifecycle`` is live; anything else is a bug."""
 
-    recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list)
+    recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list[tuple[str, bool, str, datetime]])
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         self.recorded.append((graph_id, retired, by, at))

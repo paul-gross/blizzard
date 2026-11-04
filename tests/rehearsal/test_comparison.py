@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.rehearsal.comparison import project, reflection_drift, response_schema, row_losses, view_mismatches
+from tests.rehearsal.comparison import Schema, project, reflection_drift, response_schema, row_losses, view_mismatches
 
 pytestmark = pytest.mark.unit
 
@@ -30,7 +30,7 @@ def _projected(view: dict[str, object]) -> dict[str, object]:
 
 
 def test_a_projection_keeps_only_the_declared_fields_at_every_depth() -> None:
-    view = {
+    view: dict[str, object] = {
         "chunk_id": "ch_1",
         "status": "done",
         "added": 1,
@@ -83,11 +83,11 @@ def test_a_lost_row_or_table_is_named_and_rows_added_since_are_not() -> None:
 
 def test_reflection_drift_ignores_deprecation_and_names_a_differing_table() -> None:
     column = {"type": "String", "server_default": False}
-    committed = {"tables": {
+    committed: Schema = {"tables": {
         "a": {"primary_key": [], "columns": {"x": {**column, "deprecated": "0.2"}}},
         "b": {"primary_key": [], "columns": {}},
     }}  # fmt: skip
-    reflected = {"tables": {"a": {"primary_key": [], "columns": {"x": {**column, "deprecated": None}}}}}
+    reflected: Schema = {"tables": {"a": {"primary_key": [], "columns": {"x": {**column, "deprecated": None}}}}}
     assert reflection_drift(reflected, committed) == [
         "table b: reflected <absent> but committed {'primary_key': [], 'columns': {}}"
     ]

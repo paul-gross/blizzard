@@ -8,14 +8,17 @@ with that check-then-act."""
 from __future__ import annotations
 
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
+from sqlalchemy import Connection
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
 from blizzard.tools.invariants import hub_invariants
 from tests.support import HubHarness, build_hub, ingest, report_lease
@@ -46,7 +49,7 @@ def test_a_claim_blocks_while_a_complete_holds_the_row_lock_mid_write(tmp_path: 
     release_write = threading.Event()
     real_route_of_conn = chunk_lifecycle_store_module.route_of_conn
 
-    def _blocking_route_of_conn(conn, chunk_id):
+    def _blocking_route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the completion's write"
         return real_route_of_conn(conn, chunk_id)
@@ -105,7 +108,7 @@ def test_a_completion_still_releases_the_route_a_claim_won_the_lock_to_create(tm
     writable_route = cast(IWriteChunkRouteRepository, hub.services.chunks.route)
     real_record_route_locked = writable_route.record_route_locked
 
-    def _blocking_record_route_locked(handle, route, *, token_hash, at):
+    def _blocking_record_route_locked(handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
         return real_record_route_locked(handle, route, token_hash=token_hash, at=at)

@@ -189,5 +189,7 @@ def test_the_wire_view_never_calls_a_delivered_answer_superseded() -> None:
 
     answered = replace(_ANSWERED, project_id=None)
     for row, superseded in ((answered, True), (_DELIVERED, False)):
-        view = question_view(row, {}, {}, superseded_by_restart=True)  # type: ignore[arg-type]
+        view = question_view(
+            row, {}, {"project_id": None, "project_slug": None, "project_name": None}, superseded_by_restart=True
+        )
         assert view.superseded is superseded

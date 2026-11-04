@@ -23,7 +23,13 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalOrigin,
 )
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
-from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
+from blizzard.hub.domain.garden.findings.model import (
+    FactEntry,
+    Finding,
+    FindingExitService,
+    FindingFact,
+    FindingPage,
+)
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure
 from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
@@ -101,7 +107,9 @@ def _closure(
 
 @dataclass
 class _FakeClosures:
-    by_item: dict[tuple[str, str], GardenProposalClosure] = field(default_factory=dict)
+    by_item: dict[tuple[str, str], GardenProposalClosure] = field(
+        default_factory=dict[tuple[str, str], GardenProposalClosure]
+    )
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
         raise NotImplementedError
@@ -115,7 +123,7 @@ class _FakeClosures:
 
 @dataclass
 class _FakeProposals:
-    by_id: dict[str, GardenProposal] = field(default_factory=dict)
+    by_id: dict[str, GardenProposal] = field(default_factory=dict[str, GardenProposal])
 
     def get(self, proposal_id: str) -> GardenProposal | None:
         return self.by_id.get(proposal_id)
@@ -154,7 +162,7 @@ class _FakeProposals:
 
 @dataclass
 class _FakeFindings:
-    by_id: dict[str, Finding] = field(default_factory=dict)
+    by_id: dict[str, Finding] = field(default_factory=dict[str, Finding])
     delivered_proposal_ids: frozenset[str] = frozenset()
 
     def get(self, finding_id: str) -> Finding | None:
@@ -221,10 +229,38 @@ class _FakeFindings:
 
 
 @dataclass
-class _RecordingWriteRepo:
-    batches: list[list[FactEntry]] = field(default_factory=list)
+class _RecordingWriteRepo(_FakeFindings):
+    batches: list[list[FactEntry]] = field(default_factory=list[list[FactEntry]])
 
-    def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
+    def add(
+        self,
+        finding_id: str,
+        *,
+        project_id: str,
+        routine_name: str,
+        scope_slug: str,
+        class_: str,
+        locus: str,
+        summary: str,
+        introduced: str | None,
+        at: datetime,
+    ) -> Finding:
+        raise NotImplementedError
+
+    def record_fact(
+        self,
+        finding_id: str,
+        *,
+        kind: str,
+        at: datetime,
+        note: str | None = None,
+        actor: str | None = None,
+        proposal_id: str | None = None,
+        superseded_by: str | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         self.batches.append(list(entries))
         return []
 
@@ -232,7 +268,7 @@ class _RecordingWriteRepo:
 def _resolution(
     *, closures: _FakeClosures, proposals: _FakeProposals, findings: _FakeFindings, repo: _RecordingWriteRepo
 ) -> GardenProposalDeliveryResolution:
-    exits = FindingExitService(repo=repo, clock=FixedClock(instant=_T0))  # type: ignore[arg-type]
+    exits = FindingExitService(repo=repo, clock=FixedClock(instant=_T0))
     return GardenProposalDeliveryResolution(closures=closures, proposals=proposals, findings=findings, exits=exits)
 
 

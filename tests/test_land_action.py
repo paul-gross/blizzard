@@ -62,6 +62,7 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
 from tests.support import (
     HubHarness,
@@ -193,7 +194,8 @@ def _visit(
 def _forge(*repos: str, **state: Any) -> GitHubDouble:
     double = GitHubDouble()
     for repo in repos or (_WIDGET,):
-        double.repos[repo] = DoubleRepo(**{"heads": {"feat/x": _SUBMITTED}, **state})
+        fields: dict[str, Any] = {"heads": {"feat/x": _SUBMITTED}, **state}
+        double.repos[repo] = DoubleRepo(**fields)
     return double
 
 
@@ -1195,12 +1197,13 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     hub = _hub(tmp_path, GitHubDouble())
     chunk_id = _chunk(hub, _WIDGET)
     artifacts = hub.services.chunks.artifacts
+    assert isinstance(artifacts, ChunkArtifactsStore)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     close_decision = decide_close_enqueue(chunk.work_refs, lambda _: True)
 
     def record() -> bool:
-        return artifacts.record_landing(  # type: ignore[attr-defined]
+        return artifacts.record_landing(
             chunk_id,
             node_id="nd_deliver",
             node_name="deliver",

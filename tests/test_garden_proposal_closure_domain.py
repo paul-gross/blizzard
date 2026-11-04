@@ -83,8 +83,10 @@ def _no_mint_items() -> WorkItemEditService:
 @dataclass
 class _FakeGardenProposalClosureRepo:
     closure: GardenProposalClosure | None = None
-    passed: list[tuple[str, str, str, datetime]] = field(default_factory=list)
-    declined: list[tuple[str, str | None, str, datetime]] = field(default_factory=list)
+    passed: list[tuple[str, str, str, datetime]] = field(default_factory=list[tuple[str, str, str, datetime]])
+    declined: list[tuple[str, str | None, str, datetime]] = field(
+        default_factory=list[tuple[str, str | None, str, datetime]]
+    )
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
         return self.closure

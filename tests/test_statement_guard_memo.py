@@ -26,7 +26,7 @@ _hub_table = next(table for table in hub_schema.metadata.sorted_tables if _hub_g
 _hub_key = "tenant_id"
 _leases = runner_schema.leases
 
-_GUARDS: dict[str, tuple[KeyedStatementGuard, Any, str, type[Exception]]] = {
+_GUARDS: dict[str, tuple[KeyedStatementGuard, sa.Table, str, type[Exception]]] = {
     "tenant": (_hub_guard, _hub_table, _hub_key, UnscopedTenantStatement),
     "runner": (RUNNER_GUARD, _leases, "runner_id", UnscopedRunnerStatement),
 }
@@ -47,7 +47,7 @@ def walks(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
 
 @pytest.fixture(params=list(_GUARDS))
-def guard_case(request: pytest.FixtureRequest) -> tuple[KeyedStatementGuard, Any, str, type[Exception]]:
+def guard_case(request: pytest.FixtureRequest) -> tuple[KeyedStatementGuard, sa.Table, str, type[Exception]]:
     guard, table, key, error = _GUARDS[request.param]
     return (
         KeyedStatementGuard(guard.metadata, guard.scoping, exempt_option=guard.exempt_option, unscoped=guard.unscoped),
@@ -58,11 +58,11 @@ def guard_case(request: pytest.FixtureRequest) -> tuple[KeyedStatementGuard, Any
 
 
 def test_an_unscoped_shape_is_refused_every_time_it_executes(
-    guard_case: tuple[KeyedStatementGuard, Any, str, type[Exception]], walks: list[int]
+    guard_case: tuple[KeyedStatementGuard, sa.Table, str, type[Exception]], walks: list[int]
 ) -> None:
     guard, table, _key, error = guard_case
     statement = sa.select(table)
-    messages = []
+    messages: list[str] = []
     for _ in range(2):
         with pytest.raises(error) as raised:
             guard.check(statement)
@@ -72,7 +72,7 @@ def test_an_unscoped_shape_is_refused_every_time_it_executes(
 
 
 def test_statements_differing_only_in_bound_values_share_one_verdict(
-    guard_case: tuple[KeyedStatementGuard, Any, str, type[Exception]], walks: list[int]
+    guard_case: tuple[KeyedStatementGuard, sa.Table, str, type[Exception]], walks: list[int]
 ) -> None:
     guard, table, key, _error = guard_case
     first = sa.select(table).where(table.c[key] == "a")
@@ -84,7 +84,7 @@ def test_statements_differing_only_in_bound_values_share_one_verdict(
 
 
 def test_inserts_differing_in_parameter_keys_do_not_share_a_verdict(
-    guard_case: tuple[KeyedStatementGuard, Any, str, type[Exception]], walks: list[int]
+    guard_case: tuple[KeyedStatementGuard, sa.Table, str, type[Exception]], walks: list[int]
 ) -> None:
     guard, table, key, error = guard_case
     statement = sa.insert(table)
@@ -96,23 +96,27 @@ def test_inserts_differing_in_parameter_keys_do_not_share_a_verdict(
 
 
 def test_a_statement_without_a_cache_key_is_walked_every_time(
-    guard_case: tuple[KeyedStatementGuard, Any, str, type[Exception]],
+    guard_case: tuple[KeyedStatementGuard, sa.Table, str, type[Exception]],
     walks: list[int],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard, table, key, _error = guard_case
     statement = sa.select(table).where(table.c[key] == "a")
-    monkeypatch.setattr(type(statement), "_generate_cache_key", lambda self: None)
+
+    def no_cache_key(self: object) -> None:
+        return None
+
+    monkeypatch.setattr(type(statement), "_generate_cache_key", no_cache_key)
     guard.check(statement)
     guard.check(statement)
     assert len(walks) == 2
 
 
 def test_the_verdict_cache_is_bounded(
-    guard_case: tuple[KeyedStatementGuard, Any, str, type[Exception]], monkeypatch: pytest.MonkeyPatch
+    guard_case: tuple[KeyedStatementGuard, sa.Table, str, type[Exception]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     guard, table, key, _error = guard_case
     monkeypatch.setattr(statement_guard, "_VERDICT_CACHE_SIZE", 3)
     for index in range(10):
-        guard.check(sa.select(table.c[key], sa.literal_column(f"c{index}")).where(table.c[key] == "a"))
+        guard.check(sa.select(table.c[key], sa.literal_column(f"c{index}", sa.Integer)).where(table.c[key] == "a"))
     assert len(guard.verdicts) == 3

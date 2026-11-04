@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -34,7 +34,7 @@ class _GoneLockedChunkRead(_Untouchable):
 
 class _FakeExclusiveWrites:
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, _GoneLockedChunkRead())
 
 

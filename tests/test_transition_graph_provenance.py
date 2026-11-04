@@ -7,6 +7,7 @@ Component tier: :meth:`ChunkFactsStore.load_facts` resolves ``to_node_executor``
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -64,7 +65,7 @@ class _GraphLookup:
     def __init__(self, by_id: dict[str, Graph]) -> None:
         self._by_id = by_id
 
-    def load_graph_summaries(self, graph_ids):
+    def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
         return {
             graph_id: GraphSummary(
                 graph_id=graph.graph_id, name=graph.name, entry_node_id=graph.entry_node_id, created_at=graph.created_at
@@ -73,7 +74,7 @@ class _GraphLookup:
             if (graph := self._by_id.get(graph_id)) is not None
         }
 
-    def load_node_names(self, graph_ids):
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, dict[str, str]]:
         return {
             graph_id: {node.node_id: node.name for node in graph.nodes}
             for graph_id in graph_ids
@@ -118,7 +119,11 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     )
 
     by_id = {graph_a.graph_id: graph_a, graph_b.graph_id: graph_b}
-    views = ChunkHistoryView(facts, GraphNames(_GraphLookup(by_id))).transitions()  # type: ignore[arg-type]
+    lookup = _GraphLookup(by_id)
+    views = ChunkHistoryView(
+        facts,
+        GraphNames(lookup),  # pyright: ignore[reportArgumentType]  # a stand-in for only the two projections GraphNames reads
+    ).transitions()
 
     assert [(v.from_node_name, v.to_node_name) for v in views] == [("build", "review"), ("triage", "fix")]
     # No raw-id degradation: every name resolved against its own graph.
@@ -173,7 +178,8 @@ def test_migration_view_projects_both_graphs_and_orders_tied_instants_by_epoch()
             ),
         ],
     )
-    names = GraphNames(_GraphLookup({source.graph_id: source, target.graph_id: target}))  # type: ignore[arg-type]
+    lookup = _GraphLookup({source.graph_id: source, target.graph_id: target})
+    names = GraphNames(lookup)  # pyright: ignore[reportArgumentType]  # a stand-in for only the two projections GraphNames reads
 
     views = ChunkHistoryView(facts, names).migrations()
 

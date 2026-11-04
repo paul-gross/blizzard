@@ -19,6 +19,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
 from tests.support import (
@@ -148,7 +149,7 @@ class Chunk:
         return decision_id
 
 
-def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable[[object], None]) -> object:
+def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable[[ILockedChunkRead], None]) -> object:
     with_test_lock_wait(chunk.hub)
     answered: dict[str, object] = {}
     started = threading.Event()
@@ -172,19 +173,21 @@ def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable
     thread.join(timeout=60)
     assert not thread.is_alive(), "the submission never finished after the writer released the chunk row lock"
     if "error" in answered:
-        raise AssertionError("the submission raised") from answered["error"]  # type: ignore[arg-type]
+        error = answered["error"]
+        assert isinstance(error, BaseException)
+        raise AssertionError("the submission raised") from error
     return answered["result"]
 
 
-def stop_under_lock(chunk: Chunk) -> Callable[[object], None]:
-    def write(handle) -> None:
+def stop_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
+    def write(handle: ILockedChunkRead) -> None:
         chunk.stores.lifecycle.record_stop_locked(handle, chunk.chunk_id, by="operator", at=chunk.hub.clock.now())
 
     return write
 
 
-def restart_under_lock(chunk: Chunk) -> Callable[[object], None]:
-    def write(handle) -> None:
+def restart_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
+    def write(handle: ILockedChunkRead) -> None:
         chunk.stores.movement.record_restart_locked(
             handle,
             chunk.chunk_id,

@@ -67,12 +67,18 @@ def _owed(repo: _Repo, monkeypatch: pytest.MonkeyPatch, against: str = "base") -
     return CliRunner().invoke(main, ["owed", "--against", against])
 
 
-def _edit_hub(repo: _Repo, message: str = "feat: change the hub", **kwargs) -> None:
-    repo.commit(message, {_HUB: json.dumps({"v": 2}), **kwargs.pop("files", {})}, **kwargs)
+def _edit_hub(
+    repo: _Repo,
+    message: str = "feat: change the hub",
+    *,
+    files: dict[str, str] | None = None,
+    trailer: str | None = None,
+) -> None:
+    repo.commit(message, {_HUB: json.dumps({"v": 2}), **(files or {})}, trailer=trailer)
 
 
 def test_a_changed_openapi_document_with_no_note_fails_naming_the_document(
-    repo, monkeypatch: pytest.MonkeyPatch
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _edit_hub(repo)
     result = _owed(repo, monkeypatch)
@@ -80,49 +86,49 @@ def test_a_changed_openapi_document_with_no_note_fails_naming_the_document(
     assert _HUB in result.output
 
 
-def test_an_added_unreleased_note_satisfies_the_trigger(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_added_unreleased_note_satisfies_the_trigger(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     _edit_hub(repo, files={_UNRELEASED: _note()})
     assert _owed(repo, monkeypatch).exit_code == 0
 
 
-def test_a_reasoned_waiver_passes_and_prints_its_reason(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_reasoned_waiver_passes_and_prints_its_reason(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     _edit_hub(repo, trailer=_WAIVER)
     result = _owed(repo, monkeypatch)
     assert result.exit_code == 0
     assert "reorders an enum" in result.output
 
 
-def test_a_waiver_without_a_reason_fails(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_waiver_without_a_reason_fails(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     _edit_hub(repo, trailer="Change-Note: none")
     result = _owed(repo, monkeypatch)
     assert result.exit_code == 1
     assert "Change-Note: none — <reason>" in result.output
 
 
-def test_a_changed_cli_contract_owes_a_note(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_changed_cli_contract_owes_a_note(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat: a verb", {_RUNNER_CLI: '{"commands": []}'})
     assert _owed(repo, monkeypatch).exit_code == 1
 
 
-def test_a_changed_sse_golden_owes_a_note(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_changed_sse_golden_owes_a_note(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat: a field", {_SSE_RUNNER_KIND: '{"case": {"x": 1}}'})
     result = _owed(repo, monkeypatch)
     assert result.exit_code == 1
     assert _SSE_RUNNER_KIND in result.output
 
 
-def test_a_changed_sse_readme_alone_owes_nothing(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_changed_sse_readme_alone_owes_nothing(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("docs: reword", {_SSE_README: "# SSE\n"})
     assert _owed(repo, monkeypatch).exit_code == 0
 
 
-def test_a_changed_store_document_alone_owes_nothing(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_changed_store_document_alone_owes_nothing(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("fix: store", {_STORE: '{"tables": {}}'})
     assert _owed(repo, monkeypatch).exit_code == 0
 
 
 def test_a_release_cut_range_is_exempt_from_the_trigger_and_may_move_notes_into_its_version(
-    repo, monkeypatch: pytest.MonkeyPatch
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo.commit("feat: pending", {"changes/unreleased/pending.md": _note()})
     repo.git("tag", "mark")
@@ -134,7 +140,7 @@ def test_a_release_cut_range_is_exempt_from_the_trigger_and_may_move_notes_into_
     assert "cut of 0.3.0" in result.output
 
 
-def test_a_cut_may_not_move_notes_into_another_version(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_cut_may_not_move_notes_into_another_version(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat: pending", {"changes/unreleased/pending.md": _note()})
     repo.git("tag", "mark")
     (repo.root / "changes/0.9.0").mkdir()
@@ -145,30 +151,32 @@ def test_a_cut_may_not_move_notes_into_another_version(repo, monkeypatch: pytest
     assert "changes/0.9.0/pending.md" in result.output
 
 
-def test_a_bang_commit_without_a_breaking_note_fails(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_bang_commit_without_a_breaking_note_fails(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat!: drop it")
     assert _owed(repo, monkeypatch).exit_code == 1
 
 
-def test_a_bang_commit_whose_breaking_note_lacks_upgrade_fails(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_bang_commit_whose_breaking_note_lacks_upgrade_fails(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat!: drop it", {_UNRELEASED: _note(breaking=True)})
     result = _owed(repo, monkeypatch)
     assert result.exit_code == 1
     assert "Upgrade" in result.output
 
 
-def test_a_bang_commit_with_a_breaking_upgrade_note_passes(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_bang_commit_with_a_breaking_upgrade_note_passes(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.commit("feat!: drop it", {_UNRELEASED: _note(breaking=True, upgrade=True)})
     assert _owed(repo, monkeypatch).exit_code == 0
 
 
-def test_a_breaking_note_without_a_bang_commit_fails_and_no_waiver_helps(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_breaking_note_without_a_bang_commit_fails_and_no_waiver_helps(
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo.commit("feat: drop it", {_UNRELEASED: _note(breaking=True, upgrade=True)}, trailer=_WAIVER)
     assert _owed(repo, monkeypatch).exit_code == 1
 
 
 def test_flipping_an_existing_unreleased_note_to_breaking_counts_as_adding_one(
-    repo, monkeypatch: pytest.MonkeyPatch
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo.git("switch", "base")
     repo.commit("feat: pending", {_UNRELEASED: _note()})
@@ -178,7 +186,9 @@ def test_flipping_an_existing_unreleased_note_to_breaking_counts_as_adding_one(
     assert _owed(repo, monkeypatch).exit_code == 1
 
 
-def test_a_released_notes_frontmatter_is_held_and_its_body_is_free(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_released_notes_frontmatter_is_held_and_its_body_is_free(
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo.commit("docs: reword", {_RELEASED: _note(body="Reworded.")})
     assert _owed(repo, monkeypatch).exit_code == 0
     repo.commit("docs: retag", {_RELEASED: _note().replace("changed", "fixed")})
@@ -188,7 +198,9 @@ def test_a_released_notes_frontmatter_is_held_and_its_body_is_free(repo, monkeyp
 
 
 @pytest.mark.parametrize("action", ["add", "delete", "rename"])
-def test_adding_deleting_or_renaming_a_released_note_fails(repo, monkeypatch: pytest.MonkeyPatch, action) -> None:
+def test_adding_deleting_or_renaming_a_released_note_fails(
+    repo: _Repo, monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
     if action == "add":
         repo.commit("docs: add", {"changes/0.2.0/extra.md": _note()})
     elif action == "delete":
@@ -200,7 +212,7 @@ def test_adding_deleting_or_renaming_a_released_note_fails(repo, monkeypatch: py
     assert _owed(repo, monkeypatch).exit_code == 1
 
 
-def test_commits_reachable_from_the_ref_stay_outside_the_range(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_commits_reachable_from_the_ref_stay_outside_the_range(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     repo.git("switch", "main")
     repo.commit("feat!: breaking on the base", {_HUB: json.dumps({"v": 9})})
     repo.git("branch", "-f", "base")
@@ -210,6 +222,6 @@ def test_commits_reachable_from_the_ref_stay_outside_the_range(repo, monkeypatch
     assert _owed(repo, monkeypatch).exit_code == 0
 
 
-def test_an_unknown_ref_is_a_usage_error_not_a_pass(repo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unknown_ref_is_a_usage_error_not_a_pass(repo: _Repo, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _owed(repo, monkeypatch, "no-such-ref")
     assert result.exit_code == 2

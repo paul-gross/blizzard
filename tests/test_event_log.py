@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert
+from sqlalchemy import Connection, Engine, insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -20,6 +20,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from tests.migration_support_event_log import T0
 from tests.support import (
     chunk_stores,
@@ -413,7 +414,9 @@ def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Pa
                 )
             )
 
-    newest = store.escalations.newest_escalation_per_chunk()  # type: ignore[attr-defined]
+    escalations = store.escalations
+    assert isinstance(escalations, ChunkEscalationsStore)
+    newest = escalations.newest_escalation_per_chunk()
 
     assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_tie": "second"}
 
@@ -423,7 +426,7 @@ def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_
 ) -> None:
     store, engine, _clock = _store(tmp_path)
 
-    def escalate(conn, chunk_id: str, command: str, *, at: datetime) -> None:
+    def escalate(conn: Connection, chunk_id: str, command: str, *, at: datetime) -> None:
         conn.execute(
             insert(s.escalations).values(
                 stamp(
@@ -458,7 +461,9 @@ def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_
             )
         )
 
-    newest = store.escalations.newest_escalation_per_chunk()  # type: ignore[attr-defined]
+    escalations = store.escalations
+    assert isinstance(escalations, ChunkEscalationsStore)
+    newest = escalations.newest_escalation_per_chunk()
 
     assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_a": "newer", "ch_b": "only"}
 

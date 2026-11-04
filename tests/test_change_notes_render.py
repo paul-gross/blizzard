@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict
 
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from blizzard.tools.change_notes.breaks import BreakEntry, NamedBreak
 from blizzard.tools.change_notes.cli import main
@@ -159,14 +160,37 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
+@dataclass(frozen=True)
+class _Rendered:
+    """A ``render`` invocation's result, with the compat calls it made."""
+
+    result: Result
+    compat_calls: str
+
+    @property
+    def exit_code(self) -> int:
+        return self.result.exit_code
+
+    @property
+    def output(self) -> str:
+        return self.result.output
+
+    @property
+    def stdout(self) -> str:
+        return self.result.stdout
+
+    @property
+    def stderr(self) -> str:
+        return self.result.stderr
+
+
 def _render(
     repo: Path, tag: str, monkeypatch: pytest.MonkeyPatch, *args: str, supported: tuple[str, ...] = ("v0.1.0", "v0.1.1")
-):
+) -> _Rendered:
     log = stub_compat(repo, monkeypatch, supported=supported)
     monkeypatch.chdir(repo)
     result = CliRunner().invoke(main, ["render", tag, *args])
-    result.compat_calls = log.read_text() if log.exists() else ""  # type: ignore[attr-defined]
-    return result
+    return _Rendered(result, log.read_text() if log.exists() else "")
 
 
 def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -194,7 +218,9 @@ def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, mon
     assert _render(repo, "v0.2.0", monkeypatch).output == first.output
 
 
-def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(repo: Path, monkeypatch) -> None:
+def test_a_tag_without_a_notes_directory_renders_the_commit_block_alone(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     commit(repo, "chore: later", {"x": "y"})
     git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
@@ -209,7 +235,7 @@ def test_a_tag_with_no_previous_tag_renders_the_empty_range_block(repo: Path, mo
     assert "- first (" not in result.output
 
 
-def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch) -> None:
+def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commit(repo, "fix: bad", {"changes/0.3.0/bad.md": "no frontmatter\n"})
     git(repo, "tag", "v0.3.0")
     result = _render(repo, "v0.3.0", monkeypatch)
@@ -240,7 +266,7 @@ def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(
     assert "## Turned on" not in _render(repo, "v0.2.0", monkeypatch).output
 
 
-def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch) -> None:
+def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commit(
         repo,
         "feat: immediate capability",
@@ -317,10 +343,10 @@ def test_render_without_breaks_is_unchanged_by_the_option(breaking: Path, monkey
 def test_also_in_marks_only_supported_releases(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _render(repo, "v0.2.0", monkeypatch, supported=("v0.1.0",))
     assert "- Shared.\n" in result.output and "also in" not in result.output
-    assert "releases --json --tag 0.2.0" in result.compat_calls  # type: ignore[attr-defined]
+    assert "releases --json --tag 0.2.0" in result.compat_calls
 
 
-def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch) -> None:
+def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commit(repo, "chore: later", {"x": "y"})
     git(repo, "tag", "v0.3.0")
-    assert _render(repo, "v0.3.0", monkeypatch).compat_calls == ""  # type: ignore[attr-defined]
+    assert _render(repo, "v0.3.0", monkeypatch).compat_calls == ""

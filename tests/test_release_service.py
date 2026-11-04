@@ -6,7 +6,7 @@ A fake stands in for the store — only ``route_of``/``facts`` on the locked han
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -64,17 +64,19 @@ class _FakeLockedChunkRead:
 class _FakeExclusiveWrites:
     route: Route | None
     facts: ChunkFacts
-    locked_ids: list[list[str]] = field(default_factory=list)
+    locked_ids: list[list[str]] = field(default_factory=list[list[str]])
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         self.locked_ids.append(list(chunk_ids))
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.route, self.facts))
 
 
 @dataclass
 class _FakeRouteRepo:
-    released: list[tuple[str, datetime, RouteReleaseCause | None, str | None]] = field(default_factory=list)
+    released: list[tuple[str, datetime, RouteReleaseCause | None, str | None]] = field(
+        default_factory=list[tuple[str, datetime, RouteReleaseCause | None, str | None]]
+    )
 
     def record_route_released_locked(
         self,

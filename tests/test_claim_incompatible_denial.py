@@ -19,10 +19,10 @@ from tests.support import HubHarness, build_hub, seed_runner
 pytestmark = pytest.mark.component
 
 #: Satisfies a chunk with no declared harness preference, via its ``default`` binding.
-_MATCHING_CAPABILITY = [{"harness_id": "claude", "default": True}]
+_MATCHING_CAPABILITY: list[dict[str, object]] = [{"harness_id": "claude", "default": True}]
 
 #: Names a harness no chunk here ever declares as its own preference.
-_MISMATCHED_CAPABILITY = [{"harness_id": "other-harness", "default": True}]
+_MISMATCHED_CAPABILITY: list[dict[str, object]] = [{"harness_id": "other-harness", "default": True}]
 
 
 def _register(hub: HubHarness, *, runner_id: str = "r1", capabilities: list[dict[str, object]] | None = None) -> None:

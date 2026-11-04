@@ -50,32 +50,28 @@ def _build_script(landed_file: str, repos: Sequence[str], *, delta: bool) -> str
 
 def landing_graph_yaml(landed_file: str, repos: Sequence[str], *, poll_interval: int, record_findings: bool) -> str:
     """Build and land files, optionally recording findings after delivery."""
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": _build_script(landed_file, repos, delta=record_findings),
-                "judgement": {
-                    "prompt": "verdict('pass', 'the mock harness did its turn')\n",
-                    "choices": {"pass": {"description": "Built.", "to": "deliver"}},
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "action": "land",
-                "poll_interval": poll_interval,
-                "poll_timeout": 600,
-                "judgement": {"choices": LAND_CHOICES},
-            },
+    build: dict[str, object] = {
+        "executor": "runner",
+        "prompt": _build_script(landed_file, repos, delta=record_findings),
+        "judgement": {
+            "prompt": "verdict('pass', 'the mock harness did its turn')\n",
+            "choices": {"pass": {"description": "Built.", "to": "deliver"}},
         },
+        "retries": {"max": 1, "exhausted": "escalate"},
     }
+    deliver: dict[str, object] = {
+        "executor": "hub",
+        "action": "land",
+        "poll_interval": poll_interval,
+        "poll_timeout": 600,
+        "judgement": {"choices": LAND_CHOICES},
+    }
+    nodes: dict[str, object] = {"build": build, "deliver": deliver}
     if record_findings:
-        graph["nodes"]["deliver"]["judgement"] = {
+        deliver["judgement"] = {
             "choices": {**LAND_CHOICES, "landed": {**LAND_CHOICES["landed"], "to": "record-findings"}}
         }
-        graph["nodes"]["build"]["produces"] = ["review-finding-delta"]
-        graph["nodes"]["record-findings"] = _RECORD_FINDINGS
+        build["produces"] = ["review-finding-delta"]
+        nodes["record-findings"] = _RECORD_FINDINGS
+    graph = {"name": "default-delivery", "entry": "build", "nodes": nodes}
     return yaml.safe_dump(graph, sort_keys=False)

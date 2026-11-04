@@ -358,7 +358,7 @@ def test_run_delta_reads_back_added_observed_and_gone(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)
     chunk_id = _run(hub, routine)
-    findings = [
+    findings: list[dict[str, object]] = [
         {"op": "add", "class": "stale-docstring", "locus": "a.py:1", "summary": "s", "introduced": None},
         {"op": "observed", "id": "fin_seen"},
         {"op": "gone", "id": "fin_missing", "note": "not found this pass"},
@@ -416,7 +416,9 @@ def test_an_add_predating_the_finding_set_link_renders_with_no_matched_id(tmp_pa
     hub = build_hub(tmp_path)
     routine = _routine(hub)
     chunk_id = _run(hub, routine)
-    findings = [{"op": "add", "class": "stale-docstring", "locus": "a.py:1", "summary": "s", "introduced": None}]
+    findings: list[dict[str, object]] = [
+        {"op": "add", "class": "stale-docstring", "locus": "a.py:1", "summary": "s", "introduced": None}
+    ]
     _seed_delivery(hub, chunk_id, "fins_old", artifact_id="art_1", findings=findings)
     # The add's own fact predates the linkage: no `finding_set_id` recorded on it.
     _seed_add_fact(hub, "fin_old", finding_set_id=None)
@@ -435,8 +437,12 @@ def test_run_delta_keeps_several_delivered_sets_separately_grouped(tmp_path: Pat
     hub = build_hub(tmp_path)
     routine = _routine(hub)
     chunk_id = _run(hub, routine)
-    first = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s1", "introduced": None}]
-    second = [{"op": "add", "class": "b", "locus": "b.py:2", "summary": "s2", "introduced": None}]
+    first: list[dict[str, object]] = [
+        {"op": "add", "class": "a", "locus": "a.py:1", "summary": "s1", "introduced": None}
+    ]
+    second: list[dict[str, object]] = [
+        {"op": "add", "class": "b", "locus": "b.py:2", "summary": "s2", "introduced": None}
+    ]
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=first)
     _seed_add_fact(hub, "fin_1", finding_set_id="fins_1")
     _seed_delivery(hub, chunk_id, "fins_2", artifact_id="art_2", findings=second)
@@ -459,13 +465,17 @@ def test_run_delta_query_count_does_not_grow_with_delivered_set_count(tmp_path: 
 
     few_chunk_id = _run(hub, routine)
     for i in range(2):
-        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        findings: list[dict[str, object]] = [
+            {"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}
+        ]
         _seed_delivery(hub, few_chunk_id, f"few_fins_{i}", artifact_id=f"few_art_{i}", findings=findings)
         _seed_add_fact(hub, f"few_fin_{i}", finding_set_id=f"few_fins_{i}")
 
     many_chunk_id = _run(hub, routine)
     for i in range(8):
-        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        findings: list[dict[str, object]] = [
+            {"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}
+        ]
         _seed_delivery(hub, many_chunk_id, f"many_fins_{i}", artifact_id=f"many_art_{i}", findings=findings)
         _seed_add_fact(hub, f"many_fin_{i}", finding_set_id=f"many_fins_{i}")
 
@@ -520,7 +530,9 @@ def test_run_delta_answers_every_sets_finding_ids_across_a_batch_boundary(
     hub = build_hub(tmp_path)
     chunk_id = _run(hub, _routine(hub))
     for i in range(5):  # three batches of finding sets under the lowered cap
-        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        findings: list[dict[str, object]] = [
+            {"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}
+        ]
         _seed_delivery(hub, chunk_id, f"fins_{i}", artifact_id=f"art_{i}", findings=findings)
         _seed_add_fact(hub, f"fin_{i}", finding_set_id=f"fins_{i}")
 

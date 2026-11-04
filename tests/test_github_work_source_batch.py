@@ -71,7 +71,11 @@ class _World:
     def source(self, base_url: str = "http://forge") -> GitHubWorkSource:
         gate = self.budgets.sweeping(_FORGE, "gh", "github")
         client = httpx2.Client(base_url=base_url, transport=httpx2.MockTransport(self._handle))
-        client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
+
+        def _learn(response: httpx2.Response) -> None:
+            gate.learn(response.headers)
+
+        client.event_hooks["response"].append(_learn)
         return GitHubWorkSource(client, source_id="widget", slug="widget", repo="acme/widget", web_base="x", gate=gate)
 
 

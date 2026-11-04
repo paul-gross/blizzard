@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import httpx2
 import pytest
 from fastapi import HTTPException
 
@@ -23,7 +24,7 @@ def hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path)
 
 
-def _ok(response, status: int = 200) -> dict[str, Any]:
+def _ok(response: httpx2.Response, status: int = 200) -> dict[str, Any]:
     assert response.status_code == status, response.text
     return response.json()
 

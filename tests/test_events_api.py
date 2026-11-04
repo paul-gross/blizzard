@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -20,7 +21,7 @@ from tests.support import HubHarness, build_hub, chunk_stores, count_rows_read, 
 pytestmark = pytest.mark.component
 
 
-def _events(hub: HubHarness, **params) -> list[dict[str, object]]:
+def _events(hub: HubHarness, **params: str | int) -> list[dict[str, object]]:
     resp = hub.client.get("/api/events", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["events"]
@@ -313,7 +314,7 @@ def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: 
     hub = build_hub(tmp_path)
 
     class NoEscalations:
-        def list_open_escalations(self, **kwargs):
+        def list_open_escalations(self, **kwargs: object) -> NoReturn:
             raise AssertionError("escalation read should be skipped")
 
     serve_default_tenant(

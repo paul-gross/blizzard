@@ -7,22 +7,24 @@ what the launch *passes* — the standing record's sweep bound, the boundary's s
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation
+from blizzard.runner.loop.context import LoopContext
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -35,7 +37,14 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _rig(tmp_path: Path):
+@dataclass(frozen=True)
+class _Rig:
+    store: SqlAlchemyRunnerStore
+    ctx: LoopContext
+    lease: Lease
+
+
+def _rig(tmp_path: Path) -> _Rig:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_lease(
         NewLease(
@@ -71,7 +80,7 @@ def _rig(tmp_path: Path):
     )
     lease = store.active_lease("lease_1")
     assert lease is not None
-    return SimpleNamespace(store=store, ctx=ctx, lease=lease)
+    return _Rig(store=store, ctx=ctx, lease=lease)
 
 
 def test_a_standing_record_the_caller_read_is_swept_through_its_relaunch_count(tmp_path: Path):
@@ -99,7 +108,9 @@ def test_the_judge_boundary_opens_at_the_tail_read_in_the_binding_workdir_and_wo
     rig = _rig(tmp_path)
     asked: list[tuple[object, ...]] = []
 
-    def resolve(self, session, workdir, workspace_id):
+    def resolve(
+        self: LoopContext, session: SessionReference, workdir: str | None, workspace_id: str | None
+    ) -> tuple[str | None, bool]:
         asked.append((session, workdir, workspace_id))
         return "tok-1", True
 
@@ -130,9 +141,13 @@ def test_a_launch_given_no_generation_opens_the_boundary_under_the_leases_curren
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _rig(tmp_path)
-    monkeypatch.setattr(
-        type(rig.ctx), "resolve_boundary_start", lambda self, session, workdir, workspace_id: (None, False)
-    )
+
+    def resolve(
+        self: LoopContext, session: SessionReference, workdir: str | None, workspace_id: str | None
+    ) -> tuple[str | None, bool]:
+        return None, False
+
+    monkeypatch.setattr(type(rig.ctx), "resolve_boundary_start", resolve)
     current = rig.ctx.stores.liveness.lease_generation("lease_1")
 
     judgement = Judgement.of(rig.ctx, rig.lease)

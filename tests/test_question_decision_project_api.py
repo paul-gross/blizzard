@@ -105,8 +105,11 @@ def test_the_store_stamps_each_row_with_its_chunks_project(hub: HubHarness) -> N
     default, gears = _seed(hub)
     stores = hub.services.chunks
 
-    assert stores.questions.get_question("qn_ch_gears").project_id == gears  # type: ignore[union-attr]
-    assert stores.decisions.get_decision("dec_ch_default").project_id == default  # type: ignore[union-attr]
+    question = stores.questions.get_question("qn_ch_gears")
+    decision = stores.decisions.get_decision("dec_ch_default")
+    assert question is not None and decision is not None
+    assert question.project_id == gears
+    assert decision.project_id == default
 
 
 def test_a_question_asked_through_the_fact_path_is_stamped_with_its_chunks_project(hub: HubHarness) -> None:

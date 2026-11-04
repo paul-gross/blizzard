@@ -142,7 +142,9 @@ def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
         stated_priority=None,
         at=_NOW,
     )
-    assert store.get("hub", created.ref).closed_at is None  # type: ignore[union-attr]
+    reread = store.get("hub", created.ref)
+    assert reread is not None
+    assert reread.closed_at is None
 
     closed_at = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
     closed = store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=closed_at)

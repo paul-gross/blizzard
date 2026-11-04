@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import ast
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.api.events import events_stream
@@ -33,7 +35,7 @@ _THEIRS = ProjectId("proj_theirs")
 class _Registry:
     """The registry read the lens makes: each runner and the projects it serves; ``reads`` counts the reads."""
 
-    served: dict[str, set[str]] = field(default_factory=dict)
+    served: dict[str, set[str]] = field(default_factory=dict[str, set[str]])
     reads: int = 0
 
     def runners_serving(self, project: str) -> frozenset[str]:
@@ -41,16 +43,31 @@ class _Registry:
         return frozenset(runner_id for runner_id, served in self.served.items() if project in served)
 
 
-class _ConnectedRequest:
-    """A request whose client stays connected, carrying an optional ``Last-Event-ID``."""
+class _ConnectedRequest(Request):
+    """A request whose client stays connected, carrying an optional ``Last-Event-ID`` and a query."""
 
-    def __init__(self, last_event_id: int | None = None) -> None:
-        self.app = SimpleNamespace(state=SimpleNamespace())
-        self.headers = {} if last_event_id is None else {"last-event-id": str(last_event_id)}
-        self.query_params: dict[str, str] = {}
+    def __init__(self, last_event_id: int | None = None, query: Mapping[str, str] | None = None) -> None:
+        headers = [] if last_event_id is None else [(b"last-event-id", str(last_event_id).encode())]
+        super().__init__(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/events/stream",
+                "app": SimpleNamespace(state=SimpleNamespace()),
+                "headers": headers,
+                "query_string": urlencode(query or {}).encode(),
+            }
+        )
 
     async def is_disconnected(self) -> bool:
         return False
+
+
+async def _frames(response: StreamingResponse) -> AsyncIterator[bytes]:
+    """The response's body, each chunk the ``bytes`` frame the stream sends."""
+    async for chunk in response.body_iterator:
+        assert isinstance(chunk, bytes)
+        yield chunk
 
 
 async def _open(
@@ -58,8 +75,8 @@ async def _open(
 ) -> AsyncIterator[bytes]:
     """The stream's frames, the reserved comment already read — the subscription is live from here."""
     services = SimpleNamespace(events=broker, registry=registry)
-    response = await events_stream(_ConnectedRequest(last_event_id), services, project)  # type: ignore[arg-type]
-    frames: AsyncIterator[bytes] = response.body_iterator  # type: ignore[assignment]
+    response = await events_stream(_ConnectedRequest(last_event_id), services, project)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    frames = _frames(response)
     first = await anext(frames)
     assert first.startswith(b": blizzard hub event stream")
     return frames
@@ -69,7 +86,7 @@ async def _sent(frames: AsyncIterator[bytes]) -> list[tuple[str, dict[str, objec
     """Every frame the stream sends until its broker's close ends it, as ``(type, payload)``."""
     sent: list[tuple[str, dict[str, object]]] = []
     async for chunk in frames:
-        text = chunk.decode() if isinstance(chunk, bytes) else str(chunk)
+        text = chunk.decode()
         if text.startswith(":"):
             continue
         lines = dict(line.split(": ", 1) for line in text.strip().splitlines())
@@ -214,11 +231,10 @@ def test_every_chunk_scoped_publish_site_stamps_the_chunks_project() -> None:
 async def test_from_latest_sends_only_the_projects_frames_published_after_it_joined() -> None:
     broker = EventBroker()
     broker.publish_chunk_changed("ch_old", "ready", project_id=_MINE)
-    request = _ConnectedRequest()
-    request.query_params["from"] = "latest"
+    request = _ConnectedRequest(query={"from": "latest"})
     services = SimpleNamespace(events=broker, registry=_Registry())
-    response = await events_stream(request, services, _MINE)  # type: ignore[arg-type]
-    frames: AsyncIterator[bytes] = response.body_iterator  # type: ignore[assignment]
+    response = await events_stream(request, services, _MINE)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    frames = _frames(response)
     assert (await anext(frames)).startswith(b": blizzard hub event stream")
     broker.publish_chunk_changed("ch_mine", "ready", project_id=_MINE)
     broker.publish_chunk_changed("ch_theirs", "ready", project_id=_THEIRS)
@@ -228,11 +244,10 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
 
 
 async def _route(query: dict[str, str], header: str | None = None, *, broker: EventBroker) -> AsyncIterator[bytes]:
-    request = _ConnectedRequest(None if header is None else int(header))
-    request.query_params.update(query)
+    request = _ConnectedRequest(None if header is None else int(header), query)
     services = SimpleNamespace(events=broker, registry=_Registry())
-    response = await events_stream(request, services, None)  # type: ignore[arg-type]
-    return response.body_iterator  # type: ignore[return-value]
+    response = await events_stream(request, services, None)  # pyright: ignore[reportArgumentType]  # a two-seam stand-in for the tenant services; the handler reads only events and registry
+    return _frames(response)
 
 
 @pytest.mark.parametrize("query", [{"from": "earliest"}, {"from": "latest", "last_event_id": "1"}])

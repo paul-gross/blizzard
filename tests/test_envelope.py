@@ -149,9 +149,9 @@ def test_envelope_artifact_still_requires_node_name_and_epoch() -> None:
     # `EnvelopeArtifact` (node-scoped) is untouched by the new graph-scoped wire model. One
     # field omitted per case: omitting both still raises with either one relaxed to optional.
     with pytest.raises(ValidationError):
-        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, epoch=1)  # type: ignore[call-arg]
+        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, epoch=1)  # pyright: ignore[reportCallIssue]  # the omitted node_name is the refusal under test
     with pytest.raises(ValidationError):
-        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, node_name="build")  # type: ignore[call-arg]
+        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, node_name="build")  # pyright: ignore[reportCallIssue]  # the omitted epoch is the refusal under test
 
 
 def test_envelope_carries_session_source() -> None:

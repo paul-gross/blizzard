@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -45,7 +45,9 @@ def read_rows(url: str, contract: dict[str, Any]) -> Rows:
                 live = {column["name"] for column in sa.inspect(engine).get_columns(table)}
                 columns = sorted(name for name in declared["columns"] if name in live)
                 key = declared["primary_key"] or columns
-                selected = sa.select(*(sa.column(name) for name in columns)).select_from(sa.table(table))
+                selected = sa.select(*(sa.column(name, sa.types.NullType()) for name in columns)).select_from(
+                    sa.table(table)
+                )
                 rows[table] = {
                     repr(tuple(row[k] for k in key)): {name: repr(row[name]) for name in columns}
                     for row in connection.execute(selected).mappings()
@@ -72,7 +74,7 @@ def reflect(url: str, store: str) -> dict[str, Any]:
 
 
 @contextmanager
-def postgres_database(server_url: str) -> Iterator[str]:
+def postgres_database(server_url: str) -> Generator[str]:
     """A fresh database on ``server_url``'s server for the span, dropped afterwards; yields its URL."""
     server = sa.make_url(server_url)
     if server.drivername == "postgresql":

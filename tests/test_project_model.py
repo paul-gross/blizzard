@@ -157,8 +157,8 @@ def test_no_sole_project_is_required_listing_them(count: int) -> None:
 class _Projects:
     """An in-memory tenant's projects and former slugs, as the store answers them."""
 
-    current: dict[str, Project] = field(default_factory=dict)
-    former: dict[str, Project] = field(default_factory=dict)
+    current: dict[str, Project] = field(default_factory=dict[str, Project])
+    former: dict[str, Project] = field(default_factory=dict[str, Project])
 
     def get(self, project_id: ProjectId) -> Project | None:
         return next((p for p in self.current.values() if p.project_id == project_id), None)

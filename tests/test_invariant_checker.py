@@ -43,7 +43,7 @@ from tests.support import (
 pytestmark = [pytest.mark.component]
 
 
-def _runner_engine(tmp_path: Path):
+def _runner_engine(tmp_path: Path) -> sa.Engine:
     """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
     engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
@@ -53,7 +53,7 @@ def _runner_engine(tmp_path: Path):
     return engine
 
 
-def _set_counters(engine, *, outbound: int | None = None, transcript: int | None = None) -> None:
+def _set_counters(engine: sa.Engine, *, outbound: int | None = None, transcript: int | None = None) -> None:
     """The fixture runner's outbox counters, as the seam leaves them after issuing up to each seq."""
     with engine.begin() as conn:
         for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, outbound), (runner.OUTBOX_LANE_TRANSCRIPT, transcript)):
@@ -61,11 +61,11 @@ def _set_counters(engine, *, outbound: int | None = None, transcript: int | None
                 conn.execute(insert(runner.outbox_counters).values(lane=lane, last_seq=last_seq))
 
 
-def _hub_engine(tmp_path: Path):
+def _hub_engine(tmp_path: Path) -> sa.Engine:
     return create_engine_from_url(init_hub(tmp_path / "hub").db_url)
 
 
-def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
+def _bind_held(engine: sa.Engine, *rows: tuple[str, str, str | None]) -> None:
     """Held bindings, each ``(chunk_id, environment_id, workspace_id)``."""
     with engine.begin() as conn:
         for chunk_id, environment_id, workspace_id in rows:
@@ -80,14 +80,14 @@ def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
             )
 
 
-def _unique_env_violations(engine) -> list[str]:
+def _unique_env_violations(engine: sa.Engine) -> list[str]:
     return [v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:unique-env-binding"]
 
 
 _OTHER_RUNNER = "rn_other"
 
 
-def _two_runner_engine(tmp_path: Path):
+def _two_runner_engine(tmp_path: Path) -> sa.Engine:
     """A store holding two registered runners, each with its own outbox rows 1..3 on both lanes and counters at 3."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
@@ -123,8 +123,8 @@ class _SegmentRowFields(TypedDict, total=False):
     finalized_at: datetime | None
 
 
-def _segment_row(**overrides: Unpack[_SegmentRowFields]) -> dict:
-    row: dict = {
+def _segment_row(**overrides: Unpack[_SegmentRowFields]) -> dict[str, object]:
+    row: dict[str, object] = {
         "segment_id": "seg_1",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
@@ -167,7 +167,7 @@ def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict[str, object]
     }
 
 
-def _seed_owned_chunk(conn) -> None:
+def _seed_owned_chunk(conn: sa.Connection) -> None:
     conn.execute(
         insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=NOW, model="m"))
     )
@@ -179,7 +179,7 @@ def _seed_owned_chunk(conn) -> None:
 
 
 def _seed_migration(
-    conn,
+    conn: sa.Connection,
     *,
     to_graph: str,
     model_after: str | None,
@@ -282,8 +282,8 @@ class _DependencyEdgeFields(TypedDict, total=False):
     released_by: str | None
 
 
-def _dependency_edge_values(**overrides: Unpack[_DependencyEdgeFields]) -> dict:
-    values: dict = {
+def _dependency_edge_values(**overrides: Unpack[_DependencyEdgeFields]) -> dict[str, object]:
+    values: dict[str, object] = {
         "dependency_id": "dep_1",
         "dependent_chunk_id": "ch_dependent",
         "prerequisite_chunk_id": "ch_prereq",
@@ -756,7 +756,7 @@ def test_a_held_row_naming_no_workspace_conflicts_with_any_row_on_its_environmen
     assert "ch_1" in details[0] and "ch_2" in details[0]
 
 
-def _bind_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
+def _bind_at(engine: sa.Engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
     """``chunk_id`` bound to ``r1`` of ``ws_a`` by ``runner_id`` at ``at``, the ``seq``-th fact it appended."""
     with engine.begin() as conn:
         conn.execute(
@@ -772,7 +772,7 @@ def _bind_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -
         )
 
 
-def _release_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
+def _release_at(engine: sa.Engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
     with engine.begin() as conn:
         conn.execute(
             sa.insert(runner.binding_releases).values(

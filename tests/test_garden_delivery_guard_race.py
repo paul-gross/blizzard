@@ -202,7 +202,7 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     )
     assert deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
-    revisit = DeliveryPlan(**{**plan.__dict__, "node_id": "nd_2", "epoch": 2})
+    revisit = replace(plan, node_id="nd_2", epoch=2)
 
     outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE)
 
@@ -218,11 +218,13 @@ def test_supersede_refuses_an_absorber_exited_after_it_was_read(tmp_path: Path) 
     _add_finding(findings, project, "fin_b")
     absorber = findings.get("fin_b")
     assert absorber is not None
+    superseded = findings.get("fin_a")
+    assert superseded is not None
     findings.record_fact("fin_b", kind="wont-fix", at=_LATER, note="n", actor="u2")
     service = FindingExitService(repo=findings, clock=FixedClock(instant=_LATER))
 
     with pytest.raises(AbsorberNotLive):
-        service.supersede([findings.get("fin_a")], absorber, note="dup", actor="u1")  # type: ignore[list-item]
+        service.supersede([superseded], absorber, note="dup", actor="u1")
 
     assert _kinds(engine, "fin_a") == ["add"]
 
@@ -407,4 +409,4 @@ def test_recorder_hands_the_node_step_and_the_delta_artifact_ids_to_the_write() 
     [(validated, kwargs)] = materialize.delivered
     assert validated.run == _RUN
     assert (kwargs["epoch"], kwargs["delta_artifact_ids"], kwargs["proposal_artifact_ids"]) == (1, ["art_d"], [])
-    assert (cast(Any, kwargs["chunk"]).chunk_id, cast(Any, kwargs["node"]).node_id) == ("ch_1", "nd_1")
+    assert (kwargs["chunk"].chunk_id, kwargs["node"].node_id) == ("ch_1", "nd_1")

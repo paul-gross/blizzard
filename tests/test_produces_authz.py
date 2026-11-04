@@ -178,7 +178,7 @@ def test_a_decision_carrying_its_attached_produces_parks_under_enforce(tmp_path:
     hub = build_hub(tmp_path, produces_mode=PRODUCES_ENFORCE)
     chunk_id, node_id = _ingest(hub)
 
-    notes = {"name": "notes", "kind": "asset", "content": "n", "attached": True}
+    notes: dict[str, object] = {"name": "notes", "kind": "asset", "content": "n", "attached": True}
     resp = _decide(hub, chunk_id, node_id, artifacts=[notes])
 
     assert resp.json()["outcome"] == "parked_at_gate", resp.text

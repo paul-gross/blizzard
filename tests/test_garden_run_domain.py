@@ -42,9 +42,9 @@ _UNTIL = datetime(2026, 2, 1, tzinfo=UTC)
 
 @dataclass
 class _FakeRepo:
-    records: list[RunDeliveries] = field(default_factory=list)
-    identities: dict[str, RunIdentity] = field(default_factory=dict)
-    delivered: dict[str, list[DeliveredSetRaw]] = field(default_factory=dict)
+    records: list[RunDeliveries] = field(default_factory=list[RunDeliveries])
+    identities: dict[str, RunIdentity] = field(default_factory=dict[str, RunIdentity])
+    delivered: dict[str, list[DeliveredSetRaw]] = field(default_factory=dict[str, list[DeliveredSetRaw]])
 
     def runs_in_window(self, *, since: datetime, until: datetime, project_id: str | None = None) -> list[RunDeliveries]:
         return [r for r in self.records if since <= r.identity.minted_at < until]
@@ -58,7 +58,7 @@ class _FakeRepo:
 
 @dataclass
 class _FakeChunkRecords:
-    chunks: dict[str, Chunk] = field(default_factory=dict)
+    chunks: dict[str, Chunk] = field(default_factory=dict[str, Chunk])
 
     def get(self, chunk_id: str, *, transaction: object = None) -> Chunk | None:
         return self.chunks.get(chunk_id)
@@ -102,7 +102,7 @@ class _FakeChunkRecords:
 
 @dataclass
 class _FakeChunkFacts:
-    facts: dict[str, ChunkFacts] = field(default_factory=dict)
+    facts: dict[str, ChunkFacts] = field(default_factory=dict[str, ChunkFacts])
 
     def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
         return self.facts.get(chunk_id)
@@ -134,8 +134,8 @@ class _FakeFindings:
     """`IReadFindingRepository`'s read side, narrowed to the one method the delta read
     calls — `calls` records each batch so a per-id read cannot pass unnoticed."""
 
-    findings: dict[str, Finding] = field(default_factory=dict)
-    calls: list[list[str]] = field(default_factory=list)
+    findings: dict[str, Finding] = field(default_factory=dict[str, Finding])
+    calls: list[list[str]] = field(default_factory=list[list[str]])
 
     def get(self, finding_id: str) -> Finding | None:
         raise NotImplementedError

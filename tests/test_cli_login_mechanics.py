@@ -43,7 +43,7 @@ def _hit_loopback_in_background(redirect_uri: str, *, code: str | None, state: s
 
 
 def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured_exchange = {}
+    captured_exchange: dict[str, object] = {}
 
     def fake_open(url: str) -> bool:
         query = parse_qs(urlparse(url).query)
@@ -64,9 +64,13 @@ def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch)
 
     assert token == "the-session-token"
     assert captured_exchange["code"] == "the-code"
-    assert captured_exchange["redirect_uri"].startswith("http://127.0.0.1:")
+    redirect_uri = captured_exchange["redirect_uri"]
+    assert isinstance(redirect_uri, str)
+    assert redirect_uri.startswith("http://127.0.0.1:")
     # The verifier the exchange sends must hash to the challenge the authorize URL carried.
-    assert cli_login.Pkce(captured_exchange["code_verifier"]).challenge
+    code_verifier = captured_exchange["code_verifier"]
+    assert isinstance(code_verifier, str)
+    assert cli_login.Pkce(code_verifier).challenge
 
 
 def test_loopback_login_rejects_a_state_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +98,10 @@ def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatc
 
 
 def test_loopback_login_times_out_when_no_browser_shows_up(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_login.webbrowser, "open", lambda url: True)
+    def no_browser(url: str) -> bool:
+        return True
+
+    monkeypatch.setattr(cli_login.webbrowser, "open", no_browser)
 
     with pytest.raises(cli_login.LoginError, match="timed out"):
         cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP, timeout=0.2).token()
@@ -117,7 +124,7 @@ def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_paste_code_login_exchanges_the_pasted_code() -> None:
-    captured_exchange = {}
+    captured_exchange: dict[str, object] = {}
 
     def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
         captured_exchange.update(json)

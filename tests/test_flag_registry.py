@@ -129,7 +129,10 @@ def test_a_malformed_registry_fails_the_load(text: str) -> None:
 
 @pytest.mark.unit
 def test_a_missing_registry_file_fails_the_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(config_inputs, "files", lambda _package: tmp_path)
+    def files(_package: str) -> Path:
+        return tmp_path
+
+    monkeypatch.setattr(config_inputs, "files", files)
     with pytest.raises(FlagRegistryError, match="cannot read"):
         packaged_flag_registry()
 

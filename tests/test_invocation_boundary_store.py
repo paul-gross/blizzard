@@ -418,8 +418,13 @@ def test_a_sibling_advance_leaves_a_marker_without_its_own_advance_at_its_open_s
 
     _advance(store, "lease_1", 1, "judge", "el-1", _T0.replace(hour=1))
 
-    for lease_id, generation, kind in [("lease_2", 1, "judge"), ("lease_1", 2, "judge"), ("lease_1", 1, "nudge")]:
-        current = store.current_start(lease_id, generation, kind)  # type: ignore[arg-type]
+    siblings: list[tuple[str, int, InvocationBoundaryKind]] = [
+        ("lease_2", 1, "judge"),
+        ("lease_1", 2, "judge"),
+        ("lease_1", 1, "nudge"),
+    ]
+    for lease_id, generation, kind in siblings:
+        current = store.current_start(lease_id, generation, kind)
         assert current is not None
         assert (current.start_position, current.at) == (f"open-{lease_id}-{generation}-{kind}", _T0)
 

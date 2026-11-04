@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import Connection, event
 
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, count_queries, create_repositories, fixture_repository, ingest, stamp
+from tests.support import HubHarness, build_hub, count_queries, create_repositories, fixture_repository, ingest, stamp
 
 pytestmark = pytest.mark.component
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _marker(conn, chunk_id: str, name: str, data: str, index: int) -> None:
+def _marker(conn: Connection, chunk_id: str, name: str, data: str, index: int) -> None:
     conn.execute(
         s.artifacts.insert().values(
             stamp(
@@ -109,7 +110,10 @@ def test_a_landing_with_no_pr_links_its_commit_through_the_repository_records_fo
     monkeypatch.setattr(forges, "get_many", moved)
     assert urls()[1] == {"acme/widget": "https://code.acme.example/acme/widget/commit/widget-sha"}
 
-    monkeypatch.setattr(forges, "get_many", lambda ids: {k: replace(f, kind="other") for k, f in get_many(ids).items()})
+    def _other_kind(ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
+        return {k: replace(f, kind="other") for k, f in get_many(ids).items()}
+
+    monkeypatch.setattr(forges, "get_many", _other_kind)
     assert urls()[1] == {"acme/widget": None}
 
 
@@ -140,7 +144,7 @@ def test_replacement_pr_is_open_and_previous_pr_is_closed_in_list_and_detail(tmp
 
 
 def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path: Path) -> None:
-    counts = []
+    counts: list[int] = []
     for size in (4, 20):
         directory = tmp_path / str(size)
         directory.mkdir()
@@ -151,15 +155,24 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
                 _marker(conn, chunk_id, "merged/acme/widget", f"sha-{i}", i)
         delivery_params: list[tuple[Any, ...]] = []
 
-        def watch(conn, cursor, statement, parameters, context, executemany, *, observed=delivery_params):
+        def watch(
+            conn: Connection,
+            cursor: object,
+            statement: str,
+            parameters: Sequence[object],
+            context: object,
+            executemany: bool,
+            *,
+            observed: list[tuple[Any, ...]] = delivery_params,
+        ) -> None:
             if "FROM artifacts" in statement and " LIKE " in statement:
                 observed.append(tuple(parameters))
 
         event.listen(hub.engine, "before_cursor_execute", watch)
         try:
-            result = []
+            result: list[dict[str, Any]] = []
 
-            def call(current=hub, rows=result) -> None:
+            def call(current: HubHarness = hub, rows: list[dict[str, Any]] = result) -> None:
                 response = current.client.get("/api/chunks", params={"limit": 2})
                 assert response.status_code == 200, response.text
                 rows.extend(response.json()["chunks"])

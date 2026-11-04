@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from collections.abc import AsyncGenerator, AsyncIterator
+from urllib.parse import urlencode
 
 import pytest
 import uvicorn
 from fastapi import FastAPI
+from starlette.requests import Request
+from starlette.types import Message, Scope
 
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.server import EarlyShutdownServer
@@ -21,60 +25,66 @@ pytestmark = pytest.mark.unit
 _RESERVED_COMMENT = ": test stream\n\n"
 
 
-class _FakeRequest:
-    def __init__(self) -> None:
-        self.headers: dict[str, str] = {}
-        self.query_params: dict[str, str] = {}
+def _request(
+    *, query: dict[str, str] | None = None, headers: dict[str, str] | None = None, connected: bool = True
+) -> Request:
+    """A real starlette ``Request`` built from an ASGI scope; ``connected`` picks whether
+    its ``receive`` reports a client disconnect."""
 
-    async def is_disconnected(self) -> bool:
-        return False
+    async def receive() -> Message:
+        if connected:
+            await asyncio.Event().wait()
+        return {"type": "http.disconnect"}
+
+    scope: Scope = {
+        "type": "http",
+        "query_string": urlencode(query or {}).encode(),
+        "headers": [(k.encode(), v.encode()) for k, v in (headers or {}).items()],
+    }
+    return Request(scope, receive)
 
 
-class _ConnectedRequest:
-    async def is_disconnected(self) -> bool:
-        return False
+def _connected() -> Request:
+    return _request()
 
 
-class _DisconnectedRequest:
-    async def is_disconnected(self) -> bool:
-        return True
+def _disconnected() -> Request:
+    return _request(connected=False)
+
+
+async def _close(frames: AsyncIterator[bytes]) -> None:
+    assert isinstance(frames, AsyncGenerator)
+    await frames.aclose()
 
 
 # --- Cursor -------------------------------------------------------------------------
 
 
 def test_cursor_of_defaults_to_zero_with_no_last_event_id() -> None:
-    assert Cursor.of(_FakeRequest()).last_event_id == 0  # type: ignore[arg-type]
+    assert Cursor.of(_request()).last_event_id == 0
 
 
 def test_cursor_of_reads_the_last_event_id_header() -> None:
-    request = _FakeRequest()
-    request.headers["last-event-id"] = "7"
-    assert Cursor.of(request).last_event_id == 7  # type: ignore[arg-type]
+    request = _request(headers={"last-event-id": "7"})
+    assert Cursor.of(request).last_event_id == 7
 
 
 def test_cursor_of_falls_back_to_the_query_param() -> None:
-    request = _FakeRequest()
-    request.query_params["last_event_id"] = "3"
-    assert Cursor.of(request).last_event_id == 3  # type: ignore[arg-type]
+    request = _request(query={"last_event_id": "3"})
+    assert Cursor.of(request).last_event_id == 3
 
 
 def test_cursor_of_degrades_to_zero_on_a_malformed_value() -> None:
-    request = _FakeRequest()
-    request.headers["last-event-id"] = "not-a-number"
-    assert Cursor.of(request).last_event_id == 0  # type: ignore[arg-type]
+    request = _request(headers={"last-event-id": "not-a-number"})
+    assert Cursor.of(request).last_event_id == 0
 
 
-def _asking(*, query: dict[str, str] | None = None, header: str | None = None) -> _FakeRequest:
-    request = _FakeRequest()
-    request.query_params.update(query or {})
-    if header is not None:
-        request.headers["last-event-id"] = header
-    return request
+def _asking(*, query: dict[str, str] | None = None, header: str | None = None) -> Request:
+    return _request(query=query, headers=None if header is None else {"last-event-id": header})
 
 
 def test_cursor_of_from_latest_asks_to_join_at_the_latest_event() -> None:
-    cursor = Cursor.of(_asking(query={"from": "latest"}))  # type: ignore[arg-type]
+    cursor = Cursor.of(_asking(query={"from": "latest"}))
     assert cursor.from_latest
     assert cursor.resume_from(9) == 9
 
@@ -86,26 +96,26 @@ def test_cursor_of_from_latest_asks_to_join_at_the_latest_event() -> None:
 def test_from_latest_resumes_only_from_a_readable_header_at_or_below_the_mark(
     header: str, joined_at: int, expected: int
 ) -> None:
-    cursor = Cursor.of(_asking(query={"from": "latest"}, header=header))  # type: ignore[arg-type]
+    cursor = Cursor.of(_asking(query={"from": "latest"}, header=header))
     assert cursor.resume_from(joined_at) == expected
 
 
 def test_without_from_a_cursor_above_the_mark_degrades_to_the_whole_tail() -> None:
-    assert Cursor.of(_asking(header="12")).resume_from(9) == 0  # type: ignore[arg-type]
-    assert Cursor.of(_asking(header="4")).resume_from(9) == 4  # type: ignore[arg-type]
-    assert Cursor.of(_asking()).resume_from(9) == 0  # type: ignore[arg-type]
+    assert Cursor.of(_asking(header="12")).resume_from(9) == 0
+    assert Cursor.of(_asking(header="4")).resume_from(9) == 4
+    assert Cursor.of(_asking()).resume_from(9) == 0
 
 
 @pytest.mark.parametrize("value", ["earliest", "", "LATEST"])
 def test_cursor_of_refuses_an_unknown_from(value: str) -> None:
     with pytest.raises(CursorRefused):
-        Cursor.of(_asking(query={"from": value}))  # type: ignore[arg-type]
+        Cursor.of(_asking(query={"from": value}))
 
 
 @pytest.mark.parametrize("value", ["1", ""])
 def test_cursor_of_refuses_from_latest_with_a_last_event_id_query(value: str) -> None:
     with pytest.raises(CursorRefused):
-        Cursor.of(_asking(query={"from": "latest", "last_event_id": value}))  # type: ignore[arg-type]
+        Cursor.of(_asking(query={"from": "latest", "last_event_id": value}))
 
 
 # --- EventBroker (kind-agnostic core) ------------------------------------------------
@@ -155,7 +165,7 @@ async def test_publish_delivers_live_to_a_subscriber_across_the_thread_boundary(
 
 
 async def test_stream_with_no_broker_opens_cleanly_and_idles() -> None:
-    stream = Stream(None, _DisconnectedRequest(), Cursor(0), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    stream = Stream(None, _disconnected(), Cursor(0), _RESERVED_COMMENT)
     frames = [chunk async for chunk in stream.frames()]
     assert frames == [_RESERVED_COMMENT.encode()]
 
@@ -163,7 +173,7 @@ async def test_stream_with_no_broker_opens_cleanly_and_idles() -> None:
 async def test_stream_opens_with_the_reserved_comment_then_replays_the_tail() -> None:
     broker = EventBroker()
     broker.publish("widget-changed", {"id": "w1"})
-    stream = Stream(broker, _DisconnectedRequest(), Cursor(0), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    stream = Stream(broker, _disconnected(), Cursor(0), _RESERVED_COMMENT)
     frames = [chunk async for chunk in stream.frames()]
     assert frames[0] == _RESERVED_COMMENT.encode()
     assert b"widget-changed" in frames[1]
@@ -174,7 +184,7 @@ async def test_stream_delivers_live_events_past_a_cursor_that_outruns_a_fresh_br
     broker instance — trusting it as this one's last-sent watermark would discard
     every live event until this broker's own ids caught back up to it."""
     broker = EventBroker()  # a fresh broker — as after a daemon restart
-    stream = Stream(broker, _ConnectedRequest(), Cursor(500), _RESERVED_COMMENT, keepalive_seconds=30.0)  # type: ignore[arg-type]
+    stream = Stream(broker, _connected(), Cursor(500), _RESERVED_COMMENT, keepalive_seconds=30.0)
     frames = stream.frames()
     try:
         first = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
@@ -183,7 +193,7 @@ async def test_stream_delivers_live_events_past_a_cursor_that_outruns_a_fresh_br
         live = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
         assert b"widget-changed" in live
     finally:
-        await frames.aclose()  # type: ignore[attr-defined]
+        await _close(frames)
 
 
 async def test_stream_replays_a_fresh_brokers_buffered_tail_past_a_stale_cursor() -> None:
@@ -193,7 +203,7 @@ async def test_stream_replays_a_fresh_brokers_buffered_tail_past_a_stale_cursor(
     broker = EventBroker()  # a fresh broker, already holding buffered events before connect
     broker.publish("widget-changed", {"id": "w1"})
     broker.publish("widget-changed", {"id": "w2"})
-    stream = Stream(broker, _DisconnectedRequest(), Cursor(500), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    stream = Stream(broker, _disconnected(), Cursor(500), _RESERVED_COMMENT)
     frames = [chunk async for chunk in stream.frames()]
     assert frames[0] == _RESERVED_COMMENT.encode()
     assert len(frames) == 3, frames
@@ -205,7 +215,7 @@ async def test_stream_emits_a_keepalive_on_an_idle_connection_at_the_injected_in
     """The keepalive interval is an injected value — bounding it well below the
     production default (15s) lets this observe an emission without waiting it out."""
     broker = EventBroker()
-    stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, keepalive_seconds=0.05)  # type: ignore[arg-type]
+    stream = Stream(broker, _connected(), Cursor(0), _RESERVED_COMMENT, keepalive_seconds=0.05)
     frames = stream.frames()
     try:
         first = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
@@ -213,7 +223,7 @@ async def test_stream_emits_a_keepalive_on_an_idle_connection_at_the_injected_in
         keepalive = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
         assert keepalive == b": keepalive\n\n"
     finally:
-        await frames.aclose()  # type: ignore[attr-defined]
+        await _close(frames)
 
 
 async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None:
@@ -224,7 +234,7 @@ async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None
     shutdown = asyncio.Event()
 
     async def _drain() -> None:
-        stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, shutdown, keepalive_seconds=30.0)  # type: ignore[arg-type]
+        stream = Stream(broker, _connected(), Cursor(0), _RESERVED_COMMENT, shutdown, keepalive_seconds=30.0)
         async for _ in stream.frames():
             pass
 
@@ -263,7 +273,7 @@ async def test_a_from_latest_stream_sends_only_events_published_after_it_registe
     broker = EventBroker()
     broker.publish("widget-changed", {"id": "before"})
     request = _asking(query={"from": "latest"})
-    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, keepalive_seconds=30.0)  # type: ignore[arg-type]
+    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, keepalive_seconds=30.0)
     frames = stream.frames()
     try:
         assert await asyncio.wait_for(frames.__anext__(), timeout=1.0) == _RESERVED_COMMENT.encode()
@@ -272,7 +282,7 @@ async def test_a_from_latest_stream_sends_only_events_published_after_it_registe
         assert b"after" in live
         assert b"before" not in live
     finally:
-        await frames.aclose()  # type: ignore[attr-defined]
+        await _close(frames)
 
 
 async def test_an_event_published_around_registration_arrives_exactly_once() -> None:
@@ -285,7 +295,7 @@ async def test_an_event_published_around_registration_arrives_exactly_once() -> 
 
     broker = _RacingBroker()
     request = _asking(query={"from": "latest"})
-    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, keepalive_seconds=30.0)  # type: ignore[arg-type]
+    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, keepalive_seconds=30.0)
     frames = stream.frames()
     try:
         assert await asyncio.wait_for(frames.__anext__(), timeout=1.0) == _RESERVED_COMMENT.encode()
@@ -294,4 +304,4 @@ async def test_an_event_published_around_registration_arrives_exactly_once() -> 
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(frames.__anext__(), timeout=0.1)
     finally:
-        await frames.aclose()  # type: ignore[attr-defined]
+        await _close(frames)

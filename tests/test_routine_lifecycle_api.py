@@ -8,7 +8,7 @@ same path ``POST /scopes`` uses — the ``tests/test_graph_lifecycle_api.py`` sh
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 import pytest
 
@@ -61,7 +61,7 @@ class _RoutineBodyFields(TypedDict, total=False):
     default_harnesses: list[str]
 
 
-def _create(hub: HubHarness, **overrides: Unpack[_RoutineBodyFields]) -> dict:
+def _create(hub: HubHarness, **overrides: Unpack[_RoutineBodyFields]) -> dict[str, Any]:
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",

@@ -15,7 +15,16 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import STALE_AFTER
-from tests.support import HubHarness, TenantHarness, build_hub, emitted_events, pointer_token, seed_runner
+from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from tests.support import (
+    HubHarness,
+    TenantHarness,
+    build_hub,
+    emitted_events,
+    hub_store_connections,
+    pointer_token,
+    seed_runner,
+)
 
 pytestmark = pytest.mark.component
 
@@ -430,13 +439,11 @@ def test_a_token_enrolled_on_a_retired_host_is_refused_403(tmp_path: Path) -> No
     added = _add_host(hub)
     host_id = added["host_id"]
     hub.client.post(f"/api/hosts/{host_id}/retire", json={})
-    hosts = hub.services.hosts
+    hosts = HostRegistryStore(hub_store_connections(hub.engine))
     from blizzard.foundation.tokens import TokenHash
     from blizzard.hub.domain.runners.host import HostTokenRotation
 
-    hosts.rotate_token(  # type: ignore[attr-defined]
-        HostTokenRotation(host_id, TokenHash("late").hex, hub.clock.now(), "racer")
-    )
+    hosts.rotate_token(HostTokenRotation(host_id, TokenHash("late").hex, hub.clock.now(), "racer"))
 
     resp = hub.client.get("/api/fleet/host", headers=_bearer("late"))
 
@@ -480,7 +487,7 @@ def test_a_rerun_over_a_retired_host_retires_the_runners_a_crash_left_unretired(
     host = hub.services.hosts.get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
-    hub.services.hosts.record_retirement(  # type: ignore[attr-defined]
+    HostRegistryStore(hub_store_connections(hub.engine)).record_retirement(
         HostLifecycleVersion(host_id, host.lifecycle_version), fact=fact, at=hub.clock.now(), by="op"
     )
     assert hub.client.get("/api/runners/rn_a").json()["retired"] is False
@@ -531,7 +538,7 @@ def test_a_rerun_over_a_crash_left_runner_holding_a_chunk_is_a_409(tmp_path: Pat
     host = hub.services.hosts.get_host(host_id)
     assert host is not None
     fact = host.retire({}, force=True, by="op", at=hub.clock.now())
-    hub.services.hosts.record_retirement(  # type: ignore[attr-defined]
+    HostRegistryStore(hub_store_connections(hub.engine)).record_retirement(
         HostLifecycleVersion(host_id, host.lifecycle_version), fact=fact, at=hub.clock.now(), by="op"
     )
 

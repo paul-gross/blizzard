@@ -9,7 +9,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 
 import httpx2
 import pytest
@@ -19,7 +19,7 @@ from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.unit
 
-_EVENT = {
+_EVENT: dict[str, object] = {
     "id": 1,
     "kind": "file_read",
     "subject": "src/a.py",
@@ -48,7 +48,10 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 class _FakeStreamResponse(_FakeResponse):
@@ -65,14 +68,14 @@ class _FakeStreamResponse(_FakeResponse):
 
 def _stream_returning(resp: _FakeStreamResponse):
     @contextlib.contextmanager
-    def fake_stream(method: str, url: str, **kwargs: object) -> Iterator[_FakeStreamResponse]:
+    def fake_stream(method: str, url: str, **kwargs: object) -> Generator[_FakeStreamResponse]:
         yield resp
 
     return fake_stream
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz
     time.tzset()

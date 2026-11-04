@@ -14,12 +14,10 @@ from sqlalchemy import insert
 
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
-    GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.store import schema as s
@@ -108,20 +106,6 @@ def _pass(hub: HubHarness, proposal_id: str, *, at: datetime) -> None:
             at=at,
             item_outcome=None,
             pointer=None,
-        )
-
-
-def _accept_mint(hub: HubHarness, proposal_id: str, *, at: datetime) -> None:
-    with hub_store_connections(hub.engine).write("seed_accept_mint") as conn:
-        insert_garden_proposal_closure_row(
-            conn,
-            proposal_id=proposal_id,
-            closure=GardenProposalClosureKind.ACCEPTED,
-            reason=None,
-            closed_by="operator",
-            at=at,
-            item_outcome=GardenProposalItemOutcome.MINTED,
-            pointer=WorkRef(source="hub", ref=proposal_id),
         )
 
 

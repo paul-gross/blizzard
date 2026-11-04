@@ -8,7 +8,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 
 import httpx2
@@ -38,7 +38,7 @@ def _relay(hub: HubHarness, token: str) -> Bound:
     @contextlib.contextmanager
     def fake_stream(
         method: str, url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object
-    ) -> Iterator[httpx2.Response]:
+    ) -> Generator[httpx2.Response]:
         with hub.client.stream(method.upper(), url, params=params, headers=headers) as resp:
             yield resp
 
@@ -46,7 +46,7 @@ def _relay(hub: HubHarness, token: str) -> Bound:
 
 
 @contextlib.contextmanager
-def _local_timezone(tz: str) -> Iterator[None]:
+def _local_timezone(tz: str) -> Generator[None]:
     """The dev/CI box's own local timezone is unspecified — pin it so a naive
     ``--since``/``--until`` converts predictably against the fixture's UTC stamps."""
     original = os.environ.get("TZ")

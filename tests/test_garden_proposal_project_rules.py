@@ -136,7 +136,9 @@ def test_the_proposal_store_refuses_to_attach_another_projects_finding(tmp_path:
     with pytest.raises(GardenProposalFindingOtherProjectError, match=_FOREIGN):
         store.attach("gprop_1", [_FOREIGN])
 
-    assert store.get("gprop_1").findings == [_OWN]  # type: ignore[union-attr]
+    proposal = store.get("gprop_1")
+    assert proposal is not None
+    assert proposal.findings == [_OWN]
 
 
 def test_attaching_another_projects_finding_is_422_naming_it(tmp_path: Path) -> None:

@@ -83,7 +83,11 @@ def test_absorbed_revision_refuses_before_upgrade_changes_store(tree: Path, tmp_
 
 def test_floor_error_never_discloses_database_credentials(tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runner = MigrationRunner(tree, "postgresql://operator:secret-password@db.example:5432/records?sslmode=require")
-    monkeypatch.setattr(MigrationRunner, "current_revision", lambda self: "old_rev")
+
+    def _old_revision(self: MigrationRunner) -> str:
+        return "old_rev"
+
+    monkeypatch.setattr(MigrationRunner, "current_revision", _old_revision)
     for action in (
         lambda: runner.upgrade(),
         lambda: runner.downgrade("base"),

@@ -3,7 +3,7 @@ ordering, the three independent caps, and truncation recording."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -512,7 +512,7 @@ class _FakeUnits:
         self.locks: list[tuple[list[str], list[tuple[str, str]]]] = []
 
     @contextmanager
-    def begin(self) -> Iterator[Transaction]:
+    def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:

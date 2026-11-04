@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from starlette.requests import Request
 
 from blizzard.auth_core import Role
 from blizzard.foundation.events.broker import EventBroker
@@ -75,7 +76,10 @@ def _as(hub: HubHarness, user: User) -> dict[str, str]:
     return {"Cookie": f"bz_session={seed_session(hub, user)}", TENANT_HEADER: default_tenant(hub.engine)}
 
 
-class _ConnectedRequest:
+class _ConnectedRequest(Request):
+    def __init__(self) -> None:
+        super().__init__({"type": "http"})
+
     async def is_disconnected(self) -> bool:
         return False
 
@@ -88,7 +92,7 @@ async def test_a_revoked_members_open_stream_ends_and_another_members_keeps_runn
     revoked = seed_user(hub, username="grace", role=Role.GUEST)
     kept = seed_user(hub, username="linus", role=Role.GUEST)
     broker = hub.open_services(default_tenant(hub.engine)).events
-    kept_stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, owner=kept.user_id).frames()  # type: ignore[arg-type]
+    kept_stream = Stream(broker, _ConnectedRequest(), Cursor(0), RESERVED_COMMENT, owner=kept.user_id).frames()
     assert await anext(kept_stream) == RESERVED_COMMENT.encode()
     loop = asyncio.get_running_loop()
 
@@ -114,7 +118,8 @@ async def test_a_revoked_members_open_stream_ends_and_another_members_keeps_runn
             assert broker.subscriber_count() == 1, "the other member's stream is still open"
         finally:
             broker.close()
-            await kept_stream.aclose()  # type: ignore[attr-defined]
+            assert isinstance(kept_stream, AsyncGenerator)
+            await kept_stream.aclose()
 
     assert ended.status_code == 200
     assert [frame["event"] for frame in parse_sse_frames(ended.text)] == ["queue-changed"]
@@ -157,7 +162,7 @@ async def test_a_logged_out_sessions_stream_ends_and_the_users_other_session_kee
     broker = hub.open_services(default_tenant(hub.engine)).events
     kept_stream = Stream(
         broker,
-        _ConnectedRequest(),  # type: ignore[arg-type]
+        _ConnectedRequest(),
         Cursor(0),
         RESERVED_COMMENT,
         owner=user.user_id,
@@ -184,7 +189,8 @@ async def test_a_logged_out_sessions_stream_ends_and_the_users_other_session_kee
             assert broker.subscriber_count() == 1, "the other session's stream is still open"
         finally:
             broker.close()
-            await kept_stream.aclose()  # type: ignore[attr-defined]
+            assert isinstance(kept_stream, AsyncGenerator)
+            await kept_stream.aclose()
 
     assert ended.status_code == 200
     assert [frame["event"] for frame in parse_sse_frames(ended.text)] == ["queue-changed"]

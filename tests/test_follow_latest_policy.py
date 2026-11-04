@@ -300,7 +300,9 @@ def test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint(tmp_path: P
     chunk_id, build_node = _claimed_chunk(hub)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == v2
     assert hub.client.post(f"/api/graphs/{v2}/retire").status_code == 202
-    assert hub.services.graphs.get_enabled_by_name("default-delivery").graph_id == v1  # type: ignore[union-attr]
+    enabled = hub.services.graphs.get_enabled_by_name("default-delivery")
+    assert enabled is not None
+    assert enabled.graph_id == v1
 
     assert _complete(hub, chunk_id, build_node).json()["outcome"] != "migrated"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == v2

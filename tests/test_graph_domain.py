@@ -126,7 +126,7 @@ def test_mints_effective_requires_retired_ids_explicitly() -> None:
     only = make_graph("gr_only", "solo", created_at=t0)
 
     with pytest.raises(TypeError):
-        Mints.of([only])  # type: ignore[call-arg]
+        Mints.of([only])  # pyright: ignore[reportCallIssue]  # the omitted retired_ids is the refusal under test
 
 
 # Mint.newer_than — the newest-wins order, named rather than open-coded

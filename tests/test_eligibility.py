@@ -270,7 +270,7 @@ def test_two_lineages_demanding_different_harnesses_are_satisfied_by_different_c
 # --- The harness-order gate, mirroring HarnessSelector.select against a static snapshot ---
 
 #: (id, harnesses, model preference, capabilities, expected satisfied)
-_GATE_SCENARIOS = [
+_GATE_SCENARIOS: list[tuple[str, list[str], list[str], list[RunnerCapability], bool]] = [
     (
         "a-multi-member-set-skips-a-tier-mismatch",
         ["h1", "h2"],
@@ -400,8 +400,11 @@ def _agreement_rows() -> list[tuple[str, Graph, Chunk, list[RunnerCapability], b
     ]
 
 
+_AgreementRow = tuple[str, Graph, Chunk, list[RunnerCapability], bool]
+
+
 @pytest.mark.parametrize("row", _agreement_rows(), ids=lambda row: row[0])
-def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None:
+def test_the_predicate_the_matched_peek_and_claim_admission_agree(row: _AgreementRow) -> None:
     from blizzard.hub.domain.chunk.model import ChunkFacts
     from blizzard.hub.domain.execution.claim import ClaimAdmission, ClaimDeniedIncompatible
     from blizzard.hub.domain.operations.queue import select_matched_entry

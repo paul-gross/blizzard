@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
 import sqlalchemy as sa
@@ -424,6 +425,14 @@ def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path)
     assert fresh == max(seqs) + 1
 
 
+class _Enqueue(TypedDict):
+    kind: str
+    chunk_id: str | None
+    lease_id: str | None
+    payload: str
+    created_at: datetime
+
+
 @pytest.mark.component
 def test_each_runner_counts_its_own_outbound_seq_in_one_store(tmp_path: Path) -> None:
     """Two runners over one file each take ``seq`` 1, 2, ... from a counter of their own."""
@@ -432,7 +441,13 @@ def test_each_runner_counts_its_own_outbound_seq_in_one_store(tmp_path: Path) ->
     try:
         first = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_first")
         second = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_second")
-        enqueue = {"kind": "lease.minted", "chunk_id": None, "lease_id": None, "payload": "{}", "created_at": _NOW}
+        enqueue: _Enqueue = {
+            "kind": "lease.minted",
+            "chunk_id": None,
+            "lease_id": None,
+            "payload": "{}",
+            "created_at": _NOW,
+        }
         seqs = (
             [first.enqueue_outbound(**enqueue) for _ in range(2)],
             [second.enqueue_outbound(**enqueue) for _ in range(3)],

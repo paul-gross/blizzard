@@ -10,13 +10,16 @@ force the interleaving with a patched, already-locked store write.
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.runners.route import Route
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
@@ -75,7 +78,9 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": [f"env-{runner}"]}
 
 
-def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: Path) -> None:
+def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Force the edit to pause after its status check but before its write lands, and
     prove a concurrent claim blocks on the same lock rather than completing underneath
     it — once released, the claim lands against the new graph, never a torn mix."""
@@ -87,12 +92,12 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     release_write = threading.Event()
     real_set_graph_locked = _writable_record(hub).set_graph_locked
 
-    def _blocking_set_graph_locked(handle, cid: str, *, graph_id: str) -> None:
+    def _blocking_set_graph_locked(handle: ILockedChunkRead, cid: str, *, graph_id: str) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the edit's write"
         real_set_graph_locked(handle, cid, graph_id=graph_id)
 
-    _writable_record(hub).set_graph_locked = _blocking_set_graph_locked  # type: ignore[method-assign]
+    monkeypatch.setattr(_writable_record(hub), "set_graph_locked", _blocking_set_graph_locked)
 
     edit_result: dict[str, int] = {}
 
@@ -133,7 +138,9 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     assert body["envelope"]["graph_id"] == alt_graph_id, body
 
 
-def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creation(tmp_path: Path) -> None:
+def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The reverse interleaving: force the claim to pause before its route fact lands,
     and prove a concurrent edit blocks on the same lock rather than writing underneath
     it — surfacing only after, and then refused (409) against the now-running chunk."""
@@ -146,12 +153,12 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
     release_record = threading.Event()
     real_record_route_locked = _writable_route(hub).record_route_locked
 
-    def _blocking_record_route_locked(handle, route, *, token_hash, at):
+    def _blocking_record_route_locked(handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
         return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
 
-    _writable_route(hub).record_route_locked = _blocking_record_route_locked
+    monkeypatch.setattr(_writable_route(hub), "record_route_locked", _blocking_record_route_locked)
 
     claim_result: dict[str, int] = {}
 

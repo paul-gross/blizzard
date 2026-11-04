@@ -1,6 +1,6 @@
 """The opaque hub unit's lifetime, lock declaration and statement accounting."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -55,8 +55,8 @@ def test_graduation_counts_borrowed_statements_and_rejects_reuse(store: ScopedCo
     service = tx.HubTransactions(store)
     with service.begin() as unit:
         conn = tx.connection_for(store, unit)
-        borrowed = PinnedConnections(conn, store._errors).scoped(store.scope)
-        snapshot = BorrowedConnections(conn, store._errors).scoped(store.scope)
+        borrowed = PinnedConnections(conn, store.errors).scoped(store.scope)
+        snapshot = BorrowedConnections(conn, store.errors).scoped(store.scope)
         with pytest.raises(TransactionMisuse):
             tx.connection_for(snapshot, unit)
         with pytest.raises(TransactionMisuse):
@@ -80,10 +80,18 @@ def test_graduation_counts_borrowed_statements_and_rejects_reuse(store: ScopedCo
 
 def test_lock_set_is_sorted_and_scope_is_checked(store: ScopedConnections, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(tx, "lock_chunk_row", lambda conn, chunk: calls.append(("chunk", chunk)))
-    monkeypatch.setattr(tx, "lock_keys", lambda conn, namespace, keys: calls.append((namespace, *keys)))
-    same = HubStoreConnections(store._engine, store._errors).scoped(store.scope)
-    other = HubStoreConnections(store._engine, store._errors).scoped(StoreScope(TenantId("other")))
+
+    def record_chunk_lock(conn: sa.Connection, chunk: str) -> None:
+        calls.append(("chunk", chunk))
+
+    def record_key_locks(conn: sa.Connection, namespace: str, keys: Sequence[str]) -> None:
+        calls.append((namespace, *keys))
+
+    monkeypatch.setattr(tx, "lock_chunk_row", record_chunk_lock)
+    monkeypatch.setattr(tx, "lock_keys", record_key_locks)
+    engine = store._engine  # pyright: ignore[reportPrivateUsage]  # no public engine accessor; the test needs separate seams over it
+    same = HubStoreConnections(engine, store.errors).scoped(store.scope)
+    other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
     with tx.HubTransactions(store).begin() as unit:
         locked = unit.lock_set(chunks=["b", "a", "b"], keys=[("z", "a"), ("a", "z"), ("a", "a")])
         assert calls == [("chunk", "a"), ("chunk", "b"), ("a", "a"), ("a", "z"), ("z", "a")]
@@ -166,14 +174,14 @@ def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> 
             chunks.record.set_graph_locked(handle, "ch_b", graph_id="gr_1")
         with pytest.raises(TransactionMisuse):
             chunks.dependencies.declare_locked(handle, "ch_a", "ch_b", by="test", at=now)
-        other = HubStoreConnections(engine, store._errors).scoped(StoreScope(TenantId("other")))
+        other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
         other_chunks = build_chunk_stores(
             other, FixedClock(now), registry=RunnerRegistryStore(other), transactions=HubTransactions(other)
         )
         with pytest.raises(TransactionMisuse):
             other_chunks.record.set_graph_locked(handle, "ch_a", graph_id="gr_1")
         with pytest.raises(TransactionMisuse):
-            work_ref_handle_connection(handle, store)  # type: ignore[arg-type]
+            work_ref_handle_connection(handle, store)  # pyright: ignore[reportArgumentType]  # a chunk handle, passed to prove it is refused
     with pytest.raises(TransactionMisuse):
         chunk_handle_connection(handle, store)
     with pytest.raises(TransactionMisuse):

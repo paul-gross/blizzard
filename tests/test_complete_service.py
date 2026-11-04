@@ -10,7 +10,7 @@ re-derived from the locked handle's own ``facts`` read, never a pre-lock snapsho
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,9 +39,9 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 class _FakeChunkRepo:
     """Only ``record_completion_locked`` is live — see module docstring."""
 
-    completed: list[tuple[str, str]] = field(default_factory=list)
-    stamps: list[datetime] = field(default_factory=list)
-    decisions: list[CloseEnqueueDecision] = field(default_factory=list)
+    completed: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    stamps: list[datetime] = field(default_factory=list[datetime])
+    decisions: list[CloseEnqueueDecision] = field(default_factory=list[CloseEnqueueDecision])
     _next_id: int = 1
 
     def record_completion_locked(
@@ -78,7 +78,7 @@ class _FakeExclusiveWrites:
     clock: FixedClock
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
 
@@ -127,8 +127,8 @@ def _done_via_operator_completion_facts() -> ChunkFacts:
     [_not_ready_facts, _running_facts, _stopped_facts],
     ids=["not_ready", "running", "stopped"],
 )
-def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
-    service, repo = _service(facts_factory())  # type: ignore[operator]
+def test_complete_allows_every_non_done_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, repo = _service(facts_factory())
 
     written = service.complete(_CHUNK, by="operator")
 
@@ -142,9 +142,9 @@ def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
     [_done_via_transition_facts, _done_via_operator_completion_facts],
     ids=["done_via_transition", "done_via_operator_completion"],
 )
-def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: object) -> None:
+def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: Callable[[], ChunkFacts]) -> None:
     """Idempotent by no-op — no second fact, never refused."""
-    service, repo = _service(facts_factory())  # type: ignore[operator]
+    service, repo = _service(facts_factory())
 
     fact_id = service.complete(_CHUNK, by="operator")
 

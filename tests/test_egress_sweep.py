@@ -7,7 +7,7 @@ import gzip
 import itertools
 import json
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta
@@ -453,7 +453,7 @@ class _SnapshotDepths:
         self.log = log or _DepthLog()
 
     @contextmanager
-    def snapshot(self) -> Iterator[_SnapshotDepths]:
+    def snapshot(self) -> Generator[_SnapshotDepths]:
         if self._depth == 0:
             self.log.outermost += 1
         with self._store.snapshot() as pinned:

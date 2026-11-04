@@ -77,11 +77,11 @@ _OTHER: SweepLock = (SweepName.EVENT_DERIVATION, None)
 @pytest.mark.parametrize(
     ("held", "lock", "admitted"),
     [
-        (set(), _EVERY, True),
+        (set[SweepLock](), _EVERY, True),
         ({_OTHER}, _EVERY, True),
         ({_EVERY}, _EVERY, False),
         ({_IN_A}, _EVERY, False),
-        (set(), _IN_A, True),
+        (set[SweepLock](), _IN_A, True),
         ({_IN_B}, _IN_A, True),
         ({_OTHER}, _IN_A, True),
         ({_IN_A}, _IN_A, False),
@@ -232,8 +232,11 @@ def test_a_stepped_sweep_runs_no_pass_at_boot_or_after_its_interval(tmp_path: Pa
         SweepName.TENANT_TEARDOWN,
     ]
 
+    app = hub.app
+    assert app is not None
+
     async def boot() -> None:
-        async with lifespan(hub.app):  # type: ignore[arg-type]
+        async with lifespan(app):
             await asyncio.sleep(0.3)
 
     with capture_logs() as logs:

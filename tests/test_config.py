@@ -846,11 +846,6 @@ def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) 
 # `[[subscription]]` — declared provider subscriptions.
 
 
-def _write_runner_config(root: Path, body: str) -> None:
-    root.mkdir(exist_ok=True)
-    (root / "blizzard-runner.toml").write_text('db_url = "sqlite://"\n' + body)
-
-
 @pytest.mark.unit
 def test_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None:
     root = tmp_path / "hub"

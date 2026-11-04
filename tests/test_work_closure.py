@@ -560,10 +560,10 @@ def test_sweep_s_events_name_the_ref_by_its_source_s_current_slug() -> None:
 
 
 def test_sweep_builds_each_traces_board_url_through_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "blizzard.hub.domain.work_items.closure.board_chunk_url",
-        lambda public_url, chunk_id: f"via-helper:{public_url}:{chunk_id}",
-    )
+    def via_helper(public_url: str | None, chunk_id: str) -> str:
+        return f"via-helper:{public_url}:{chunk_id}"
+
+    monkeypatch.setattr("blizzard.hub.domain.work_items.closure.board_chunk_url", via_helper)
     chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))])
     chunks.sources["ch_1"] = DeliverySources(markers=[_marker("ch_1", "merged/acme/widget", "abc123def456789")])
     closer = FakeCloser()

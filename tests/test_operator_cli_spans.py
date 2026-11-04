@@ -420,7 +420,11 @@ def test_the_operator_trace_records_the_exit_code_its_command_ends_in(
 def test_the_operator_trace_returns_the_commands_value_and_finishes_once() -> None:
     trace = operator_trace.OperatorTrace("hub", CliCollaborators.production(), {})
     finished: list[int] = []
-    trace.finish = finished.append  # type: ignore[method-assign]
+
+    def finish(exit_code: int) -> None:
+        finished.append(exit_code)
+
+    trace.finish = finish
 
     assert trace.run(lambda: "value") == "value"
     with pytest.raises(SystemExit):
