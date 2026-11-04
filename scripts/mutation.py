@@ -15,6 +15,7 @@ import ast
 import contextlib
 import fnmatch
 import functools
+import importlib
 import json
 import os
 import re
@@ -29,6 +30,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+from typing import NotRequired, Protocol, TypedDict, cast
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_ROOT = REPO_ROOT / "tests"
@@ -281,7 +283,7 @@ def test_module_selected(
     `conftest.py` is never followed as a helper: pytest loads it implicitly for every test
     module, so it carries no scope-selecting signal of its own.
     """
-    visited = _visited if _visited is not None else set()
+    visited: set[Path] = _visited if _visited is not None else set()
     if path in visited or path.name == "conftest.py":
         return False
     visited.add(path)
@@ -334,17 +336,21 @@ def config_override_for_scope(scope: Scope, test_selection: list[str]) -> Config
     )
 
 
-def apply_config_override(mutmut_config: object, override: ConfigOverride) -> None:
+class MutmutConfig(Protocol):
+    only_mutate: list[str]
+    do_not_mutate: list[str]
+    pytest_add_cli_args_test_selection: list[str]
+
+
+def apply_config_override(mutmut_config: MutmutConfig, override: ConfigOverride) -> None:
     """Install `override` onto a live `mutmut.configuration.Config`.
 
     mutmut forks every worker from this process after this runs, so the override reaches
     each child through inherited memory — never through a rewritten pyproject.toml.
     """
-    mutmut_config.only_mutate = list(override.only_mutate)  # type: ignore[attr-defined]
-    mutmut_config.do_not_mutate = list(override.do_not_mutate)  # type: ignore[attr-defined]
-    mutmut_config.pytest_add_cli_args_test_selection = list(  # type: ignore[attr-defined]
-        override.pytest_add_cli_args_test_selection
-    )
+    mutmut_config.only_mutate = list(override.only_mutate)
+    mutmut_config.do_not_mutate = list(override.do_not_mutate)
+    mutmut_config.pytest_add_cli_args_test_selection = list(override.pytest_add_cli_args_test_selection)
 
 
 # --- the mutants/ tree: one scope at a time -------------------------------------------------
@@ -408,7 +414,13 @@ def discard_unreadable_metas(mutants_dir: Path) -> list[Path]:
     return removed
 
 
-def install_atomic_meta_save(mutation_data_class: type) -> None:
+class MutationData(Protocol):
+    meta_path: Path
+
+    def save(self) -> None: ...
+
+
+def install_atomic_meta_save(mutation_data_class: type[MutationData]) -> None:
     """Make mutmut's per-file `.meta` save atomic.
 
     mutmut truncates the file and then dumps into it, so an interrupt landing between the
@@ -420,18 +432,18 @@ def install_atomic_meta_save(mutation_data_class: type) -> None:
     if getattr(original_save, "_atomic", False):
         return
 
-    def atomic_save(self: object) -> None:
-        meta_path = self.meta_path  # type: ignore[attr-defined]
+    def atomic_save(self: MutationData) -> None:
+        meta_path = self.meta_path
         temp_path = Path(meta_path).with_name(Path(meta_path).name + ".tmp")
-        self.meta_path = temp_path  # type: ignore[attr-defined]
+        self.meta_path = temp_path
         try:
             original_save(self)
         finally:
-            self.meta_path = meta_path  # type: ignore[attr-defined]
+            self.meta_path = meta_path
         os.replace(temp_path, meta_path)
 
-    atomic_save._atomic = True  # type: ignore[attr-defined]
-    mutation_data_class.save = atomic_save  # type: ignore[attr-defined]
+    atomic_save._atomic = True  # pyright: ignore[reportFunctionMemberAccess]  # marker on the patched method
+    mutation_data_class.save = atomic_save
 
 
 # --- delta: the functions a revision range changed, as mutant-name globs ----------------------
@@ -612,6 +624,32 @@ class ScopeRun:
 ScopeRunner = Callable[[str, str, float], ScopeRun]
 
 
+class ScopeEntry(TypedDict):
+    scope: str
+    status: str
+    reason: str | None
+    elapsed_seconds: float
+    survivors: list[dict[str, str | None]]
+    mutants: NotRequired[int]
+
+
+class DeltaReport(TypedDict):
+    since: str
+    budget_seconds: float
+    elapsed_seconds: float
+    scopes: list[ScopeEntry]
+    unscoped_files: list[str]
+
+
+class MutationReport(TypedDict):
+    scope: str
+    since: str | None
+    complete: bool
+    total: int
+    counts: dict[str, int]
+    survivors: list[dict[str, str | None]]
+
+
 def _run_scope_process(slug: str, since: str, timeout_seconds: float) -> ScopeRun:
     """Run one scope in its own process group, killing the group when `timeout_seconds` runs out.
 
@@ -655,7 +693,7 @@ def run_delta(
     mutants_dir: Path = MUTANTS_DIR,
     scope_runner: ScopeRunner = _run_scope_process,
     clock: Callable[[], float] = time.monotonic,
-) -> dict:
+) -> DeltaReport:
     """Run every scope the changes since `since` touch, one after another, and write the aggregate report.
 
     Each scope runs fresh. `budget_seconds` covers preparation as well as execution: a scope
@@ -668,9 +706,15 @@ def run_delta(
     routed, unscoped = route_changed_files(changed_source_files(since, repo_root))
     mutants_dir.mkdir(parents=True, exist_ok=True)
 
-    entries: list[dict] = []
+    entries: list[ScopeEntry] = []
     for slug, files in routed.items():
-        entry: dict = {"scope": slug, "status": "no-changes", "reason": None, "elapsed_seconds": 0.0, "survivors": []}
+        entry: ScopeEntry = {
+            "scope": slug,
+            "status": "no-changes",
+            "reason": None,
+            "elapsed_seconds": 0.0,
+            "survivors": [],
+        }
         entries.append(entry)
         if not changed_mutant_globs(SCOPES[slug], since, repo_root, only_files=files):
             entry["reason"] = "no function in the scope's mutable source changed"
@@ -685,7 +729,7 @@ def run_delta(
         entry["elapsed_seconds"] = round(clock() - scope_started, 1)
         _record_scope_run(entry, run, mutants_dir / REPORT_NAME, budget_seconds)
 
-    report = {
+    report: DeltaReport = {
         "since": since,
         "budget_seconds": budget_seconds,
         "elapsed_seconds": round(clock() - started, 1),
@@ -696,7 +740,7 @@ def run_delta(
     return report
 
 
-def _record_scope_run(entry: dict, run: ScopeRun, report_path: Path, budget_seconds: float) -> None:
+def _record_scope_run(entry: ScopeEntry, run: ScopeRun, report_path: Path, budget_seconds: float) -> None:
     if run.exit_code is None:
         entry.update(status="over-budget", reason=f"still running at the {budget_seconds:g}s wall budget")
         return
@@ -705,7 +749,7 @@ def _record_scope_run(entry: dict, run: ScopeRun, report_path: Path, budget_seco
         entry.update(status="failed", reason=f"{reason}: {run.output_tail}" if run.output_tail else reason)
         return
     try:
-        scope_report = json.loads(report_path.read_text())
+        scope_report: MutationReport = json.loads(report_path.read_text())
     except (OSError, json.JSONDecodeError):
         entry.update(status="failed", reason="mutation exited 0 but wrote no readable report")
         return
@@ -757,9 +801,9 @@ DiffProvider = Callable[[str, Path], str]
 
 
 def _real_diff_provider(mutant_name: str, source_path: Path) -> str:
-    from mutmut.mutation.diff_apply import get_diff_for_mutant
-
-    return get_diff_for_mutant(mutant_name, path=source_path)
+    module = importlib.import_module("mutmut.mutation.diff_apply")
+    get_diff = cast(Callable[..., str], module.get_diff_for_mutant)
+    return get_diff(mutant_name, path=source_path)
 
 
 def _in_delta(mutant_name: str, name_globs: list[str] | None) -> bool:
@@ -774,14 +818,14 @@ def build_report(
     name_globs: list[str] | None = None,
     since: str | None = None,
     complete: bool = True,
-) -> dict:
+) -> MutationReport:
     """Count and list what `mutants_dir` holds, restricted to mutants matching `name_globs` when given.
 
     `complete` is False when the run stopped on its budget: the counts then carry the
     unchecked mutants under `not checked`, and the survivors are only those found so far.
     """
     counts = dict.fromkeys(KNOWN_STATUSES, 0)
-    survivors: list[dict] = []
+    survivors: list[dict[str, str | None]] = []
     total = 0
 
     for meta_path in sorted(mutants_dir.rglob("*.meta")):
@@ -826,7 +870,7 @@ def write_report(
     name_globs: list[str] | None = None,
     since: str | None = None,
     complete: bool = True,
-) -> dict:
+) -> MutationReport:
     report = build_report(
         scope=scope.slug,
         mutants_dir=mutants_dir,
@@ -842,9 +886,20 @@ def write_report(
 # --- driving mutmut in-process, with a budget bounding only mutant execution ---------------
 
 
+class MutantRunner(Protocol):
+    def startup(self) -> None: ...
+
+
+class MutmutMain(Protocol):
+    get_mutant_runner: Callable[..., MutantRunner]
+
+    def _run(self, names: tuple[str, ...], argument: None) -> None: ...
+    def _reset_mutant_results(self, predicate: Callable[[str, int | None], bool]) -> None: ...
+
+
 def _run_with_budget(
     budget_seconds: float | None,
-    mutmut_main: ModuleType | None = None,
+    mutmut_main: MutmutMain | None = None,
     mutant_names: tuple[str, ...] = (),
 ) -> bool:
     """Run mutmut's `run` command in-process. Returns False iff `budget_seconds` expired.
@@ -859,7 +914,7 @@ def _run_with_budget(
     returns.
     """
     if mutmut_main is None:
-        import mutmut.__main__ as mutmut_main
+        mutmut_main = cast(MutmutMain, importlib.import_module("mutmut.__main__"))
 
     budget_expired = threading.Event()
     run_finished = threading.Event()
@@ -876,7 +931,7 @@ def _run_with_budget(
         nagger = threading.Thread(target=resend_until_finished, daemon=True)
         nagger.start()
 
-    def runner_starting_budget_on_startup(*args: object, **kwargs: object) -> object:
+    def runner_starting_budget_on_startup(*args: object, **kwargs: object) -> MutantRunner:
         runner = original_get_mutant_runner(*args, **kwargs)
         original_startup = runner.startup
 
@@ -898,7 +953,7 @@ def _run_with_budget(
     # try/except and surface here as KeyboardInterrupt, or inside an in-process pytest run
     # that swallows it and makes mutmut exit(1) — either way, the budget is what stopped it.
     try:
-        mutmut_main._run(mutant_names, None)
+        mutmut_main._run(mutant_names, None)  # pyright: ignore[reportPrivateUsage]  # mutmut exposes this in-process entrypoint
     except (KeyboardInterrupt, SystemExit):
         if not budget_expired.is_set():
             raise
@@ -923,17 +978,19 @@ def run_scope(
     budget_seconds: float | None,
     mutant_names: tuple[str, ...] = (),
 ) -> bool:
-    import mutmut.__main__ as mutmut_main
-    from mutmut.configuration import config
-    from mutmut.mutation.data import SourceFileMutationData
+    mutmut_main = cast(MutmutMain, importlib.import_module("mutmut.__main__"))
+    configuration = importlib.import_module("mutmut.configuration")
+    data = importlib.import_module("mutmut.mutation.data")
+    config = cast(Callable[[], MutmutConfig], configuration.config)
+    source_file_mutation_data = cast(type[MutationData], data.SourceFileMutationData)
 
-    install_atomic_meta_save(SourceFileMutationData)
+    install_atomic_meta_save(source_file_mutation_data)
     cfg = config()
     apply_config_override(cfg, config_override_for_scope(scope, test_selection))
 
     # A mutant interrupted mid-test (never a killed/survived/timeout verdict) must be
     # retried on resume, the same as one mutmut never got to at all.
-    mutmut_main._reset_mutant_results(lambda _key, exit_code: exit_code == 2)
+    mutmut_main._reset_mutant_results(lambda _key, exit_code: exit_code == 2)  # pyright: ignore[reportPrivateUsage]  # mutmut's resume hook
 
     return _run_with_budget(budget_seconds, mutant_names=mutant_names)
 

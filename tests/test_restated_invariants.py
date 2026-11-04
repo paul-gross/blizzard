@@ -510,14 +510,17 @@ def test_a_file_root_reports_a_restatement_the_registry_does_not_declare(tmp_pat
     assert any(f.kind == "new" for f in findings)
 
 
-# Case 16 — a `.py` file that fails to parse yields no spans rather than raising
-# (the `tokenize.TokenizeError` typo — the real name is `TokenError`).
-
-
 def test_case16_unparsable_python_file_yields_no_spans(tmp_path: Path) -> None:
     py = tmp_path / "broken.py"
     py.write_text("def broken(:\n    pass\n")
     assert prose_spans.extract_spans(py) == []
+
+
+def test_prose_caps_keeps_comments_before_tokenizer_failure(tmp_path: Path) -> None:
+    prose_caps = _load_module("prose_caps", "prose_caps.py")
+    py = tmp_path / "broken.py"
+    py.write_text('# one\n# two\n# three\n"""unfinished\n')
+    assert prose_caps.over_cap_blocks(py) == [f"{py}:1: comment block 3 lines (cap 2)"]
 
 
 # Case 17 — a skipped file (unreadable, or unparsable) is surfaced as a finding

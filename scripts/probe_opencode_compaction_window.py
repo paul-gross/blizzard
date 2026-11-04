@@ -16,7 +16,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, NotRequired, TypedDict
 
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -26,10 +26,10 @@ from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.model_limits import FileOpenCodeModelLimitsCatalog
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
+from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
-from blizzard.wire.envelope import NodeConfig, NodeEnvelope
 from blizzard.wire.graph import SessionMode
 
 _OUTPUT = 1000
@@ -37,8 +37,36 @@ _CONTEXT = 32000
 _USAGE = (4000, 7900, 8100, 100)
 
 
+class _Part(TypedDict):
+    type: str
+    tokens: NotRequired[dict[str, int]]
+
+
+class _Message(TypedDict):
+    info: dict[str, object]
+    parts: list[_Part]
+
+
+class _Export(TypedDict):
+    messages: list[_Message]
+
+
+class _Event(TypedDict):
+    type: str
+    part: _Part
+
+
+class _Turn(TypedDict):
+    usage_requested: int
+    observed_input: list[int]
+    exit: int
+    compactions: int
+    summaries: int
+    requests: int
+
+
 class _Provider(BaseHTTPRequestHandler):
-    requests: ClassVar[list[dict]] = []
+    requests: ClassVar[list[dict[str, object]]] = []
     usage: ClassVar[int] = 100
     used: ClassVar[bool] = False
 
@@ -46,14 +74,14 @@ class _Provider(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        body: dict[str, object] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.requests.append(body)
         usage = self.usage if body.get("tools") and not self.used else 100
         if body.get("tools"):
             type(self).used = True
         delta = {"role": "assistant", "content": "probe-finished"}
         finish = "stop"
-        chunks = [
+        chunks: list[dict[str, object]] = [
             {
                 "id": "probe",
                 "object": "chat.completion.chunk",
@@ -76,7 +104,7 @@ class _Provider(BaseHTTPRequestHandler):
         self.wfile.write(b"data: [DONE]\n\n")
 
 
-def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecutor) -> dict:
+def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecutor) -> dict[str, object]:
     cell = root / (window or "none")
     home, project = cell / "home", cell / "project"
     home.mkdir(parents=True)
@@ -128,14 +156,14 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
             stderr_path=str(err),
             lease_token="token-probe",
         )
-        node = NodeConfig(
+        node = EnvelopeNode(
             node_id="nd_probe",
             node_name="build",
             executor=Executor.RUNNER,
             session=SessionMode.FRESH,
             judged_by=JudgedBy.WORKER,
         )
-        envelope = NodeEnvelope(
+        envelope = Envelope(
             chunk_id="ch_probe",
             graph_id="gr_probe",
             epoch=1,
@@ -143,14 +171,16 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
             prompt="Report probe-finished.",
             judgement_prompt="assess",
         )
-        configured = adapter._compose_compaction(str(project), adapter._config_env(), "stub/stub", window)
+        launch_env = adapter.identity_env(preamble, envelope.chunk_id, "")
+        configured = adapter._compose_compaction(str(project), launch_env, "stub/stub", window)  # pyright: ignore[reportPrivateUsage]  # inspect the launch composition
         resolver = SubprocessOpenCodePermissionResolver(binary, children=children)
-        resolved = resolver.resolve(cwd=str(project), env=env.worker(configured)).merged_config
+        resolver_env = env.tool().adding({k: v for k, v in configured.items() if k.startswith("OPENCODE_CONFIG")})
+        resolved = resolver.resolve(cwd=str(project), env=resolver_env).merged_config
         (cell / "effective-config.json").write_text(json.dumps(resolved, indent=2))
         (cell / "inline-config.json").write_text(configured["OPENCODE_CONFIG_CONTENT"])
         export_env = {**os.environ, "OPENCODE_CONFIG": str(bundle), "OPENCODE_CONFIG_CONTENT": bundle.read_text()}
         session = None
-        turns = []
+        turns: list[_Turn] = []
         for index, usage in enumerate(_USAGE):
             _Provider.usage = usage
             _Provider.used = False
@@ -193,15 +223,13 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
                     timeout=30,
                     check=True,
                 )
-            export = json.loads((cell / f"export-{index}.json").read_text())
+            export: _Export = json.loads((cell / f"export-{index}.json").read_text())
             messages = export["messages"]
             markers = sum(p.get("type") == "compaction" for m in messages for p in m["parts"])
             summaries = sum(m["info"].get("summary") is True for m in messages)
-            events = [json.loads(line) for line in out.read_text().splitlines() if line.startswith("{")]
+            events: list[_Event] = [json.loads(line) for line in out.read_text().splitlines() if line.startswith("{")]
             tokens = [
-                e["part"]["tokens"]["input"]
-                for e in events
-                if e.get("type") == "step_finish" and e["part"].get("tokens")
+                e["part"]["tokens"]["input"] for e in events if e.get("type") == "step_finish" and "tokens" in e["part"]
             ]
             turns.append(
                 {
@@ -215,14 +243,15 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
             )
             (cell / "requests.json").write_text(json.dumps(_Provider.requests, indent=2))
         caps = [r.get("max_tokens", r.get("max_completion_tokens")) for r in _Provider.requests]
-        result = {
+        result: dict[str, object] = {
             "turns": turns,
             "output_caps": caps,
             "session": session,
         }
         expected = [0, 0, 1, 1] if window not in ("auto", None) else [0, 0, 0, 0]
-        crossing = json.loads((cell / "export-2.json").read_text())["messages"]
-        sequence = []
+        crossing_export: _Export = json.loads((cell / "export-2.json").read_text())
+        crossing = crossing_export["messages"]
+        sequence: list[str] = []
         for message in crossing:
             for part in message["parts"]:
                 if part.get("type") == "step-finish" and part.get("tokens", {}).get("input") == 8100:
@@ -266,7 +295,7 @@ def main() -> None:
     numbers = tuple(int(part) for part in version.split(".")[:3])
     if not ((1, 18, 25) <= numbers < (2, 0, 0)):
         raise RuntimeError(f"OpenCode version outside admitted range: {version}")
-    results = {}
+    results: dict[str, dict[str, object]] = {}
     with ThreadPoolExecutor(max_workers=2) as executor:
         for window in (args.window, "auto", None):
             try:

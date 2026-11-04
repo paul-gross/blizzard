@@ -16,8 +16,10 @@ import signal
 import subprocess
 import tempfile
 import time
+from concurrent.futures import Executor as FuturesExecutor
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -32,11 +34,14 @@ from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.wiring import publish_harness_bundle
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses, StreamTarget
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
-from blizzard.wire.envelope import NodeConfig, NodeEnvelope
+from blizzard.runner.process.probe import IProcessProbe
 from blizzard.wire.graph import SessionMode
 
 
@@ -146,15 +151,29 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
     return home, project, runtime, effective
 
 
-def _events(path: Path) -> tuple[list[str], list[dict]]:
-    records = [json.loads(line) for line in path.read_text().splitlines() if line.startswith("{")]
+class _EventPart(TypedDict):
+    tool: str
+    state: dict[str, str]
+
+
+class _Event(TypedDict):
+    type: str
+    part: NotRequired[_EventPart]
+    sessionID: NotRequired[str]
+
+
+def _events(path: Path) -> tuple[list[str], list[_Event]]:
+    records: list[_Event] = [json.loads(line) for line in path.read_text().splitlines() if line.startswith("{")]
     errors = [entry for entry in records if entry.get("type") == "error"]
     assert not errors, errors
-    tools = [
-        entry["part"]["tool"]
-        for entry in records
-        if entry.get("type") == "tool_use" and entry["part"].get("state", {}).get("status") == "completed"
-    ]
+    tools: list[str] = []
+    for entry in records:
+        part = entry.get("part")
+        if entry.get("type") == "tool_use" and part is not None:
+            state = part.get("state")
+            tool = part.get("tool")
+            if state.get("status") == "completed":
+                tools.append(tool)
     return tools, records
 
 
@@ -177,16 +196,27 @@ class _ProbeCatalog:
 
 
 class _InspectingLauncher(ProcessLauncher):
-    def __init__(self, *args, binary: str, model: str, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, process: IProcessProbe, *, executor: FuturesExecutor, children: IChildProcesses, binary: str, model: str
+    ) -> None:
+        super().__init__(process, executor=executor, children=children)
         self.binary = binary
         self.model = model
         self.expected_reserve = 0
         self.expected_output = 0
         self.invocation = ""
-        self.checks = []
+        self.checks: list[dict[str, object]] = []
 
-    def launch(self, argv, *, cwd, env, stdout, stderr, defer_disarm=False):
+    def launch(
+        self,
+        argv: list[str],
+        *,
+        cwd: str | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
+        defer_disarm: bool = False,
+    ) -> LaunchedProcess:
         result = subprocess.run(
             [self.binary, "debug", "config", "--pure"],
             cwd=cwd,
@@ -229,14 +259,14 @@ def _run(
         lease_token="token-probe",
     )
     if name in {"fresh", "resume"}:
-        node = NodeConfig(
+        node = EnvelopeNode(
             node_id="nd_probe",
             node_name="build",
             executor=Executor.RUNNER,
             session=SessionMode.FRESH,
             judged_by=JudgedBy.WORKER,
         )
-        envelope = NodeEnvelope(
+        envelope = Envelope(
             chunk_id="ch_probe",
             graph_id="gr_probe",
             epoch=1,
@@ -245,6 +275,8 @@ def _run(
             judgement_prompt="assess",
         )
         handle = adapter.spawn(envelope, preamble, None, resume_from=session, model=model, compaction_window="8k")
+        handle.confirm_durable()
+        minted = handle.await_identity(10).session_id if name == "fresh" else session
     elif name == "judge":
         assert session
         handle = adapter.judge(
@@ -257,6 +289,8 @@ def _run(
             model=model,
             compaction_window="8k",
         )
+        handle.confirm_durable()
+        minted = session
     else:
         assert session
         handle = adapter.resume_with_message(
@@ -269,12 +303,12 @@ def _run(
             model=model,
             compaction_window="8k",
         )
-    handle.confirm_durable()
-    minted = handle.await_identity(10).session_id if name == "fresh" else session
+        handle.confirm_durable()
+        minted = session
     _wait(handle.pid)
     tools, records = _events(out)
     if name == "fresh":
-        assert minted == records[0]["sessionID"]
+        assert minted == records[0].get("sessionID")
     return minted or "", tools
 
 

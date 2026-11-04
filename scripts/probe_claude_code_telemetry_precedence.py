@@ -36,6 +36,7 @@ import socket
 import subprocess
 import tempfile
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -44,18 +45,20 @@ from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsSer
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
+from opentelemetry.proto.metrics.v1.metrics_pb2 import (
+    ExponentialHistogramDataPoint,
+    HistogramDataPoint,
+    Metric,
+    NumberDataPoint,
+    SummaryDataPoint,
+)
+from opentelemetry.proto.trace.v1.trace_pb2 import Span
 
 _SIGNALS = ("traces", "metrics", "logs")
 _REQUEST_TYPES = {
     "traces": ExportTraceServiceRequest,
     "metrics": ExportMetricsServiceRequest,
     "logs": ExportLogsServiceRequest,
-}
-#: Per signal, the export request's resource field and each resource's scope field.
-_FIELDS = {
-    "traces": ("resource_spans", "scope_spans"),
-    "metrics": ("resource_metrics", "scope_metrics"),
-    "logs": ("resource_logs", "scope_logs"),
 }
 _TURN_TIMEOUT_SECONDS = 60
 _EXPORT_INTERVAL_MS = "500"
@@ -94,8 +97,10 @@ class _Sink:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.server.server_port}"
 
-    def requests(self, signal: str) -> list:
-        parsed = []
+    def requests(
+        self, signal: str
+    ) -> list[ExportTraceServiceRequest | ExportMetricsServiceRequest | ExportLogsServiceRequest]:
+        parsed: list[ExportTraceServiceRequest | ExportMetricsServiceRequest | ExportLogsServiceRequest] = []
         for body in self.bodies[signal]:
             request = _REQUEST_TYPES[signal]()
             request.ParseFromString(body)
@@ -230,15 +235,15 @@ def _run_cell(cell: _Cell, root: Path, binary: str, model: str, fallback: bool) 
 
 
 def _scopes(sink: _Sink, signal: str) -> list[str]:
-    resources_field, scopes_field = _FIELDS[signal]
-    return sorted(
-        {
-            scope.scope.name
-            for request in sink.requests(signal)
-            for resource in getattr(request, resources_field)
-            for scope in getattr(resource, scopes_field)
-        }
-    )
+    names: set[str] = set()
+    for request in sink.requests(signal):
+        if isinstance(request, ExportTraceServiceRequest):
+            names.update(scope.scope.name for resource in request.resource_spans for scope in resource.scope_spans)
+        elif isinstance(request, ExportLogsServiceRequest):
+            names.update(scope.scope.name for resource in request.resource_logs for scope in resource.scope_logs)
+        else:
+            names.update(scope.scope.name for resource in request.resource_metrics for scope in resource.scope_metrics)
+    return sorted(names)
 
 
 def _received(sink: _Sink) -> dict[str, dict[str, int]]:
@@ -251,17 +256,18 @@ def _received(sink: _Sink) -> dict[str, dict[str, int]]:
 
 def _reading(process: _Sink, settings: _Sink) -> dict[str, str]:
     """Per signal, the sink that received it in any encoding: ``process``, ``settings``, ``both`` or ``none``."""
-    reading = {}
+    reading: dict[str, str] = {}
     for signal in _SIGNALS:
         sources = [name for name, sink in (("process", process), ("settings", settings)) if sink.content_types[signal]]
         reading[signal] = "both" if len(sources) == 2 else (sources[0] if sources else "none")
     return reading
 
 
-def _spans(sink: _Sink) -> list:
+def _spans(sink: _Sink) -> list[Span]:
     return [
         span
         for request in sink.requests("traces")
+        if isinstance(request, ExportTraceServiceRequest)
         for resource in request.resource_spans
         for scope in resource.scope_spans
         for span in scope.spans
@@ -275,39 +281,56 @@ def _traceparent_reading(sink: _Sink) -> dict[str, object]:
     return {"spans": len(spans), "in_env_trace": len(in_trace), "parented_on_env_span": len(parented)}
 
 
-def _sanitize(attributes: list[KeyValue]) -> None:
+def _sanitize(attributes: Iterable[KeyValue]) -> None:
     for attribute in attributes:
         if attribute.key.startswith(_SANITIZED_KEY_PREFIXES):
             attribute.value.CopyFrom(AnyValue(string_value=_SANITIZED_VALUE))
 
 
 def _sanitized_export(sink: _Sink, signal: str) -> bytes:
-    resources_field, scopes_field = _FIELDS[signal]
     request = sink.requests(signal)[0]
-    for resource in getattr(request, resources_field):
-        _sanitize(resource.resource.attributes)
-        for scope in getattr(resource, scopes_field):
-            if signal == "traces":
+    if isinstance(request, ExportTraceServiceRequest):
+        for resource in request.resource_spans:
+            _sanitize(resource.resource.attributes)
+            for scope in resource.scope_spans:
                 for span in scope.spans:
                     _sanitize(span.attributes)
-            elif signal == "logs":
+    elif isinstance(request, ExportLogsServiceRequest):
+        for resource in request.resource_logs:
+            _sanitize(resource.resource.attributes)
+            for scope in resource.scope_logs:
                 for record in scope.log_records:
                     _sanitize(record.attributes)
-            else:
+    else:
+        for resource in request.resource_metrics:
+            _sanitize(resource.resource.attributes)
+            for scope in resource.scope_metrics:
                 for metric in scope.metrics:
                     for point in _data_points(metric):
                         _sanitize(point.attributes)
     return request.SerializeToString()
 
 
-def _data_points(metric: object) -> list:
-    kind = metric.WhichOneof("data")  # type: ignore[attr-defined]
-    return list(getattr(metric, kind).data_points) if kind else []
+def _data_points(
+    metric: Metric,
+) -> Iterable[NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint]:
+    kind = metric.WhichOneof("data")
+    if kind == "gauge":
+        return metric.gauge.data_points
+    if kind == "sum":
+        return metric.sum.data_points
+    if kind == "histogram":
+        return metric.histogram.data_points
+    if kind == "exponential_histogram":
+        return metric.exponential_histogram.data_points
+    if kind == "summary":
+        return metric.summary.data_points
+    return []
 
 
 def _save_fixtures(sink: _Sink, directory: Path) -> list[str]:
     directory.mkdir(parents=True, exist_ok=True)
-    saved = []
+    saved: list[str] = []
     for signal in _SIGNALS:
         if sink.bodies[signal]:
             path = directory / f"{signal}.pb"

@@ -686,6 +686,17 @@ class _MutmutShapedData:
             raise KeyboardInterrupt
 
 
+def test_atomic_save_with_real_mutmut_data(tmp_path: Path) -> None:
+    pytest.importorskip("mutmut")
+    data_module = importlib.import_module("mutmut.mutation.data")
+    data_class = data_module.SourceFileMutationData
+    m.install_atomic_meta_save(data_class)
+    data = data_class(path=tmp_path / "example.py")
+    data.save()
+    assert json.loads(Path(data.meta_path).read_text())["exit_code_by_key"] == {}
+    assert not Path(str(data.meta_path) + ".tmp").exists()
+
+
 def test_an_interrupted_atomic_save_leaves_the_previous_meta_intact(tmp_path: Path) -> None:
     meta_path = tmp_path / "cli.py.meta"
     meta_path.write_text('{"exit_code_by_key": {}}')
