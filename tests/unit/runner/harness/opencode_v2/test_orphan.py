@@ -1,5 +1,6 @@
-"""OpenCode 2's orphan against an in-memory service: the running tree interrupted deepest first, then the root; every
-request held to the orphan's own bound; and no service, an unknown session, or a failed interrupt logged and ignored."""
+"""OpenCode 2's orphan against an in-memory service: the running tree interrupted deepest first, then the root; a tree
+running nothing left alone; the whole call held to one bound; and no service, an unknown session, or a failed
+interrupt logged and ignored."""
 
 from __future__ import annotations
 
@@ -38,10 +39,26 @@ def test_the_running_tree_is_interrupted_deepest_first_then_the_root() -> None:
     assert service.running == set()
 
 
-def test_every_request_is_held_to_the_orphans_bound() -> None:
+def test_a_tree_running_nothing_is_left_alone() -> None:
+    service = _service()
+    service.running.clear()
+    SessionOrphaner(lambda: REGISTRATION, SessionTransport(service)).orphan(ROOT)
+    assert service.interrupted == []
+
+
+def test_every_request_is_held_to_what_is_left_of_one_bound() -> None:
+    now = [0.0]
     transport = SessionTransport(_service())
-    SessionOrphaner(lambda: REGISTRATION, transport, timeout_seconds=2.0).orphan(ROOT)
-    assert transport.requests and all(request.timeout_seconds == 2.0 for request in transport.requests)
+
+    def monotonic() -> float:
+        now[0] += 0.5
+        return now[0]
+
+    with capture_logs() as logs:
+        SessionOrphaner(lambda: REGISTRATION, transport, bound_seconds=2.0, monotonic=monotonic).orphan(ROOT)
+    timeouts = [request.timeout_seconds for request in transport.requests]
+    assert timeouts and timeouts == sorted(timeouts, reverse=True) and max(timeouts) <= 2.0
+    assert len(_warnings(logs)) == 1  # the bound ran out before the tree was walked
 
 
 def test_no_registered_service_is_logged_and_ignored() -> None:

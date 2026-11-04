@@ -39,7 +39,7 @@ from blizzard.runner.harness.opencode_v2.attend import (
     attended_argv,
     parse_model_option,
 )
-from blizzard.runner.harness.opencode_v2.client import ModelReference, ServiceRequestError, ServiceShapeError
+from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.compatibility.corpus import (
     CorpusError,
     ProofEvidence,
@@ -51,7 +51,12 @@ from blizzard.runner.harness.opencode_v2.compatibility.rows import classify_row
 from blizzard.runner.harness.opencode_v2.compatibility.store_migration import StoreMigrationProbe
 from blizzard.runner.harness.opencode_v2.compatibility.subprocess_host import SubprocessProofHost
 from blizzard.runner.harness.opencode_v2.drive import TurnDriver
-from blizzard.runner.harness.opencode_v2.driver import DriverCore, ServiceIdentityError, ServiceNotRegisteredError
+from blizzard.runner.harness.opencode_v2.driver import (
+    BIND_FAULTS,
+    DriverCore,
+    ServiceIdentityError,
+    ServiceNotRegisteredError,
+)
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError
 from blizzard.runner.harness.opencode_v2.registration import (
     RegistrationError,
@@ -62,8 +67,6 @@ from blizzard.runner.harness.opencode_v2.registration import (
 from blizzard.runner.harness.opencode_v2.request import DriveRequestError, take_request
 from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter
 from blizzard.runner.harness.opencode_v2.transport import (
-    NonLoopbackServiceError,
-    ServiceUnreachableError,
     UrllibServiceTransport,
 )
 from blizzard.runner.harness.opencode_v2.version import (
@@ -285,18 +288,6 @@ def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration
     return registration
 
 
-#: Every way binding to the registered service fails before a turn or a takeover can use it.
-_UNBOUND = (
-    ServiceNotRegisteredError,
-    ServiceIdentityError,
-    ServiceUnreachableError,
-    ServiceRequestError,
-    ServiceShapeError,
-    RegistrationError,
-    NonLoopbackServiceError,
-)
-
-
 @opencode_group.command("drive")
 @click.option(
     "--request",
@@ -318,7 +309,7 @@ def opencode_drive(request_path: Path) -> None:
     path = registration_path(environment)
     try:
         core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
-    except _UNBOUND as exc:
+    except BIND_FAULTS as exc:
         error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
         ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
         return
@@ -368,7 +359,7 @@ def opencode_attend(session_id: str, model: ModelReference | None, binary: str) 
     path = registration_path(os.environ)
     try:
         core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
-    except _UNBOUND as exc:
+    except BIND_FAULTS as exc:
         raise click.ClickException(f"no OpenCode service holds the session: {exc}") from exc
     try:
         SessionHandover(core, warn=partial(click.echo, err=True)).prepare(session_id, model)

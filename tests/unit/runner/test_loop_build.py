@@ -77,6 +77,7 @@ from tests.runner_fakes import (
 )
 from tests.support import InMemoryTraceExporter
 
+_NO_HARNESSES = HarnessRegistry({})
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
@@ -737,7 +738,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
     """No real process and no wall clock: the marking hook is driven entirely off a
     virtual clock and a scripted probe, both supplied as constructor dependencies."""
     store = _seeded_running_lease_store(tmp_path)
-    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe())
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(), _NO_HARNESSES)
 
     marked = marking.on_shutdown()
 
@@ -764,7 +765,7 @@ def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_
         sleeps.append(seconds)
         probe.groups_alive.discard(100)  # the worker exits on the SIGINT this drain just sent
 
-    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), probe, sleep)
+    marking = ResumeMarking(make_stores(store), make_host_stores(store), FixedClock(_NOW), probe, _NO_HARNESSES, sleep)
 
     marked = marking.on_shutdown()
 
@@ -794,8 +795,8 @@ def test_resume_marking_on_shutdown_orphans_a_survivor_through_its_harness_owner
         make_host_stores(store),
         clock,
         probe,
+        HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
         lambda seconds: clock.advance(timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE + seconds)),
-        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
     )
 
     marking.on_shutdown()
@@ -807,7 +808,7 @@ def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_pa
     store = _seeded_running_lease_store(tmp_path)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
     marking = ResumeMarking(
-        make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(alive=set())
+        make_stores(store), make_host_stores(store), FixedClock(_NOW), FakeProbe(alive=set()), _NO_HARNESSES
     )  # the pid is dead
 
     marked = marking.on_startup()

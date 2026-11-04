@@ -54,7 +54,7 @@ from blizzard.runner.lifecycle.spawn import (
     SpawnHostStores,
     SpawnStores,
 )
-from blizzard.runner.lifecycle.takeover import OpenTakeover
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, OpenTakeover
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.throttle.release import ReleaseContext
@@ -85,6 +85,8 @@ class ClaimStores(SpawnStores, Protocol):
     def environments(self) -> IWriteEnvironmentRepository: ...
     @property
     def requeue(self) -> IReadRequeueRepository: ...
+    @property
+    def takeover(self) -> IReadTakeoverRepository: ...
 
 
 class IPoolHeldRead(Protocol):

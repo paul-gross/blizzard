@@ -35,7 +35,7 @@ from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
-from blizzard.runner.lifecycle.orphan import orphan_resultless_exit, orphan_session
+from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.usage_limit import classify_judge_usage_limit, mark_and_park_judge
 from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
@@ -177,11 +177,6 @@ class Judgement:
 
     def _enter(self, entry: ExitEntry) -> None:
         lease = self.lease
-        if entry is ExitEntry.EXIT:
-            # A worker gone without its result may have left its turn running past it.
-            generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-            output = self.ctx.worker_files.read_stdout(lease.lease_id, generation)
-            orphan_resultless_exit(self.ctx, lease, output, via="exit")
         gated = lease.node_name in self.ctx.config.gates
         route = route_exit(entry, gated=gated)
         artifacts: list[CompletionArtifact] = []
@@ -500,6 +495,7 @@ class Judgement:
             # A plain raise never disarms the trampoline on its own — kill it explicitly, as `Spawner.spawn`
             # does; an `ElicitationNotRecorded` leaves nothing to track the judge by, so it is reaped too.
             self.ctx.process.kill_group(handle.pgid)
+            orphan_session(self.ctx, lease, via="judge-record-failed")
             raise
         # Disarm only now this record is durable — `collect` can re-adopt it past here.
         handle.confirm_durable()

@@ -4,6 +4,7 @@ a forced takeover and a lease an open takeover holds never do, and an owner that
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -130,11 +131,27 @@ def test_a_stalled_worker_reaped_is_killed_and_its_session_orphaned(tmp_path: Pa
     assert probe.killed_groups == [100] and harness.orphaned == ["sess-a"]
 
 
-def test_an_exit_without_a_result_orphans_the_session_before_it_is_judged(tmp_path: Path) -> None:
+def test_an_exit_without_a_result_orphans_the_session_and_is_still_judged(tmp_path: Path) -> None:
     store = _store(tmp_path)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=False)
     Advance(_ctx(store, _hub(), harness, probe=FakeProbe())).run()
     assert harness.orphaned == ["sess-a"] and len(harness.judged) == 1
+
+
+def test_an_exit_without_a_result_that_parks_on_an_ask_is_orphaned(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Which API?",
+        options=["rest", "graphql"],
+        session=_SESSION,
+        asked_at=_NOW,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=False)
+    Advance(_ctx(store, _hub(), harness, probe=FakeProbe())).run()
+    assert harness.orphaned == ["sess-a"] and harness.judged == []
 
 
 def test_an_exit_with_its_result_orphans_nothing(tmp_path: Path) -> None:
@@ -143,7 +160,7 @@ def test_an_exit_with_its_result_orphans_nothing(tmp_path: Path) -> None:
     assert harness.orphaned == [] and len(harness.judged) == 1
 
 
-def test_a_lost_judge_is_orphaned_before_it_is_relaunched(tmp_path: Path) -> None:
+def test_a_lost_judge_is_orphaned_and_relaunched(tmp_path: Path) -> None:
     store = _store(tmp_path)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_output="cut off mid-", judge_output_usable=False)
     ctx = _ctx(store, _hub(), harness, probe=FakeProbe())
@@ -152,7 +169,7 @@ def test_a_lost_judge_is_orphaned_before_it_is_relaunched(tmp_path: Path) -> Non
     assert len(harness.judged) == 2 and harness.orphaned == ["sess-a", "sess-a"]
 
 
-def test_restart_resume_orphans_the_killed_generations_session_before_resuming_it(tmp_path: Path) -> None:
+def test_restart_resume_orphans_the_killed_generations_session_and_resumes_it(tmp_path: Path) -> None:
     store, harness = _store(tmp_path), _harness()
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     harness.resume_pid = 4321
@@ -206,6 +223,16 @@ def test_the_session_an_open_takeover_holds_is_never_handed_over(tmp_path: Path)
     _hold_by_takeover(store)
     orphan_session(_ctx(store, _hub(), harness), lease, via="test")
     assert harness.orphaned == []
+
+
+def test_a_lease_minted_above_an_open_takeovers_reach_is_the_loops_to_orphan(tmp_path: Path) -> None:
+    store, harness = _store(tmp_path), _harness()
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    _hold_by_takeover(store, fence_epoch=2)
+    reach = replace(lease, epoch=3)
+    orphan_session(_ctx(store, _hub(), harness), reach, via="test")
+    assert harness.orphaned == ["sess-a"]
 
 
 def test_an_owner_whose_orphan_fails_is_logged_and_the_closure_still_lands(tmp_path: Path) -> None:

@@ -2,8 +2,8 @@
 
 SIGINTs every marked lease's process group, waits at most :data:`SHUTDOWN_DRAIN_DEADLINE`
 in total (one shared budget, not one per worker), then SIGKILLs any survivor and orphans its
-session. Makes no durable write: it only waits for the worker's own envelope to reach the stdout
-file the next startup's usage recording reads back."""
+session, each orphan held to its harness's own bound. Makes no durable write: it only waits for
+the worker's own envelope to reach the stdout file the next startup's usage recording reads back."""
 
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ class ShutdownDrain:
     process: IOwnedProcessControl
     clock: IClock
     sleep: Callable[[float], None]
-    deadline_seconds: float = SHUTDOWN_DRAIN_DEADLINE
     #: Called with each killed survivor's lease, so a turn that outlives its worker is stopped.
-    orphan: Callable[[Lease], None] = lambda lease: None
+    orphan: Callable[[Lease], None]
+    deadline_seconds: float = SHUTDOWN_DRAIN_DEADLINE
 
     def run(self, leases: Sequence[Lease]) -> None:
         signalled: dict[int, Lease] = {}

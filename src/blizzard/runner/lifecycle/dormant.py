@@ -756,6 +756,7 @@ class DormantSession:
             # A plain raise here never disarms the trampoline on its own — kill it
             # explicitly instead (`Spawner.spawn`'s own guard, mirrored here).
             self.ctx.process.kill_group(resumed.pgid)
+            orphan_session(self.ctx, lease, via="resume-record-failed")
             raise
         points.recorded()  # ownership durable; not yet disarmed
         # Disarm only now this record is durable — a later REAP/ADVANCE pass can

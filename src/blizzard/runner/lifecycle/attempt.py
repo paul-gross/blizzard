@@ -111,20 +111,25 @@ class Attempt:
         """Best-effort teardown of this lease's own worker process — the shared,
         liveness-checked, pgid-preferring kill (:func:`kill_owned_process`) every owned-process
         teardown in the runner loop reaches through, rather than each reimplementing its own
-        liveness check. A closing lease's worker is killed or already gone without a result, so its session is
-        orphaned too: a turn that outlives its worker is stopped."""
+        liveness check."""
         lease = self.lease
         kill_owned_process(
             self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
         )
-        orphan_session(self.ctx, lease, via="close")
+
+    def _tear_down(self, *, kill_worker: bool = True) -> None:
+        """Kill the closing lease's worker, unless its caller already has, and its in-flight elicitation, then orphan
+        the session both ran on: a turn that outlives its process is stopped once nothing can prompt it again."""
+        if kill_worker:
+            self._kill_process()
+        self._kill_in_flight_elicitation()
+        orphan_session(self.ctx, self.lease, via="close")
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then abandon, retry, defer, or escalate per :func:`failure_move`."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
-        self._kill_in_flight_elicitation()
+        self._tear_down()  # best-effort hygiene; the epoch fence is the guarantee
         # Best-effort: a worker that never crashed to stderr wrote no tail, the ordinary case.
         tail = self.ctx.worker_files.stderr_tail(lease)
 
@@ -360,8 +365,7 @@ class Attempt:
         a crash right after leaves nothing to redo — the next pass reads a closed lease."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self._kill_process()  # best-effort hygiene; nothing is live behind it
-        self._kill_in_flight_elicitation()
+        self._tear_down()  # best-effort hygiene; nothing is live behind it
         closure = owner_unresolvable_closure(lease, unavailable=isinstance(exc, UnavailableHarnessError))
         status = closure.owner_status
         message = f"escalated — recorded harness owner {status} ({session.harness_id!r}, via {via})"
@@ -424,9 +428,7 @@ class Attempt:
         ``released``, and any open ask park is retired alongside."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if not killed:
-            self._kill_process()
-        self._kill_in_flight_elicitation()
+        self._tear_down(kill_worker=not killed)
         _CP_ABANDON_AFTER_KILL.reached()  # recovery is the next tick's re-scan
         self.ctx.env_release.release_chunk(lease.chunk_id)
         _CP_ABANDON_AFTER_RELEASE.reached()  # re-run releases nothing more, then records the closure
@@ -519,8 +521,7 @@ class Attempt:
         only the re-entry spawn waits for it to lift."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
-        self._kill_in_flight_elicitation()
+        self._tear_down()  # best-effort hygiene; the epoch fence is the guarantee
         _CP_PREEMPT_AFTER_KILL.reached()  # recovery is the next tick's re-scan, off the still-higher fence
         park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is not None:

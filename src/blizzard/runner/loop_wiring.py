@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Protocol, TypeVar
 
@@ -27,7 +27,7 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
-from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
+from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
@@ -317,10 +317,10 @@ class ResumeMarking:
     host_stores: HostStores
     clock: IClock
     process: IProcessProbe
+    #: The runner's harness owners, each killed survivor's session is orphaned through.
+    harnesses: IHarnessRegistry
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
     sleep: Callable[[float], None] = time.sleep
-    #: The runner's harness owners, each killed survivor's session is orphaned through.
-    harnesses: IHarnessRegistry = field(default_factory=lambda: HarnessRegistry({}))
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully, then drain their workers:

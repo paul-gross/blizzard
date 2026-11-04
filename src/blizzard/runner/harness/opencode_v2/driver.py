@@ -89,6 +89,18 @@ def bind_service(
     return client, ServiceIdentity(registration.id, registration.pid, registration.version)
 
 
+#: Every way binding to the registered service, or a call on it, fails short of a turn's own failure.
+BIND_FAULTS: tuple[type[Exception], ...] = (
+    ServiceNotRegisteredError,
+    ServiceIdentityError,
+    ServiceUnreachableError,
+    ServiceRequestError,
+    ServiceShapeError,
+    RegistrationError,
+    NonLoopbackServiceError,
+)
+
+
 class DriverCore:
     """Drives sessions on the service it was bound to, and recognizes that service's restart by its identity rather
     than by an outage, since a restart can finish between two polls."""
@@ -119,15 +131,7 @@ class DriverCore:
         registration read mid-rewrite or an answer the core cannot read."""
         try:
             _, identity = bind_service(self._source, self._transport)
-        except (
-            ServiceNotRegisteredError,
-            ServiceIdentityError,
-            ServiceUnreachableError,
-            ServiceRequestError,
-            ServiceShapeError,
-            RegistrationError,
-            NonLoopbackServiceError,
-        ):
+        except BIND_FAULTS:
             return None
         return identity
 
@@ -217,6 +221,7 @@ class DriverCore:
 
 
 __all__ = [
+    "BIND_FAULTS",
     "DEFAULT_POLL_SECONDS",
     "DEFAULT_REACH_BOUND_SECONDS",
     "DEFAULT_RETURN_GRACE_SECONDS",

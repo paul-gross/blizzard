@@ -58,9 +58,9 @@ from blizzard.runner.lifecycle.model import (
     resolved_retries_max,
     spawn_hold,
 )
+from blizzard.runner.lifecycle.orphan import OrphanContext, OrphanStores
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
-from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
@@ -127,7 +127,7 @@ class MintedLease:
     compaction_window: str | None
 
 
-class SpawnStores(TranscriptPumpStores, GateStores, Protocol):
+class SpawnStores(TranscriptPumpStores, GateStores, OrphanStores, Protocol):
     @property
     def lease_record(self) -> IWriteLeaseRecordRepository: ...
     @property
@@ -148,8 +148,6 @@ class SpawnStores(TranscriptPumpStores, GateStores, Protocol):
     def pause(self) -> IWritePauseRepository: ...
     @property
     def tokens(self) -> IWriteTokenRepository: ...
-    @property
-    def takeover(self) -> IReadTakeoverRepository: ...
 
 
 class SpawnHostStores(GateHostStores, Protocol):
@@ -178,7 +176,7 @@ class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
     def worker_program_tracing(self) -> bool: ...
 
 
-class SpawnContext(TranscriptPumpContext, GateContext, Protocol):
+class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     """What a spawn and an attempt read."""
 
     @property

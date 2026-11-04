@@ -41,14 +41,15 @@ def orphan_resultless_exit(ctx: OrphanContext, lease: Lease, output: str, *, via
 
 
 def orphan_session(ctx: OrphanContext, lease: Lease, *, via: str) -> None:
-    """Hand ``lease``'s session to its owner's ``orphan``; never raises. A lease with no session, a session whose
-    owner cannot be resolved, or one an open takeover holds is left alone."""
+    """Hand ``lease``'s session to its owner's ``orphan``; never raises. A lease with no session, one whose owner
+    cannot be resolved, or one an open takeover holds is left alone."""
     session = lease.session
     if session is None:
         return
     try:
+        # The loop's own takeover reach (`OpenTakeover.holds`): a lease a re-claim minted above it is the loop's again.
         takeover = ctx.stores.takeover.open_takeover_for_chunk(lease.chunk_id)
-        if takeover is not None and takeover.session_id == session.session_id:
+        if takeover is not None and takeover.holds(lease.chunk_id, lease.epoch):
             return
         ctx.harnesses.lifecycle(session.harness_id).orphan(session.session_id)
     except (UnknownHarnessError, UnavailableHarnessError) as exc:
