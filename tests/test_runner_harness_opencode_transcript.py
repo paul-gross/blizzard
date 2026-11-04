@@ -10,7 +10,6 @@ from concurrent.futures import Executor
 from typing import Any
 
 import pytest
-import structlog
 from structlog.testing import capture_logs
 
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
@@ -22,8 +21,16 @@ from blizzard.runner.harness.opencode.shapes import parse_session_export
 from blizzard.runner.harness.opencode.transcript.export import IOpenCodeExporter, OpenCodeExportError
 from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION, build_turns
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
-from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
+from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.process.child_env import AllowlistedEnv
+from tests.opencode_export_fakes import (
+    FakeExporter,
+    assistant_message,
+    error_factory,
+    opencode_export,
+    tool_part,
+    user_message,
+)
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 from tests.support_child_launch import CHILDREN, version_probe
@@ -34,31 +41,8 @@ _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "ope
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
-def error_factory() -> TranscriptErrorFactory:
-    return TranscriptErrorFactory(structlog.get_logger("test"))
-
-
 def _load_contract(name: str) -> dict[str, Any]:
     return json.loads((_CORPUS_DIR / name).read_text())["export"]
-
-
-class FakeExporter:
-    """A scripted :class:`IOpenCodeExporter`: each session id maps to a JSON string to
-    return, or an exception instance to raise — mutable, so a test can grow a session
-    between two reads the way a live ``opencode export`` would."""
-
-    def __init__(self, scripts: dict[str, str | Exception] | None = None) -> None:
-        self.scripts = dict(scripts or {})
-        self.calls: list[str] = []
-
-    def export(self, session_id: str) -> str:
-        self.calls.append(session_id)
-        script = self.scripts.get(session_id)
-        if script is None:
-            raise OpenCodeExportError(f"no script for {session_id!r}")
-        if isinstance(script, Exception):
-            raise script
-        return script
 
 
 _exporter: type[IOpenCodeExporter] = FakeExporter
@@ -67,53 +51,12 @@ _exporter: type[IOpenCodeExporter] = FakeExporter
 # --- export fixture builders (src/blizzard/runner/harness/contracts/opencode/1.18.25/child_session.json's own shapes) ---
 
 
-def _session_info(session_id: str, *, version: str = "1.18.25", parent_id: str | None = None) -> dict[str, Any]:
-    info: dict[str, Any] = {"id": session_id, "version": version}
-    if parent_id is not None:
-        info["parentID"] = parent_id
-    return info
-
-
 def _text_part(session_id: str, message_id: str, part_id: str, text: str) -> dict[str, Any]:
     return {"id": part_id, "sessionID": session_id, "messageID": message_id, "type": "text", "text": text}
 
 
 def _reasoning_part(session_id: str, message_id: str, part_id: str, text: str = "") -> dict[str, Any]:
     return {"id": part_id, "sessionID": session_id, "messageID": message_id, "type": "reasoning", "text": text}
-
-
-def tool_part(
-    session_id: str,
-    message_id: str,
-    part_id: str,
-    *,
-    call_id: str,
-    tool: str = "bash",
-    status: str = "completed",
-    input: dict[str, Any] | None = None,
-    output: str | None = None,
-    error: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    title: str | None = None,
-) -> dict[str, Any]:
-    state: dict[str, Any] = {"status": status, "input": input or {}}
-    if output is not None:
-        state["output"] = output
-    if error is not None:
-        state["error"] = error
-    if metadata is not None:
-        state["metadata"] = metadata
-    if title is not None:
-        state["title"] = title
-    return {
-        "id": part_id,
-        "sessionID": session_id,
-        "messageID": message_id,
-        "type": "tool",
-        "callID": call_id,
-        "tool": tool,
-        "state": state,
-    }
 
 
 def _step_finish_part(session_id: str, message_id: str, part_id: str, *, input_tokens: int = 10) -> dict[str, Any]:
@@ -126,18 +69,6 @@ def _step_finish_part(session_id: str, message_id: str, part_id: str, *, input_t
         "cost": 0,
         "tokens": {"input": input_tokens, "output": 1, "reasoning": 0, "cache": {"read": 0, "write": 0}},
     }
-
-
-def user_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"info": {"id": message_id, "sessionID": session_id, "role": "user"}, "parts": parts}
-
-
-def assistant_message(session_id: str, message_id: str, parts: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"info": {"id": message_id, "sessionID": session_id, "role": "assistant"}, "parts": parts}
-
-
-def opencode_export(session_id: str, messages: list[dict[str, Any]], **info_kwargs: Any) -> str:
-    return json.dumps({"info": _session_info(session_id, **info_kwargs), "messages": messages})
 
 
 # --- cold `turns_since` ---

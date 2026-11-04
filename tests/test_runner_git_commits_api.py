@@ -43,7 +43,7 @@ from tests.runner_fakes import (
     migrated_store_at,
     single_workspace,
 )
-from tests.test_runner_winter_provider import FakeGit, FakeWinter
+from tests.winter_provider_fakes import FakeGit, FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"

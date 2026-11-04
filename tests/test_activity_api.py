@@ -16,8 +16,8 @@ import pytest
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
+from tests.hub_request_auth import bearer, seed_enrolled
 from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
-from tests.test_fleet_auth import bearer, seed_enrolled
 
 pytestmark = pytest.mark.component
 

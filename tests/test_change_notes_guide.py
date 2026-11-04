@@ -15,9 +15,9 @@ from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.guide import guide
 from blizzard.tools.change_notes.render import render
 from blizzard.tools.change_notes.schedule import due_without_removal
+from tests.change_notes_repo import commit, git
 from tests.compat_stub import stub_compat
 from tests.repo_files import repo_root
-from tests.test_change_notes_render import commit, git
 
 pytestmark = pytest.mark.unit
 

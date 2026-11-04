@@ -71,7 +71,7 @@ def test_the_runner_prototype_matches_a_fresh_migration(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_second_build_hub_over_the_same_directory_keeps_the_first_ones_state(tmp_path: Path) -> None:
-    from tests.test_graphs_api import GRAPH_YAML
+    from tests.graph_yaml import GRAPH_YAML
 
     first = build_hub(tmp_path)
     graph_id = first.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML}).json()["graph_id"]

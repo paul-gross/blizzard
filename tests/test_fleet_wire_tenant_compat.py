@@ -18,11 +18,12 @@ from blizzard.runner.hub.client import TokenIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
 from tests.config_inputs import export_hub_app
+from tests.repo_files import repo_root
 from tests.support import add_tenant, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
 
-_COMMITTED_SPEC = Path(__file__).resolve().parents[1] / "openapi" / "hub.openapi.json"
+_COMMITTED_SPEC = repo_root() / "openapi" / "hub.openapi.json"
 _FLEET = "/api/fleet"
 _METHODS = ("get", "post", "put", "patch", "delete")
 #: The two responses that name the runner's tenant, and the fields each gains.

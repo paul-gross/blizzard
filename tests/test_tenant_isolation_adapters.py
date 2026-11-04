@@ -20,7 +20,7 @@ from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
 from tests.support import build_hub, hub_scoped
-from tests.test_tenant_isolation import Two, seeded
+from tests.tenant_isolation_world import Two, seeded
 
 pytestmark = pytest.mark.component
 

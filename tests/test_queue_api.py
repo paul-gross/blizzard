@@ -538,7 +538,7 @@ def test_reordering_either_list_writes_no_activity_row(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_get_and_put_queue(tmp_path: Path) -> None:
-    from tests.test_fleet_auth import bearer, seed_enrolled
+    from tests.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)

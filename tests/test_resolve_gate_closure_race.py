@@ -29,10 +29,10 @@ from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, hub_store_connections
-from tests.test_decisions_api import (
-    _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared fixture helper owned by another test module; no public surface yet
+from tests.gate_decisions import (
+    _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.gate_decisions
 )
+from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, hub_store_connections
 
 pytestmark = pytest.mark.component
 

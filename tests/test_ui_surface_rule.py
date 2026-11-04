@@ -12,7 +12,7 @@ from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.component
 
-_FIXTURES = Path(__file__).parent / "fixtures" / "ui_surface"
+_FIXTURES = repo_root() / "tests" / "fixtures" / "ui_surface"
 _ROOT = repo_root()
 _VALE = shutil.which("vale")
 _REQUIRED = os.environ.get("BLIZZARD_REQUIRE_VALE") == "1"

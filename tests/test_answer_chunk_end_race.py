@@ -26,8 +26,8 @@ from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.transactions import HubTransactions
+from tests.chunk_questions import ask_question
 from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, hub_store_connections
-from tests.test_questions_api import ask_question
 
 pytestmark = pytest.mark.component
 

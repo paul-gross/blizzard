@@ -17,49 +17,14 @@ from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import chunk_stores, hub_store_connections, report_lease, seed_runner
-from tests.test_flow_driver import (
-    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared graph fixture lives in test_flow_driver; no public helper yet
+from tests.flow_driver_world import (
+    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
     World,
 )
+from tests.flow_route_lines import Line
+from tests.support import chunk_stores, hub_store_connections, report_lease, seed_runner
 
 pytestmark = pytest.mark.component
-
-
-class Line:
-    """Two chunks in one line at ``merge``, the first arrived first, each past its first ``pending`` turn."""
-
-    def __init__(self, tmp_path: Path) -> None:
-        self.world = World(tmp_path)
-        self.client = self.world.hub.client
-        self.first = self.world.at_merge(ref="1")
-        self.world.hub.clock.advance(timedelta(seconds=1))
-        self.second = self.world.at_merge(ref="2")
-        self.world.hub.settle_turns()
-        [self.flow_id] = [flow["flow_id"] for flow in self.client.get("/api/flows").json()["flows"]]
-
-    def submission(self, chunk_id: str) -> Submission:
-        [sub] = self.world.submissions(chunk_id)
-        return sub
-
-    def line(self) -> list[tuple[str, str, int]]:
-        body = self.client.get(f"/api/flows/{self.flow_id}").json()
-        return [(place["chunk_id"], place["state"], place["position"]) for place in body["line"]]
-
-    def chunk_places(self, chunk_id: str) -> list[tuple[str, str, int]]:
-        """The chunk's places as the chunk list and the chunk detail answer them — asserted equal."""
-        rows = {row["chunk_id"]: row for row in self.client.get("/api/chunks").json()["chunks"]}
-        listed = [(p["flow_id"], p["state"], p["position"]) for p in rows[chunk_id]["flow_places"]]
-        detail = [(p["flow_id"], p["state"], p["position"]) for p in self.world.detail(chunk_id)["flow_places"]]
-        assert listed == detail
-        return listed
-
-    def take_turn(self, chunk_id: str) -> None:
-        store = FlowStore(hub_store_connections(self.world.hub.engine), self.world.hub.clock)
-        turn = store.take_turn(
-            self.submission(chunk_id).submission_id, passed_over=frozenset(), terms=(), at=self.world.hub.clock.now()
-        )
-        assert turn is not None
 
 
 @pytest.fixture

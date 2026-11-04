@@ -12,6 +12,7 @@ from alembic.util import CommandError
 from blizzard.foundation.store.migrations import MigrationRunner, RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.store import MIGRATIONS_DIR
+from tests.baseline_floor_trees import make_tree
 
 pytestmark = pytest.mark.unit
 
@@ -19,22 +20,6 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def tree(tmp_path: Path) -> Path:
     return make_tree(tmp_path)
-
-
-def make_tree(tmp_path: Path) -> Path:
-    scripts = tmp_path / "scripts"
-    versions = scripts / "versions"
-    versions.mkdir(parents=True)
-    (scripts / "env.py").write_text((MIGRATIONS_DIR / "env.py").read_text())
-    (versions / "base.py").write_text(
-        'revision = "base_rev"\ndown_revision = None\n'
-        'BASELINE_FLOOR = "v0.2.0"\nABSORBED = frozenset({"old_rev"})\n'
-        "def upgrade(): pass\ndef downgrade(): pass\n"
-    )
-    (versions / "next.py").write_text(
-        'revision = "next_rev"\ndown_revision = "base_rev"\ndef upgrade(): pass\ndef downgrade(): pass\n'
-    )
-    return scripts
 
 
 def _store(path: Path, revision: str) -> None:

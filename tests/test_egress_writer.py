@@ -2,72 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import TypedDict, Unpack
 
 import pytest
 
 from blizzard.hub.egress.writer import (
-    ColumnSpec,
-    ColumnType,
-    DatasetSchema,
-    EgressBatch,
     EgressFailure,
     EgressFailureCause,
-    EgressPass,
     EgressValues,
     FilesWritten,
     ManifestCommitted,
     mint_process_token,
 )
+from tests.egress_world import PASS, RowFields, batch, row
 from tests.support import InMemoryEgressWriter
 
 pytestmark = pytest.mark.unit
-
-SCHEMA = DatasetSchema(
-    "things",
-    1,
-    (
-        ColumnSpec("id", ColumnType.STRING, False, "the id"),
-        ColumnSpec("n", ColumnType.INT64, True, "a count"),
-        ColumnSpec("ok", ColumnType.BOOL, True, "a flag"),
-        ColumnSpec("at", ColumnType.TIMESTAMP, True, "a time"),
-        ColumnSpec("cost", ColumnType.MONEY, True, "money"),
-        ColumnSpec("tags", ColumnType.STRING_LIST, True, "labels"),
-    ),
-)
-PASS = EgressPass(datetime(2026, 10, 1, 6, 15, tzinfo=UTC))
-
-
-class RowFields(TypedDict, total=False):
-    """The test schema's columns, plus a column it does not declare. Every value stays wide:
-    the writer's own validation is what these tests feed malformed values to."""
-
-    id: object
-    n: object
-    ok: object
-    at: object
-    cost: object
-    tags: object
-    extra: object
-
-
-def row(position: str = "p1", /, **overrides: Unpack[RowFields]) -> EgressValues:
-    values: RowFields = {
-        "id": "a",
-        "n": 1,
-        "ok": True,
-        "at": datetime(2026, 10, 1, tzinfo=UTC),
-        "cost": Decimal("1.5"),
-        "tags": ["x"],
-    }
-    values.update(overrides)
-    return EgressValues(position, values)
-
-
-def batch(*rows: EgressValues) -> EgressBatch:
-    return EgressBatch(SCHEMA, date(2026, 10, 1), PASS, rows)
 
 
 def test_a_conforming_batch_is_recorded_and_its_manifest_lists_what_was_passed() -> None:

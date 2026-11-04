@@ -22,10 +22,11 @@ from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDesc
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_env import AllowlistedEnv
+from tests.opencode_export_fakes import FakeExporter
+from tests.opencode_subagent_events import opencode_events, opencode_session, opencode_task, step
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 from tests.support_child_launch import CHILDREN, version_probe
-from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.unit
 
@@ -299,85 +300,6 @@ def test_a_child_on_another_model_is_priced_at_its_own_model(spawn_executor: Exe
 
 
 # --- synthetic sessions -------------------------------------------------------
-
-
-def step(part_id: str, session: str, message: str, tokens: int = 10, cost: float = 0) -> dict[str, Any]:
-    return {
-        "id": part_id,
-        "sessionID": session,
-        "messageID": message,
-        "type": "step-finish",
-        "reason": "stop",
-        "cost": cost,
-        "tokens": {"input": tokens, "output": 1, "reasoning": 0, "cache": {"read": 0, "write": 0}},
-    }
-
-
-def opencode_task(
-    part_id: str,
-    session: str,
-    message: str,
-    child: str,
-    start: int,
-    end: int | None,
-) -> dict[str, Any]:
-    time: dict[str, int] = {"start": start} if end is None else {"start": start, "end": end}
-    return {
-        "id": part_id,
-        "sessionID": session,
-        "messageID": message,
-        "type": "tool",
-        "callID": f"call_{part_id}",
-        "tool": "task",
-        "state": {
-            "status": "completed" if end is not None else "running",
-            "input": {"subagent_type": "x"},
-            "output": "ok",
-            "time": time,
-            "metadata": {"sessionId": child},
-        },
-    }
-
-
-def opencode_session(
-    session: str, parent: str | None, messages: list[tuple[str, int, str, list[dict[str, Any]]]]
-) -> str:
-    info: dict[str, Any] = {"id": session}
-    if parent is not None:
-        info["parentID"] = parent
-    return json.dumps(
-        {
-            "info": info,
-            "messages": [
-                {
-                    "info": {
-                        "id": mid,
-                        "sessionID": session,
-                        "role": "assistant",
-                        "providerID": "openai",
-                        "modelID": model,
-                        "time": {"created": created},
-                    },
-                    "parts": parts,
-                }
-                for mid, created, model, parts in messages
-            ],
-        }
-    )
-
-
-def opencode_events(parts: list[dict[str, Any]], *, root: str = "root", stamp: int = 1_000) -> str:
-    return "\n".join(
-        json.dumps(
-            {
-                "type": "tool_use" if p["type"] == "tool" else "step_finish",
-                "sessionID": root,
-                "timestamp": stamp,
-                "part": p,
-            }
-        )
-        for p in parts
-    )
 
 
 def _synthetic() -> tuple[FakeExporter, str]:

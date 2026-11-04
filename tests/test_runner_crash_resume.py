@@ -28,7 +28,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
-from tests.test_runner_restart_resume import running_chunk
+from tests.runner_resume_world import running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (~1h)

@@ -26,7 +26,7 @@ from tests.runner_fakes import (
     make_store,
 )
 from tests.support import capture_statements, count_rows_read
-from tests.test_transcript_pump import incomplete_batch, normalized_turn, transcript_batch
+from tests.transcript_batches import incomplete_batch, normalized_turn, transcript_batch
 
 pytestmark = pytest.mark.component
 

@@ -12,8 +12,9 @@ from typing import Any
 
 import pytest
 
+from tests.analytics_durations_world import complete_node, mint_chunk, seeded_hub
+from tests.hub_request_auth import cookie
 from tests.support import HubHarness, report_lease
-from tests.test_analytics_durations_api import complete_node, cookie, mint_chunk, seeded_hub
 
 pytestmark = pytest.mark.component
 

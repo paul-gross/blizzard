@@ -6,13 +6,14 @@ from pathlib import Path
 
 import pytest
 
+import tests
 from tests.repo_files import check_repo_read, copied_repo_files, prepare_mutant_tree, repo_root
 
 pytestmark = pytest.mark.unit
 
 
 def test_root_is_the_checkout_containing_the_test_package() -> None:
-    assert repo_root() / "tests" == Path(__file__).resolve().parent
+    assert repo_root() / "tests" == Path(tests.__file__).resolve().parent
 
 
 def test_undeclared_read_is_rejected_until_its_path_is_copied() -> None:

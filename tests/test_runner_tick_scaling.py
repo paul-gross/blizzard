@@ -38,7 +38,7 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
 )
-from tests.test_runner_tick_bulk_reads import migrated_engine
+from tests.runner_tick_engines import migrated_engine
 
 pytestmark = pytest.mark.component
 

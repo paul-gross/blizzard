@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict
@@ -16,8 +14,15 @@ from blizzard.tools.change_notes.breaks import BreakEntry, NamedBreak
 from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.render import render
+from tests.change_notes_repo import (
+    commit,
+    git,
+    repo,
+)
 from tests.compat_stub import entry, stub_compat
-from tests.repo_files import repo_root
+
+# Re-exported so pytest resolves the shared `repo` fixture here; the tests request it by name.
+_FIXTURES = (repo,)
 
 pytestmark = pytest.mark.unit
 
@@ -119,45 +124,6 @@ def test_render_of_only_a_recorded_break_still_has_an_upgrade_notes_section() ->
 
 def test_render_of_no_notes_is_the_commit_block_alone() -> None:
     assert render("v0.3.0", [], {}, _COMMITS).startswith("## Commits\n")
-
-
-def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True).stdout.strip()
-
-
-def commit(repo: Path, message: str, files: dict[str, str]) -> None:
-    for name, text in files.items():
-        (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(text)
-    git(repo, "add", ".")
-    git(repo, "commit", "-m", message)
-
-
-def _fixed(text: str) -> str:
-    return f"---\nkind: fixed\n---\n\n{text}\n"
-
-
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    path = tmp_path / "repo"
-    (path / "scripts").mkdir(parents=True)
-    git(path, "init", "-b", "main")
-    git(path, "config", "user.name", "Test")
-    git(path, "config", "user.email", "test@example.com")
-    shutil.copy(repo_root() / "scripts" / "release-notes.sh", path / "scripts" / "release-notes.sh")
-    commit(path, "feat: first", {"changes/0.1.0/one.md": _fixed("Fixes one."), "README.md": "x"})
-    git(path, "tag", "v0.1.0")
-    commit(
-        path,
-        "fix: second",
-        {"changes/0.2.0/two.md": _fixed("Fixes two."), "changes/0.2.0/shared.md": _fixed("Shared.")},
-    )
-    git(path, "tag", "v0.2.0")
-    git(path, "checkout", "-q", "-b", "release/0.1", "v0.1.0")
-    commit(path, "fix: patch", {"changes/0.1.1/shared.md": _fixed("Shared.")})
-    git(path, "tag", "v0.1.1")
-    git(path, "checkout", "-q", "main")
-    return path
 
 
 @dataclass(frozen=True)

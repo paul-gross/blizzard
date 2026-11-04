@@ -29,8 +29,8 @@ from blizzard.runner.lifecycle.takeover import TakeoverCommand
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ShellCommand
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+from tests.runner_cli_home import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
 from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.test_runner_status_cli import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
 from tests.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)

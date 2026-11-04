@@ -28,7 +28,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_sweeps_per_tenant import close_events, landed_hub_ref
+from tests.tenant_sweeps import close_events, landed_hub_ref
 
 pytestmark = pytest.mark.component
 

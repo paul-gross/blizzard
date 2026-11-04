@@ -19,11 +19,8 @@ from blizzard.hub.domain.observability.transcripts import (
     stored_turns,
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
+from tests.hub_request_auth import bearer, cookie, enroll_runner, enrolled_runner_token, ingest_chunk, register_runner
 from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
-from tests.test_fleet_auth import (
-    enroll_runner,
-    register_runner,
-)
 
 pytestmark = pytest.mark.component
 
@@ -68,26 +65,12 @@ def _record(
     }
 
 
-def cookie(token: str) -> dict[str, str]:
-    return {"Cookie": f"bz_session={token}"}
-
-
-def bearer(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
 def _seed_enrolled(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
     ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
     register_runner(hub, runner_id=runner_id, workspace_id=workspace_id)
     return enroll_runner(hub, runner_id)
-
-
-def ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
-    assert resp.status_code == 201, resp.text
-    return str(resp.json()["chunk_id"])
 
 
 # --- the fleet ingest route ------------------------------------------------------
@@ -208,15 +191,6 @@ def test_get_segment_is_403_below_transcript_read(tmp_path: Path) -> None:
 
     resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=cookie(token))
     assert resp.status_code == 403
-
-
-def enrolled_runner_token(tmp_path: Path) -> str:
-    """A runner token enrolled through its own throwaway hub over ``tmp_path``, for the caller's
-    oauth hub to read — the same two-hub-instances-over-one-store shape ``tests/test_fleet_auth.py``'s
-    own ``_seed_enrolled`` uses."""
-    seed_hub = build_hub(tmp_path)
-    register_runner(seed_hub, runner_id="runner-a", workspace_id="ws-a")
-    return enroll_runner(seed_hub, "runner-a")
 
 
 def test_list_segments_refuses_a_runner_principal(tmp_path: Path) -> None:

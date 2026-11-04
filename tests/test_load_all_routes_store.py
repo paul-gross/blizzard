@@ -12,8 +12,8 @@ import pytest
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.route import Route
+from tests.load_all_facts_seed import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
 from tests.support import count_queries, seed_chunk_record
-from tests.test_load_all_facts_store import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
 
 pytestmark = pytest.mark.component
 

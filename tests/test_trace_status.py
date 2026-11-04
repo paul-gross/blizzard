@@ -16,7 +16,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
 from blizzard.wire.traces import TraceStatusResponse
 from tests.support import HubHarness, InMemoryTraceExporter
-from tests.test_trace_export_sweep import closed_pair, trace_export_sweep
+from tests.trace_export_world import closed_pair, trace_export_sweep
 from tests.trace_hub import trace_hub
 from tests.worker_http import bind_stubs
 

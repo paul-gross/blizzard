@@ -19,7 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.sweeps.names import SweepName
 from tests.config_inputs import load_hub_config
-from tests.test_host_config_keys import document_carrying_every_key
+from tests.config_key_documents import document_carrying_every_key
 
 pytestmark = pytest.mark.unit
 

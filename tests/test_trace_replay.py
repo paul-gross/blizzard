@@ -25,7 +25,7 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.store import schema
 from tests.hub_event_rows import hub_event_rows
 from tests.support import HubHarness, InMemoryTraceExporter, hub_scoped
-from tests.test_trace_export_sweep import closed_pair, trace_export_sweep
+from tests.trace_export_world import closed_pair, trace_export_sweep
 from tests.trace_fixtures import make_facts, runner_epoch
 from tests.trace_hub import trace_hub
 from tests.worker_http import Bound, bind_stubs

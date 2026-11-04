@@ -10,14 +10,14 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
 from tests.github_double import RED, check, comparison
-from tests.test_land_action import (
-    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _forge,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _land,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _row,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _Sink,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
-    _visit,  # pyright: ignore[reportPrivateUsage]  # land-action double shared from test_land_action
+from tests.land_action_doubles import (
+    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _forge,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _land,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _row,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _Sink,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+    _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
 )
 
 pytestmark = pytest.mark.component

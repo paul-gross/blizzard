@@ -144,7 +144,7 @@ def test_authorize_with_session_delivers_a_signed_jwt_via_form_post(tmp_path: Pa
 
 
 def test_authorize_with_no_session_bounces_into_the_single_configured_provider(tmp_path: Path) -> None:
-    from tests.test_auth_login_api import FakeOAuthProvider
+    from tests.oauth_login_double import FakeOAuthProvider
 
     provider = FakeOAuthProvider(name="github")
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH, oauth_providers={"github": provider})
@@ -162,7 +162,7 @@ def test_authorize_with_no_session_bounces_into_the_single_configured_provider(t
 
 
 def test_authorize_with_no_session_and_multiple_providers_bounces_to_the_login_chooser(tmp_path: Path) -> None:
-    from tests.test_auth_login_api import FakeOAuthProvider
+    from tests.oauth_login_double import FakeOAuthProvider
 
     hub = build_hub(
         tmp_path,

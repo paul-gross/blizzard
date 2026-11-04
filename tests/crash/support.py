@@ -18,13 +18,26 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx2
+from sqlalchemy import Connection, select
 
+from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.route_paths import runner_prefix
+from blizzard.runner.store import schema as runner_schema
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.fleet_world import REPO_NAME, basic_workspace, scripted_build
 from tests.harness_sections import claude_code, opencode, sections
-from tests.host_files import init_runner_environment, load_runner_config, sampler_without_credentials, write_host_file
+from tests.host_files import (
+    init_runner_environment,
+    load_runner_config,
+    sampler_without_credentials,
+    write_host_file,
+)
+from tests.runner_fakes import (
+    runner_store_errors,
+)
 from tests.runner_join import join_runner, runner_spawn_env
 from tests.support import (
     LISTENING_FILE,
@@ -869,3 +882,127 @@ def wait_status(client: httpx2.Client, chunk_id: str, targets: set[str], *, time
                     return status
         time.sleep(0.25)
     return status
+
+
+@contextlib.contextmanager
+def _audit_connection(runner_dir: Path) -> Generator[Connection]:
+    """A read connection over every runner's rows in the runner's sqlite, as the invariant checker's audit opens one."""
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
+    try:
+        audit = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock()).runner_audit
+        with audit.connect() as conn:
+            yield conn
+    finally:
+        engine.dispose()
+
+
+def leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:
+    """Every lease row (active or closed) for a chunk: (lease_id, epoch, session_id, pid)."""
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(
+                runner_schema.leases.c.lease_id,
+                runner_schema.leases.c.epoch,
+                runner_schema.leases.c.session_id,
+                runner_schema.leases.c.pid,
+            ).where(runner_schema.leases.c.chunk_id == chunk_id)
+        ).all()
+    return [(str(r[0]), int(r[1]), r[2], r[3]) for r in rows]
+
+
+@scripted_build
+def _hang_once_build_script(landed_file: str, marker: Path) -> str:
+    """Commit ``landed_file``, then ``hang()`` — but only the *first* time, so a fresh
+    re-claim after the detach finds the marker and returns normally instead of hanging
+    a second time."""
+    return (
+        "import pathlib, subprocess\n"
+        f"repo = {REPO_NAME!r}\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
+        'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+        "subprocess.run(\n"
+        '    ["git", "-C", repo,\n'
+        '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "    check=True,\n"
+        ")\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        "    check=True,\n"
+        ")\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('hung once\\n')\n"
+        "    hang()\n"
+    )
+
+
+def abandon_graph_yaml(landed_file: str, marker: Path) -> str:
+    """The hang-once ``build -> deliver`` graph this scenario detaches mid-flight."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": _hang_once_build_script(landed_file, marker),
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed before the detach; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": land_node(),
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def await_marker(marker: Path, *, timeout: float = 30.0) -> None:
+    """Block until ``marker`` exists — proof the first attempt reached its hang, past the
+    commit, so the detach it races is pinned strictly after that point rather than racing
+    the pre-commit write."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if marker.exists():
+            return
+        time.sleep(0.2)
+    raise AssertionError(f"the build worker never reached its hang-once marker ({marker}) before the timeout")
+
+
+def _closure_reason(runner_dir: Path, lease_id: str) -> str | None:
+    """The closure reason recorded for ``lease_id``, or ``None`` if it is still active."""
+    with _audit_connection(runner_dir) as conn:
+        row = conn.execute(
+            select(runner_schema.lease_closures.c.reason).where(runner_schema.lease_closures.c.lease_id == lease_id)
+        ).first()
+    return str(row[0]) if row is not None else None
+
+
+def wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> str | None:
+    """Poll until ``lease_id`` closes, or the timeout elapses (return whatever was last seen)."""
+    deadline = time.monotonic() + timeout
+    reason = None
+    while time.monotonic() < deadline:
+        reason = _closure_reason(runner_dir, lease_id)
+        if reason is not None:
+            return reason
+        time.sleep(0.25)
+    return reason

@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
 from tests.support import HubHarness, build_hub
-from tests.test_auth_login_api import ADA, FakeOAuthProvider, known_ada, state_from_redirect
 
 pytestmark = pytest.mark.component
 

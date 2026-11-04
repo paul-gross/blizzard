@@ -15,7 +15,6 @@ alone."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -30,11 +29,12 @@ from blizzard.auth_core import Role
 from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
-from blizzard.hub.auth.invitations import InvitationRecord, InvitationToken, TenantInvitation
+from blizzard.hub.auth.invitations import InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import Identity, ProviderIdentity
 from blizzard.hub.store import schema
-from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.tenancy import TenantClosed, TenantId
+from tests.invitation_reads import resolved_after_first_read
+from tests.oauth_login_double import FakeOAuthProvider, state_from_redirect
 from tests.support import (
     HubHarness,
     build_hub,
@@ -46,7 +46,6 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_auth_login_api import FakeOAuthProvider, state_from_redirect
 
 pytestmark = pytest.mark.component
 
@@ -383,24 +382,6 @@ def test_an_invitation_is_accepted_at_most_once(tmp_path: Path) -> None:
 
     assert again is SignInRefusal.INVITATION_UNUSABLE
     assert _written(hub) == after_first
-
-
-def resolved_after_first_read(monkeypatch: pytest.MonkeyPatch, rival: Callable[[], object]) -> None:
-    """Interleave ``rival`` between the next invitation read and its reader's write: that read answers the invitation
-    as it stood before any outcome was recorded — live — and ``rival`` runs right after it; every later read is real."""
-    real_get = InvitationStore.get
-    reads = 0
-
-    def get(store: InvitationStore, invitation_id: str) -> InvitationRecord | None:
-        nonlocal reads
-        reads += 1
-        record = real_get(store, invitation_id)
-        if reads > 1 or record is None:
-            return record
-        rival()
-        return InvitationRecord(record.invitation, None)
-
-    monkeypatch.setattr(InvitationStore, "get", get)
 
 
 def test_a_revocation_that_loses_to_an_acceptance_answers_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

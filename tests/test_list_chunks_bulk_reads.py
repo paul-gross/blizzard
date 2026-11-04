@@ -33,6 +33,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
+from tests.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
 from tests.support import (
     FakeWorkSource,
     HubHarness,
@@ -48,7 +49,6 @@ from tests.support import (
     seed_graph,
     serve_default_tenant,
 )
-from tests.test_ingest_and_queue import BUILD_REVIEW_DELIVER_YAML, pass_node
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

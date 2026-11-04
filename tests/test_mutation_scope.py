@@ -13,9 +13,11 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+_SCRIPTS = repo_root() / "scripts"
 
 
 def _load_module(name: str, path: Path) -> ModuleType:

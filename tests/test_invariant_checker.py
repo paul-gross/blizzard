@@ -24,7 +24,17 @@ from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
-from tests.config_inputs import init_host, init_hub
+from tests.config_inputs import init_host
+from tests.invariant_checker_world import (
+    _flow,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _link,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _submit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+    _terms,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+)
 from tests.migration_support_invariant_checker import NOW, PROJECT_INVARIANTS, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import (
@@ -59,10 +69,6 @@ def _set_counters(engine: sa.Engine, *, outbound: int | None = None, transcript:
         for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, outbound), (runner.OUTBOX_LANE_TRANSCRIPT, transcript)):
             if last_seq is not None:
                 conn.execute(insert(runner.outbox_counters).values(lane=lane, last_seq=last_seq))
-
-
-def _hub_engine(tmp_path: Path) -> sa.Engine:
-    return create_engine_from_url(init_hub(tmp_path / "hub").db_url)
 
 
 def _bind_held(engine: sa.Engine, *rows: tuple[str, str, str | None]) -> None:
@@ -2923,28 +2929,6 @@ def _forge(conn: sa.Connection, forge_id: str, *, tenant: str, api_base: str, we
     )
 
 
-def _forge_repository(
-    conn: sa.Connection, repository_id: str, *, tenant: str, forge_id: str | None, forge_api_url: str
-) -> None:
-    conn.execute(
-        hub_scoped(insert(hub.repositories)).values(
-            tenant_id=tenant,
-            repository_id=repository_id,
-            slug=repository_id,
-            name=repository_id,
-            forge_api_url=forge_api_url,
-            owner="acme",
-            repo=repository_id,
-            base_branch="main",
-            secret_name="tok",
-            revision=1,
-            created_at=NOW,
-            created_by="test",
-            forge_id=forge_id,
-        )
-    )
-
-
 def _forge_source(
     conn: sa.Connection,
     work_source_id: str,
@@ -3107,77 +3091,6 @@ def _flow_line_breaches(engine: sa.Engine, *, now: datetime = NOW + timedelta(ho
     """The three flow invariants' breaches alone, judged at ``now``."""
     flow_invariants = {"hub:one-turn-per-flow", "hub:one-turn-per-visit", "hub:flow-line-standing"}
     return [v.invariant for v in hub_invariants(engine, clock=FixedClock(now)).run() if v.invariant in flow_invariants]
-
-
-def _seed_at_deliver(conn: sa.Connection, chunk_id: str = "ch_1") -> None:
-    """A chunk whose newest movement entered ``nd_deliver`` at epoch 1."""
-    conn.execute(
-        insert(hub.chunks).values(stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=NOW, model="m"))
-    )
-    conn.execute(
-        insert(hub.lease_facts).values(stamp(hub.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r", minted_at=NOW))
-    )
-    conn.execute(
-        insert(hub.transitions).values(
-            stamp(
-                hub.transitions,
-                transition_id=f"tr_{chunk_id}",
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                from_node_id="nd_build",
-                to_node_id="nd_deliver",
-                choice_name="pass",
-                epoch=1,
-                runner_id="r",
-                recorded_at=NOW,
-            )
-        )
-    )
-
-
-def _submit(
-    conn: sa.Connection, submission_id: str, *, chunk_id: str, node_id: str, arrival: int, flow_id: str
-) -> None:
-    conn.execute(
-        insert(hub.flow_submissions).values(
-            stamp(
-                hub.flow_submissions,
-                submission_id=submission_id,
-                chunk_id=chunk_id,
-                node_id=node_id,
-                epoch=1,
-                generation=0,
-                arrival=arrival,
-                submitted_at=NOW,
-            )
-        )
-    )
-    conn.execute(
-        insert(hub.flow_submission_flows).values(
-            stamp(hub.flow_submission_flows, submission_id=submission_id, flow_id=flow_id)
-        )
-    )
-
-
-def _flow(conn: sa.Connection, flow_id: str = "flw_main") -> None:
-    conn.execute(
-        insert(hub.flows).values(
-            stamp(
-                hub.flows,
-                flow_id=flow_id,
-                resource="repo:repo_a/main",
-                repository_id="repo_a",
-                branch="main",
-                created_at=NOW,
-            )
-        )
-    )
-
-
-def _open_turn(conn: sa.Connection, turn_id: str, submission_id: str) -> None:
-    conn.execute(
-        insert(hub.hub_turns).values(stamp(hub.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=NOW))
-    )
 
 
 def test_a_line_whose_visits_stand_at_their_node_holds_every_flow_invariant(tmp_path: Path) -> None:
@@ -3384,14 +3297,6 @@ def _other_tenant(conn: sa.Connection) -> None:
     )
 
 
-def _link(conn: sa.Connection, project_id: str, repository_id: str, *, tenant: str) -> None:
-    conn.execute(
-        insert(hub.project_repository_links).values(
-            tenant_id=tenant, project_id=project_id, repository_id=repository_id, revision=1
-        )
-    )
-
-
 def _position(conn: sa.Connection, project_id: str, repository_id: str, position: float | None = 1.0) -> int:
     inserted = conn.execute(
         insert(hub.project_repository_positions).values(
@@ -3407,19 +3312,6 @@ def _position(conn: sa.Connection, project_id: str, repository_id: str, position
     ).inserted_primary_key
     assert inserted is not None
     return int(inserted[0])
-
-
-def _terms(conn: sa.Connection, submission_id: str, repository_id: str) -> None:
-    conn.execute(
-        insert(hub.flow_submission_terms).values(
-            stamp(
-                hub.flow_submission_terms,
-                submission_id=submission_id,
-                repository_id=repository_id,
-                landing_policy="merge-on-checks",
-            )
-        )
-    )
 
 
 def test_a_landing_position_or_terms_naming_another_tenants_repository_is_a_violation(tmp_path: Path) -> None:

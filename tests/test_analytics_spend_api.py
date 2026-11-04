@@ -20,8 +20,15 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from tests.support import FakeWorkSource, HubHarness, build_hub, claim_route, pointer_token, seed_session, seed_user
-from tests.test_fleet_auth import seed_enrolled
+from tests.analytics_spend_world import (
+    _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.analytics_spend_world
+    _cookie,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.analytics_spend_world
+    mint_chunk,
+    push_usage,
+    seeded_hub,
+)
+from tests.hub_request_auth import seed_enrolled
+from tests.support import FakeWorkSource, build_hub, claim_route, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -33,34 +40,6 @@ _ROUTES = [
     "/api/analytics/spend/chunks/ndjson",
 ]
 
-#: Named to match the packaged default graph's own name, so `POST /api/chunks` mints
-#: onto *this* graph — see `tests/test_analytics_durations_api.py`'s own note.
-_GRAPH_YAML = """
-name: default-delivery
-entry: build
-nodes:
-  build:
-    executor: runner
-    prompt: Build it.
-    judgement:
-      prompt: Assess the build.
-      choices:
-        pass:
-          description: Complete.
-          to: review
-        fail:
-          description: Incomplete.
-          to: build
-  review:
-    executor: runner
-    prompt: Review it.
-    judgement:
-      prompt: Assess the review.
-      choices:
-        pass:
-          description: Complete.
-          to: done
-"""
 
 _OTHER_GRAPH_YAML = """
 name: spend-fixture-other
@@ -78,65 +57,8 @@ nodes:
 """
 
 
-def _cookie(token: str) -> dict[str, str]:
-    return {"Cookie": f"bz_session={token}"}
-
-
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):
-    hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
-    admin = seed_user(hub, username="admin", role=Role.ADMIN)
-    admin_token = seed_session(hub, admin)
-    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token))
-    assert graph.status_code == 201, graph.text
-    graph_id = graph.json()["graph_id"]
-    nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-
-    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
-    token = seed_session(hub, contributor)
-    return hub, token, graph_id, nodes
-
-
-def mint_chunk(hub: HubHarness, token: str, *, source: str = "default", ref: str = "1") -> str:
-    resp = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
-    )
-    assert resp.status_code == 201, resp.text
-    return str(resp.json()["chunk_id"])
-
-
-def push_usage(
-    hub: HubHarness,
-    *,
-    chunk_id: str,
-    node_id: str,
-    epoch: int,
-    seq: int,
-    cost_usd: float | None,
-    estimated_cost_usd: float | None = None,
-) -> None:
-    payload = {
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": epoch,
-        "kind": "spawn",
-        "model": "claude-opus-4-8",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 10,
-        "cache_create_tokens": 5,
-        "cost_usd": cost_usd,
-    }
-    if estimated_cost_usd is not None:
-        payload["estimated_cost_usd"] = estimated_cost_usd
-    resp = hub.client.post(
-        "/api/fleet/events",
-        json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
-    )
-    assert resp.status_code == 200, resp.text
 
 
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------

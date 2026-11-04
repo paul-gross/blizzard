@@ -25,6 +25,7 @@ from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from tests.repo_files import repo_root
 from tests.support_child_launch import CHILDREN
 
 
@@ -125,7 +126,7 @@ if len(sys.argv) > 2 and sys.argv[2] == "confirm":
 
 
 def _launch_in_a_throwaway_process(pid_file: str, *, confirm: bool) -> tuple[int, int]:
-    src_root = os.path.join(os.path.dirname(__file__), "..", "src")
+    src_root = str(repo_root() / "src")
     args = [sys.executable, "-c", _GRANDCHILD_LAUNCH_SCRIPT.format(src=src_root), pid_file]
     if confirm:
         args.append("confirm")

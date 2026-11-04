@@ -38,7 +38,7 @@ from blizzard.hub.egress.writer import (
     PlacedFile,
 )
 from tests.egress_recipes import LOAD_NDJSON, LOAD_PARQUET, load
-from tests.test_egress_writer import PASS, SCHEMA, batch, row
+from tests.egress_world import PASS, SCHEMA, batch, row
 
 pytestmark = pytest.mark.component
 

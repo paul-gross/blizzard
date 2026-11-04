@@ -21,7 +21,6 @@ from sqlalchemy import Engine
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -36,7 +35,6 @@ from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.status.view import RunnerStatusService
 from tests import support
-from tests.config_inputs import init_host
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -50,16 +48,12 @@ from tests.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.runner_tick_engines import migrated_engine
 from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
-
-
-def migrated_engine(tmp_path: Path) -> Engine:
-    config = init_host(tmp_path)
-    return create_engine_from_url(config.db_url)
 
 
 def _store(tmp_path: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:

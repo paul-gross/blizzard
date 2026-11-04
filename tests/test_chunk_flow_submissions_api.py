@@ -15,6 +15,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
+from tests.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
 from tests.support import (
     HubHarness,
     add_tenant,
@@ -28,7 +29,6 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.test_transcript_segments_api import bearer, cookie, enrolled_runner_token, ingest_chunk
 
 pytestmark = pytest.mark.component
 

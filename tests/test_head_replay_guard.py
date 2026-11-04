@@ -14,7 +14,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
 from tests.repo_files import repo_root
 from tests.support import hub_migration_prototype, migrate_to
-from tests.test_pin_migration_prototype import test_the_hub_prototype_matches_a_fresh_migration
 
 
 @pytest.mark.unit
@@ -71,7 +70,12 @@ def test_a_tail_upgrade_and_a_migration_module_replay_pass(tmp_path: Path) -> No
     assert runner.current_revision() == runner.script_head()
     fresh = tmp_path / "fresh"
     fresh.mkdir()
-    test_the_hub_prototype_matches_a_fresh_migration(fresh)
+    # A migration-named test module's from-empty replay is what the guard lets through: run the replay from a
+    # caller whose module file is one, without importing a test module.
+    replaying = hub_migration_runner(HubConfig(root=fresh, db_url=f"sqlite:///{fresh / 'fresh-hub.db'}"))
+    module_file = str(repo_root() / "tests" / "test_migration_replay.py")
+    exec(compile("runner.upgrade('head')", module_file, "exec"), {"__file__": module_file, "runner": replaying})
+    assert replaying.current_revision() == replaying.script_head()
 
 
 @pytest.mark.unit

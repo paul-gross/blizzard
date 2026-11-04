@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
+from tests.loaded_modules import loaded_after_running
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -3400,18 +3401,6 @@ def _loaded_after_importing(module: str) -> set[str]:
     return set(json.loads(result.stdout))
 
 
-def loaded_after_running(argv: list[str], env: dict[str, str] | None = None) -> set[str]:
-    """The modules a ``blizzard`` invocation leaves loaded, in a fresh interpreter."""
-    code = (
-        "import sys, json; from click.testing import CliRunner; from blizzard.cli.main import blizzard; "
-        f"CliRunner().invoke(blizzard, {argv!r}); print(json.dumps(sorted(sys.modules)))"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True, env={**os.environ, **(env or {})}
-    )
-    return set(json.loads(result.stdout))
-
-
 def test_a_worker_verb_loads_no_opentelemetry() -> None:
     """A worker verb is a short-lived process that must not pay for the OpenTelemetry SDK."""
     loaded = loaded_after_running(
@@ -4789,3 +4778,90 @@ def test_the_exemplars_keep_every_block_within_its_cap() -> None:
     trees = (_EXEMPLAR_DIR, _EXEMPLAR_DIR.parent / "tests")
     violations = [v for tree in trees for path in sorted(tree.rglob("*.py")) for v in prose_caps.over_cap_blocks(path)]
     assert not violations, f"exemplar prose over cap: {violations}"
+
+
+def _test_module_imports(tests_root: Path) -> list[str]:
+    """Every import, in a ``test_*.py`` module under ``tests_root``, of a module whose last component starts with
+    ``test_``. Absolute, relative, ``from <package> import test_x``, and function-local imports all resolve to the
+    module path they name."""
+    top = tests_root.name
+    violations: list[str] = []
+    for path in sorted(tests_root.rglob("test_*.py")):
+        importer = list(path.relative_to(tests_root.parent).with_suffix("").parts)
+        package = importer[:-1]
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                named = [alias.name.split(".") for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = package[: len(package) - (node.level - 1)] if node.level else []
+                base = [*base, *(node.module.split(".") if node.module else [])]
+                named = [base, *([*base, alias.name] for alias in node.names)]
+            else:
+                continue
+            for module in named:
+                if module[:1] == [top] and module[-1].startswith("test_"):
+                    violations.append(
+                        f"{path.relative_to(tests_root.parent)}:{node.lineno} imports {'.'.join(module)}"
+                        " (bzh:test-imports-support-only)"
+                    )
+                    break
+    return violations
+
+
+def test_no_test_module_imports_another_test_module() -> None:
+    """A test module shares code through a support module, never by importing another test module
+    (``bzh:test-imports-support-only``)."""
+    violations = _test_module_imports(_REPO_ROOT / "tests")
+    assert not violations, f"test modules import test modules: {violations}"
+
+
+def _plant_tests(tmp_path: Path, importer: str, statement: str) -> list[str]:
+    """A ``tests`` package holding a test module, a support module, and a kind folder, where ``importer``
+    holds one ``statement``."""
+    tests = tmp_path / "tests"
+    for rel, text in {
+        "__init__.py": "",
+        "test_a.py": "VALUE = 1\n",
+        "support_a.py": "VALUE = 1\n",
+        "kind/__init__.py": "",
+        "kind/test_b.py": "VALUE = 1\n",
+    }.items():
+        (tests / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tests / rel).write_text(text)
+    (tests / importer).write_text(f"{statement}\n")
+    return _test_module_imports(tests)
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("test_c.py", "from tests.test_a import VALUE"),
+        ("test_c.py", "import tests.test_a"),
+        ("test_c.py", "from tests import test_a"),
+        ("test_c.py", "from . import test_a"),
+        ("test_c.py", "from .test_a import VALUE"),
+        ("test_c.py", "def f():\n    from tests.test_a import VALUE"),
+        ("kind/test_c.py", "from tests.test_a import VALUE"),
+        ("test_c.py", "from tests.kind.test_b import VALUE"),
+        ("kind/test_c.py", "from .test_b import VALUE"),
+        ("kind/test_c.py", "from ..test_a import VALUE"),
+    ],
+)
+def test_the_test_import_check_catches_every_import_form(tmp_path: Path, importer: str, statement: str) -> None:
+    violations = _plant_tests(tmp_path, importer, statement)
+    assert len(violations) == 1
+    assert violations[0].endswith("(bzh:test-imports-support-only)")
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("test_c.py", "from tests.support_a import VALUE"),
+        ("test_c.py", "from tests import support_a"),
+        ("kind/test_c.py", "from tests.support_a import VALUE"),
+        ("support_c.py", "from tests.test_a import VALUE"),
+    ],
+)
+def test_the_test_import_check_admits_support_modules(tmp_path: Path, importer: str, statement: str) -> None:
+    assert _plant_tests(tmp_path, importer, statement) == []

@@ -11,8 +11,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, hub_scoped
-from tests.test_garden_delivery_api import (
+from tests.garden_delivery_world import (
     SCOPE,
     add_op,
     finding_count,
@@ -22,6 +21,7 @@ from tests.test_garden_delivery_api import (
     seed_chunk,
     seed_scope,
 )
+from tests.support import build_hub, hub_scoped
 
 pytestmark = pytest.mark.component
 

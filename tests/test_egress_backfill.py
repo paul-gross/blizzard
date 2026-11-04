@@ -19,10 +19,10 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
-from tests.test_egress_events_sweep import OLD_VERSION, Events
-from tests.test_egress_sweep import (
+from tests.egress_world import (
+    OLD_VERSION,
     SETTLED,
+    Events,
     closed_step,
     egress_cursor_rows,
     egress_hub,
@@ -33,6 +33,7 @@ from tests.test_egress_sweep import (
     kinds,
     project_of,
 )
+from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
 from tests.trace_hub import seed_open_tenant_chunk, trace_store
 from tests.worker_http import bind_stubs
 

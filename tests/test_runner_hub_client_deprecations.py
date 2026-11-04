@@ -15,7 +15,6 @@ import re
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, cast
 
 import httpx2
@@ -30,10 +29,11 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.node_steps.submissions import Completion, GateSubmission
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.component
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = repo_root()
 _SPEC: dict[str, Any] = json.loads((_ROOT / "openapi" / "hub.openapi.json").read_text())
 _API_DIR = _ROOT / "src" / "blizzard" / "runner" / "api"
 _METHODS = ("get", "post", "put", "patch", "delete")

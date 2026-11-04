@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.service.test_parity_guard import assert_ihubclient_endpoint_table_matches_protocol
+from tests.ihubclient_parity import assert_ihubclient_endpoint_table_matches_protocol
 
 pytestmark = pytest.mark.unit
 

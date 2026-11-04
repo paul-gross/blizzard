@@ -15,7 +15,7 @@ from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
 from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
-from tests.test_layering import loaded_after_running
+from tests.loaded_modules import loaded_after_running
 from tests.worker_http import StubClient
 
 pytestmark = pytest.mark.unit

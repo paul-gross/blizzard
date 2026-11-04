@@ -14,13 +14,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_TESTS_DIR = Path(__file__).resolve().parent
+_TESTS_DIR = repo_root() / "tests"
 
 #: Resolved, because ``rglob`` yields paths under the already-resolved ``_TESTS_DIR``, or this file flags
 #: its own docstring under a symlinked checkout.
-_SELF = Path(__file__).resolve()
+_SELF = _TESTS_DIR / "test_daemon_port_zero.py"
 
 #: A port chooser by name, in either language: ``free_port``, ``freePort``, ``otelcolFreePort``.
 _CHOOSER_NAME = re.compile(r"free_?port", re.IGNORECASE)

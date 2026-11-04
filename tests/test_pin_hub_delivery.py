@@ -8,48 +8,20 @@ decision is reverted. Grouped by the module whose decision they pin.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.graphs import PACKAGED
 from tests.github_double import GitHubDouble
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.pin_hub_delivery_world import mint_and_claim, writable
+from tests.support import HubHarness, build_hub, report_lease
 
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
-
-
-def writable(hub: HubHarness) -> IWriteChunkMovementRepository:
-    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
-
-
-def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
-    """Mint the packaged adv-dwf graph, ingest a chunk, repin it onto adv-dwf, and claim a
-    route — the same sequence ``tests/test_delivery_conflict_routing.py`` uses."""
-    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)
-    minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
-    assert minted.status_code == 201, minted.text
-    graph_id = minted.json()["graph_id"]
-    nodes = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}
-    chunk_id = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "1"})]}
-    ).json()["chunk_id"]
-    repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": graph_id})
-    assert repin.status_code == 202, repin.text
-    hub.promote(chunk_id)
-    hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
-    )
-    return chunk_id, nodes
 
 
 def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: str, nodes: dict[str, str]) -> None:
