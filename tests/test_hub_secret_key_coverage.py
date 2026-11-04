@@ -1,7 +1,7 @@
 """The hub refuses to start when a stored secret's key generation is missing (component tier).
 
 Proven on ``build_hosted_app`` itself — ``tests/support.py::build_hub`` bypasses it —
-the ``tests/test_hub_platform_tracing.py`` shape."""
+the ``tests/component/hub/test_app_platform_tracing.py`` shape."""
 
 from __future__ import annotations
 

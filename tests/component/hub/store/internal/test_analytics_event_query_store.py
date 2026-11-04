@@ -1,0 +1,489 @@
+"""The analytics event query seam: every filter alone and combined, keyset paging
+covering a result set exactly once with no repeats, and the four canned counts honoring
+the same filters."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, NamedTuple, TypedDict, Unpack
+
+import pytest
+from sqlalchemy import Engine, insert
+
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
+from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
+from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
+from tests.support import count_rows_read, hub_store_connections, migrated_hub_at, mint_graph, stamp
+
+_VERSION = "blizzard-analytics/2"
+_OTHER_VERSION = "blizzard-analytics/1"
+_NOW = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+#: Comfortably over any fixture here, so a page bound never shapes what a filter returns.
+_LIMIT = 50
+_PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
+_OTHER_PROVENANCE = SegmentProvenance(harness_id="opencode", harness_version="2.0", model="gpt-5.6-luna", effort="max")
+
+
+class _EventFields(TypedDict, total=False):
+    kind: str
+    turn_path: str
+    occurrence: int
+    payload: str
+    subject: str | None
+    tool: str | None
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    graph_id: str
+    depth: int
+    agent_type: str | None
+    occurred_at: datetime | None
+
+
+class _CriteriaFields(TypedDict, total=False):
+    extractor_version: str
+    kind: str | None
+    tool: str | None
+    subject_prefix: str | None
+    node_id: str | None
+    graph_id: str | None
+    source: str | None
+    since: datetime | None
+    until: datetime | None
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
+
+
+def _event(**overrides: Unpack[_EventFields]) -> TranscriptEvent:
+    values: _EventFields = {
+        "kind": "file_read",
+        "turn_path": "0",
+        "occurrence": 0,
+        "payload": "{}",
+        "subject": "src/a.py",
+        "tool": "Read",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "spawn_generation": 1,
+        "graph_id": "gr_1",
+        "depth": 0,
+        "agent_type": None,
+        "occurred_at": _NOW,
+    }
+    values.update(overrides)
+    return TranscriptEvent(**values)
+
+
+def _criteria(**overrides: Unpack[_CriteriaFields]) -> EventQueryCriteria:
+    values: _CriteriaFields = {"extractor_version": _VERSION}
+    values.update(overrides)
+    return EventQueryCriteria(**values)
+
+
+class _Fixture(NamedTuple):
+    """A migrated, empty store, the engine behind it, and the writer its tests seed
+    through — the write path is the event store's own, never ad-hoc SQL."""
+
+    store: AnalyticsEventQueryStore
+    engine: Engine
+    insert_events: Any
+
+
+def _new_store(tmp_path: Path) -> _Fixture:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migrated_hub_at(db_url)
+    engine = create_engine_from_url(db_url)
+    connections = hub_store_connections(engine)
+    writer = TranscriptEventStore(connections)
+
+    def insert_events(
+        segment_id: str,
+        *events: TranscriptEvent,
+        extractor_version: str = _VERSION,
+        provenance: SegmentProvenance = _PROVENANCE,
+    ) -> None:
+        writer.replace_segment_events(
+            segment_id,
+            extractor_version,
+            list(events),
+            complete=True,
+            content_fingerprint="fp",
+            at=_NOW,
+            provenance=provenance,
+        )
+
+    return _Fixture(AnalyticsEventQueryStore(connections), engine, insert_events)
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> AnalyticsEventQueryStore:
+    store, engine, insert_events = _new_store(tmp_path)
+    insert_events(
+        "sg_1",
+        _event(kind="file_read", subject="src/a.py", tool="Read", node_id="nd_build", graph_id="gr_1"),
+        _event(
+            kind="file_read",
+            turn_path="1",
+            subject="src/b.py",
+            tool="Read",
+            node_id="nd_build",
+            graph_id="gr_1",
+            chunk_id="ch_1",
+            occurred_at=_NOW.replace(hour=13),
+        ),
+        _event(
+            kind="skill_invocation",
+            subject="wf-commit",
+            tool="Skill",
+            payload="{}",
+            node_id="nd_build",
+            graph_id="gr_1",
+            chunk_id="ch_1",
+        ),
+        _event(
+            kind="agent_spawn",
+            subject="explorer",
+            tool="Task",
+            agent_type=None,
+            node_id="nd_build",
+            graph_id="gr_1",
+            chunk_id="ch_1",
+        ),
+    )
+    insert_events(
+        "sg_2",
+        _event(
+            kind="file_read",
+            subject="src/c.py",
+            tool="Read",
+            node_id="nd_review",
+            graph_id="gr_2",
+            chunk_id="ch_2",
+            agent_type="explorer",
+            occurred_at=_NOW.replace(day=13),
+        ),
+        provenance=_OTHER_PROVENANCE,
+    )
+    # A prior-version row — must never surface under `_VERSION`'s reads (mixing
+    # versions double-counts the same occurrence).
+    insert_events(
+        "sg_1",
+        _event(kind="file_read", subject="src/a.py", tool="Read", node_id="nd_build", graph_id="gr_1"),
+        extractor_version=_OTHER_VERSION,
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.chunk_work_refs).values(stamp(s.chunk_work_refs, chunk_id="ch_1", source="github", ref="255"))
+        )
+        conn.execute(
+            insert(s.chunk_work_refs).values(stamp(s.chunk_work_refs, chunk_id="ch_2", source="jira", ref="EX-1"))
+        )
+
+    return store
+
+
+# --- events: each filter alone -------------------------------------------------
+
+
+def test_extractor_version_scopes_reads_to_one_version(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(), limit=_LIMIT)
+    assert len(page.events) == 5
+    assert all(e.tool != "" for e in page.events)
+
+    page_other = store.events(_criteria(extractor_version=_OTHER_VERSION), limit=_LIMIT)
+    assert len(page_other.events) == 1
+
+
+def test_kind_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(kind="skill_invocation"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["wf-commit"]
+
+
+def test_tool_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(tool="Task"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["explorer"]
+
+
+def test_subject_prefix_filters_events_by_subject(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(subject_prefix="src/"), limit=_LIMIT)
+    assert {e.subject for e in page.events} == {"src/a.py", "src/b.py", "src/c.py"}
+
+
+def test_node_id_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(node_id="nd_review"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_graph_id_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(graph_id="gr_2"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_harness_id_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(harness_id="opencode"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_harness_version_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(harness_version="2.0"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_model_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(model="gpt-5.6-luna"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_effort_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(effort="max"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_events_carry_their_own_provenance(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(graph_id="gr_2"), limit=_LIMIT)
+    [event] = page.events
+    assert (event.harness_id, event.harness_version, event.model, event.effort) == (
+        "opencode",
+        "2.0",
+        "gpt-5.6-luna",
+        "max",
+    )
+
+
+def test_source_filters_by_chunk_work_ref_existence(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(source="jira"), limit=_LIMIT)
+    assert {e.chunk_id for e in page.events} == {"ch_2"}
+
+
+def test_time_range_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(since=_NOW.replace(hour=12, minute=30)), limit=_LIMIT)
+    assert {e.subject for e in page.events} == {"src/b.py", "src/c.py"}
+
+    page = store.events(_criteria(until=_NOW.replace(hour=12, minute=30)), limit=_LIMIT)
+    assert {e.subject for e in page.events} == {"src/a.py", "wf-commit", "explorer"}
+
+
+def test_an_untimed_event_falls_outside_every_time_range(tmp_path: Path) -> None:
+    """A turn can carry no timestamp at all, and a real fleet's transcripts do: such an
+    event is filtered out by a range rather than counted as unbounded, and never errors."""
+    store, _engine, insert_events = _new_store(tmp_path)
+    insert_events(
+        "sg_1",
+        _event(subject="src/untimed.py", occurred_at=None),
+        _event(turn_path="1", subject="src/timed.py"),
+    )
+
+    assert len(store.events(_criteria(), limit=_LIMIT).events) == 2
+    for criteria in (_criteria(since=_NOW.replace(hour=1)), _criteria(until=_NOW.replace(hour=23))):
+        assert [e.subject for e in store.events(criteria, limit=_LIMIT).events] == ["src/timed.py"]
+        assert [r.key for r in store.counts_by_file(criteria)] == ["src/timed.py"]
+
+
+def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(kind="file_read", node_id="nd_build", subject_prefix="src/b"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/b.py"]
+
+
+def test_subject_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path) -> None:
+    """A prefix is a prefix, not a pattern: real paths carry ``_`` constantly, so an
+    unescaped LIKE would quietly return files the caller never asked for."""
+    store, _engine, insert_events = _new_store(tmp_path)
+    insert_events(
+        "sg_1",
+        _event(subject="src/a_b.py"),
+        _event(turn_path="1", subject="src/aXb.py"),
+        _event(turn_path="2", subject="src/a%c.py"),
+        _event(turn_path="3", subject="src/azc.py"),
+    )
+
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/a_b"), limit=_LIMIT).events] == ["src/a_b.py"]
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/a%c"), limit=_LIMIT).events] == ["src/a%c.py"]
+    assert [r.key for r in store.counts_by_file(_criteria(subject_prefix="src/a_b"))] == ["src/a_b.py"]
+
+
+def test_subject_prefix_is_case_sensitive(tmp_path: Path) -> None:
+    """The same prefix must select the same rows whichever backend serves it, and only
+    the case-sensitive reading is available on both."""
+    store, _engine, insert_events = _new_store(tmp_path)
+    insert_events("sg_1", _event(subject="src/foo.py"))
+
+    assert store.events(_criteria(subject_prefix="SRC/"), limit=_LIMIT).events == []
+    assert store.counts_by_file(_criteria(subject_prefix="SRC/")) == []
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/"), limit=_LIMIT).events] == ["src/foo.py"]
+
+
+# --- events: keyset paging ------------------------------------------------------
+
+
+def test_paging_covers_the_result_set_exactly_once_with_no_repeats(store: AnalyticsEventQueryStore) -> None:
+    seen: list[int] = []
+    cursor: str | None = None
+    for _ in range(10):  # generous bound on iterations for a 5-row set
+        page = store.events(_criteria(), cursor=cursor, limit=1)
+        assert len(page.events) == 1
+        seen.append(page.events[0].id)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+    assert cursor is None
+    assert sorted(seen) == seen  # ordered
+    assert len(seen) == len(set(seen)) == 5
+
+
+@pytest.mark.parametrize(
+    "cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0", "7", encode_cursor("x"), encode_cursor(1, 2)]
+)
+def test_a_cursor_no_page_minted_is_refused_by_the_seam_that_mints_them(
+    store: AnalyticsEventQueryStore, cursor: str
+) -> None:
+    """``int`` alone accepts whitespace, a sign, and Python's digit separator, none of
+    which a ``next_cursor`` ever carries."""
+    with pytest.raises(MalformedCursor):
+        store.events(_criteria(), cursor=cursor, limit=_LIMIT)
+
+
+def test_a_cursor_a_page_minted_is_accepted(store: AnalyticsEventQueryStore) -> None:
+    first = store.events(_criteria(), limit=1)
+    assert first.next_cursor is not None
+
+    assert store.events(_criteria(), cursor=first.next_cursor, limit=_LIMIT).events
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_a_limit_below_one_is_refused_rather_than_crashing_on_an_empty_page(
+    store: AnalyticsEventQueryStore, limit: int
+) -> None:
+    with pytest.raises(ValueError):
+        store.events(_criteria(), limit=limit)
+
+
+# --- counts: honor the same filters ---------------------------------------------
+
+
+def test_counts_by_file(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_file(_criteria())
+    assert {(r.key, r.count) for r in rows} == {("src/a.py", 1), ("src/b.py", 1), ("src/c.py", 1)}
+
+
+def _seed_reads(insert_events: Any, counts: dict[str, int]) -> None:
+    events = [
+        _event(subject=path, turn_path=str(i), occurrence=n)
+        for i, (path, reads) in enumerate(counts.items())
+        for n in range(reads)
+    ]
+    insert_events("sg_top", *events)
+
+
+def test_counts_by_file_limit_returns_the_ordered_prefix_with_complete_counts(tmp_path: Path) -> None:
+    store, _engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {"src/e.py": 1, "src/d.py": 2, "src/c.py": 2, "src/b.py": 3, "src/a.py": 1})
+
+    everything = store.counts_by_file(_criteria())
+    top = store.counts_by_file(_criteria(), limit=3)
+
+    assert [(r.key, r.count) for r in everything] == [
+        ("src/b.py", 3),
+        ("src/c.py", 2),
+        ("src/d.py", 2),
+        ("src/a.py", 1),
+        ("src/e.py", 1),
+    ]
+    assert top == everything[:3]
+    assert store.counts_by_file(_criteria(), limit=99) == everything
+
+
+def test_counts_by_file_limit_cuts_a_tie_by_path_ascending(tmp_path: Path) -> None:
+    store, _engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {"src/z.py": 2, "src/m.py": 2, "src/a.py": 2})
+
+    assert [r.key for r in store.counts_by_file(_criteria(), limit=2)] == ["src/a.py", "src/m.py"]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_counts_by_file_refuses_a_limit_below_one(store: AnalyticsEventQueryStore, limit: int) -> None:
+    with pytest.raises(ValueError):
+        store.counts_by_file(_criteria(), limit=limit)
+
+
+def test_counts_by_file_limit_bounds_returned_rows_as_distinct_paths_grow(tmp_path: Path) -> None:
+    store, engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {f"src/f{i:03}.py": 1 for i in range(5)})
+    small = count_rows_read(engine, lambda: store.counts_by_file(_criteria(), limit=3))
+    _seed_reads(insert_events, {f"src/g{i:03}.py": 1 for i in range(60)})
+    large = count_rows_read(engine, lambda: store.counts_by_file(_criteria(), limit=3))
+
+    assert small == large == 3
+
+
+def test_counts_by_file_honors_a_combined_filter(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_file(_criteria(node_id="nd_build"))
+    assert {(r.key, r.count) for r in rows} == {("src/a.py", 1), ("src/b.py", 1)}
+
+
+def test_counts_by_file_honors_a_harness_id_filter(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_file(_criteria(harness_id="opencode"))
+    assert {(r.key, r.count) for r in rows} == {("src/c.py", 1)}
+
+
+def test_counts_by_skill(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_skill(_criteria())
+    assert {(r.key, r.count) for r in rows} == {("wf-commit", 1)}
+
+
+def test_counts_by_agent_type(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_agent_type(_criteria())
+    assert {(r.key, r.count) for r in rows} == {("explorer", 1)}
+
+
+def test_counts_by_node(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_node(_criteria())
+    assert {(r.key, r.count) for r in rows} == {("nd_build", 4), ("nd_review", 1)}
+
+
+def test_counts_by_node_names_each_node_and_its_graph_and_leaves_an_unresolved_id_unnamed(tmp_path: Path) -> None:
+    """Two graphs whose node and graph names differ, so each correlation predicate is the
+    only thing tying a node id to its own names — dropping either lets a neighbour's through."""
+    store, engine, insert_events = _new_store(tmp_path)
+    mint_graph(engine, "gr_a", name="alpha", nodes={"nd_a1": "build", "nd_a2": "review"}, at=_NOW)
+    mint_graph(engine, "gr_b", name="beta", nodes={"nd_b1": "ship"}, at=_NOW)
+    insert_events(
+        "sg_1",
+        _event(turn_path="0", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="1", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="2", node_id="nd_a1", graph_id="gr_a"),
+        _event(turn_path="3", node_id="nd_a2", graph_id="gr_a"),
+        _event(turn_path="4", node_id="nd_b1", graph_id="gr_b"),
+        _event(turn_path="5", node_id="nd_b1", graph_id="gr_b"),
+        _event(turn_path="6", node_id="nd_gone", graph_id="gr_b"),
+    )
+
+    rows = {r.key: (r.count, r.graph_name, r.node_name) for r in store.counts_by_node(_criteria())}
+
+    assert rows == {
+        "nd_a1": (3, "alpha", "build"),
+        "nd_a2": (1, "alpha", "review"),
+        "nd_b1": (2, "beta", "ship"),
+        "nd_gone": (1, None, None),
+    }
+
+
+def test_counts_are_ordered_most_frequent_first(store: AnalyticsEventQueryStore) -> None:
+    assert [r.key for r in store.counts_by_node(_criteria())] == ["nd_build", "nd_review"]
+
+
+def test_a_canned_counts_own_kind_intersects_the_criteria_kind_rather_than_replacing_it(
+    store: AnalyticsEventQueryStore,
+) -> None:
+    """A caller naming a kind this count cannot serve asked for an empty scope — it must
+    not get the count's own kind back under the name it did not ask for."""
+    assert store.counts_by_file(_criteria(kind="skill_invocation")) == []
+    assert [r.key for r in store.counts_by_file(_criteria(kind="file_read"))] == ["src/a.py", "src/b.py", "src/c.py"]
