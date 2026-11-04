@@ -54,7 +54,11 @@ class FederatedIdentity:
             issued_at = claims["iat"]
             if isinstance(issued_at, bool) or not isinstance(issued_at, int | float):
                 raise FederationTokenError("token issue time is not a timestamp")
-            if datetime.fromtimestamp(issued_at, tz=UTC) > now + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS):
+            try:
+                issued = datetime.fromtimestamp(issued_at, tz=UTC)
+            except (OverflowError, OSError, ValueError) as exc:
+                raise FederationTokenError("token issue time is not a timestamp") from exc
+            if issued > now + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS):
                 raise FederationTokenError("token is not yet valid")
         email = claims.get("email")
         return cls(

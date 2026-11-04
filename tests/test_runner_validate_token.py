@@ -214,7 +214,7 @@ def test_a_token_issued_on_the_machine_clock_is_refused_by_a_clock_an_hour_behin
         _identity_at(FixedClock(behind), _claims_at(datetime.now(UTC)))
 
 
-@pytest.mark.parametrize("iat", ["1700000000", True])
+@pytest.mark.parametrize("iat", ["1700000000", True, 10**20, -(10**20), float("inf"), float("nan")])
 def test_an_iat_that_is_not_a_timestamp_is_refused(iat: object) -> None:
     now = datetime.now(UTC)
     with pytest.raises(FederationTokenError, match="issue time"):
