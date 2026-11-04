@@ -23,7 +23,7 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import FixedClock, IClock, SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
     Flags,
     resolve_flags,
@@ -901,11 +901,6 @@ def build_process_core(engine: Engine) -> HubCore:
 def build_system_clock() -> IClock:
     """The one wall clock a hub process reads."""
     return SystemClock()
-
-
-def build_stepped_clock() -> FixedClock:
-    """A test-steppable clock that starts at the system clock's now."""
-    return FixedClock(build_system_clock().now())
 
 
 def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:

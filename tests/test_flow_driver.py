@@ -22,7 +22,7 @@ from sqlalchemy import insert, inspect, select, update
 from blizzard.foundation.clock import ControlledClock, FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.api.clock import clock_router
-from blizzard.hub.api.test_flow_control import controlled_flow_router
+from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import flow_turn
 from blizzard.hub.delivery.action_registry import HubActions
@@ -159,7 +159,7 @@ def test_controlled_step_reports_probe_failure_and_recovers(world: World, monkey
     app = create_hub_app(
         world.hub.wired_app.state.config,
         services=world.hub.hub_services,
-        test_flow_router=controlled_flow_router(driver, clock, asyncio.Lock()),
+        test_flow_router=flow_control_router(driver, clock, asyncio.Lock()),
     )
     probe = world.stores.corpus.flow_lines_signature
     monkeypatch.setattr(world.stores.corpus, "flow_lines_signature", Mock(side_effect=RuntimeError("probe down")))
@@ -181,7 +181,7 @@ def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: 
     app = create_hub_app(
         world.hub.wired_app.state.config,
         services=world.hub.hub_services,
-        test_flow_router=controlled_flow_router(driver, clock, lock),
+        test_flow_router=flow_control_router(driver, clock, lock),
         controlled_clock_router=clock_router(clock, lock),
     )
     client = TestClient(app)
@@ -224,7 +224,7 @@ async def test_controlled_step_holds_clock_until_real_turn_finishes(
         return await take(visit, forges, effects)
 
     monkeypatch.setattr(world.action, "take", held)
-    step = next(r.endpoint for r in controlled_flow_router(driver, clock, lock).routes if isinstance(r, APIRoute))
+    step = next(r.endpoint for r in flow_control_router(driver, clock, lock).routes if isinstance(r, APIRoute))
     move = next(
         r.endpoint for r in clock_router(clock, lock).routes if isinstance(r, APIRoute) and r.methods == {"POST"}
     )

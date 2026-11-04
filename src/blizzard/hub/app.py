@@ -27,7 +27,6 @@ from starlette.routing import Route
 
 from blizzard import __version__
 from blizzard.foundation.clock import ControlledClock, resolve_clock
-from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
@@ -100,7 +99,7 @@ from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
 from blizzard.hub.api.sweeps import router as sweeps_router
-from blizzard.hub.api.test_flow_control import controlled_flow_router, flow_control_router
+from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
@@ -120,7 +119,6 @@ from blizzard.hub.composition import (
     build_hub_flags,
     build_process_core,
     build_services,
-    build_stepped_clock,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
 from blizzard.hub.delivery.flow_driver import FlowDriver
@@ -599,10 +597,6 @@ def build_hosted_app(
     instrumented through it. ``version_window`` judges each registering runner's version."""
     resolved_clock = resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
-    stepped = os.environ.get("BLIZZARD_TEST_FLOW_STEP") == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
-    if controlled and stepped:
-        raise ConfigError("BLIZZARD_TEST_FLOW_STEP and BLIZZARD_CLOCK cannot both select a clock")
-    test_clock = build_stepped_clock() if stepped else None
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -616,7 +610,7 @@ def build_hosted_app(
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    core = build_hub_core(engine, clock=test_clock if test_clock is not None else resolved_clock)
+    core = build_hub_core(engine, clock=resolved_clock)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
 
@@ -728,10 +722,8 @@ def build_hosted_app(
         platform_tracing=platform_tracing,
         flags=build_hub_flags(config),
         test_flow_router=(
-            controlled_flow_router(flow_driver, resolved_clock, control_lock)
+            flow_control_router(flow_driver, resolved_clock, control_lock)
             if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver
-            else flow_control_router(flow_driver, test_clock)
-            if flow_driver and test_clock
             else None
         ),
         controlled_clock_router=(
@@ -743,7 +735,7 @@ def build_hosted_app(
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
-    app.state.flow_driver = None if stepped or controlled else flow_driver
+    app.state.flow_driver = None if controlled else flow_driver
     return app
 
 

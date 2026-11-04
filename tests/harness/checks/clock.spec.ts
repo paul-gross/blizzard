@@ -118,23 +118,11 @@ test.describe('BLIZZARD_CLOCK in hubEnv', () => {
   });
 });
 
-test.describe('flowStepped beside clockMode controlled', () => {
-  test.use({ isolation: 'fresh-hub', flowStepped: true, clockMode: 'controlled' });
-  test.fail(true, 'flowStepped and clockMode controlled exclude each other');
-  test('is refused', ({ level }) => {
-    void level;
-  });
-});
-
 plain.describe('the refusals name the key or option, and refuse before any daemon starts', () => {
   plain('a controlled stack below fresh-hub names fresh-hub', () => {
-    expect(() => requireClockOptions('controlled', 'fresh-tenant', false)).toThrow(/clockMode.*fresh-hub/);
-    expect(() => requireClockOptions('controlled', 'fresh-hub', false)).not.toThrow();
-    expect(() => requireClockOptions('system', 'common', true)).not.toThrow();
-  });
-
-  plain('flowStepped beside clockMode names both options', () => {
-    expect(() => requireClockOptions('controlled', 'fresh-hub', true)).toThrow(/flowStepped.*clockMode/);
+    expect(() => requireClockOptions('controlled', 'fresh-tenant')).toThrow(/clockMode.*fresh-hub/);
+    expect(() => requireClockOptions('controlled', 'fresh-hub')).not.toThrow();
+    expect(() => requireClockOptions('system', 'common')).not.toThrow();
   });
 
   plain('a timed sweep in the merged profile is named by its key', () => {

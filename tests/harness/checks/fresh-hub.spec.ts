@@ -1,6 +1,9 @@
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as path from 'node:path';
 import { test as plain } from '@playwright/test';
+import { hubApi } from '../client/clients';
+import { Ledger } from '../client/ledger';
 import { HubInternal } from '../client/internal';
 import { isAlive } from '../daemons/process';
 import { runDir } from '../env';
@@ -61,38 +64,41 @@ test.describe('hubConfig at fresh-tenant', () => {
 
 test.describe('flow stepping below fresh-hub', () => {
   test.use({ isolation: 'fresh-tenant' });
-  test('refuses hub-wide controls before sending a request', async ({ api, level }) => {
+  test('refuses the hub-wide step before sending a request', async ({ api, level }) => {
     if (level.served === 'fresh-hub') return;
     await expect(api.flowStep()).rejects.toThrow(/fresh-hub/);
-    await expect(api.flowAdvance(1)).rejects.toThrow(/fresh-hub/);
   });
 });
 
-test.describe('flowStepped at fresh-tenant', () => {
-  test.use({ isolation: 'fresh-tenant', flowStepped: true });
-  test.fail(!raised, 'flowStepped requires fresh-hub');
-  test('is refused before the hub starts', async ({ level }) => {
-    expect(level.served).toBe('fresh-hub');
+plain('flow stepping on a system stack is refused, naming clockMode, before any request', async ({ playwright }, testInfo) => {
+  let requests = 0;
+  const server = http.createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{}');
   });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const context = await playwright.request.newContext({ baseURL: `http://127.0.0.1:${(server.address() as { port: number }).port}` });
+  try {
+    const api = hubApi({ context, testInfo, tenantId: 'ten_stub', narrow: false, level: 'fresh-hub', clockMode: 'system', ledger: new Ledger(), logContext: () => '' });
+    await expect(api.flowStep()).rejects.toThrow(/clockMode/);
+    expect(requests).toBe(0);
+  } finally {
+    await context.dispose();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
 
-test.describe('a stepped fresh hub', () => {
-  test.use({ isolation: 'fresh-hub', flowStepped: true });
-  test('steps on a frozen clock and advances it explicitly', async ({ api }) => {
+test.describe('a controlled fresh hub', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+  test('steps on a frozen clock and moves it explicitly', async ({ api, clock }) => {
     const first = await api.flowStep();
     const second = await api.flowStep();
     expect([first.reconciled, first.skipped, first.failed]).toEqual([1, 0, 0]);
     expect([second.reconciled, second.skipped, second.failed]).toEqual([0, 1, 0]);
     expect(second.now).toBe(first.now);
-    const advanced = await api.flowAdvance(7);
-    expect(Date.parse(advanced.now) - Date.parse(first.now)).toBe(7000);
-    expect((await api.flowStep()).now).toBe(advanced.now);
-  });
-
-  test('refuses to restart with a lost virtual clock', async ({ api, freshHub }) => {
-    await api.flowAdvance(86400);
-    await freshHub.stop();
-    await expect(freshHub.start()).rejects.toThrow(/flow-stepped.*virtual clock/);
+    await clock.advance(7);
+    expect(Date.parse((await api.flowStep()).now) - Date.parse(first.now)).toBe(7000);
   });
 });
 
