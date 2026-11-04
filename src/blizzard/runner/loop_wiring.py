@@ -71,8 +71,8 @@ class LoopWiring:
     """Constructs the loop's collaborators from resolved config.
 
     The runner prompt is an **already-resolved** value: resolving it on the caller's own thread
-    turns a missing prompt file into a startup error (``tests/unit/runner/test_pin_runner_loop.py``); each workspace's prompt
-    is resolved where the host builds its workspaces."""
+    turns a missing prompt file into a startup error (``tests/unit/runner/test_pin_runner_loop.py``); each
+    workspace's prompt is resolved where the host builds its workspaces."""
 
     config: RunnerConfig
     runner_prompt: str
