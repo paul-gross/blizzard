@@ -77,6 +77,7 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _HUB_DIR / "cli" / "traces.py": "a short-lived CLI process's own composition root",
     _HUB_DIR / "cli" / "egress.py": "a short-lived CLI process's own composition root",
     _SRC_DIR / "cli" / "collaborators.py": "CliCollaborators.production — every CLI process's collaborator root",
+    _FOUNDATION_DIR / "clock.py": "resolve_clock — the clock fence's resolver, where a serving root's clock is chosen",
     _SRC_DIR
     / "tools"
     / "invariants.py": "hub_invariants and runner_invariants — the invariant checker's composition root",
