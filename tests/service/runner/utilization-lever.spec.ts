@@ -1,5 +1,5 @@
 import { expect, runnerTest as test, stepUntil, stepUntilHeld } from '../../harness/fixtures';
-import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
+import type { Clock, MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // A utilization line holds a runner's next node and not the step in flight: one host, one runner spending a sampled
 // subscription and configuring a line. A sample over the line stands while the chunk's first node runs; that step
@@ -9,11 +9,13 @@ import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures'
 
 const RUNNER = 'runner-local';
 const CHECKPOINT = 'build';
-const MAX_HOST_STEPS = 20_000;
+const SAMPLE_INTERVAL_SECONDS = 1;
+
+test.use({ clockMode: 'controlled' });
 
 /** What a credential reports when both windows sit at `pct`: the line names no window, so either one over is over. */
-function sample(pct: number) {
-  const now = Math.floor(Date.now() / 1000);
+function sample(clock: Clock, pct: number) {
+  const now = Math.floor(clock.now().getTime() / 1000);
   return { short: { utilization: pct, resetsAt: now + 3 * 3_600 }, long: { utilization: pct, resetsAt: now + 48 * 3_600 } };
 }
 
@@ -52,25 +54,24 @@ async function chunkNode(mockHub: MockHub, host: RunnerHost, chunkId: string): P
   return (detail.body as { current_node_id: string }).current_node_id;
 }
 
-test('test_a_utilization_line_declines_the_next_node_and_never_the_step_in_flight', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint }, testInfo) => {
+test('test_a_utilization_line_declines_the_next_node_and_never_the_step_in_flight', async ({ mockHub, runnerHosts, vendorUsage, workerCheckpoint, clock }, testInfo) => {
   const credential = vendorUsage.mintAnthropic(testInfo.outputPath('vendor'));
-  vendorUsage.set(credential.token, sample(40));
+  vendorUsage.set(credential.token, sample(clock, 40));
   const host = await runnerHosts.create({
     runnerConfig: {
-      subscription: [{ slug: 'anthropic', credentials_path: credential.path, usage_api_base: '${usageBase}', sample_interval_seconds: 1n }],
+      subscription: [{ slug: 'anthropic', credentials_path: credential.path, usage_api_base: '${usageBase}', sample_interval_seconds: BigInt(SAMPLE_INTERVAL_SECONDS) }],
       runner: [{ name: RUNNER, subscription: 'anthropic', throttle: { utilization: { below_pct: 95 } } }],
     },
   });
-  // The line reads a sample only while it is fresh, so the subscription keeps a short real interval: a resample is due
-  // once it has passed, and the host is stepped until the recorded sample is the one the counterpart now reports.
+  // The line reads a sample only while it is fresh: advancing the clock by the subscription's interval makes a resample
+  // due, and the one host step takes it, so the recorded sample is exactly the one the counterpart now reports.
   const sampled = async (pct: number): Promise<void> => {
-    vendorUsage.set(credential.token, sample(pct));
-    for (let pass = 0; ; pass++) {
-      if (pass === MAX_HOST_STEPS) throw new Error(`no sample at ${pct}% within ${MAX_HOST_STEPS} host passes\n${host.logTail()}`);
-      expect((await host.stepHost()).outcome).toBe('completed');
-      const item = (await host.api.subscriptions()).body.items.find((entry) => entry.slug === 'anthropic');
-      if (item?.ok && item.windows.length === 2 && item.windows.every((window) => window.utilization_pct === pct)) return;
-    }
+    vendorUsage.set(credential.token, sample(clock, pct));
+    await clock.advance(SAMPLE_INTERVAL_SECONDS);
+    expect((await host.stepHost()).outcome).toBe('completed');
+    const item = (await host.api.subscriptions()).body.items.find((entry) => entry.slug === 'anthropic');
+    expect(item?.ok).toBe(true);
+    expect(item?.windows.map((window) => window.utilization_pct)).toEqual([pct, pct]);
   };
 
   await sampled(40);
