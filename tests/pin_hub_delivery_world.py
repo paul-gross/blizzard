@@ -16,7 +16,7 @@ def writable(hub: HubHarness) -> IWriteChunkMovementRepository:
 
 def mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     """Mint the packaged adv-dwf graph, ingest a chunk, repin it onto adv-dwf, and claim a
-    route — the same sequence ``tests/test_delivery_conflict_routing.py`` uses."""
+    route — the same sequence ``tests/component/hub/test_delivery_conflict_routing.py`` uses."""
     definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text

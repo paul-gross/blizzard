@@ -1,6 +1,6 @@
 """Completion apply — the epoch fence, terminal rejection, and bad choices (component tier).
 
-The happy path and idempotent replay are covered by ``test_hub_command_node``; this file
+The happy path and idempotent replay are covered by ``tests/component/hub/test_command_node.py``; this file
 pins the rejection edges (``bzh:facts-not-status``).
 """
 

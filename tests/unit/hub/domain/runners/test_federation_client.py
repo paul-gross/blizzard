@@ -1,7 +1,7 @@
 """``FederationClient`` — what a hub-IdP sign-in needs of the runner or host it names (unit tier).
 
 Pins each refusal and their order; the route's mapping to the one identical 400 and the retired 403 is pinned in
-``tests/test_idp_authorize.py``.
+``tests/component/hub/api/test_idp_authorize.py``.
 """
 
 from __future__ import annotations

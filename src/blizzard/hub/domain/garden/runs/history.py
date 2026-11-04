@@ -244,7 +244,8 @@ def _observed_ids(delta: DeliveredDelta) -> list[str]:
 def _set_delta(raw: DeliveredSetRaw, delta: DeliveredDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
     """Fold one delivered set's parsed artifact into its own added/observed/gone groups — an add
     op is zipped positionally against `raw.add_finding_ids`. Degradation is pinned by
-    `tests/test_garden_run_domain.py`'s `test_an_add_op_with_no_matching_fact_degrades_to_an_unmatched_finding_id`
+    `tests/unit/hub/domain/garden/runs/test_garden_run_domain.py`'s
+    `test_an_add_op_with_no_matching_fact_degrades_to_an_unmatched_finding_id`
     and `test_an_observed_op_with_no_finding_row_keeps_its_id_and_degrades_to_none_fields`."""
     add_ids = iter(raw.add_finding_ids)
     added: list[AddedFinding] = []
