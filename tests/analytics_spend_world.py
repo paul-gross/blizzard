@@ -8,7 +8,7 @@ from blizzard.auth_core import Role
 from tests.support import FakeWorkSource, HubHarness, build_hub, pointer_token, seed_session, seed_user
 
 #: Named to match the packaged default graph's own name, so `POST /api/chunks` mints
-#: onto *this* graph — see `tests/test_analytics_durations_api.py`'s own note.
+#: onto *this* graph — see `tests/component/hub/api/test_analytics_durations.py`'s own note.
 _GRAPH_YAML = """
 name: default-delivery
 entry: build

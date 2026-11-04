@@ -1154,7 +1154,7 @@ _HUB_RETIRED_GRAPH_YAML = _HUB_GRAPH_YAML.replace(_HUB_GRAPH_NAME, _HUB_RETIRED_
 
 def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict[str, object]:
     """One transcript tool-call turn shaped for the analytics extractors — mirrors
-    ``tests/test_analytics_events_api.py``'s own ``_tool_turn``, the smallest shape the
+    ``tests/component/hub/api/test_analytics_events.py``'s own ``_tool_turn``, the smallest shape the
     file_read/skill_invocation/agent_spawn extractors parse."""
     return {
         "index": index,

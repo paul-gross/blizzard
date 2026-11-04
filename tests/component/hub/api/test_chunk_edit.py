@@ -1,0 +1,565 @@
+"""The ``PATCH /chunks/{id}`` edit route over the HTTP surface.
+
+A not-ready or ready-and-unclaimed chunk's graph, default model/effort, and migration
+intent are editable through one all-or-nothing ``PATCH``, refused (409) once claimed.
+Proves the controller wires ``EditService`` end to end.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from tests.support import HubHarness, build_hub, default_project, emitted_events, ingest
+
+_POINTER = {"source": "default", "ref": "12"}
+
+_ALT_YAML = """
+name: alt-graph
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+        fail:
+          description: Incomplete.
+          to: build
+  deliver:
+    executor: hub
+    action: pass
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+"""
+
+
+def _mint_alt_graph(hub: HubHarness) -> str:
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": _ALT_YAML})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["graph_id"]
+
+
+# --------------------------------------------------------------------------- #
+# Read — graph_id and the two defaults already ride the list/detail views.
+
+
+def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_preference(tmp_path: Path) -> None:
+    """Ingest mints neither default — a fresh chunk expresses no model or
+    effort preference."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "not_ready"
+    assert detail["default_model"] == []
+    assert detail["default_effort"] is None
+    default_graph_id = detail["graph_id"]
+
+    summary = next(c for c in hub.client.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
+    assert summary["default_model"] == []
+    assert summary["default_effort"] is None
+    assert summary["graph_id"] == default_graph_id
+
+
+# --------------------------------------------------------------------------- #
+# Write — PATCH /chunks/{id}: applied all-or-nothing in one request.
+
+
+def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> None:
+    """Claim ``chunk_id`` for ``runner_id`` — the only status the plain #27/#120 graph and
+    default edits refuse, and the status ``intended_migration``'s own window opens at."""
+    resp = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": runner_id, "workspace_id": "w1", "environment_ids": ["env-a"]},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_patch_unknown_chunk_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.patch("/api/chunks/ch_nope", json={"default_model": ["blizzard:basic"]})
+    assert resp.status_code == 404
+
+
+def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    alt_graph_id = _mint_alt_graph(hub)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={
+            "graph_id": alt_graph_id,
+            "default_model": ["blizzard:basic", "gpt-5.3-codex"],
+            "default_effort": "medium",
+        },
+    )
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json() == {
+        "chunk_id": chunk_id,
+        "project_id": default_project(hub.engine),
+        "project_slug": "default",
+        "project_name": "Default",
+        "graph_id": alt_graph_id,
+        "default_model": ["blizzard:basic", "gpt-5.3-codex"],
+        "default_effort": "medium",
+        "default_harnesses": [],
+        "intended_migration": None,
+    }
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == alt_graph_id
+    # Order is the operator's priority order and survives the round trip.
+    assert detail["default_model"] == ["blizzard:basic", "gpt-5.3-codex"]
+    assert detail["default_effort"] == "medium"
+
+
+def test_patch_naming_one_default_leaves_the_other_untouched(tmp_path: Path) -> None:
+    """``default_model`` and ``default_effort`` are set independently — omitting one
+    from the body leaves it unchanged."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"], "default_effort": "high"}
+    )
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:advanced"]})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == ["blizzard:advanced"]
+    assert detail["default_effort"] == "high"
+
+
+def test_patch_can_clear_both_defaults_back_to_no_preference(tmp_path: Path) -> None:
+    """An empty list and explicit ``null`` are real values — "express no preference",
+    the minted state — not "leave unchanged"."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"], "default_effort": "high"}
+    )
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_model": [], "default_effort": None})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == []
+    assert detail["default_effort"] is None
+
+
+def test_patch_naming_only_default_harnesses_leaves_the_other_two_defaults_intact(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"], "default_effort": "high"}
+    )
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == ["blizzard:basic"]
+    assert detail["default_effort"] == "high"
+    assert detail["default_harnesses"] == ["claude_code"]
+
+
+def test_patch_applies_all_three_defaults_in_one_call(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={
+            "default_model": ["blizzard:basic"],
+            "default_effort": "high",
+            "default_harnesses": ["claude_code", "codex"],
+        },
+    )
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["default_harnesses"] == ["claude_code", "codex"]
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == ["blizzard:basic"]
+    assert detail["default_effort"] == "high"
+    assert detail["default_harnesses"] == ["claude_code", "codex"]
+
+
+def test_patch_can_clear_default_harnesses_back_to_no_preference(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": []})
+
+    assert resp.status_code == 202, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_duplicate_default_harnesses_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code", "claude_code"]})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_blank_default_harnesses_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code", "  "]})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_default_harnesses_refuses_once_claimed(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+
+    assert resp.status_code == 409, resp.text
+    assert "default_harnesses" in resp.json()["detail"]
+
+
+def test_patch_unknown_graph_id_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": "gr_nope"})
+
+    assert resp.status_code == 404
+
+
+def test_patch_blank_default_model_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic", "  "]})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_model"] == []
+
+
+def test_patch_blank_default_effort_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_effort": "   "})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_effort"] is None
+
+
+def test_patch_accepts_an_unrecognized_model_or_effort_vocabulary(tmp_path: Path) -> None:
+    """Neither value's vocabulary is the hub's to check — both are opaque preference
+    strings here."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"default_model": ["not-a-real-model"], "default_effort": "glacial"}
+    )
+
+    assert resp.status_code == 202, resp.text
+
+
+def test_patch_refuses_a_field_not_editable_at_the_current_status_and_writes_nothing(tmp_path: Path) -> None:
+    """A mixed body refused on one field applies neither (all-or-nothing
+    redesign) — `graph_id` stays sealed once claimed even though a plain PATCH-only
+    `intended_migration` body would be admitted at the same status."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+    before = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={"graph_id": alt_graph_id, "intended_migration": {"to_graph": alt_graph_id}},
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "graph_id" in resp.json()["detail"]
+    after = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert after["graph_id"] == before["graph_id"]
+    assert after["intended_migration"] is None
+
+
+def test_patch_retired_graph_id_target_is_not_bypassed_by_a_different_valid_migration_target(tmp_path: Path) -> None:
+    """A retired `graph_id` target 409s even when `intended_migration.to_graph` names a
+    different, non-retired graph — the two targets validate independently, so nothing
+    applies."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
+    retired_graph_id = _mint_alt_graph(hub)
+    other_graph_id = _mint_alt_graph(hub)
+    retire = hub.client.post(f"/api/graphs/{retired_graph_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
+    before = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={"graph_id": retired_graph_id, "intended_migration": {"to_graph": other_graph_id}},
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "retired" in resp.json()["detail"]
+    assert retired_graph_id in resp.json()["detail"]
+    after = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert after["graph_id"] == before["graph_id"]
+    assert after["intended_migration"] is None
+
+
+def test_patch_applies_graph_id_and_a_different_intended_migration_target_together(tmp_path: Path) -> None:
+    """The happy combined case: a `graph_id` repin and an `intended_migration` naming a
+    *different* target graph both validate and apply together in one PATCH."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
+    new_graph_id = _mint_alt_graph(hub)
+    migration_graph_id = _mint_alt_graph(hub)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={"graph_id": new_graph_id, "intended_migration": {"to_graph": migration_graph_id}},
+    )
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == new_graph_id
+    assert detail["intended_migration"]["graph_id"] == migration_graph_id
+
+
+def test_patch_publishes_chunk_changed(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    since = hub.events.latest_id()
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"]})
+
+    assert resp.status_code == 202, resp.text
+    events = emitted_events(hub, since=since)
+    assert "chunk-changed" in [e["event"] for e in events]
+
+
+# --------------------------------------------------------------------------- #
+# Write — PATCH intended_migration.
+
+
+def test_get_chunk_intended_migration_is_null_by_default(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    assert detail["intended_migration"] is None
+
+
+def test_patch_sets_an_auto_intended_migration_on_a_claimed_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+
+    assert resp.status_code == 202, resp.text
+    expected = {"mode": "auto", "graph_id": alt_graph_id, "graph_name": "alt-graph", "node_name": None}
+    assert resp.json()["intended_migration"] == expected
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["intended_migration"] == expected
+    assert detail["status"] == "running"
+
+
+def test_patch_sets_a_forced_intended_migration(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id, "node": "deliver"}}
+    )
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["intended_migration"] == {
+        "mode": "forced",
+        "graph_id": alt_graph_id,
+        "graph_name": "alt-graph",
+        "node_name": "deliver",
+    }
+
+
+def test_patch_resolves_a_graph_name_to_the_newest_enabled_graph_and_stores_its_id(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": "alt-graph"}})
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["intended_migration"]["graph_id"] == alt_graph_id
+
+
+def test_patch_overwrites_an_existing_intended_migration(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+    first = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+    assert first.status_code == 202, first.text
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id, "node": "deliver"}}
+    )
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["intended_migration"]["mode"] == "forced"
+    assert detail["intended_migration"]["node_name"] == "deliver"
+
+
+def test_patch_clears_an_intended_migration_via_explicit_null(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+    set_resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+    assert set_resp.status_code == 202, set_resp.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": None})
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["intended_migration"] is None
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["intended_migration"] is None
+
+
+def test_patch_with_intended_migration_field_absent_leaves_it_unchanged(tmp_path: Path) -> None:
+    """`intended_migration`'s window spans `ready` too, unlike `default_model`'s — set on
+    a ready-unclaimed chunk here so a later PATCH naming only `default_model` (still
+    editable at `ready`) can prove the absent field survives untouched."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
+    alt_graph_id = _mint_alt_graph(hub)
+    set_resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+    assert set_resp.status_code == 202, set_resp.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"]})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["intended_migration"]["graph_id"] == alt_graph_id
+    assert detail["default_model"] == ["blizzard:basic"]
+
+
+def test_patch_intended_migration_refuses_once_the_chunk_is_stopped(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    alt_graph_id = _mint_alt_graph(hub)
+    stop = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
+    assert stop.status_code == 202, stop.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "intended_migration" in detail
+    assert "stopped" in detail
+
+
+def test_patch_intended_migration_refuses_a_retired_target(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+    retire = hub.client.post(f"/api/graphs/{alt_graph_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id}})
+
+    assert resp.status_code == 409, resp.text
+    assert "retired" in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["intended_migration"] is None
+
+
+def test_patch_intended_migration_refuses_the_chunks_own_current_pin(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
+    own_graph_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": own_graph_id}})
+
+    assert resp.status_code == 409, resp.text
+    assert "current graph pin" in resp.json()["detail"]
+
+
+def test_patch_intended_migration_forced_refuses_a_node_absent_from_the_target(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id, "node": "nope"}}
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "nope" in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["intended_migration"] is None
+
+
+def test_patch_intended_migration_blank_to_graph_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": "   "}})
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_patch_intended_migration_blank_node_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    alt_graph_id = _mint_alt_graph(hub)
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": alt_graph_id, "node": "   "}}
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_patch_intended_migration_unknown_graph_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": "gr_nope"}})
+
+    assert resp.status_code == 404, resp.text

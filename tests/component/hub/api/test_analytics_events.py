@@ -1,0 +1,379 @@
+"""Analytics events/counts route authentication, filters, paging and counts."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from blizzard.auth_core import Role
+from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
+from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from tests.analytics_events_world import record_transcript, seeded_hub, tool_turn
+from tests.hub_request_auth import cookie, ingest_chunk, seed_enrolled
+from tests.support import build_hub, seed_session, seed_user
+
+#: Every route this module holds to the auth triad — one list, three sweeps over it.
+_ROUTES = [
+    "/api/analytics/events",
+    "/api/analytics/events/ndjson",
+    "/api/analytics/counts/files",
+    "/api/analytics/counts/skills",
+    "/api/analytics/counts/agent-types",
+    "/api/analytics/counts/nodes",
+]
+
+
+def _bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+# --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_is_401_with_no_session(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    resp = hub.client.get(path)
+    assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    guest = seed_user(hub, username="grace", role=Role.GUEST)
+    token = seed_session(hub, guest)
+
+    resp = hub.client.get(path, headers=cookie(token))
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("path", _ROUTES)
+def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
+    token = seed_enrolled(tmp_path, runner_id="runner-a")
+    hub = build_hub(tmp_path, auth_mode="oauth")
+
+    resp = hub.client.get(path, headers=_bearer(token))
+    assert resp.status_code == 403
+
+
+def test_events_is_200_at_contributor(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/events", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["events"]) == 3
+    assert body["next_cursor"] is None
+
+
+# --- events: filters and paging ---------------------------------------------------
+
+
+def test_events_filters_by_kind(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/events", params={"kind": "skill_invocation"}, headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    events = resp.json()["events"]
+    assert len(events) == 1
+    assert events[0]["subject"] == "wf-commit"
+    assert events[0]["payload"] == {"skill_name": "wf-commit"}
+
+
+def test_events_filters_by_tool(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/events", params={"tool": "Agent"}, headers=cookie(token))
+
+    assert [e["subject"] for e in resp.json()["events"]] == ["explorer"]
+
+
+def test_events_filters_by_subject_prefix(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/events", params={"subject_prefix": "src/"}, headers=cookie(token))
+
+    assert [e["subject"] for e in resp.json()["events"]] == ["src/a.py"]
+
+
+def test_events_filters_by_time_range(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get(
+        "/api/analytics/events",
+        params={"since": "2026-08-12T09:30:00Z", "until": "2026-08-12T10:30:00Z"},
+        headers=cookie(token),
+    )
+
+    assert [e["subject"] for e in resp.json()["events"]] == ["wf-commit"]
+
+
+def test_events_filter_by_provenance(tmp_path: Path) -> None:
+    """harness_id/harness_version/model/effort narrow the events route,
+    and the response carries each dimension on every event."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
+    push = hub.client.post(
+        "/api/fleet/transcripts",
+        json={
+            "runner_id": "r1",
+            "records": [
+                record_transcript(
+                    chunk_id,
+                    segment_id="sg_claude",
+                    turns=[tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")],
+                    harness_id="claude_code",
+                    model="claude-sonnet-5",
+                    effort="high",
+                ),
+                record_transcript(
+                    chunk_id,
+                    segment_id="sg_opencode",
+                    turns=[tool_turn(0, "Read", {"file_path": "src/b.py"}, timestamp="2026-08-12T09:00:00Z")],
+                    harness_id="opencode",
+                    harness_version="1.18.25",
+                    model="gpt-5.6-luna",
+                    effort="max",
+                ),
+            ],
+        },
+    )
+    assert push.status_code == 200, push.text
+    hub.hub_services.event_derivation.sweep()
+
+    resp = hub.client.get("/api/analytics/events", params={"harness_id": "opencode"}, headers=cookie(token))
+    assert [e["subject"] for e in resp.json()["events"]] == ["src/b.py"]
+
+    resp = hub.client.get("/api/analytics/events", params={"model": "claude-sonnet-5"}, headers=cookie(token))
+    assert [e["subject"] for e in resp.json()["events"]] == ["src/a.py"]
+
+    resp = hub.client.get("/api/analytics/events", params={"effort": "max"}, headers=cookie(token))
+    [event] = resp.json()["events"]
+    assert event["subject"] == "src/b.py"
+    assert event["harness_id"] == "opencode"
+    assert event["harness_version"] == "1.18.25"
+    assert event["model"] == "gpt-5.6-luna"
+    assert event["effort"] == "max"
+
+
+def test_events_pages_with_a_cursor(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    first = hub.client.get("/api/analytics/events", params={"limit": 1}, headers=cookie(token))
+    assert first.status_code == 200, first.text
+    assert len(first.json()["events"]) == 1
+    cursor = first.json()["next_cursor"]
+    assert cursor is not None
+
+    second = hub.client.get("/api/analytics/events", params={"limit": 1, "cursor": cursor}, headers=cookie(token))
+    assert len(second.json()["events"]) == 1
+    assert second.json()["events"][0]["id"] != first.json()["events"][0]["id"]
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-an-id",
+        " 2 ",
+        "+3",
+        "1_0",
+        "-1",
+        "",
+        "2.0",
+        "7",
+        encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"),
+        encode_cursor(7, 8),
+        encode_cursor(-1),
+        encode_cursor(True),
+    ],
+)
+def test_events_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/events", params={"cursor": cursor}, headers=cookie(token))
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"] == "malformed cursor"
+
+
+def test_a_prior_extractor_version_finds_nothing_under_the_current_one(tmp_path: Path) -> None:
+    """Mixing versions double-counts the same occurrence — the current version is
+    the default, and an explicit stale one reads that version's own (empty) rows."""
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get(
+        "/api/analytics/events", params={"extractor_version": f"{EXTRACTOR_VERSION}-stale"}, headers=cookie(token)
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["events"] == []
+
+
+# --- the NDJSON encoding: same events, same order -----------------------------------
+
+
+def test_ndjson_serves_the_same_events_in_the_same_order_as_json(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    json_resp = hub.client.get("/api/analytics/events", headers=cookie(token))
+    ndjson_resp = hub.client.get("/api/analytics/events/ndjson", headers=cookie(token))
+
+    assert ndjson_resp.status_code == 200, ndjson_resp.text
+    assert ndjson_resp.headers["content-type"].startswith("application/x-ndjson")
+    lines = [json.loads(line) for line in ndjson_resp.text.strip().split("\n")]
+    assert [e["id"] for e in lines] == [e["id"] for e in json_resp.json()["events"]]
+    assert [e["subject"] for e in lines] == [e["subject"] for e in json_resp.json()["events"]]
+
+
+def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> None:
+    """The batch boundary is the stream's only moving part, and the default 500 puts it
+    out of reach of any fixture — so the body is served here one event per batch."""
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
+
+    body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
+    lines = [json.loads(line) for line in body.splitlines()]
+
+    whole = hub.client.get("/api/analytics/events", headers=cookie(token)).json()["events"]
+    assert [e["id"] for e in lines] == [e["id"] for e in whole]
+    assert len(lines) == 3
+
+
+# --- the payload passes through as the stored text, undecoded ------------------------
+
+
+def test_both_encodings_carry_each_stored_payload_verbatim_including_non_ascii(tmp_path: Path) -> None:
+    """The stored text is spliced in, not decoded and re-dumped: its bytes — ASCII-escaped by the
+    writer — appear in each body as-is, and each body still parses to the decoded payload."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
+    turns = [
+        tool_turn(0, "Read", {"file_path": "src/café/ünï.py"}),
+        tool_turn(1, "Skill", {"skill": "wf-日本"}),
+    ]
+    push = hub.client.post(
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=turns)]}
+    )
+    assert push.status_code == 200, push.text
+    hub.hub_services.event_derivation.sweep()
+    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
+    stored = [e.payload for e in hub.services.analytics_events.events(criteria, cursor=None, limit=100).events]
+    assert any("\\u" in text for text in stored)
+
+    json_resp = hub.client.get("/api/analytics/events", headers=cookie(token))
+    ndjson_resp = hub.client.get("/api/analytics/events/ndjson", headers=cookie(token))
+
+    assert json_resp.status_code == 200, json_resp.text
+    for text in stored:
+        assert text in json_resp.text
+        assert text in ndjson_resp.text
+    decoded = [json.loads(text) for text in stored]
+    assert [e["payload"] for e in json_resp.json()["events"]] == decoded
+    assert [json.loads(line)["payload"] for line in ndjson_resp.text.splitlines()] == decoded
+
+
+# --- the four canned counts, honoring filters ----------------------------------------
+
+
+def test_counts_by_file(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/files", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}]
+
+
+def test_counts_by_file_limit_is_forwarded_and_omitting_it_changes_nothing(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    unlimited = hub.client.get("/api/analytics/counts/files", headers=cookie(token))
+    limited = hub.client.get("/api/analytics/counts/files", params={"limit": 1}, headers=cookie(token))
+
+    assert limited.status_code == 200, limited.text
+    assert limited.json()["counts"] == unlimited.json()["counts"][:1]
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "x"])
+def test_counts_by_file_refuses_a_non_positive_or_malformed_limit(tmp_path: Path, limit: str) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/files", params={"limit": limit}, headers=cookie(token))
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_counts_by_skill(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/skills", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "wf-commit", "count": 1, "graph_name": None, "node_name": None}]
+
+
+def test_counts_by_agent_type_is_empty_at_the_main_lane(tmp_path: Path) -> None:
+    """The seeded triad's spawn is main-lane (depth 0), so its `agent_type` column
+    (the enclosing sidechain's) is unset — the count groups on that column, not the
+    spawn's own subject."""
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/agent-types", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == []
+
+
+def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spawn(tmp_path: Path) -> None:
+    """The discriminating case for this count's column choice: a main-lane ``Agent``
+    spawning ``explorer`` whose sidechain then reads two files. Grouping on the
+    sidechain's ``agent_type`` counts two; grouping on the spawn's subject, one."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
+    chunk_id = ingest_chunk(hub, headers=cookie(token))
+    spawn = tool_turn(0, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T09:00:00Z")
+    spawn["sidechain"] = {
+        "agent_id": "ag_1",
+        "agent_type": "explorer",
+        "link": "resolved",
+        "turns": [
+            tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:01:00Z"),
+            tool_turn(1, "Read", {"file_path": "src/b.py"}, timestamp="2026-08-12T09:02:00Z"),
+        ],
+    }
+    push = hub.client.post(
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [record_transcript(chunk_id, turns=[spawn])]}
+    )
+    assert push.status_code == 200, push.text
+    hub.hub_services.event_derivation.sweep()
+
+    resp = hub.client.get("/api/analytics/counts/agent-types", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "explorer", "count": 2, "graph_name": None, "node_name": None}]
+
+
+def test_counts_by_node(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/nodes", headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "nd_build", "count": 3, "graph_name": None, "node_name": None}]
+
+
+def test_counts_by_node_honors_a_kind_filter(tmp_path: Path) -> None:
+    hub, token, _chunk_id = seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/nodes", params={"kind": "file_read"}, headers=cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "nd_build", "count": 1, "graph_name": None, "node_name": None}]

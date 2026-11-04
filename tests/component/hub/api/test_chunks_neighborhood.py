@@ -1,0 +1,213 @@
+"""``GET /api/chunks/{chunk_id}``'s ``neighborhood`` field — a chunk's
+standing dependency edges one hop each way, proven end to end over HTTP.
+
+Unlike ``blocked``, the field is always present: a chunk with no edges still reads back
+two empty lists."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+from typing import Any, cast
+
+from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.scoped import ScopedConnections
+from tests.support import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    serve_default_tenant,
+)
+
+_DEPENDENT = {"source": "default", "ref": "dependent"}
+_PREREQUISITE = {"source": "default", "ref": "prereq"}
+
+
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
+    resp = hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id})
+    assert resp.status_code == 202, resp.text
+
+
+def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
+    resp = hub.client.post(
+        f"/api/chunks/{dependent_id}/dependencies/release", json={"prerequisite_chunk_id": prerequisite_id}
+    )
+    assert resp.status_code == 202, resp.text
+
+
+def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
+    resp = hub.client.get(f"/api/chunks/{chunk_id}")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_a_chunk_with_no_edges_reads_two_empty_lists(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_DEPENDENT])
+
+    assert _detail(hub, chunk_id)["neighborhood"] == {"prerequisites": [], "dependents": []}
+
+
+def test_a_prerequisite_and_a_dependent_each_read_back_their_own_list(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
+    prerequisite_id = ingest(hub, [_PREREQUISITE])
+    dependent_id = ingest(hub, [_DEPENDENT])
+    _declare(hub, subject_id, prerequisite_id)
+    _declare(hub, dependent_id, subject_id)
+
+    neighborhood = _detail(hub, subject_id)["neighborhood"]
+
+    assert neighborhood["prerequisites"] == [{"chunk_id": prerequisite_id, "status": "ready", "satisfied": False}]
+    assert neighborhood["dependents"] == [{"chunk_id": dependent_id, "status": "ready", "satisfied": False}]
+
+
+def test_a_satisfied_prerequisite_is_distinguished_from_an_unmet_one(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
+    done_id = ingest(hub, [{"source": "default", "ref": "done-prereq"}])
+    pending_id = ingest(hub, [{"source": "default", "ref": "pending-prereq"}])
+    _declare(hub, subject_id, done_id)
+    _declare(hub, subject_id, pending_id)
+    resp = hub.client.post(f"/api/chunks/{done_id}/complete", json={})
+    assert resp.status_code == 202, resp.text
+
+    prerequisites = {n["chunk_id"]: n for n in _detail(hub, subject_id)["neighborhood"]["prerequisites"]}
+
+    assert prerequisites[done_id]["satisfied"] is True
+    assert prerequisites[pending_id]["satisfied"] is False
+
+
+def test_a_dependent_edge_is_satisfied_when_the_subject_itself_is_done(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
+    dependent_id = ingest(hub, [_DEPENDENT])
+    _declare(hub, dependent_id, subject_id)
+    resp = hub.client.post(f"/api/chunks/{subject_id}/complete", json={})
+    assert resp.status_code == 202, resp.text
+
+    dependents = _detail(hub, subject_id)["neighborhood"]["dependents"]
+
+    assert dependents == [{"chunk_id": dependent_id, "status": "ready", "satisfied": True}]
+
+
+def test_released_edges_are_absent_from_both_lists(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
+    prerequisite_id = ingest(hub, [_PREREQUISITE])
+    _declare(hub, subject_id, prerequisite_id)
+
+    _release(hub, subject_id, prerequisite_id)
+
+    assert _detail(hub, subject_id)["neighborhood"] == {"prerequisites": [], "dependents": []}
+
+
+def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_path: Path) -> None:
+    """The residual race a delete's 409 refusal otherwise guards against — a standing
+    edge naming a prerequisite id the fleet holds no facts for. Declared directly through
+    the store, below the API's own existence check, to reach the case at all."""
+    hub = build_hub(tmp_path)
+    subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
+    dependencies = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([subject_id, "chk_ghost"]) as handle:
+        dependencies.declare_locked(handle, subject_id, "chk_ghost", by="test", at=hub.clock.now())
+
+    prerequisites = _detail(hub, subject_id)["neighborhood"]["prerequisites"]
+
+    assert prerequisites == [{"chunk_id": "chk_ghost", "status": None, "satisfied": False}]
+
+
+class _CountingFactsStore(ChunkFactsStore):
+    """Counts calls to the bulk and per-chunk facts reads, the ``tests/component/hub/api/test_chunks_blocked_marking.py``
+    shape, so a test can pin exactly how many facts reads one route call costs."""
+
+    def __init__(self, store: ScopedConnections, clock: IClock) -> None:
+        super().__init__(store, clock)
+        self.load_all_facts_calls = 0
+        self.load_facts_calls = 0
+
+    def load_all_facts(self) -> dict[str, ChunkFacts]:
+        self.load_all_facts_calls += 1
+        return super().load_all_facts()
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        self.load_facts_calls += 1
+        return super().load_facts(chunk_id, transaction=transaction)
+
+
+def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(tmp_path: Path) -> None:
+    """A bare chunk's neighborhood costs exactly the one facts read the route already
+    makes for its own status — no edges means no further per-neighbor reads."""
+    hub = build_hub(tmp_path)
+    bare_id = ingest(hub, [{"source": "default", "ref": "bare"}])
+
+    counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
+    assert hub.app is not None
+    serve_default_tenant(hub, replace(hub.services, chunks=replace(hub.services.chunks, facts=counting)))
+
+    resp = hub.client.get(f"/api/chunks/{bare_id}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["neighborhood"] == {"prerequisites": [], "dependents": []}
+    assert counting.load_all_facts_calls == 0
+    assert counting.load_facts_calls == 1
+
+
+def test_the_neighborhoods_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small")
+    subject_id = ingest(small, [{"source": "default", "ref": "subject"}])
+    prerequisite_id = ingest(small, [_PREREQUISITE])
+    _declare(small, subject_id, prerequisite_id)
+
+    large = build_hub(tmp_path / "large")
+    large_subject_id = ingest(large, [{"source": "default", "ref": "subject"}])
+    large_prerequisite_id = ingest(large, [_PREREQUISITE])
+    _declare(large, large_subject_id, large_prerequisite_id)
+    for i in range(8):  # 9x the small fleet, none of it named by the subject's own edges
+        ingest(large, [{"source": "default", "ref": f"filler-{i}"}])
+
+    def call(hub: HubHarness, chunk_id: str) -> None:
+        resp = hub.client.get(f"/api/chunks/{chunk_id}")
+        assert resp.status_code == 200, resp.text
+
+    small_count = count_queries(small.engine, lambda: call(small, subject_id))
+    large_count = count_queries(large.engine, lambda: call(large, large_subject_id))
+
+    assert small_count == large_count
+
+
+def test_query_count_is_independent_of_the_subjects_own_neighbor_count(tmp_path: Path) -> None:
+    """The subject's own edge count — not just fleet size — must not move the query
+    count: a bulk `load_facts_for` resolves every neighbor's status in one read
+    regardless of how many neighbors there are."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    few_subject_id = ingest(few, [{"source": "default", "ref": "subject"}])
+    for i in range(3):
+        prereq_id = ingest(few, [{"source": "default", "ref": f"prereq-{i}"}])
+        _declare(few, few_subject_id, prereq_id)
+
+    many = build_hub(tmp_path / "many")
+    many_subject_id = ingest(many, [{"source": "default", "ref": "subject"}])
+    for i in range(9):  # 3x the few-neighbor subject's own edge count
+        prereq_id = ingest(many, [{"source": "default", "ref": f"prereq-{i}"}])
+        _declare(many, many_subject_id, prereq_id)
+
+    def call(hub: HubHarness, chunk_id: str) -> None:
+        resp = hub.client.get(f"/api/chunks/{chunk_id}")
+        assert resp.status_code == 200, resp.text
+
+    few_count = count_queries(few.engine, lambda: call(few, few_subject_id))
+    many_count = count_queries(many.engine, lambda: call(many, many_subject_id))
+
+    assert few_count == many_count

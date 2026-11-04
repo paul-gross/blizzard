@@ -2,7 +2,7 @@
 
 Exercised against a fake of the ``AuthService`` calls it composes and a fake token-resolution port; the real
 acceptance rules are pinned in ``tests/unit/hub/auth/test_service.py`` and the route's mapping in
-``tests/test_auth_login_api.py``.
+``tests/component/hub/api/test_auth_login.py``.
 """
 
 from __future__ import annotations

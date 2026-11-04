@@ -198,7 +198,7 @@ class GraphMintService:
 
         Idempotent by name, and once under concurrency (``bzh:store-exclusive-write``). A ``None`` from
         ``get_enabled_by_name`` is ambiguous, so :meth:`IReadGraphRepository.any_minted` disambiguates, pinned by
-        tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
+        tests/component/hub/api/test_graphs_lifecycle.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
             return existing  # an enabled graph of the name stands; nothing to decide under the lock

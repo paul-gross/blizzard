@@ -1,0 +1,221 @@
+"""``GET /api/fleet/chunks/{chunk_id}/garden/proposals`` — the worker-scoped fleet read
+of a routine's garden-proposal docket, filtered by a ``state`` selector (``open`` by
+default, plus ``closed`` and ``all``) (component tier). Derives the routine from the
+chunk's own ``RunContext``, reuses ``src/blizzard/hub/api/garden_proposals.py``'s own ``garden_proposal_view``, and
+refuses — rather than answering an empty bucket — an unknown chunk or one with no run
+context. No scope column exists here, so unlike findings there is no scope case."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.run_context_store import RunContextStore
+from tests.support import HubHarness, build_hub, default_project, hub_store_connections, seed_scope, seed_work_item
+
+_NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
+_ROUTINE = "nightly"
+_SCOPE = "blizzard"
+
+
+def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
+    """A work item with its own resting chunk, plus a recorded run context for it
+    unless ``with_run_context`` is False — the chunk id the route resolves through."""
+    store_connections = hub_store_connections(hub.engine)
+    item = seed_work_item(store_connections, graph_id="gr_garden", author=WorkItemAuthor.user("u_1"), at=_NOW)
+    if with_run_context:
+        seed_scope(store_connections, _SCOPE, at=_NOW)
+        RunContextStore(store_connections).record(
+            item.work_item_id,
+            RunContext(
+                project_id=default_project(hub.engine), routine_name=_ROUTINE, scope_slug=_SCOPE, mode="dry_run"
+            ),
+        )
+    return f"ch_{item.ref}"
+
+
+def _seed_finding(hub: HubHarness, finding_id: str) -> None:
+    seed_scope(hub_store_connections(hub.engine), _SCOPE, at=_NOW)
+    FindingStore(hub_store_connections(hub.engine)).add(
+        finding_id,
+        project_id=default_project(hub.engine),
+        routine_name=_ROUTINE,
+        scope_slug=_SCOPE,
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s",
+        introduced=None,
+        at=_NOW,
+    )
+
+
+def _seed_proposal(hub: HubHarness, proposal_id: str, *, routine_name: str = _ROUTINE) -> None:
+    GardenProposalStore(hub_store_connections(hub.engine)).create(
+        proposal_id,
+        project_id=default_project(hub.engine),
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name=routine_name,
+        class_="fix-the-source",
+        title="t",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+
+
+def _pass_proposal(hub: HubHarness, proposal_id: str) -> None:
+    GardenProposalClosureStore(hub_store_connections(hub.engine)).record_pass(
+        proposal_id, reason="not worth it", closed_by="u_1", at=_NOW
+    )
+
+
+def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/fleet/chunks/ch_ghost/garden/proposals")
+    assert resp.status_code == 404, resp.text
+    assert "unknown chunk" in resp.json()["detail"]
+
+
+def test_404s_on_a_chunk_with_no_run_context(tmp_path: Path) -> None:
+    """A chunk that is not a routine run gets a legible refusal, not an empty list."""
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub, with_run_context=False)
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals")
+    assert resp.status_code == 404, resp.text
+    assert "no run context" in resp.json()["detail"]
+
+
+def test_returns_the_routines_open_proposals_via_the_shared_projection(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_1")
+    _seed_proposal(hub, "gprop_other", routine_name="other-routine")  # a different routine — not in this bucket
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["proposal_id"] for row in body] == ["gprop_1"]
+    assert body[0]["closure"] is None
+
+
+def test_excludes_a_closed_proposal(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_open")
+    _seed_proposal(hub, "gprop_closed")
+    _pass_proposal(hub, "gprop_closed")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals")
+    assert resp.status_code == 200, resp.text
+    assert [row["proposal_id"] for row in resp.json()] == ["gprop_open"]
+
+
+def test_state_closed_returns_only_closed_proposals_with_their_pass_reason(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_open")
+    _seed_proposal(hub, "gprop_closed")
+    _pass_proposal(hub, "gprop_closed")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "closed"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["proposal_id"] for row in body] == ["gprop_closed"]
+    assert body[0]["closure"]["closure"] == "passed"
+    assert body[0]["closure"]["reason"] == "not worth it"
+
+
+def test_state_all_returns_open_and_closed_proposals(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_open")
+    _seed_proposal(hub, "gprop_closed")
+    _pass_proposal(hub, "gprop_closed")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "all"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["proposal_id"] for row in body] == ["gprop_open", "gprop_closed"]
+    assert body[0]["closure"] is None
+    assert body[1]["closure"]["reason"] == "not worth it"
+
+
+def test_state_closed_404s_for_a_chunk_with_no_run_context(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub, with_run_context=False)
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "closed"})
+    assert resp.status_code == 404, resp.text
+    assert "no run context" in resp.json()["detail"]
+
+
+def test_takes_no_routine_flag(tmp_path: Path) -> None:
+    """The route's own signature carries no such parameter — passing one is a no-op,
+    never a way to reach another routine's docket."""
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_1")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"routine": "other-routine"})
+    assert resp.status_code == 200, resp.text
+    assert [row["proposal_id"] for row in resp.json()] == ["gprop_1"]
+
+
+def _follow_pages(hub: HubHarness, chunk_id: str, **params: str | int) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    while True:
+        resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals/page", params=params)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body["proposals"]) <= int(params["limit"])
+        rows += body["proposals"]
+        if body["next_cursor"] is None:
+            return rows
+        params = {**params, "cursor": body["next_cursor"]}
+
+
+@pytest.mark.parametrize("state", ["open", "closed", "all"])
+def test_page_route_followed_to_its_end_equals_the_legacy_route(tmp_path: Path, state: str) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    for n in range(5):
+        _seed_proposal(hub, f"gprop_{n}")
+        if n % 2:
+            _pass_proposal(hub, f"gprop_{n}")
+    _seed_proposal(hub, "gprop_other", routine_name="other-routine")
+
+    legacy = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": state}).json()
+
+    assert _follow_pages(hub, chunk_id, state=state, limit=2) == legacy
+
+
+def test_page_route_refuses_a_malformed_cursor_and_an_out_of_range_limit(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    url = f"/api/fleet/chunks/{chunk_id}/garden/proposals/page"
+
+    assert hub.client.get(url, params={"cursor": "junk"}).status_code == 422
+    assert hub.client.get(url, params={"limit": 0}).status_code == 422
+    assert hub.client.get(url, params={"limit": 1001}).status_code == 422
+
+
+def test_page_route_404s_on_an_unknown_chunk_and_a_chunk_with_no_run_context(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.get("/api/fleet/chunks/ch_ghost/garden/proposals/page").status_code == 404
+    chunk_id = _seed_chunk(hub, with_run_context=False)
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals/page")
+    assert resp.status_code == 404
+    assert "no run context" in resp.json()["detail"]

@@ -1,7 +1,7 @@
 """``GET /api/routines/trend`` — a routine's
 finding inflow-against-outflow over a window, seeded straight through ``findings``/
 ``finding_facts`` so each fact's own ``recorded_at``/``introduced_at`` is pinned exactly
-(the ``tests/test_finding_api.py`` shape)."""
+(the ``tests/component/hub/api/test_findings.py`` shape)."""
 
 from __future__ import annotations
 
