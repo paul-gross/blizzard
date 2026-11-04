@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 from fastapi.routing import APIRoute
@@ -149,6 +150,26 @@ def test_a_worker_transition_onto_the_node_is_submitted_once_and_takes_its_turn(
         ("turn-ended", "pending"),
     ]
     assert world.action.passes == [chunk_id]
+
+
+def test_controlled_step_reports_probe_failure_and_recovers(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = ControlledClock(world.hub.clock.now())
+    driver = FlowDriver(world.stores, clock)
+    app = create_hub_app(
+        world.hub.wired_app.state.config,
+        services=world.hub.hub_services,
+        test_flow_router=controlled_flow_router(driver, clock, asyncio.Lock()),
+    )
+    probe = world.stores.corpus.flow_lines_signature
+    monkeypatch.setattr(world.stores.corpus, "flow_lines_signature", Mock(side_effect=RuntimeError("probe down")))
+    with TestClient(app) as client:
+        failed = client.post("/api/admin/test-flow/step")
+        assert failed.status_code == 500
+        assert failed.json() == {"detail": "flow driver step failed"}
+        monkeypatch.setattr(world.stores.corpus, "flow_lines_signature", probe)
+        recovered = client.post("/api/admin/test-flow/step")
+        assert recovered.status_code == 200
+        assert recovered.json()["reconciled"] == 1
 
 
 def test_controlled_step_completes_turn_and_move_does_not_run_or_publish(world: World) -> None:

@@ -25,6 +25,31 @@ from tests.support import build_hub, runner_token, seed_hub_admin, seed_runner, 
 pytestmark = pytest.mark.component
 
 
+@pytest.mark.asyncio
+async def test_cancelled_controlled_step_drains_a_failing_pass_before_releasing_lock() -> None:
+    clock = ControlledClock(datetime(2025, 1, 1, tzinfo=UTC))
+    lock = asyncio.Lock()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def failing_step() -> TickResult:
+        entered.set()
+        await release.wait()
+        raise RuntimeError("probe down")
+
+    driver = Mock(spec=FlowDriver)
+    driver.step = AsyncMock(side_effect=failing_step)
+    step = next(r.endpoint for r in controlled_flow_router(driver, clock, lock).routes if isinstance(r, APIRoute))
+    stepping = asyncio.create_task(step())
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    stepping.cancel()
+    await asyncio.sleep(0)
+    assert lock.locked() and not stepping.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await stepping
+    assert not lock.locked()
+
+
 def test_clock_routes_on_store_behind_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
     monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")

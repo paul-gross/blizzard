@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.clock import ControlledClock, FixedClock, IClock
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
@@ -50,6 +51,11 @@ def controlled_flow_router(driver: FlowDriver, clock: ControlledClock, lock: asy
                     if task.cancelled():
                         raise
                     cancelled = True
+                except Exception as exc:
+                    get_logger("blizzard.hub.flow_driver").exception("flow driver tick failed")
+                    if cancelled:
+                        raise asyncio.CancelledError from exc
+                    raise HTTPException(status_code=500, detail="flow driver step failed") from exc
             if cancelled:
                 raise asyncio.CancelledError
             return step_answer(result, clock)
