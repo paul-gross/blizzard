@@ -6,6 +6,9 @@ the caller, never taught to this module."""
 
 from __future__ import annotations
 
+import os
+import socket
+import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -76,8 +79,68 @@ def run_migrate(
     click.echo("migrated" if down is None else f"reversed to {down}")
 
 
-def build_early_shutdown_server(app: Any, *, host: str, port: int, shutdown_signal: Any) -> _EarlyShutdownServer:
-    """Wire APP under uvicorn behind the shared early-shutdown wrapper."""
+@contextmanager
+def bound_tcp(host: str, port: int) -> Generator[socket.socket, None, None]:
+    """A listening TCP socket at HOST:PORT, closed when the block exits. Port ``0`` lets the kernel pick one;
+    read the port actually bound from :func:`bound_port`. A bind failure is a ``click.ClickException``."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host, port))
+        sock.listen()
+    except OSError as exc:
+        sock.close()
+        raise click.ClickException(f"could not bind {host}:{port}: {exc}") from exc
+    with sock:
+        yield sock
+
+
+def bound_port(sock: socket.socket) -> int:
+    """The port SOCK is bound to."""
+    return int(sock.getsockname()[1])
+
+
+def publish_listening_file(path: Path, host: str, port: int) -> None:
+    """Write ``http://HOST:PORT`` and a newline to PATH atomically: a temp file in PATH's directory, then
+    ``os.replace``, so a reader sees no file or the whole URL — never part of one."""
+    descriptor, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            handle.write(f"http://{host}:{port}\n")
+        os.replace(temp, path)
+    except BaseException:
+        Path(temp).unlink(missing_ok=True)
+        raise
+
+
+class _ListeningServer(_EarlyShutdownServer):
+    """Publishes the listening file once uvicorn's startup has completed — the daemon's readiness signal."""
+
+    def __init__(
+        self, config: uvicorn.Config, *, shutdown_signal: Any, listening_file: Path | None, host: str, port: int
+    ) -> None:
+        super().__init__(config, shutdown_signal=shutdown_signal)
+        self._listening_file = listening_file
+        self._host = host
+        self._port = port
+
+    async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+        await super().startup(sockets=sockets)
+        if self.started and self._listening_file is not None:
+            publish_listening_file(self._listening_file, self._host, self._port)
+
+
+def build_early_shutdown_server(
+    app: Any,
+    *,
+    host: str,
+    port: int,
+    shutdown_signal: Any,
+    listening_file: Path | None = None,
+) -> _EarlyShutdownServer:
+    """Wire APP under uvicorn behind the shared early-shutdown wrapper. PORT is the port the daemon serves on —
+    the bound one, when it is handed pre-bound sockets through ``run(sockets=...)``. LISTENING_FILE, when given,
+    receives ``http://HOST:PORT`` once startup has completed."""
     uvicorn_config = uvicorn.Config(
         app,
         host=host,
@@ -85,4 +148,18 @@ def build_early_shutdown_server(app: Any, *, host: str, port: int, shutdown_sign
         timeout_keep_alive=KEEP_ALIVE_SECONDS,
         timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
     )
-    return _EarlyShutdownServer(uvicorn_config, shutdown_signal=shutdown_signal)
+    return _ListeningServer(
+        uvicorn_config, shutdown_signal=shutdown_signal, listening_file=listening_file, host=host, port=port
+    )
+
+
+def listening_file_option(function: Callable[..., Any]) -> Callable[..., Any]:
+    """The ``--listening-file PATH`` option a daemon's ``host`` verb takes."""
+    return click.option(
+        "--listening-file",
+        "listening_file",
+        type=click.Path(dir_okay=False, path_type=Path),
+        default=None,
+        help="Once serving, write the daemon's URL (http://HOST:PORT, the port actually bound) to this file, "
+        "atomically. Pair with --port 0 to let the kernel pick a free port.",
+    )(function)

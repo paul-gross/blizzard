@@ -468,7 +468,7 @@ def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path) -> No
 
     collaborators = _http_collaborators(build_host_process=build)
 
-    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)], obj=collaborators)
+    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime), "--port", "0"], obj=collaborators)
 
     assert result.exit_code != 0
     assert str(bundle / "claude-code" / "stray") in result.output
@@ -485,7 +485,7 @@ def test_host_publishes_before_building_the_process(tmp_path: Path) -> None:
         raise RuntimeError("stop here")
 
     result = CliRunner().invoke(
-        runner_group, ["host", "--dir", str(runtime)], obj=_http_collaborators(build_host_process=stop)
+        runner_group, ["host", "--dir", str(runtime), "--port", "0"], obj=_http_collaborators(build_host_process=stop)
     )
 
     assert isinstance(result.exception, RuntimeError)
@@ -629,7 +629,9 @@ def test_a_collision_fails_startup_naming_the_native_path_and_keeps_current(tmp_
     before = published_snapshot(runtime)
     (bundle / "claude-code" / "settings.json").write_text(json.dumps({"permissions": {"allow": ["Read", "Monitor"]}}))
 
-    result = CliRunner().invoke(runner_group, [command, "--dir", str(runtime)])
+    result = CliRunner().invoke(
+        runner_group, [command, "--dir", str(runtime), *(["--port", "0"] if command == "host" else [])]
+    )
 
     assert result.exit_code != 0
     assert str(bundle / "claude-code" / "settings.json") in result.output

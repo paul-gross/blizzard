@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import signal
 import types
+from dataclasses import replace
 from functools import partial
 from importlib.resources import files
 from pathlib import Path
@@ -13,7 +14,15 @@ import click
 from blizzard import __version__
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
-from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
+from blizzard.cli.runtime import (
+    bound_port,
+    bound_tcp,
+    build_early_shutdown_server,
+    click_exception_on,
+    listening_file_option,
+    run_init,
+    run_migrate,
+)
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
@@ -97,8 +106,16 @@ def migrate_cmd(directory: str, down: str | None, head: bool, knows: str | None,
 )
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
+@listening_file_option
 @click.option("--allow-external-db", "allow_external_db", is_flag=True, default=False, help=_ALLOW_EXTERNAL_DB_HELP)
-def host(directory: str | None, dir_option: str, host_: str | None, port: int | None, allow_external_db: bool) -> None:
+def host(
+    directory: str | None,
+    dir_option: str,
+    host_: str | None,
+    port: int | None,
+    listening_file: Path | None,
+    allow_external_db: bool,
+) -> None:
     """Become the blizzard-hub daemon: HTTP API + SSE + the embedded web app.
 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
@@ -118,20 +135,29 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         )
     with click_exception_on(RevisionMismatchError, StoreBelowFloorError):
         ensure_current_revision(config)
-    with click_exception_on(ConfigError):
-        app = build_hosted_app(config, version_window=window)
-    click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
-    server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
+    # Bound before anything is built, so every derivation of the port sees the one actually bound.
+    with bound_tcp(config.host, config.port) as sock:
+        config = replace(config, port=bound_port(sock))
+        with click_exception_on(ConfigError):
+            app = build_hosted_app(config, version_window=window)
+        click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
+        server = build_early_shutdown_server(
+            app,
+            host=config.host,
+            port=config.port,
+            shutdown_signal=app.state.shutdown,
+            listening_file=listening_file,
+        )
 
-    # The server re-raises a caught signal through the handler installed before it ran; the
-    # default would kill the process, so this one lets `run()` return and the disposal run.
-    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
-        server.handle_exit(signum, frame)
+        # The server re-raises a caught signal through the handler installed before it ran; the
+        # default would kill the process, so this one lets `run()` return and the disposal run.
+        def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+            server.handle_exit(signum, frame)
 
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
-    try:
-        server.run()
-    finally:
-        app.state.engine.dispose()
-        app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+        try:
+            server.run(sockets=[sock])
+        finally:
+            app.state.engine.dispose()
+            app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)

@@ -33,7 +33,7 @@ def test_operator_entry_points_refuse_absorbed_store(
     verbs = [["migrate", "--dir", str(root)], ["migrate", "--dir", str(root), "--down", "base"]]
     verbs.append(["init", str(root)])
     if daemon == "runner":
-        verbs.extend((["host", "--check", "--dir", str(root)], ["host", "--dir", str(root)]))
+        verbs.extend((["host", "--check", "--dir", str(root)], ["host", "--dir", str(root), "--port", "0"]))
     else:
         verbs.append(["host", "--dir", str(root)])
     for verb in verbs:

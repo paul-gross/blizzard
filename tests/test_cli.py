@@ -577,7 +577,7 @@ def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_p
 _STORE_WRITERS = {
     "reship": (["transcript", "reship", "seg_x"], "reship a transcript"),
     "tick": (["tick"], "run a tick"),
-    "host": (["host"], "start the host"),
+    "host": (["host", "--port", "0"], "start the host"),
 }
 
 
@@ -657,7 +657,7 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) 
 
     result = runner.invoke(
         blizzard,
-        ["runner", "host", "--dir", str(root)],
+        ["runner", "host", "--dir", str(root), "--port", "0"],
         obj=replace(
             InitCollaborators(runner.hub.clients, runner.hub.host_clients, runner.sessions), build_host_process=stop
         ),
@@ -681,7 +681,7 @@ def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_p
         config_path.read_text().replace('runner_prompt_file = ""', 'runner_prompt_file = "does-not-exist.md"')
     )
 
-    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
+    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root), "--port", "0"])
 
     assert result.exit_code != 0
     assert result.exception is None or isinstance(result.exception, SystemExit)
