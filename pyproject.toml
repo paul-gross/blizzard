@@ -75,11 +75,8 @@ egress = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Pinned so `setup-uv` resolves a committed version instead of falling back to a
-# live GitHub API lookup of the latest release — keep in sync with the `uv` pin
-# in mise.toml, the local dev entrypoint.
 [tool.uv]
-required-version = "==0.11.21"
+required-version = ">=0.13,<0.14"
 
 [tool.hatch.build.targets.wheel]
 # The one wheel ships both daemons, the CLI, and the compiled frontend.
