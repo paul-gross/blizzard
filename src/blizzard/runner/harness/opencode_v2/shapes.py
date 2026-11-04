@@ -210,8 +210,9 @@ def parse_part(value: JsonValue) -> Part:
 @domain_model
 @dataclass(frozen=True)
 class Message:
-    """One session message. ``parts``, ``tokens``, ``cost``, ``finish`` and ``model`` are an assistant step's;
-    ``outcome`` an idle's; ``error`` either's; ``text`` a user or synthetic message's."""
+    """One session message. ``parts`` and ``finish`` are an assistant step's; ``tokens``, ``cost`` and ``model`` an
+    assistant step's or a compaction's; ``outcome`` an idle's; ``error`` an assistant step's or an idle's; ``text`` a
+    user or synthetic message's."""
 
     type: str
     id: str
@@ -237,6 +238,16 @@ def parse_message(value: JsonValue) -> Message:
     base = Message(type=kind, id=_text(record, "id", what), created=created)
     error = record.get("error")
     parsed_error = None if error is None else parse_error(error, f"{what}.error")
+    if kind == "compaction":
+        model = record.get("model")
+        return Message(
+            type=kind,
+            id=base.id,
+            created=created,
+            tokens=parse_tokens(record.get("tokens"), f"{what}.tokens"),
+            cost=_number(record, "cost", what),
+            model=None if model is None else parse_model_reference(model, f"{what}.model"),
+        )
     if kind == "assistant":
         model = record.get("model")
         return Message(

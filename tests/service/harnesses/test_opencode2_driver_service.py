@@ -28,11 +28,13 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
-from blizzard.runner.harness.opencode_v2.client import ModelReference
+from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
+from blizzard.runner.harness.opencode_v2.registration import read_registration
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, Outcome, parse_result
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
+from blizzard.runner.harness.opencode_v2.shapes import parse_session
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -118,6 +120,11 @@ class Engine:
         result = parse_result(out)
         assert result is not None, (out, err)
         return result
+
+    def client(self) -> OpenCodeServiceClient:
+        registration = read_registration(self.home / ".local" / "state" / "opencode" / "service.json")
+        assert registration is not None
+        return OpenCodeServiceClient(registration, UrllibServiceTransport())
 
     def service(self, *args: str) -> subprocess.CompletedProcess[str]:
         # The service's own environment is the one every child session's tools run under.
@@ -243,13 +250,18 @@ def test_a_resume_continues_its_own_session_and_refuses_another_runners(engine: 
 
 def test_sigint_interrupts_the_tree_and_ends_the_turn_interrupted(engine: Engine) -> None:
     child = "hang()"
-    proc = engine.start(engine.request(f"subagent({child!r}, background=True)\nhang()"))
+    request = engine.request(f"subagent({child!r}, background=True)\nhang()")
+    proc = engine.start(request)
     time.sleep(3)
     proc.send_signal(signal.SIGINT)
     out, err = proc.communicate(timeout=60)
     result = parse_result(out)
     assert result is not None, err
     assert result.outcome is Outcome.INTERRUPTED
+    client = engine.client()
+    children = [parse_session(child) for child in client.children(request.session_id)]
+    assert children and all(child.outcome == "interrupted" for child in children)
+    assert parse_session(client.session(request.session_id)).outcome == "interrupted"
 
 
 def test_a_lost_event_stream_leaves_polling_to_finish_the_turn(tmp_path: Path, engine_bin: Path) -> None:

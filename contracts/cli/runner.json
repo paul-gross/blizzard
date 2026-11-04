@@ -1204,7 +1204,7 @@
           "short_help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."
         },
         "drive": {
-          "help": "Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.\n\nThe runner launches this as the worker for every OpenCode 2 spawn, resume, judgement, and nudge; its exit ends\nthe turn. SIGINT interrupts the session tree and ends the turn interrupted.",
+          "help": "Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.\n\nThe worker entrypoint the OpenCode 2 binding launches for each spawn, resume, judgement, and nudge, not meant to\nbe run by hand; its exit ends the turn. SIGINT interrupts the session tree and ends the turn interrupted.",
           "params": [
             {
               "help": "The turn's request file, written by the runner; read once, then removed.",

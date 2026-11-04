@@ -14,7 +14,7 @@ from pathlib import Path
 import click
 
 from blizzard.runner.cli.children import RunnerCliCollaborators
-from blizzard.runner.cli.worker_call import WorkerCall
+from blizzard.runner.cli.worker import send_heartbeat
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityContractError
 from blizzard.runner.harness.opencode.compatibility.attach import LoopbackAttachProxyFactory
@@ -285,8 +285,8 @@ def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration
 def opencode_drive(request_path: Path) -> None:
     """Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.
 
-    The runner launches this as the worker for every OpenCode 2 spawn, resume, judgement, and nudge; its exit ends
-    the turn. SIGINT interrupts the session tree and ends the turn interrupted."""
+    The worker entrypoint the OpenCode 2 binding launches for each spawn, resume, judgement, and nudge, not meant to
+    be run by hand; its exit ends the turn. SIGINT interrupts the session tree and ends the turn interrupted."""
     try:
         request = take_request(request_path)
     except DriveRequestError as exc:
@@ -299,16 +299,8 @@ def opencode_drive(request_path: Path) -> None:
         error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
         ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
         return
-    worker = WorkerCall.hook("heartbeat", traced=False)
-
-    def heartbeat() -> None:
-        if worker is not None:
-            worker.soft_post(
-                "/api/heartbeat", failure="could not reach the runner", json_body={"lease_id": worker.lease_id}
-            )
-
     stop = threading.Event()
-    driver = TurnDriver(core, request, environment, sys.stdout, heartbeat=heartbeat, stop=stop)
+    driver = TurnDriver(core, request, environment, sys.stdout, heartbeat=send_heartbeat, stop=stop)
 
     def interrupt(signum: int, frame: object) -> None:
         del signum, frame

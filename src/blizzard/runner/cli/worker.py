@@ -10,16 +10,21 @@ from blizzard.runner.cli.artifact import artifact_create
 from blizzard.runner.cli.worker_call import ENV_ELICITATION, WorkerCall
 
 
-@click.command()
-def heartbeat() -> None:
-    """Worker hook: report that this worker is still alive (identity from the environment).
-
-    Fails **soft**: a missing identity or an unreachable runner is reported to stderr and this still exits 0."""
+def send_heartbeat() -> None:
+    """Report this worker alive, failing soft: a missing identity or an unreachable runner is said on stderr only."""
     worker = WorkerCall.hook("heartbeat", traced=False)
     if worker is not None:
         worker.soft_post(
             "/api/heartbeat", failure="could not reach the runner", json_body={"lease_id": worker.lease_id}
         )
+
+
+@click.command()
+def heartbeat() -> None:
+    """Worker hook: report that this worker is still alive (identity from the environment).
+
+    Fails **soft**: a missing identity or an unreachable runner is reported to stderr and this still exits 0."""
+    send_heartbeat()
 
 
 @click.command("session-end")

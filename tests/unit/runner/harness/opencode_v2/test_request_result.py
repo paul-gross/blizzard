@@ -79,6 +79,27 @@ def test_the_result_reads_back_as_written() -> None:
     )
 
 
+def _attempt(text: str, *, finished: bool = True) -> str:
+    out = io.StringIO()
+    writer = ResultWriter(out, "ses_1")
+    writer.decision(Decision("form", "ses_1", f"frm_{text}", "cancel"))
+    if finished:
+        step = Step("ses_1", None, f"msg_{text}", "openai/gpt-6-luna", Tokens(1, 1, 0, 0, 0), 0.0)
+        writer.finish(Outcome.SUCCEEDED, text, [step], None)
+    return out.getvalue()
+
+
+def test_an_appended_capture_reads_its_last_attempt_alone() -> None:
+    result = parse_result(_attempt("first") + _attempt("second"))
+    assert result is not None and result.text == "second"
+    assert [s.message_id for s in result.steps] == ["msg_second"]
+    assert [d.request_id for d in result.decisions] == ["frm_second"]
+
+
+def test_a_last_attempt_cut_short_is_unusable_whatever_came_before() -> None:
+    assert parse_result(_attempt("first") + _attempt("second", finished=False)) is None
+
+
 def test_a_result_without_its_result_record_is_unusable() -> None:
     out = io.StringIO()
     ResultWriter(out, "ses_1").decision(Decision("form", "ses_1", "frm_1", "cancel"))

@@ -141,10 +141,11 @@ def test_a_spawn_resuming_a_session_drives_that_session(tmp_path: Path) -> None:
 def test_a_judgement_writes_to_its_output_path_and_marks_the_elicitation(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path)
     output = tmp_path / "verdict.out"
+    output.write_text("a stale reply\n")
     adapter.judge(str(tmp_path), "ses_1", "judge it", str(output), preamble=_preamble(tmp_path), chunk_id="c1")
     assert launcher.requests[0].kind is DriveKind.JUDGE and launcher.requests[0].prompt == "judge it"
     assert launcher.envs[0]["BLIZZARD_ELICITATION"] == "1"
-    assert output.exists()
+    assert output.read_text() == ""
     with pytest.raises(HarnessSpawnError):
         adapter.judge(str(tmp_path), "ses_1", "judge it", "")
 
