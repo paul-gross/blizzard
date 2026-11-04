@@ -4,7 +4,7 @@
 #
 #   release-notes.sh --range <from>..<to>   real git log over the given range
 #   release-notes.sh --from-stdin           read "<sha> <subject>" lines from
-#                                            stdin — what tests/test_release_notes.py
+#                                            stdin — what tests/guards/test_release_notes.py
 #                                            drives, over a synthetic commit list
 #                                            with no real git history needed
 #

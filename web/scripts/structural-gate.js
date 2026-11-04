@@ -885,7 +885,7 @@ function assertNoCacheWriteDetectorWorks() {
 
 // The package-layers sweep (`bzh:frontend-package-layers`). Each project's source root is cut
 // into units — folders, keyed by their path below the root — and each unit maps to the units it
-// may import (the backend's `tests/test_layering.py` shape). A unit may also always import the
+// may import (the backend's `tests/guards/test_layering.py` shape). A unit may also always import the
 // project's shared kernel, and a spec or a story may also import the project's spec-support unit. A file
 // belongs to the longest key prefixing its path; a key with child keys (`garden` beside
 // `garden/core`) owns only the files directly inside it. Something two features need moves down

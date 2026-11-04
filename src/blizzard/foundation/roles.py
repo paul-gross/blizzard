@@ -2,7 +2,7 @@
 
 Each marker records its role on the class as ``__blizzard_role__`` and returns the class itself, so it
 stacks on ``@dataclass(frozen=True)`` in either order and keeps its type for the type checker.
-``tests/test_layering.py`` reads the markers from source and holds each role to ``bzh:data-roles``.
+``tests/guards/test_layering.py`` reads the markers from source and holds each role to ``bzh:data-roles``.
 """
 
 from __future__ import annotations

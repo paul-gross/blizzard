@@ -58,7 +58,8 @@ _COMMANDS = {
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
     # One session service every subcommand inherits, through the carrier pinned here; who may write through it is
-    # pinned by tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root.
+    # pinned by
+    # tests/guards/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root.
     HubCliCollaborators.resolve(ctx, lambda: SessionService(SessionFile.of()))
     if ctx.invoked_subcommand is None:
         host = hub.get_command(ctx, "host")

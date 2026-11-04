@@ -7,8 +7,6 @@ import yaml
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "upper-tiers.yml").read_text())
 _JOBS = _WORKFLOW["jobs"]
 _SUITE_JOBS = ("ui", "journey", "image-smoke", "compose-smoke")

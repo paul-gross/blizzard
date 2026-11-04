@@ -9,12 +9,9 @@ from __future__ import annotations
 import tomllib
 from typing import Any
 
-import pytest
 import yaml
 
 from tests.repo_files import repo_root
-
-pytestmark = pytest.mark.unit
 
 _REPO_ROOT = repo_root()
 _DOCKER_DIR = _REPO_ROOT / "packaging" / "docker"

@@ -1,5 +1,5 @@
 """The Claude Code binding's declaration — the one approved site constructing
-:class:`ClaudeCodeAdapter` and its health probe (``tests/test_layering.py``)."""
+:class:`ClaudeCodeAdapter` and its health probe (``tests/guards/test_layering.py``)."""
 
 from __future__ import annotations
 

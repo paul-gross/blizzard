@@ -15,8 +15,6 @@ import pytest
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _SCRIPTS = repo_root() / "scripts"
 
 

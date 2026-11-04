@@ -19,8 +19,6 @@ import pytest
 
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 _SPECS = sorted((repo_root() / "openapi").glob("*.openapi.json"))
 
 _SCHEMAS = {name for spec in _SPECS for name in json.loads(spec.read_text())["components"]["schemas"]}

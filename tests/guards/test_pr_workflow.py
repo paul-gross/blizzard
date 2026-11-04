@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import pytest
 import yaml
 
 from tests.repo_files import repo_root
-
-pytestmark = pytest.mark.unit
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "pr.yml").read_text())
 

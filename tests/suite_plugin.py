@@ -43,7 +43,7 @@ _TIER_MARKERS = frozenset(
 
 #: Every collected item's nodeid missing every tier marker, populated by
 #: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
-#: markers on its own, so ``tests/test_default_suite_markers.py`` reads this back instead.
+#: markers on its own, so ``tests/guards/test_default_suite_markers.py`` reads this back instead.
 UNMARKED_TEST_NODEIDS: list[str] = []
 
 

@@ -10,11 +10,7 @@ from __future__ import annotations
 import ast
 import collections
 
-import pytest
-
 from tests.repo_files import repo_root
-
-pytestmark = pytest.mark.unit
 
 _TESTS = repo_root() / "tests"
 _ROOT = _TESTS.parent

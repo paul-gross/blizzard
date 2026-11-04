@@ -21,8 +21,6 @@ from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
 from tests.loaded_modules import loaded_after_running
 from tests.repo_files import repo_root
 
-pytestmark = pytest.mark.unit
-
 
 def _production_files(root: Path) -> list[Path]:
     """Every module under ``root`` bar the store-migration tests colocated beside their revisions, which are test code
