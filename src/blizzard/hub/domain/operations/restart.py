@@ -68,7 +68,7 @@ class RestartGraphPinChanged(Exception):
 
 class RestartCurrentNodeUnknown(Exception):
     """The chunk stands on a node its own pinned graph does not carry — refused, never rewound
-    (``tests/test_operator_verb_rules.py::test_restart_landing_refuses_an_unmatched_current_node``)."""
+    (``tests/unit/hub/domain/operations/test_operator_verb_rules.py::test_restart_landing_refuses_an_unmatched_current_node``)."""
 
     def __init__(self, node_id: str, graph_id: str) -> None:
         super().__init__(f"chunk stands on node {node_id} which graph {graph_id} does not carry")

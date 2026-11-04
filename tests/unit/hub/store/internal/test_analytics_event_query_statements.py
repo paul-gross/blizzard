@@ -1,0 +1,115 @@
+"""The analytics query adapter's statements: every one it executes compiles under both
+dialects and stays on the portable expression surface (unit
+tier)."""
+
+from __future__ import annotations
+
+import ast
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.sql import ClauseElement, visitors
+from sqlalchemy.sql.elements import TextClause
+
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import analytics_event_query_store as store_module
+from blizzard.hub.store.scoped import ScopedStatements
+from blizzard.hub.tenancy import StoreScope, TenantId
+
+_STMTS = ScopedStatements(StoreScope(TenantId("ten_analytics")))
+
+#: Every filter set at once, so no branch of the statement builders goes uncompiled.
+_CRITERIA = EventQueryCriteria(
+    extractor_version="blizzard-analytics/2",
+    kind="file_read",
+    tool="Read",
+    subject_prefix="src/",
+    node_id="nd_build",
+    graph_id="gr_1",
+    source="github",
+    since=datetime(2026, 8, 12, tzinfo=UTC),
+    until=datetime(2026, 8, 13, tzinfo=UTC),
+)
+
+
+def _executed_statements() -> dict[str, ClauseElement]:
+    m = store_module
+    return {
+        "filtered_stmt": m.filtered_stmt(_STMTS, _STMTS.select(s.transcript_events), _CRITERIA),
+        "events_stmt": m.events_stmt(_STMTS, _CRITERIA, cursor=encode_cursor(7), limit=200),
+        "counts_stmt": m.counts_stmt(_STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read"),
+        "counts_by_node_stmt": m.counts_by_node_stmt(_STMTS, _CRITERIA),
+    }
+
+
+def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
+    for name, stmt in _executed_statements().items():
+        for dialect in (postgresql.dialect(), sqlite.dialect()):
+            assert "transcript_events" in str(stmt.compile(dialect=dialect)), name
+
+
+def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
+    assert store_module.__name__.endswith("analytics_event_query_store")  # pins which adapter this sweep covers
+    for name, stmt in _executed_statements().items():
+        assert type(stmt).__module__.startswith("sqlalchemy.sql."), name
+        assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)], name
+
+
+def test_a_prefix_filter_compiles_to_a_dialect_independent_comparison() -> None:
+    """A prefix match is `substr(...) = ...` under both dialects — LIKE's case folding
+    differs between them, so an events page or a count would follow the backend."""
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(_executed_statements()["filtered_stmt"].compile(dialect=dialect))
+        assert "substr" in sql.lower()
+        assert "like" not in sql.lower()
+
+
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reads store_module.__file__'s own source; under mutmut that file also carries every "
+    "generated mutant body, which this sweep would wrongly hold to the same pattern",
+)
+def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
+    builders = {name for name in vars(store_module) if name.endswith("_stmt")}
+    assert builders == set(_executed_statements())
+
+    source = ast.parse(Path(store_module.__file__ or "").read_text())
+    executed = [
+        node.args[0]
+        for node in ast.walk(source)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
+    ]
+    assert executed
+    for arg in executed:
+        built_by_a_builder = isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id in builders
+        assert built_by_a_builder, ast.unparse(arg)
+
+
+def test_a_zero_events_cursor_decodes_to_offset_zero() -> None:
+    assert store_module.decode_event_cursor(encode_cursor(0)) == 0
+
+
+def test_a_negative_events_cursor_is_malformed() -> None:
+    with pytest.raises(MalformedCursor):
+        store_module.decode_event_cursor(encode_cursor(-1))
+
+
+def test_an_events_cursor_of_the_wrong_arity_is_malformed_naming_the_cursor() -> None:
+    cursor = encode_cursor(7, 8)
+    with pytest.raises(MalformedCursor) as exc_info:
+        store_module.decode_event_cursor(cursor)
+    assert exc_info.value.cursor == cursor
+
+
+def test_a_counts_limit_follows_the_grouping_and_ordering() -> None:
+    stmt = store_module.counts_stmt(
+        _STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read", limit=5
+    )
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(stmt.compile(dialect=dialect)).upper()
+        assert sql.index("GROUP BY") < sql.index("ORDER BY") < sql.index("LIMIT")

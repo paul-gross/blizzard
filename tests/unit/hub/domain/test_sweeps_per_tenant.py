@@ -1,0 +1,779 @@
+"""The hub's sweeps across tenants: each is one pass per hub that reads its corpus once and acts on every
+row in that row's own tenant, through that tenant's half of the sweep — never one tenant's scope on another
+tenant's row, and never on a tenant closed since the pass read its corpus."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from datetime import timedelta
+from typing import cast
+from unittest.mock import Mock
+
+import pytest
+from structlog.contextvars import merge_contextvars
+from structlog.testing import capture_logs
+
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import TenantWorkRef, WorkRefsSignature
+from blizzard.hub.domain.observability.analytics.derivation import (
+    DerivationTally,
+    EventDerivationReconciler,
+    EventDerivationService,
+    TenantEventDerivation,
+)
+from blizzard.hub.domain.observability.analytics.events import CandidacyRead, DerivationSignature
+from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, AnnotationTally, TenantAnnotation
+from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns, TenantTeardown, TenantTeardownSweep
+from blizzard.hub.domain.work_items.closure import (
+    CLOSE_DRAIN_PASS_LIMIT,
+    CloseDrainSweep,
+    CloseDrainTally,
+    CloseIntentDrainer,
+    TenantCloseIntent,
+    fair_share,
+)
+from blizzard.hub.tenancy import TenantClosed, TenantId
+from tests.pass_isolation import (
+    HEALTHY,
+    POISONED,
+    Poison,
+    Recorder,
+    Scene,
+    assert_pass_isolates,
+    assert_tenant_pass_isolates,
+    build_sweep,
+)
+from tests.tenant_sweeps import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_sweeps
+)
+
+_A = TenantId("ten_a")
+_B = TenantId("ten_b")
+_log = get_logger("test.sweep_tenants")
+
+
+def _refused(tenant: TenantId) -> object:
+    raise TenantClosed(tenant)
+
+
+# --- the close drain -----------------------------------------------------------------------
+
+
+class _Intents:
+    def __init__(self, rows: Sequence[TenantCloseIntent]) -> None:
+        self.rows = list(rows)
+        self.reads = 0
+
+    def pending_close_intents(self) -> list[TenantCloseIntent]:
+        self.reads += 1
+        return self.rows
+
+
+class _TenantDrainer:
+    """Stands in for one tenant's :class:`CloseIntentDrainer`, recording the intents it is handed."""
+
+    def __init__(self) -> None:
+        self.drained: list[str] = []
+
+    def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
+        self.drained.extend(intent.chunk_id for intent in due)
+
+
+def _intent(tenant: TenantId, chunk_id: str) -> TenantCloseIntent:
+    return TenantCloseIntent(tenant=tenant, intent=PendingCloseIntent(chunk_id=chunk_id, ref=WorkRef("src", "1")))
+
+
+def test_one_drain_pass_hands_each_tenant_only_its_own_intents_in_intent_order() -> None:
+    corpus = _Intents([_intent(_A, "ch_a1"), _intent(_B, "ch_b1"), _intent(_A, "ch_a2")])
+    drainers = {_A: _TenantDrainer(), _B: _TenantDrainer()}
+    sweep = CloseDrainSweep(
+        corpus=corpus, tenant=lambda tenant: cast(CloseIntentDrainer, drainers[tenant]), clock=FixedClock(_NOW)
+    )
+
+    sweep.sweep()
+
+    assert corpus.reads == 1
+    assert drainers[_A].drained == ["ch_a1", "ch_a2"]
+    assert drainers[_B].drained == ["ch_b1"]
+
+
+def test_the_drain_skips_a_tenant_closed_since_its_corpus_read_and_drains_the_rest() -> None:
+    drainer = _TenantDrainer()
+    sweep = CloseDrainSweep(
+        corpus=_Intents([_intent(_B, "ch_b1"), _intent(_A, "ch_a1")]),
+        tenant=lambda tenant: cast(CloseIntentDrainer, drainer if tenant == _A else _refused(tenant)),
+        clock=FixedClock(_NOW),
+    )
+
+    sweep.sweep()
+
+    assert drainer.drained == ["ch_a1"]
+
+
+# --- event derivation ----------------------------------------------------------------------
+
+
+class _Segments:
+    def __init__(self, candidacy: dict[TenantId, CandidacyRead], derived: dict[TenantId, frozenset[str]]) -> None:
+        self._candidacy = candidacy
+        self._derived = derived
+
+    def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
+        signature = DerivationSignature(segment_count=1, max_segment_id=1, max_received_at=_NOW, chunk_count=1)
+        return dict.fromkeys({*self._candidacy, *self._derived}, signature)
+
+    def candidacy(self, extractor_version: str) -> dict[TenantId, CandidacyRead]:
+        return self._candidacy
+
+    def derived_segment_ids(self) -> dict[TenantId, frozenset[str]]:
+        return self._derived
+
+
+class _TenantDerivation:
+    """Stands in for one tenant's :class:`TenantEventDerivation`, recording what it is handed."""
+
+    def __init__(self) -> None:
+        self.handed: list[tuple[list[str], frozenset[str]]] = []
+
+    def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+        self.handed.append((list(candidates), stale))
+        return True
+
+
+def test_a_derivation_pass_keys_each_segment_by_its_tenant() -> None:
+    """Both tenants hold a segment ``sg_1`` (segment ids are runner-minted): the one visible in
+    ``ten_a`` is derived there, and only ``ten_b``'s, visible no longer, is dropped."""
+    visible = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    corpus = _Segments({_A: visible}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_1"})})
+    units = {_A: _TenantDerivation(), _B: _TenantDerivation()}
+    reconciler = EventDerivationReconciler(
+        corpus=corpus, tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]), clock=FixedClock(_NOW)
+    )
+
+    reconciler.sweep()
+
+    assert units[_A].handed == [(["sg_1"], frozenset())]
+    assert units[_B].handed == [([], frozenset({"sg_1"}))]
+
+
+def test_a_derivation_pass_skips_a_tenant_closed_since_its_corpus_read() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    unit = _TenantDerivation()
+    reconciler = EventDerivationReconciler(
+        corpus=_Segments({_A: read, _B: read}, {}),
+        tenant=lambda tenant: cast(TenantEventDerivation, unit if tenant == _A else _refused(tenant)),
+        clock=FixedClock(_NOW),
+    )
+
+    reconciler.sweep()
+
+    assert unit.handed == [(["sg_1"], frozenset())]
+
+
+# --- forge-status annotation ---------------------------------------------------------------
+
+
+class _WorkRefs:
+    def __init__(self, rows: Sequence[TenantWorkRef]) -> None:
+        self.rows = list(rows)
+        self.reads = 0
+        self.changes: dict[TenantId, int] = {}
+
+    def live_work_refs(self) -> list[TenantWorkRef]:
+        self.reads += 1
+        return self.rows
+
+    def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
+        counts: dict[TenantId, int] = {}
+        for row in self.rows:
+            counts[row.tenant] = counts.get(row.tenant, 0) + 1
+        return {tenant: WorkRefsSignature(marks=(("refs", count, count),)) for tenant, count in counts.items()}
+
+    def work_source_changes_signature(self) -> dict[TenantId, int]:
+        return self.changes
+
+
+class _TenantAnnotation:
+    """Stands in for one tenant's :class:`TenantAnnotation`: its sources, and the rows it reconciled."""
+
+    def __init__(self, *sources: str) -> None:
+        self.sources = list(sources)
+        self.reconciled: list[tuple[TenantId, list[str], list[str]]] = []
+
+    def annotating(self) -> list[str]:
+        return self.sources
+
+    def reconcile(
+        self,
+        tenant: TenantId,
+        annotating: Sequence[str],
+        rows: Callable[[], Sequence[TenantWorkRef]],
+        tally: AnnotationTally,
+        outages: set[str],
+    ) -> bool:
+        self.reconciled.append((tenant, list(annotating), [row.chunk_id for row in rows()]))
+        return True
+
+
+def _work_ref(tenant: TenantId, chunk_id: str) -> TenantWorkRef:
+    return TenantWorkRef(tenant=tenant, chunk_id=chunk_id, ref=WorkRef("src", chunk_id))
+
+
+def test_an_annotation_pass_reconciles_each_tenants_rows_against_its_own_sources() -> None:
+    corpus = _WorkRefs([_work_ref(_A, "ch_a"), _work_ref(_B, "ch_b")])
+    units = {_A: _TenantAnnotation("forge-a"), _B: _TenantAnnotation("forge-b")}
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: [_B, _A],
+        tenant=lambda tenant: cast(TenantAnnotation, units[tenant]),
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+
+    reconciler.sweep()
+
+    assert corpus.reads == 1
+    assert units[_A].reconciled == [(_A, ["forge-a"], ["ch_a"])]
+    assert units[_B].reconciled == [(_B, ["forge-b"], ["ch_b"])]
+
+
+def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_only_its_tenant() -> None:
+    tenants = [_A, _B, *(TenantId(f"ten_{n}") for n in range(8))]
+    corpus = _WorkRefs([_work_ref(tenant, f"ch_{tenant}") for tenant in tenants])
+    units = {tenant: _TenantAnnotation("forge") for tenant in tenants}
+    opened: list[TenantId] = []
+
+    def open_tenant(tenant: TenantId) -> TenantAnnotation:
+        opened.append(tenant)
+        return cast(TenantAnnotation, units[tenant])
+
+    clock = FixedClock(_NOW)
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: tenants,
+        tenant=open_tenant,
+        clock=clock,
+        full_pass_floor=timedelta(minutes=10),
+    )
+    reconciler.sweep()
+    assert opened == sorted(tenants)
+    opened.clear()
+    reconciler.sweep()
+    assert opened == []
+    assert corpus.reads == 1
+
+    corpus.changes[_B] = 1
+    reconciler.sweep()
+    assert opened == [_B]
+    assert len(units[_B].reconciled) == 2
+    assert len(units[_A].reconciled) == 1
+
+    opened.clear()
+    corpus.rows.append(_work_ref(_A, "ch_new"))
+    reconciler.sweep()
+    assert opened == [_A]
+    assert units[_A].reconciled[-1] == (_A, ["forge"], [f"ch_{_A}", "ch_new"])
+
+    opened.clear()
+    clock.advance(timedelta(minutes=10))
+    reconciler.sweep()
+    assert opened == sorted(tenants)
+
+
+def test_an_annotation_pass_skips_a_tenant_closed_since_the_open_set_was_read() -> None:
+    unit = _TenantAnnotation("forge-a")
+    reconciler = AnnotationReconciler(
+        corpus=_WorkRefs([_work_ref(_A, "ch_a"), _work_ref(_B, "ch_b")]),
+        tenants=lambda: [_A, _B],
+        tenant=lambda tenant: cast(TenantAnnotation, unit if tenant == _A else _refused(tenant)),
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+
+    reconciler.sweep()
+
+    assert unit.reconciled == [(_A, ["forge-a"], ["ch_a"])]
+
+
+# --- one tenant's failure or burst changes nothing the pass does for another (bzh:pass-isolates-tenants) ----------
+
+
+def _poison_for(tenant: TenantId, scene: Scene) -> Poison | None:
+    return scene.poison if tenant == scene.poisoned else None
+
+
+def _annotation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> AnnotationReconciler:
+    class Unit(_TenantAnnotation):
+        def __init__(self, tenant: TenantId) -> None:
+            super().__init__("forge")
+            self.tenant = tenant
+
+        def annotating(self) -> list[str]:
+            _log.info("tenant annotation opening")
+            recorder.log(self.tenant, "annotating")
+            return super().annotating()
+
+        def reconcile(
+            self,
+            tenant: TenantId,
+            annotating: Sequence[str],
+            rows: Callable[[], Sequence[TenantWorkRef]],
+            tally: AnnotationTally,
+            outages: set[str],
+        ) -> bool:
+            _log.info("tenant annotation work")
+            recorder.log(tenant, "reconcile", list(annotating), [row.chunk_id for row in rows()])
+            poison = _poison_for(tenant, scene)
+            if poison is Poison.RAISES:
+                raise RuntimeError("the forge cannot be read")
+            return poison is None
+
+    corpus = _WorkRefs([_work_ref(tenant, f"ch_{tenant}") for tenant in scene.tenants])
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: scene.tenants,
+        tenant=lambda tenant: cast(TenantAnnotation, Unit(tenant)),
+        clock=clock,
+        full_pass_floor=timedelta(minutes=10),
+    )
+    return reconciler
+
+
+def _derivation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> EventDerivationReconciler:
+    class Unit(_TenantDerivation):
+        def __init__(self, tenant: TenantId) -> None:
+            super().__init__()
+            self.tenant = tenant
+
+        def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+            _log.info("tenant derivation work")
+            recorder.log(self.tenant, "converge", list(candidates), sorted(stale))
+            poison = _poison_for(self.tenant, scene)
+            if poison is Poison.RAISES:
+                raise RuntimeError("the pins cannot be resolved")
+            return poison is None
+
+    reads = {
+        tenant: CandidacyRead(visible_segment_ids=frozenset({f"sg_{tenant}"}), candidate_segment_ids=[f"sg_{tenant}"])
+        for tenant in scene.tenants
+    }
+    reconciler = EventDerivationReconciler(
+        corpus=_Segments(reads, {}), tenant=lambda tenant: cast(TenantEventDerivation, Unit(tenant)), clock=clock
+    )
+    return reconciler
+
+
+def _drain_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> CloseDrainSweep:
+    pending = [
+        _intent(tenant, f"ch_{tenant}_{n}")
+        for tenant in (*([scene.poisoned] if scene.poisoned else []), *HEALTHY)
+        for n in range(CLOSE_DRAIN_PASS_LIMIT + 20 if tenant == scene.poisoned and scene.poison is Poison.BURST else 3)
+    ]
+    corpus = _Intents(pending)
+
+    class Drainer(_TenantDrainer):
+        def __init__(self, tenant: TenantId) -> None:
+            super().__init__()
+            self.tenant = tenant
+
+        def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
+            _log.info("tenant drain work")
+            recorder.log(self.tenant, "drain", [intent.chunk_id for intent in due])
+            if _poison_for(self.tenant, scene) is Poison.RAISES:
+                raise RuntimeError("the forge refused the close")
+            drained = {intent.chunk_id for intent in due}
+            corpus.rows = [row for row in corpus.rows if row.intent.chunk_id not in drained]
+
+    return CloseDrainSweep(corpus=corpus, tenant=lambda tenant: cast(CloseIntentDrainer, Drainer(tenant)), clock=clock)
+
+
+def _teardown_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Callable[[], None]:
+    class Teardown:
+        def advance(self, tenant: TenantId, *, budget: int) -> None:
+            _log.info("tenant teardown work")
+            recorder.log(tenant, "advance", budget)
+            if _poison_for(tenant, scene) is Poison.RAISES:
+                raise RuntimeError("the drain failed")
+
+    class Underway:
+        def underway(self) -> list[TenantId]:
+            return list(scene.tenants)
+
+    return TenantTeardownSweep(
+        teardown=cast(TenantTeardown, Teardown()), teardowns=cast(IReadTenantTeardowns, Underway()), budget=50
+    ).sweep
+
+
+@pytest.mark.parametrize(
+    ("make_pass", "events", "summary"),
+    [
+        (
+            build_sweep(_annotation_pass),
+            ("tenant annotation opening", "tenant annotation work"),
+            "forge-status sweep completed",
+        ),
+        (build_sweep(_derivation_pass), ("tenant derivation work",), "transcript event derivation sweep completed"),
+        (build_sweep(_drain_pass), ("tenant drain work",), "close intent drain sweep completed"),
+        (_teardown_pass, ("tenant teardown work",), None),
+    ],
+)
+def test_each_sweep_binds_only_its_tenants_work_even_when_last_tenant_raises(
+    make_pass: Callable[[Scene, Recorder, FixedClock], Callable[[], None]],
+    events: tuple[str, ...],
+    summary: str | None,
+) -> None:
+    last = TenantId("ten_z")
+    scene = Scene(poisoned=last, poison=Poison.RAISES)
+    sweep = make_pass(scene, Recorder(), FixedClock(_NOW))
+
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep()
+        _log.info("after tenant loop")
+
+    for event in events:
+        assert {entry["tenant_id"] for entry in logs if entry["event"] == event} == set(scene.tenants)
+    failures = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert all(entry["tenant_id"] == last for entry in failures)
+    assert all("tenant" not in entry for entry in logs)
+    assert "tenant_id" not in logs[-1]
+    if summary is not None:
+        [entry] = [entry for entry in logs if entry["event"] == summary]
+        assert "tenant_id" not in entry
+
+
+def test_annotation_source_left_warning_inherits_tenant_from_its_sweep() -> None:
+    def unit(tenant: TenantId) -> TenantAnnotation:
+        memory = Mock()
+        memory.annotated_sources.return_value = frozenset({"departed"})
+        sources = Mock()
+        sources.annotating_ids.return_value = []
+        sources.label_clearer.return_value = None
+        return TenantAnnotation(
+            facts=Mock(), work_sources=sources, memory=memory, events=Mock(), clock=FixedClock(_NOW)
+        )
+
+    sweep = AnnotationReconciler(
+        corpus=_WorkRefs([]),
+        tenants=lambda: [_A, _B],
+        tenant=unit,
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep.sweep()
+
+    assert [
+        entry["tenant_id"]
+        for entry in logs
+        if entry["event"] == "forge-status source left config; its labels are not cleared"
+    ] == [_A, _B]
+    assert "tenant_id" not in logs[-1]
+
+
+def test_segment_derivation_warning_inherits_tenant_from_its_sweep() -> None:
+    def unit(tenant: TenantId) -> TenantEventDerivation:
+        service = Mock(spec=EventDerivationService)
+        service.graph_pins_for.return_value = Mock()
+        service.derivation_inputs.return_value = {}
+        service.derive_segment.side_effect = RuntimeError("bad segment")
+        return TenantEventDerivation(service=service, events=Mock(), clock=FixedClock(_NOW))
+
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    sweep = EventDerivationReconciler(corpus=_Segments({_A: read, _B: read}, {}), tenant=unit, clock=FixedClock(_NOW))
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep.sweep()
+
+    assert [entry["tenant_id"] for entry in logs if entry["event"] == "segment derivation skipped"] == [_A, _B]
+    assert "tenant_id" not in logs[-1]
+
+
+_FAILING = (Poison.RAISES, Poison.UNCONVERGED)
+
+
+@pytest.mark.parametrize("poison", _FAILING)
+def test_a_failing_tenant_changes_nothing_the_annotation_pass_does_for_another(poison: Poison) -> None:
+    assert_pass_isolates(build_sweep(_annotation_pass), poison)
+
+
+@pytest.mark.parametrize("poison", _FAILING)
+def test_a_failing_tenant_changes_nothing_the_derivation_pass_does_for_another(poison: Poison) -> None:
+    assert_pass_isolates(build_sweep(_derivation_pass), poison)
+
+
+@pytest.mark.parametrize("poison", (Poison.RAISES, Poison.BURST))
+def test_a_failing_or_bursting_tenant_changes_nothing_the_close_drain_does_for_another(poison: Poison) -> None:
+    assert_pass_isolates(build_sweep(_drain_pass), poison)
+
+
+@pytest.mark.parametrize("poison", (Poison.RAISES, Poison.BURST))
+def test_a_failing_or_bursting_tenant_changes_nothing_the_teardown_sweep_does_for_another(poison: Poison) -> None:
+    assert_pass_isolates(_teardown_pass, poison)
+
+
+@pytest.mark.parametrize("poison", _FAILING)
+def test_a_failing_tenants_one_tenant_passes_change_nothing_the_annotation_pass_does_for_another(
+    poison: Poison,
+) -> None:
+    assert_tenant_pass_isolates(_annotation_pass, poison)
+
+
+@pytest.mark.parametrize("poison", _FAILING)
+def test_a_failing_tenants_one_tenant_passes_change_nothing_the_derivation_pass_does_for_another(
+    poison: Poison,
+) -> None:
+    assert_tenant_pass_isolates(_derivation_pass, poison)
+
+
+@pytest.mark.parametrize("poison", (Poison.RAISES, Poison.BURST))
+def test_a_failing_or_bursting_tenants_one_tenant_passes_change_nothing_the_close_drain_does_for_another(
+    poison: Poison,
+) -> None:
+    assert_tenant_pass_isolates(_drain_pass, poison)
+
+
+# --- one pass for one tenant ---------------------------------------------------------------
+
+
+def test_a_one_tenant_annotation_pass_reconciles_that_tenant_alone_against_the_same_corpus() -> None:
+    corpus = _WorkRefs([_work_ref(_A, "ch_a"), _work_ref(_B, "ch_b")])
+    units = {_A: _TenantAnnotation("forge-a"), _B: _TenantAnnotation("forge-b")}
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: [_A, _B],
+        tenant=lambda tenant: cast(TenantAnnotation, units[tenant]),
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+
+    assert reconciler.sweep_tenant(_B) is None
+
+    assert corpus.reads == 1
+    assert units[_A].reconciled == []
+    assert units[_B].reconciled == [(_B, ["forge-b"], ["ch_b"])]
+
+
+def test_a_one_tenant_derivation_pass_hands_that_tenant_alone_its_candidates_and_stale_segments() -> None:
+    visible = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    corpus = _Segments({_A: visible, _B: visible}, {_A: frozenset({"sg_1", "sg_2"}), _B: frozenset({"sg_9"})})
+    units = {_A: _TenantDerivation(), _B: _TenantDerivation()}
+    reconciler = EventDerivationReconciler(
+        corpus=corpus, tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]), clock=FixedClock(_NOW)
+    )
+
+    assert reconciler.sweep_tenant(_A) is None
+
+    assert units[_A].handed == [(["sg_1"], frozenset({"sg_2"}))]
+    assert units[_B].handed == []
+
+
+def test_a_one_tenant_drain_pass_drains_that_tenants_due_intents_alone_up_to_the_pass_limit() -> None:
+    rows = [_intent(_A, "ch_a1"), *(_intent(_B, f"ch_b{n}") for n in range(CLOSE_DRAIN_PASS_LIMIT + 5))]
+    drainers = {_A: _TenantDrainer(), _B: _TenantDrainer()}
+    sweep = CloseDrainSweep(
+        corpus=_Intents(rows), tenant=lambda tenant: cast(CloseIntentDrainer, drainers[tenant]), clock=FixedClock(_NOW)
+    )
+
+    assert sweep.sweep_tenant(_B) is None
+
+    assert drainers[_A].drained == []
+    assert drainers[_B].drained == [f"ch_b{n}" for n in range(CLOSE_DRAIN_PASS_LIMIT)]
+
+
+def test_a_one_tenant_drain_pass_leaves_the_hub_wide_rotation_unmoved() -> None:
+    """Three tenants each over a third of the limit: the rotation alone picks who takes the odd slot."""
+    tenants = (_A, _B, TenantId("ten_c"))
+    rows = [_intent(tenant, f"ch_{tenant}_{n}") for tenant in tenants for n in range(CLOSE_DRAIN_PASS_LIMIT)]
+
+    def second_hub_wide_pass(*, one_tenant_between: bool) -> dict[TenantId, int]:
+        drainers = {tenant: _TenantDrainer() for tenant in tenants}
+        sweep = CloseDrainSweep(
+            corpus=_Intents(rows),
+            tenant=lambda tenant: cast(CloseIntentDrainer, drainers[tenant]),
+            clock=FixedClock(_NOW),
+        )
+        sweep.sweep()
+        if one_tenant_between:
+            sweep.sweep_tenant(_A)
+        for drainer in drainers.values():
+            drainer.drained.clear()
+        sweep.sweep()
+        return {tenant: len(drainer.drained) for tenant, drainer in drainers.items()}
+
+    assert second_hub_wide_pass(one_tenant_between=True) == second_hub_wide_pass(one_tenant_between=False)
+
+
+def test_a_one_tenant_pass_skips_a_tenant_not_due_and_completes() -> None:
+    corpus = _WorkRefs([_work_ref(_A, "ch_a")])
+    unit = _TenantAnnotation("forge-a")
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: [_A],
+        tenant=lambda tenant: cast(TenantAnnotation, unit),
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+    reconciler.sweep()
+
+    with capture_logs() as logs:
+        assert reconciler.sweep_tenant(_A) is None
+
+    assert len(unit.reconciled) == 1
+    assert corpus.reads == 1
+    assert [entry["event"] for entry in logs] == ["forge-status sweep skipped"]
+
+
+def test_a_one_tenant_derivation_pass_skips_a_tenant_not_due() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    unit = _TenantDerivation()
+    reconciler = EventDerivationReconciler(
+        corpus=_Segments({_A: read}, {}),
+        tenant=lambda tenant: cast(TenantEventDerivation, unit),
+        clock=FixedClock(_NOW),
+    )
+    reconciler.sweep_tenant(_A)
+
+    assert reconciler.sweep_tenant(_A) is None
+
+    assert len(unit.handed) == 1
+
+
+@pytest.mark.parametrize("make_pass", [_annotation_pass, _derivation_pass, _drain_pass])
+def test_a_one_tenant_pass_returns_the_fault_its_raising_tenant_met(
+    make_pass: Callable[
+        [Scene, Recorder, FixedClock], AnnotationReconciler | EventDerivationReconciler | CloseDrainSweep
+    ],
+) -> None:
+    reconciler = make_pass(Scene(POISONED, Poison.RAISES), Recorder(), FixedClock(_NOW))
+
+    with capture_logs() as logs:
+        fault = reconciler.sweep_tenant(POISONED)
+
+    assert fault is not None
+    assert fault.message in {"the forge cannot be read", "the pins cannot be resolved", "the forge refused the close"}
+    assert any(entry["event"].endswith("failed for a tenant") for entry in logs)
+
+
+def test_a_one_tenant_pass_returns_the_fault_of_a_tenant_that_cannot_be_opened() -> None:
+    def unopenable(tenant: TenantId) -> TenantAnnotation:
+        raise RuntimeError("the tenant store is unreachable")
+
+    reconciler = AnnotationReconciler(
+        corpus=_WorkRefs([]),
+        tenants=lambda: [_A],
+        tenant=unopenable,
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+
+    fault = reconciler.sweep_tenant(_A)
+
+    assert fault is not None
+    assert fault.message == "the tenant store is unreachable"
+
+
+def test_a_one_tenant_pass_lets_a_closed_tenants_refusal_propagate() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    passes: list[Callable[[TenantId], object]] = [
+        AnnotationReconciler(
+            corpus=_WorkRefs([_work_ref(_A, "ch_a")]),
+            tenants=lambda: [_A],
+            tenant=lambda tenant: cast(TenantAnnotation, _refused(tenant)),
+            clock=FixedClock(_NOW),
+            full_pass_floor=timedelta(minutes=10),
+        ).sweep_tenant,
+        EventDerivationReconciler(
+            corpus=_Segments({_A: read}, {}),
+            tenant=lambda tenant: cast(TenantEventDerivation, _refused(tenant)),
+            clock=FixedClock(_NOW),
+        ).sweep_tenant,
+        CloseDrainSweep(
+            corpus=_Intents([_intent(_A, "ch_a1")]),
+            tenant=lambda tenant: cast(CloseIntentDrainer, _refused(tenant)),
+            clock=FixedClock(_NOW),
+        ).sweep_tenant,
+    ]
+
+    for one_tenant_pass in passes:
+        with pytest.raises(TenantClosed):
+            one_tenant_pass(_A)
+
+
+def _due(tenant: TenantId, count: int) -> list[PendingCloseIntent]:
+    return [PendingCloseIntent(chunk_id=f"ch_{tenant}_{n}", ref=WorkRef("src", str(n))) for n in range(count)]
+
+
+def test_the_fair_share_takes_one_intent_per_tenant_in_turn_and_hands_unused_share_on() -> None:
+    due = {_A: _due(_A, 5), _B: _due(_B, 1)}
+
+    taken = fair_share(due, 4, start=0)
+
+    assert {tenant: [i.chunk_id for i in intents] for tenant, intents in taken.items()} == {
+        _A: ["ch_ten_a_0", "ch_ten_a_1", "ch_ten_a_2"],
+        _B: ["ch_ten_b_0"],
+    }
+
+
+def test_the_fair_share_rotates_which_tenant_takes_the_odd_slot() -> None:
+    due = {_A: _due(_A, 3), _B: _due(_B, 3)}
+
+    first = fair_share(due, 3, start=0)
+    second = fair_share(due, 3, start=1)
+
+    assert (len(first[_A]), len(first[_B])) == (2, 1)
+    assert (len(second[_A]), len(second[_B])) == (1, 2)
+
+
+def test_the_fair_share_never_exceeds_the_limit_and_takes_everything_below_it() -> None:
+    due = {_A: _due(_A, 4), _B: _due(_B, 4)}
+
+    assert sum(map(len, fair_share(due, 5, start=0).values())) == 5
+    assert sum(map(len, fair_share(due, 50, start=0).values())) == 8
+    assert fair_share({}, 5, start=3) == {}
+
+
+class _VanishedTenant(_Segments):
+    """``_B`` holds derived rows but no segment or chunk, so the grouped probe has no entry for it."""
+
+    def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
+        return {_A: super().derivation_signature()[_A]}
+
+
+def test_a_derivation_pass_still_drops_a_tenant_whose_every_segment_and_chunk_is_gone() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    units = {_A: _TenantDerivation(), _B: _TenantDerivation()}
+    reconciler = EventDerivationReconciler(
+        corpus=_VanishedTenant({_A: read}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_9"})}),
+        tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]),
+        clock=FixedClock(_NOW),
+    )
+
+    reconciler.sweep()
+
+    assert units[_B].handed == [([], frozenset({"sg_9"}))]
+
+
+def test_a_derivation_pass_retries_a_vanished_tenants_drop_that_raised() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    attempts: list[frozenset[str]] = []
+
+    class Flaky(_TenantDerivation):
+        def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+            attempts.append(stale)
+            if len(attempts) == 1:
+                raise RuntimeError("the drop failed")
+            return True
+
+    units = {_A: _TenantDerivation(), _B: Flaky()}
+    reconciler = EventDerivationReconciler(
+        corpus=_VanishedTenant({_A: read}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_9"})}),
+        tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]),
+        clock=FixedClock(_NOW),
+    )
+
+    reconciler.sweep()
+    reconciler.sweep()
+    reconciler.sweep()
+
+    assert attempts == [frozenset({"sg_9"}), frozenset({"sg_9"})]

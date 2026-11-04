@@ -113,7 +113,7 @@ def _stop(tmp_path: Path, chunk_id: str, *, at: datetime) -> None:
     """Write a ``chunk_stopped`` row directly rather than through ``POST
     /chunks/{id}/stop`` — a lighter-weight precondition for a test that
     only needs a stopped chunk to exist, not to exercise the stop route itself (that
-    route's own behavior is proven in ``tests/test_chunk_stop.py``)."""
+    route's own behavior is proven in ``tests/component/hub/api/test_chunks_stop.py``)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
         conn.execute(
