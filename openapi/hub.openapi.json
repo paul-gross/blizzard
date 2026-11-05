@@ -997,6 +997,43 @@
         "title": "ApplyResponse",
         "type": "object"
       },
+      "ArtifactCheckRequest": {
+        "description": "``POST /api/fleet/chunks/{chunk_id}/artifact-check`` \u2014 content a worker is about to stage under ``name``.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "ArtifactCheckRequest",
+        "type": "object"
+      },
+      "ArtifactCheckResponse": {
+        "description": "The hub's verdict on a staging offer: ``refusal`` is the delivery-time message when the content fails\nthe format its graph owes ``name``, and absent otherwise.",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          }
+        },
+        "title": "ArtifactCheckResponse",
+        "type": "object"
+      },
       "ArtifactKind": {
         "description": "The union discriminator.",
         "enum": [
@@ -26782,6 +26819,59 @@
           }
         },
         "summary": "Get Chunk Analytics Spend Nodes",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/artifact-check": {
+      "post": {
+        "description": "The verdict on content a worker is about to stage under ``body.name``: the delivery-time refusal when\nthe chunk's graph owes the name a format the content fails. The verdict rides a ``200`` body \u2014 a\n``4xx`` here is a failed request, never a refusal. 404 for an unknown chunk.",
+        "operationId": "check_artifact_api_fleet_chunks__chunk_id__artifact_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Artifact",
         "tags": [
           "fleet"
         ]

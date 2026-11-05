@@ -111,9 +111,19 @@ class HubProxy:
         timeout: float | None = None,
         severity: str = "error",
         params: dict[str, str] | None = None,
+        json_body: object | None = None,
         **fields: object,
     ) -> httpx2.Response:
-        return self.forward("POST", path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
+        return self.forward(
+            "POST",
+            path,
+            expect=expect,
+            timeout=timeout,
+            severity=severity,
+            params=params,
+            json_body=json_body,
+            **fields,
+        )
 
     def forward(
         self,
@@ -124,6 +134,7 @@ class HubProxy:
         timeout: float | None = None,
         severity: str = "error",
         params: dict[str, str] | None = None,
+        json_body: object | None = None,
         **fields: object,
     ) -> httpx2.Response:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
@@ -141,10 +152,19 @@ class HubProxy:
         on the first response. A ``POST`` never retries; it runs at exactly the resolved
         budget (the caller's ``timeout`` or ``HUB_TIMEOUT``). ``severity`` names the
         structlog level the exhausted-forward line logs at — every route keeps ``error``
-        unless it opts into a lower one for a tolerated failure. ``fields`` add a structured
-        subject to that line."""
+        unless it opts into a lower one for a tolerated failure. ``json_body`` is sent as the JSON request
+        body. ``fields`` add a structured subject to that line."""
         self._verify_identity(timeout)
-        return self._forward(method, path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
+        return self._forward(
+            method,
+            path,
+            expect=expect,
+            timeout=timeout,
+            severity=severity,
+            params=params,
+            json_body=json_body,
+            **fields,
+        )
 
     def _forward(
         self,
@@ -155,6 +175,7 @@ class HubProxy:
         timeout: float | None,
         severity: str,
         params: dict[str, str] | None,
+        json_body: object | None = None,
         **fields: object,
     ) -> httpx2.Response:
         url = f"{self.config.hub_url.rstrip('/')}{path}"
@@ -175,6 +196,7 @@ class HubProxy:
                     headers=(self.token or self.config).auth_headers(),
                     timeout=attempt_timeout,
                     params=params,
+                    json=json_body,
                 )
             except httpx2.HTTPError as exc:
                 if retryable and self._may_retry(retries, budget, started):

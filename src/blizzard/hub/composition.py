@@ -103,6 +103,7 @@ from blizzard.hub.domain.execution.questions import QuestionService
 from blizzard.hub.domain.execution.release import ReleaseService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
+from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
 from blizzard.hub.domain.garden.delivery.validation import CommitResolver
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
@@ -438,6 +439,8 @@ class TenantServices:
     finding_bucket: FindingBucketReader
     #: Records a delivering node-step's garden delivery: validate, then materialize in one transaction.
     garden_delivery: GardenDeliveryRecorder
+    #: Judges content offered for staging against the formats its chunk's graph owes the artifact's name.
+    garden_stage_check: GardenStageCheck
     #: Issue, list and revoke the tenant's invitations.
     invitations: InvitationService
     #: Record a delivery lane's deferred review findings, once per chunk.
@@ -1409,6 +1412,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         finding_bucket=finding_bucket,
         garden_delivery=garden_delivery,
+        garden_stage_check=GardenStageCheck(formats=garden_formats, catalogue=parts.actions.catalogue),
         review_findings=review_findings,
         commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),

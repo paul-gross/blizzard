@@ -21,6 +21,7 @@ from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.graph.actions import ArtifactFormat, HubActionCatalogue
 
 
 class GraphParseError(ValueError):
@@ -692,6 +693,22 @@ class Graph:
         statement of intent, and the only thing that tells an empty delivery set apart
         from a failed one."""
         return any(spec.kind is ArtifactKind.GIT_COMMIT for node in self.nodes for spec in node.produces)
+
+    def artifact_formats(self, name: str, catalogue: HubActionCatalogue) -> frozenset[ArtifactFormat]:
+        """The formats the artifact ``name`` must satisfy: the union, over every hub node, of the format its
+        action gives each arg whose ``with:`` lists ``name``."""
+        formats: set[ArtifactFormat] = set()
+        for node in self.nodes:
+            if node.action is None:
+                continue
+            spec = catalogue.get(node.action)
+            if spec is None:
+                continue
+            for arg, names in node.action_args.items():
+                fmt = spec.arg_formats.get(arg)
+                if fmt is not None and name in names:
+                    formats.add(fmt)
+        return frozenset(formats)
 
     def session_by_name(self, name: str) -> SessionDecl | None:
         return next((s for s in self.sessions if s.name == name), None)

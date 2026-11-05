@@ -29,3 +29,17 @@ class StagedAttachment(BaseModel):
 
     name: str
     content: str
+
+
+class ArtifactCheckRequest(BaseModel):
+    """``POST /api/fleet/chunks/{chunk_id}/artifact-check`` — content a worker is about to stage under ``name``."""
+
+    name: str
+    content: str
+
+
+class ArtifactCheckResponse(BaseModel):
+    """The hub's verdict on a staging offer: ``refusal`` is the delivery-time message when the content fails
+    the format its graph owes ``name``, and absent otherwise."""
+
+    refusal: str | None = None

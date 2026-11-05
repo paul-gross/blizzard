@@ -12,7 +12,9 @@ import httpx2
 import pytest
 from click.testing import CliRunner, Result
 
+from blizzard.runner.api.attachments import STAGE_CHECK_TIMEOUT
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.worker_call import WRITE_TIMEOUT
 from tests.support.worker_http import bind_stubs
 
 _ENV = {
@@ -670,6 +672,27 @@ def test_create_surfaces_a_rejection_as_a_nonzero_exit() -> None:
 
     assert result.exit_code != 0
     assert "could not record" in result.output
+
+
+def test_create_shows_the_hubs_refusal_verbatim_and_says_nothing_was_stored() -> None:
+    refusal = "artifact 'delta' does not match the finding-delta shape: measurement: Input should be a valid string"
+
+    class _Refused:
+        def raise_for_status(self) -> None:
+            request = httpx2.Request("POST", "http://runner.local")
+            response = httpx2.Response(422, json={"detail": refusal}, request=request)
+            raise httpx2.HTTPStatusError("422", request=request, response=response)
+
+    bound = bind_stubs(post=lambda *a, **k: _Refused())
+    result = bound.runner.invoke(runner_group, ["artifact", "create", "--name", "delta"], env=_ENV, input="{}")
+
+    assert result.exit_code != 0
+    assert refusal in result.output
+    assert "nothing was stored" in result.output
+
+
+def test_the_stage_check_budget_fits_inside_the_cli_write_timeout() -> None:
+    assert STAGE_CHECK_TIMEOUT < WRITE_TIMEOUT
 
 
 def test_create_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
