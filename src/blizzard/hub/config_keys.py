@@ -81,7 +81,6 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("transcripts.chunk_budget_max_bytes", INTEGER),
         ConfigKey("transcripts.runner_daily_rate_max_bytes", INTEGER),
         *TRACING_KEYS,
-        # Runner-only keys the hub never read: still declared so an existing file's key resolves, refused at load.
         ConfigKey("egress", TABLE),
         ConfigKey("egress.directory", STRING),
         ConfigKey("egress.format", STRING, default=_EGRESS.format),
