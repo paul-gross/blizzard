@@ -24,6 +24,7 @@ from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 def hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path, link=False)
     _ok(hub.client.post("/api/secrets", json={"name": "token", "value": "v"}), 201)
+    _ok(hub.client.post("/api/forges", json={"slug": "forge-example", "kind": "github", "api_base": _FORGE}), 201)
     for slug in ("acme-app", "acme-lib"):
         _ok(hub.client.post("/api/repositories", json=_repository(slug)), 201)
     _ok(hub.client.post("/api/projects", json={"slug": "widgets", "name": "Widgets"}), 201)
@@ -31,7 +32,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 class _RepositoryBody(TypedDict, total=False):
-    forge_api_url: str
+    forge: str
     owner: str
     repo: str
     base_branch: str
@@ -39,10 +40,13 @@ class _RepositoryBody(TypedDict, total=False):
     landing_policy: str
 
 
+_FORGE = "https://forge.example"
+
+
 def _repository(slug: str, **extra: Unpack[_RepositoryBody]) -> dict[str, object]:
     return {
         "slug": slug,
-        "forge_api_url": "https://forge.example",
+        "forge": "forge-example",
         "owner": "acme",
         "repo": slug,
         "base_branch": "main",
@@ -216,9 +220,8 @@ def _written(applied: dict[str, Any]) -> list[tuple[str, str, str]]:
     return [(o["kind"], o["key"], o["op"]) for o in applied["outcomes"] if o["op"] != "unchanged"]
 
 
-@pytest.mark.parametrize("version", [1, 2])
-def test_an_unknown_policy_in_a_document_is_refused(hub: HubHarness, version: int) -> None:
-    document = _ok(hub.client.get("/api/config/export", params={"version": version}))
+def test_an_unknown_policy_in_a_document_is_refused(hub: HubHarness) -> None:
+    document = _ok(hub.client.get("/api/config/export"))
     document["repositories"][0]["landing_policy"] = "unknown"
 
     refused = _apply(hub.client, document)
@@ -227,12 +230,11 @@ def test_an_unknown_policy_in_a_document_is_refused(hub: HubHarness, version: in
     assert refused.json()["detail"][0]["loc"][-1] == "landing_policy"
 
 
-@pytest.mark.parametrize("version", [1, 2])
-def test_an_exported_landing_order_applies_back_writing_nothing(hub: HubHarness, version: int) -> None:
+def test_an_exported_landing_order_applies_back_writing_nothing(hub: HubHarness) -> None:
     _link_both(hub.client)
     _ok(hub.client.put("/api/projects/widgets/landing-order", json={"repositories": ["acme-lib"]}))
 
-    document = _ok(hub.client.get("/api/config/export", params={"version": version}))
+    document = _ok(hub.client.get("/api/config/export"))
     facts = _facts(hub)
     applied = _ok(_apply(hub.client, document))
 
@@ -266,7 +268,7 @@ def test_export_after_position_move_applies_without_rewriting_positions(hub: Hub
 
 def test_a_document_links_and_ranks_a_repository_together_and_reports_the_order(hub: HubHarness) -> None:
     document = {
-        "version": 1,
+        "version": 2,
         "projects": [
             {"slug": "widgets", "repositories": ["acme-app", "acme-lib"], "landing_order": ["acme-lib", "acme-app"]}
         ],
@@ -288,14 +290,14 @@ def test_a_document_that_omits_the_landing_order_leaves_it(hub: HubHarness) -> N
     _link_both(hub.client)
     _ok(hub.client.put("/api/projects/widgets/landing-order", json={"repositories": ["acme-lib"]}))
 
-    _ok(_apply(hub.client, {"version": 1, "projects": [{"slug": "widgets", "name": "Widgets"}]}))
+    _ok(_apply(hub.client, {"version": 2, "projects": [{"slug": "widgets", "name": "Widgets"}]}))
 
     assert _order(hub.client) == [("acme-lib", 1.0), ("acme-app", None)]
 
 
 def test_a_landing_order_naming_a_repository_the_entry_does_not_link_is_refused(hub: HubHarness) -> None:
     document = {
-        "version": 1,
+        "version": 2,
         "projects": [{"slug": "widgets", "repositories": ["acme-app"], "landing_order": ["acme-lib"]}],
     }
 
@@ -308,7 +310,7 @@ def test_a_landing_order_naming_a_repository_the_entry_does_not_link_is_refused(
 
 def test_a_dry_run_reports_the_order_and_writes_no_fact(hub: HubHarness) -> None:
     _link_both(hub.client)
-    document = {"version": 1, "projects": [{"slug": "widgets", "landing_order": ["acme-app"]}]}
+    document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["acme-app"]}]}
 
     previewed = _ok(hub.client.post("/api/config/apply", params={"dry_run": "true"}, json=document))
 

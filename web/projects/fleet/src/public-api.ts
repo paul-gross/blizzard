@@ -117,7 +117,6 @@ export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
 export type {
-  RepositoryDocument,
   RepositoryCreateRequest,
   ForgeCreateRequest,
   ForgePatchRequest,
@@ -126,7 +125,6 @@ export type {
   SecretCreateRequestWritable,
   SecretReplaceRequest,
   RepositoryPatchRequest,
-  WorkSourceDocument,
   WorkSourceCreateRequest,
   WorkSourcePatchRequest,
   OldFieldWarning,

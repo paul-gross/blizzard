@@ -1,9 +1,9 @@
-"""Forges over the real stores: the forge verbs and their refusals, the old address fields resolved to forges, and a
-forge edit moving every record that names it (component tier, migrated sqlite-on-disk)."""
+"""Forges over the real stores: the forge verbs and their refusals, a record write naming its forge — and refused an
+address field the forge carries — and a forge edit moving every record that names it (component tier, migrated
+sqlite-on-disk)."""
 
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,12 +14,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind, RecordRef
-from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forge_resolution import (
-    ForgeChoice,
-    ForgeConflict,
-    ForgeRequired,
-)
+from blizzard.hub.domain.config.forge_resolution import FieldMovedToForge, ForgeChoice, ForgeRequired, MovedField
 from blizzard.hub.domain.config.forges import (
     GITHUB_API_BASE,
     ConfiguredForge,
@@ -30,13 +25,11 @@ from blizzard.hub.domain.config.forges import (
     ForgeRetired,
     ForgeUnavailable,
 )
-from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositorySlugTaken
+from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import (
     WorkSourceDraft,
     WorkSourceEdit,
-    WorkSourceLocatorTaken,
-    WorkSourceSlugTaken,
 )
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
@@ -44,7 +37,7 @@ from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import repositories, work_sources
-from tests.support.scaffolding import OP, RecordedEvents, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 _CLI = ChangeContext(actor="alice", door=Door.CLI)
@@ -144,187 +137,38 @@ def test_a_write_naming_a_retired_forge_is_refused(world: _World) -> None:
     forge = world.authoring.retire_forge(world.ghe(), _CLI)
     with pytest.raises(ForgeUnavailable):
         world.authoring.create_repository("demo", None, _REPO.on(forge.forge_id), _CLI)
-    with pytest.raises(ForgeUnavailable, match="retired forge ghe"):
-        world.authoring.create_repository_naming("demo", None, _REPO, ForgeChoice(api_base=_GHE), _CLI)
+    with pytest.raises(ForgeUnavailable, match="forge ghe is retired"):
+        world.authoring.create_repository_naming("demo", None, _REPO, ForgeChoice(forge="ghe", named=forge), _CLI)
 
 
-def test_an_old_field_resolves_to_the_forge_holding_its_origin_with_a_warning(world: _World) -> None:
-    forge = world.ghe()
-    authored = world.authoring.create_repository_naming(
-        "demo", None, _REPO, ForgeChoice(api_base="https://GHE.acme.internal/api/v3/"), _CLI
-    )
-    assert authored.record.fields.forge_id == forge.forge_id
-    assert [(w.field, w.forge_slug) for w in authored.warnings] == [("forge_api_url", "ghe")]
-    assert world.columns("repositories", authored.record.repository_id) == (forge.forge_id, _GHE)
-
-
-def test_an_old_field_no_forge_holds_makes_one_as_the_migration_slugs_it(world: _World) -> None:
-    authored = world.authoring.create_repository_naming(
-        "demo", None, _REPO, ForgeChoice(api_base="http://127.0.0.1:8123/"), _CLI
-    )
-    forge = world.forges.get(authored.record.fields.forge_id)
-    assert forge is not None
-    assert (forge.slug, forge.name, forge.fields.api_base, forge.created_by) == (
-        "127-0-0-1-8123",
-        "127.0.0.1:8123",
-        "http://127.0.0.1:8123",
-        "alice",
-    )
-    rows = world.log.page(before=None, limit=10, record_kind=RecordKind.FORGE, record_key=forge.forge_id)
-    assert [(row.op, row.door) for row in rows] == [(ChangeOp.CREATE, Door.CLI)]
-
-
-def test_a_work_source_created_with_no_address_is_on_github_with_a_warning(world: _World) -> None:
-    authored = world.authoring.create_work_source_naming("demo", None, _SOURCE, ForgeChoice(), _CLI)
-    forge = world.forges.get(authored.record.fields.forge_id)
-    assert forge is not None and (forge.slug, forge.fields.api_base) == ("github", GITHUB_API_BASE)
-    assert [w.field for w in authored.warnings] == ["api_base"]
-    assert world.columns("work_sources", authored.record.work_source_id) == (forge.forge_id, GITHUB_API_BASE, None)
-
-
-def test_an_edit_naming_no_forge_keeps_it_silently_and_a_null_moves_it_to_github(world: _World) -> None:
-    forge = world.ghe()
-    source = world.authoring.create_work_source_naming("demo", None, _SOURCE, ForgeChoice(api_base=_GHE), _CLI).record
-    kept = world.authoring.edit_work_source_naming(source, WorkSourceEdit(), ForgeChoice(), _CLI)
-    assert kept.record.fields.forge_id == forge.forge_id and kept.warnings == ()
-    moved = world.authoring.edit_work_source_naming(source, WorkSourceEdit(), ForgeChoice(api_base=None), _CLI)
-    github = world.forges.get(moved.record.fields.forge_id)
-    assert github is not None and github.slug == "github"
-    assert [(w.field, w.forge_slug) for w in moved.warnings] == [("api_base", "github")]
-
-
-def test_an_old_field_disagreeing_with_the_named_forge_is_refused(world: _World) -> None:
+def test_a_record_created_naming_no_forge_is_refused(world: _World) -> None:
     world.ghe()
-    with pytest.raises(ForgeConflict):
-        world.authoring.create_repository_naming(
-            "demo",
-            None,
-            _REPO,
-            ForgeChoice(forge="ghe", api_base=GITHUB_API_BASE, named=world.forges.resolve("ghe")),
-            _CLI,
-        )
-    with pytest.raises(ForgeConflict, match="web origin of forge ghe"):
-        world.authoring.create_work_source_naming(
-            "demo", None, _SOURCE, ForgeChoice(api_base=_GHE, web_base="https://elsewhere.example"), _CLI
-        )
-
-
-def test_a_repository_naming_no_forge_is_refused(world: _World) -> None:
     with pytest.raises(ForgeRequired):
         world.authoring.create_repository_naming("demo", None, _REPO, ForgeChoice(), _CLI)
+    with pytest.raises(ForgeRequired):
+        world.authoring.create_work_source_naming("demo", None, _SOURCE, ForgeChoice(), _CLI)
+    assert world.repos.list_all(include_retired=True) == []
+    assert world.sources.list_all(include_retired=True) == []
 
 
-def test_two_concurrent_writes_naming_one_new_origin_make_one_forge(world: _World) -> None:
-    second = config_authoring(world.engine, keys=world.keys, clock=FixedClock(_NOW))
-    barrier = threading.Barrier(2)
-    found: list[str] = []
-
-    def create(authoring: ConfigAuthoring, slug: str, spelling: str) -> None:
-        barrier.wait()
-        draft = RepositoryDraft(owner="acme", repo=slug, base_branch="main", secret_name="gh")
-        authored = authoring.create_repository_naming(slug, None, draft, ForgeChoice(api_base=spelling), _CLI)
-        found.append(authored.record.fields.forge_id)
-
-    threads = [
-        threading.Thread(target=create, args=(world.authoring, "one", "https://new.example/")),
-        threading.Thread(target=create, args=(second, "two", "https://NEW.example")),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert len(found) == 2 and found[0] == found[1]
-    assert [f.fields.api_base for f in world.forges.list_all(include_retired=True)] == ["https://new.example"]
+def test_an_address_field_is_refused_naming_the_forge_holding_its_origin_and_writes_nothing(world: _World) -> None:
+    world.ghe()
+    choice = ForgeChoice(moved=(MovedField("forge_api_url", "https://GHE.acme.internal/api/v3/"),))
+    with pytest.raises(FieldMovedToForge, match="forge ghe"):
+        world.authoring.create_repository_naming("demo", None, _REPO, choice, _CLI)
+    assert world.repos.list_all(include_retired=True) == []
+    assert [forge.slug for forge in world.forges.list_all(include_retired=True)] == ["ghe"]
 
 
-def test_a_write_decided_before_another_made_its_forge_is_decided_again_onto_that_forge(
-    world: _World, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    other = config_authoring(world.engine, keys=world.keys, clock=FixedClock(_NOW))
-    listed = ForgeRecordStore.list_all
-    calls: list[int] = []
-
-    def stale_first(store: ForgeRecordStore, *, include_retired: bool) -> list[ConfiguredForge]:
-        held = listed(store, include_retired=include_retired)
-        if not calls:
-            calls.append(1)
-            draft = RepositoryDraft(owner="acme", repo="first", base_branch="main", secret_name="gh")
-            other.create_repository_naming("first", None, draft, ForgeChoice(api_base=_GHE), _CLI)
-        return held
-
-    monkeypatch.setattr(ForgeRecordStore, "list_all", stale_first)
-    authored = world.authoring.create_repository_naming("demo", None, _REPO, ForgeChoice(api_base=_GHE), _CLI)
-    (forge,) = listed(world.forges, include_retired=True)
-    assert authored.record.fields.forge_id == forge.forge_id
-    assert [(w.field, w.forge_slug) for w in authored.warnings] == [("forge_api_url", forge.slug)]
-
-
-@pytest.mark.parametrize(
-    ("slug", "draft", "refusal"),
-    [
-        ("Not A Slug", _REPO, ConfigFieldError),
-        ("demo", RepositoryDraft(owner=" ", repo="demo", base_branch="main", secret_name="gh"), ConfigFieldError),
-        ("demo", RepositoryDraft(owner="acme", repo="demo", base_branch="main", secret_name="nope"), ConfigFieldError),
-        ("taken", _REPO, RepositorySlugTaken),
-    ],
-)
-def test_a_refused_write_naming_a_new_origin_leaves_no_forge(
-    world: _World, slug: str, draft: RepositoryDraft, refusal: type[Exception]
-) -> None:
-    github = world.authoring.create_forge("github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), _CLI)
-    world.authoring.create_repository(
-        "taken", None, RepositoryDraft("acme", "other", "main", "gh").on(github.forge_id), _CLI
+def test_an_address_field_on_an_edit_is_refused_naming_the_records_forge(world: _World) -> None:
+    forge = world.ghe()
+    source = world.authoring.create_work_source_naming(
+        "demo", None, _SOURCE, ForgeChoice(forge="ghe", named=forge), _CLI
     )
-    with pytest.raises(refusal):
-        world.authoring.create_repository_naming(slug, None, draft, ForgeChoice(api_base=_GHE), _CLI)
-    assert [forge.slug for forge in world.forges.list_all(include_retired=True)] == ["github"]
-    assert world.log.page(before=None, limit=10, record_kind=RecordKind.FORGE, record_key=None)[0].record_key == (
-        github.forge_id
-    )
-
-
-def test_a_refused_source_edit_naming_a_new_origin_leaves_no_forge(world: _World) -> None:
-    github = world.authoring.create_forge("github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), _CLI)
-    world.authoring.create_work_source(
-        "held", None, WorkSourceDraft("github", "acme/held", False, "gh").on(github.forge_id), _CLI
-    )
-    source = world.authoring.create_work_source("demo", None, _SOURCE.on(github.forge_id), _CLI)
-    with pytest.raises(WorkSourceLocatorTaken):
-        world.authoring.edit_work_source_naming(
-            source, WorkSourceEdit(locator="acme/held"), ForgeChoice(api_base=_GHE), _CLI
-        )
-    assert [forge.slug for forge in world.forges.list_all(include_retired=True)] == ["github"]
-
-
-def test_each_old_field_a_committed_write_used_records_one_event(tmp_path: Path) -> None:
-    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migrated_hub_at(db_url)
-    events = RecordedEvents()
-    authoring = config_authoring(
-        create_engine_from_url(db_url),
-        keys=hub_key_provider({}, data_dir=tmp_path / "data"),
-        clock=FixedClock(_NOW),
-        events=events,
-    )
-    authoring.create_secret(SecretName.parse("gh"), "tok", OP)
-    choice = ForgeChoice(api_base=_GHE, web_base="https://ghe.acme.internal")
-    authored = authoring.create_work_source_naming("demo", None, _SOURCE, choice, _CLI)
-    with pytest.raises(WorkSourceSlugTaken):
-        authoring.create_work_source_naming("demo", None, _SOURCE, choice, _CLI)
-    authoring.edit_work_source_naming(authored.record, WorkSourceEdit(annotate=True), ForgeChoice(), _CLI)
-    forge = authored.warnings[0].forge_slug
-    assert [(kind, detail) for kind, _, detail in events.events] == [
-        (
-            "config-old-field-used",
-            {
-                "record": "work source demo",
-                "field": field,
-                "forge_id": authored.record.fields.forge_id,
-                "forge_slug": forge,
-            },
-        )
-        for field in ("api_base", "web_base")
-    ]
+    choice = ForgeChoice(moved=(MovedField("api_base", GITHUB_API_BASE),))
+    with pytest.raises(FieldMovedToForge, match="forge ghe"):
+        world.authoring.edit_work_source_naming(source, WorkSourceEdit(annotate=True), choice, _CLI)
+    assert world.sources.get(source.work_source_id) == source
 
 
 def test_a_forge_edit_rewrites_every_referrers_address_columns(world: _World) -> None:
@@ -358,6 +202,6 @@ def test_a_work_source_naming_its_forge_needs_one_of_its_providers_kind(world: _
     source = world.authoring.create_work_source_naming(
         "demo", None, _SOURCE, ForgeChoice(forge="ghe", named=forge), _CLI
     )
-    assert source.record.fields.forge_id == forge.forge_id and source.warnings == ()
+    assert source.fields.forge_id == forge.forge_id
     with pytest.raises(ForgeUnavailable, match="forge nope is unknown"):
         world.authoring.create_work_source_naming("other", None, _SOURCE, ForgeChoice(forge="nope"), _CLI)

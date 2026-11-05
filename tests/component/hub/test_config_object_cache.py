@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -19,8 +20,16 @@ from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.tenancy import StoreScope
-from tests.support.scaffolding import OP, config_authoring, default_tenant, migrated_hub_at
+from tests.support.scaffolding import (
+    OP,
+    config_authoring,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_forge,
+)
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _FIELDS = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
@@ -49,8 +58,8 @@ class _World:
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
         self.source_id = self.authoring.create_work_source_naming(
-            "demo", None, _FIELDS, ForgeChoice(), OP
-        ).record.work_source_id
+            "demo", None, _FIELDS, _on_github(self.engine), OP
+        ).work_source_id
         self.live = self.second_process()
         self.builds = 0
 
@@ -144,3 +153,10 @@ def test_a_cold_cache_and_a_second_cache_build_equivalent_objects(world: _World)
 
 def test_an_unknown_record_builds_nothing(world: _World) -> None:
     assert world.live.objects.get(RecordKind.REPOSITORY, "absent", lambda: _Client("x", False, "t")) is None
+
+
+def _on_github(engine: Engine) -> ForgeChoice:
+    """The forge choice naming the forge holding GitHub's API origin, made when none does."""
+    forge = ForgeRecordStore(hub_store_connections(engine)).get(seed_forge(engine, "https://api.github.com"))
+    assert forge is not None
+    return ForgeChoice(forge=forge.forge_id, named=forge)

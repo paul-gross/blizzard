@@ -24,6 +24,7 @@ from tests.support.scaffolding import (
     RepositorySeed,
     build_hub,
     create_repositories,
+    ensure_fixture_forge,
     fixture_repository,
     ingest,
     make_ready,
@@ -198,7 +199,7 @@ def test_a_tracker_sourced_chunk_links_its_branch_through_the_repository_its_com
         work_sources={"tracker": FakeWorkSource(name="tracker", repo="corp/tracker")},
         repositories=[
             RepositorySeed(
-                forge_api_url="https://ghe.example/api/v3",
+                api_base="https://ghe.example/api/v3",
                 owner="acme",
                 repo="widget",
                 base_branch="main",
@@ -231,7 +232,11 @@ def test_a_commit_in_a_repository_its_project_does_not_link_or_no_record_names_h
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("gadget", "http://forge.fixture", owner="acme")], project=None)
+    create_repositories(
+        hub.client,
+        [fixture_repository("gadget", ensure_fixture_forge(hub.client, "http://forge.fixture"), owner="acme")],
+        project=None,
+    )
     commits = [
         _BUILD_ARTIFACT,
         {**_BUILD_ARTIFACT, "name": "acme/gadget", "repo": "acme/gadget"},
@@ -252,7 +257,11 @@ def test_the_commit_link_binding_resolves_a_landed_name_through_the_chunks_linke
     """The same resolution the branch link uses: a linked record on a GitHub-kind forge links its commit; an unlinked
     or unknown name, and a chunk with no project, link none."""
     hub = build_hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("gadget", "http://forge.fixture", owner="acme")], project=None)
+    create_repositories(
+        hub.client,
+        [fixture_repository("gadget", ensure_fixture_forge(hub.client, "http://forge.fixture"), owner="acme")],
+        project=None,
+    )
     chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT])
     chunk = hub.services.chunks.record.get_many([chunk_id])[chunk_id]
 

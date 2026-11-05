@@ -102,7 +102,13 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_ingest import RUNNER_TABLES, contents, invariant_violations, seed_runner
 from tests.support.runner_join import RUNNER_BIN, runner_spawn_env
-from tests.support.scaffolding import create_repositories, fixture_repository, hub_scoped, seed_drainable_history
+from tests.support.scaffolding import (
+    create_repositories,
+    ensure_fixture_forge,
+    fixture_repository,
+    hub_scoped,
+    seed_drainable_history,
+)
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -2676,7 +2682,7 @@ def _merged_markers(hub: httpx2.Client, chunk_id: str) -> list[str]:
 
 def _create_web_repository(hub: httpx2.Client, forge_url: str) -> None:
     """The second repository the two-repo land resolves its ``toy-web`` commit against."""
-    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, forge_url, owner=OWNER)])
+    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, ensure_fixture_forge(hub, forge_url), owner=OWNER)])
 
 
 def _repo_pull_count(forge: httpx2.Client, repo: str) -> int:

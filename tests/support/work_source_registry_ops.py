@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.tenancy import StoreScope
-from tests.support.scaffolding import ForgeDouble, ForgeIssue, bound_socket, github_double
+from tests.support.scaffolding import ForgeDouble, ForgeIssue, bound_socket, ensure_fixture_forge, github_double
 
 _ISSUES: dict[str, ForgeIssue] = {
     f"acme/widget#{n}": {"title": f"t{n}", "body": f"b{n}", "comments": []} for n in (1, 2)
@@ -59,7 +59,7 @@ def create(
             "slug": slug,
             "provider": "github",
             "locator": locator,
-            "api_base": forge_url,
+            "forge": ensure_fixture_forge(client, forge_url),
             "annotate": annotate,
             "secret": "gh",
         },

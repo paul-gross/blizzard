@@ -28,12 +28,7 @@ from blizzard.hub.domain.config.apply import (
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forge_resolution import (
-    REPOSITORY_FORGE_RULES,
-    WORK_SOURCE_FORGE_RULES,
-    ForgePlanner,
-    OldFieldUsed,
-)
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice, resolve_forge
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeId,
@@ -80,12 +75,11 @@ from blizzard.hub.domain.projects.order import IReadProjectPositions
 @domain_model
 @dataclass(frozen=True)
 class ApplyResult:
-    """What an apply decided: the id its changes share — ``None`` on a dry run, which commits nothing — an outcome row
-    per named record, and a warning per old address field an entry used."""
+    """What an apply decided: the id its changes share — ``None`` on a dry run, which commits nothing — and an outcome
+    row per named record."""
 
     apply_id: str | None
     outcomes: tuple[EntryOutcome, ...]
-    warnings: tuple[OldFieldUsed, ...] = ()
 
 
 @domain_model
@@ -176,8 +170,7 @@ class ConfigApplication:
         projects = self._plan_projects(entries, ctx, repositories, sources)
         held_forges = {f.slug: f for f in self._forges.list_all(include_retired=True)}
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
-        planner = ForgePlanner(lookup.records, ctx, at=self._clock.now())
-        declaration, warnings = self._declaration(entries, projects, repositories, sources, planner, lookup)
+        declaration = self._declaration(entries, projects, repositories, sources, lookup)
         declaration = replace(declaration, declared_forges=declared_forges)
         outcomes = self._authoring.apply(
             declaration,
@@ -185,9 +178,7 @@ class ConfigApplication:
             ctx,
             dry_run=dry_run,
         )
-        if apply_id is not None:
-            self._authoring.record_old_fields(warnings, record=f"config apply {apply_id}")
-        return ApplyResult(apply_id, tuple(outcomes), warnings)
+        return ApplyResult(apply_id, tuple(outcomes))
 
     def _held_forges(
         self, entries: DocumentEntries, held: dict[str, ConfiguredForge], ctx: ChangeContext
@@ -361,16 +352,21 @@ class ConfigApplication:
         projects: ProjectsPlan,
         held: _Repositories,
         sources_held: _WorkSources,
-        planner: ForgePlanner,
         forges: PlannedForges,
-    ) -> tuple[ConfigDeclaration, tuple[OldFieldUsed, ...]]:
-        """The domain's declarations from the entries: each record under the id it takes and on the forge it names —
-        the forges no origin's forge holds yet planned beside them — and each scope and routine within the project it
-        names, as the apply leaves the projects; with a warning per old address field an entry used. An entry's
+    ) -> ConfigDeclaration:
+        """The domain's declarations from the entries: each record under the id it takes and on the forge it names,
+        and each scope and routine within the project it names, as the apply leaves the projects. An entry's
         :class:`ConfigFieldError` on its forge is refused at the entry."""
-        warnings: list[OldFieldUsed] = []
-        for entry in entries.work_sources:
-            planner.foresee(entry.forge, WORK_SOURCE_FORGE_RULES, creating=entry.slug not in sources_held.stored)
+
+        def resolved(choice: ForgeChoice, provider: str | None, current: ForgeId | None) -> ConfiguredForge | None:
+            return resolve_forge(
+                replace(choice, named=forges.resolve(choice.forge)) if choice.forge is not UNSET else choice,
+                provider=provider,
+                current=None if current is None else forges.resolve(current),
+                creating=current is None,
+                forges=lambda: forges.records,
+            )
+
         work_sources: list[WorkSourceDeclaration] = []
         for index, entry in enumerate(entries.work_sources):
             stored = sources_held.stored.get(entry.slug)
@@ -381,28 +377,18 @@ class ConfigApplication:
             current = None if stored is None else stored.fields.forge_id
             try:
                 require_known_provider(provider)
-                resolved = planner.decide(
-                    replace(entry.forge, named=forges.resolve(entry.forge.forge))
-                    if entry.forge.forge is not UNSET
-                    else entry.forge,
-                    WORK_SOURCE_FORGE_RULES,
-                    provider=provider,
-                    current=current,
-                    section=WORK_SOURCES_SECTION,
-                    index=index,
-                )
+                forge = resolved(entry.forge, provider, current)
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(WORK_SOURCES_SECTION, index, exc) from exc
-            forge_id = current if resolved is None else resolved.forge.forge_id
+            forge_id = current if forge is None else forge.forge_id
             assert forge_id is not None
-            warnings.extend(() if resolved is None else resolved.warnings)
             work_sources.append(
                 WorkSourceDeclaration(
                     slug=entry.slug,
                     name=entry.name,
                     work_source_id=sources_held.ids[entry.slug],
                     fields=entry.draft.on(forge_id),
-                    edit=entry.edit if resolved is None else replace(entry.edit, forge_id=forge_id),
+                    edit=entry.edit if forge is None else replace(entry.edit, forge_id=forge_id),
                 )
             )
         repositories: list[RepositoryDeclaration] = []
@@ -410,33 +396,22 @@ class ConfigApplication:
             stored_repo = held.stored.get(repo.slug)
             current = None if stored_repo is None else stored_repo.fields.forge_id
             try:
-                resolved = planner.decide(
-                    replace(repo.forge, named=forges.resolve(repo.forge.forge))
-                    if repo.forge.forge is not UNSET
-                    else repo.forge,
-                    REPOSITORY_FORGE_RULES,
-                    provider=None,
-                    current=current,
-                    section=REPOSITORIES_SECTION,
-                    index=index,
-                )
+                forge = resolved(repo.forge, None, current)
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(REPOSITORIES_SECTION, index, exc) from exc
-            forge_id = current if resolved is None else resolved.forge.forge_id
+            forge_id = current if forge is None else forge.forge_id
             assert forge_id is not None
-            warnings.extend(() if resolved is None else resolved.warnings)
             repositories.append(
                 RepositoryDeclaration(
                     slug=repo.slug,
                     name=repo.name,
                     repository_id=held.ids[repo.slug],
                     fields=repo.draft.on(forge_id),
-                    edit=repo.edit if resolved is None else replace(repo.edit, forge_id=forge_id),
+                    edit=repo.edit if forge is None else replace(repo.edit, forge_id=forge_id),
                 )
             )
         return ConfigDeclaration(
             secrets=entries.secrets,
-            forges=tuple(planner.planned),
             work_sources=tuple(work_sources),
             repositories=tuple(repositories),
             projects=projects.section,
@@ -464,7 +439,7 @@ class ConfigApplication:
                 )
                 for index, routine in enumerate(entries.routines)
             ),
-        ), tuple(warnings)
+        )
 
     def _stored(
         self,

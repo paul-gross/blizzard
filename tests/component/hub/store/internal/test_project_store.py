@@ -24,6 +24,7 @@ from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId, ProjectSlug, ProjectSlugTaken
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -39,8 +40,10 @@ from tests.support.scaffolding import (
     default_tenant,
     first_color,
     hub_migration_prototype,
+    hub_store_connections,
     link_project,
     scoped_connections,
+    seed_forge,
     seed_project,
 )
 
@@ -88,12 +91,11 @@ class _World:
 
     def source(self, name: str) -> ConfiguredWorkSource:
         draft = WorkSourceDraft(provider="github", locator=f"acme/{name}", annotate=False, secret="forge-token")
-        return self.config().create_work_source_naming(name, None, draft, ForgeChoice(), OP).record
+        return self.config().create_work_source_naming(name, None, draft, _on_github(self.engine), OP)
 
     def repository(self, name: str) -> ConfiguredRepository:
         draft = RepositoryDraft(owner="acme", repo=name, base_branch="main", secret_name="forge-token")
-        choice = ForgeChoice(api_base="https://api.github.com")
-        return self.config().create_repository_naming(name, None, draft, choice, OP).record
+        return self.config().create_repository_naming(name, None, draft, _on_github(self.engine), OP)
 
 
 @pytest.fixture
@@ -412,3 +414,10 @@ def test_a_project_change_row_carries_its_project_id_column(world: _World) -> No
             .where(config_changes.c.record_key == created.project_id)
         ).scalar_one()
     assert stored == created.project_id
+
+
+def _on_github(engine: Engine) -> ForgeChoice:
+    """The forge choice naming the forge holding GitHub's API origin, made when none does."""
+    forge = ForgeRecordStore(hub_store_connections(engine)).get(seed_forge(engine, "https://api.github.com"))
+    assert forge is not None
+    return ForgeChoice(forge=forge.forge_id, named=forge)

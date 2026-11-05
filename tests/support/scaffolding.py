@@ -38,7 +38,6 @@ from typing_extensions import TypeIs
 from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
-from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
@@ -88,13 +87,15 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.forge_resolution import ForgeChoice, IEventRecorder
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import (
     GITHUB_API_BASE,
     ForgeId,
     ForgeKindOffers,
     canonical_origin,
     forge_for_origin,
+    origin_identity,
+    suffixed_slug,
 )
 from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
@@ -172,7 +173,6 @@ from blizzard.hub.work_sources.source import (
     WorkItem,
     WorkSourceError,
 )
-from blizzard.wire.work_source import WorkSourceDocument
 from tests.support.config_inputs import VERSION_WINDOW, create_hub_app
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -552,40 +552,15 @@ OP = ChangeContext(actor="op", door=Door.API)
 MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
-class RecordedEvents:
-    """An event recorder that keeps every event it is handed, in order, as ``(kind, message, detail)``."""
-
-    def __init__(self) -> None:
-        self.events: list[tuple[str, str, dict[str, str] | None]] = []
-
-    def record(
-        self,
-        *,
-        kind: EventLogKind,
-        runner_id: None,
-        chunk_id: None,
-        project_id: None,
-        lease_id: None,
-        node_name: None,
-        message: str,
-        detail: dict[str, str] | None,
-        at: datetime,
-    ) -> int:
-        self.events.append((kind, message, detail))
-        return len(self.events)
-
-
 def config_authoring(
     engine: Engine,
     *,
     keys: IHubKeyProvider,
     clock: IClock,
-    events: IEventRecorder | None = None,
     offers: IForgeOffers | None = None,
 ) -> ConfigAuthoring:
-    """The one configured-record writer over ``engine``, sealing under ``keys``, recording old-field events to
-    ``events`` — a fresh :class:`RecordedEvents` when none is given — and asking ``offers`` what a forge offers — each
-    forge kind's own set when none is given."""
+    """The one configured-record writer over ``engine``, sealing under ``keys`` and asking ``offers`` what a forge
+    offers — each forge kind's own set when none is given."""
     store = hub_store_connections(engine)
     return ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store),
@@ -596,7 +571,6 @@ def config_authoring(
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
-        events=RecordedEvents() if events is None else events,
         clock=clock,
     )
 
@@ -1514,10 +1488,9 @@ def checkpoint_sqlite(db_url: str) -> None:
 
 @dataclass(frozen=True)
 class RepositorySeed:
-    """A repository a test seeds as an operator names one by its old address field: the forge holding
-    ``forge_api_url`` is the one it lives on, made when no forge holds it."""
+    """A repository a test seeds on the forge holding ``api_base``, made when no forge holds it."""
 
-    forge_api_url: str
+    api_base: str
     owner: str
     repo: str
     base_branch: str
@@ -1532,7 +1505,7 @@ FIXTURE_FORGE_URL = "http://forge.fixture"
 
 
 def seed_forge(engine: Engine, api_base: str = FIXTURE_FORGE_URL) -> ForgeId:
-    """The id of the forge holding ``api_base`` — made, as an old-field write makes one, when none does."""
+    """The id of the forge holding ``api_base`` — made, slugged and named from its origin, when none does."""
     forges = ForgeRecordStore(hub_store_connections(engine))
     origin = canonical_origin(api_base)
     held = forges.get_by_api_base(origin)
@@ -1547,7 +1520,7 @@ def seed_forge(engine: Engine, api_base: str = FIXTURE_FORGE_URL) -> ForgeId:
 #: the component tier's commits name — so a deliver node resolves them.
 DEFAULT_FIXTURE_REPOSITORIES = (
     RepositorySeed(
-        forge_api_url=FIXTURE_FORGE_URL,
+        api_base=FIXTURE_FORGE_URL,
         owner="acme",
         repo="widget",
         base_branch="main",
@@ -1572,15 +1545,19 @@ def seed_repositories(
         name = f"{fields.owner}-{fields.repo}"
         existing = RepositoryRecordStore(hub_store_connections(engine)).resolve(name)
         held = None if existing is None else forges.get(existing.fields.forge_id)
-        if held is not None and held.fields.api_base == canonical_origin(fields.forge_api_url):
+        if held is not None and held.fields.api_base == canonical_origin(fields.api_base):
             continue
         if existing is not None:  # the same owner/repo on another forge is a record of its own
-            name = f"{name}-{re.sub('[^a-z0-9]+', '-', urlparse(fields.forge_api_url).netloc.lower()).strip('-')}"
+            name = f"{name}-{re.sub('[^a-z0-9]+', '-', urlparse(fields.api_base).netloc.lower()).strip('-')}"
             if RepositoryRecordStore(hub_store_connections(engine)).resolve(name) is not None:
                 continue
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
-        authoring.create_repository_naming(name, None, fields.draft(), ForgeChoice(api_base=fields.forge_api_url), OP)
+        forge = forges.get(seed_forge(engine, fields.api_base))
+        assert forge is not None
+        authoring.create_repository_naming(
+            name, None, fields.draft(), ForgeChoice(forge=forge.forge_id, named=forge), OP
+        )
         if link:
             link_project(engine, repository=name)
 
@@ -1776,11 +1753,36 @@ def with_test_lock_wait(hub: HubHarness) -> None:
     hub.engine.dispose()
 
 
-def fixture_work_source(slug: str, locator: str, api_base: str, *, annotate: bool = False) -> WorkSourceDocument:
-    """A GitHub-shaped source on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
-    return WorkSourceDocument(
-        slug=slug, provider="github", locator=locator, api_base=api_base, annotate=annotate, secret=FIXTURE_FORGE_SECRET
-    )
+#: A work-source or repository record body, as a running hub's own API takes it.
+type RecordBody = dict[str, Any]
+
+
+def ensure_fixture_forge(hub: httpx2.Client, api_base: str) -> str:
+    """The slug of ``hub``'s forge holding ``api_base`` — created, slugged and named from its origin, when none does."""
+    origin = canonical_origin(api_base)
+    listed = hub.get("/api/forges", params={"include_retired": "true"})
+    assert listed.status_code == 200, listed.text
+    forges = listed.json()["forges"]
+    held = next((forge["slug"] for forge in forges if forge["api_base"] == origin), None)
+    if held is not None:
+        return held
+    slug, name = origin_identity(origin, None)
+    slug = suffixed_slug(slug, {forge["slug"] for forge in forges})
+    created = hub.post("/api/forges", json={"slug": slug, "name": name, "kind": "github", "api_base": origin})
+    assert created.status_code == 201, created.text
+    return slug
+
+
+def fixture_work_source(slug: str, locator: str, forge: str, *, annotate: bool = False) -> RecordBody:
+    """A GitHub-shaped source body on the fixture forge ``forge`` names, naming :data:`FIXTURE_FORGE_SECRET`."""
+    return {
+        "slug": slug,
+        "provider": "github",
+        "locator": locator,
+        "forge": forge,
+        "annotate": annotate,
+        "secret": FIXTURE_FORGE_SECRET,
+    }
 
 
 def ensure_fixture_secret(hub: httpx2.Client) -> None:
@@ -1789,11 +1791,11 @@ def ensure_fixture_secret(hub: httpx2.Client) -> None:
     assert secret.status_code in (201, 409), secret.text
 
 
-def fixture_repository(name: str, forge_api_url: str, *, owner: str, base_branch: str = "main") -> dict[str, str]:
-    """A repository record body on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
+def fixture_repository(name: str, forge: str, *, owner: str, base_branch: str = "main") -> RecordBody:
+    """A repository record body on the fixture forge ``forge`` names, naming :data:`FIXTURE_FORGE_SECRET`."""
     return {
         "slug": name,
-        "forge_api_url": forge_api_url,
+        "forge": forge,
         "owner": owner,
         "repo": name,
         "base_branch": base_branch,
@@ -1801,16 +1803,16 @@ def fixture_repository(name: str, forge_api_url: str, *, owner: str, base_branch
     }
 
 
-def fixture_repositories(sources: Sequence[WorkSourceDocument], forge_api_url: str) -> list[dict[str, str]]:
-    """One repository record per source's ``owner/repo`` locator, on the fixture forge's ``main``."""
+def fixture_repositories(sources: Sequence[RecordBody], forge: str) -> list[RecordBody]:
+    """One repository record per source's ``owner/repo`` locator, on ``forge``'s ``main``."""
     return [
-        fixture_repository(source.locator.rpartition("/")[2], forge_api_url, owner=source.locator.partition("/")[0])
+        fixture_repository(source["locator"].rpartition("/")[2], forge, owner=source["locator"].partition("/")[0])
         for source in sources
     ]
 
 
 def create_repositories(
-    hub: httpx2.Client, repositories: Sequence[dict[str, str]], *, project: str | None = "default"
+    hub: httpx2.Client, repositories: Sequence[RecordBody], *, project: str | None = "default"
 ) -> None:
     """Create repository ``repositories`` — and the secret they name — through a running hub's own
     API and link each to ``project`` (a slug; ``None`` links none), so a deliver node of that project's
@@ -1824,7 +1826,7 @@ def create_repositories(
             assert linked.status_code == 200, linked.text
 
 
-def create_work_sources(hub: httpx2.Client, sources: Sequence[WorkSourceDocument]) -> None:
+def create_work_sources(hub: httpx2.Client, sources: Sequence[RecordBody]) -> None:
     """Create ``sources``, and the secret they name, through a running hub's own API, each linked to the
     hub's only project.
 
@@ -1837,9 +1839,9 @@ def create_work_sources(hub: httpx2.Client, sources: Sequence[WorkSourceDocument
     assert projects.status_code == 200, projects.text
     (project,) = projects.json()["projects"]
     for source in sources:
-        created = hub.post("/api/work-sources", json=source.model_dump())
+        created = hub.post("/api/work-sources", json=source)
         assert created.status_code == 201, created.text
-        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source.slug}")
+        linked = hub.put(f"/api/projects/{project['project_id']}/source-links/{source['slug']}")
         assert linked.status_code == 200, linked.text
 
 

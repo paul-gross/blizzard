@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -18,7 +18,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
-from blizzard.hub.api.forge_warnings import warned
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -52,7 +51,6 @@ from blizzard.wire.config import (
     ConfigApplyResponse,
     ConfigChangesPage,
     ConfigChangeView,
-    ConfigDocument,
     ConfigDocumentV2,
     FieldChangeView,
     ForgeEntry,
@@ -62,10 +60,8 @@ from blizzard.wire.config import (
     ScopeEntry,
     WorkSourceEntry,
 )
-from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
-from blizzard.wire.work_source import WorkSourceDocument
 
 router = APIRouter(
     prefix="/api/config",
@@ -83,13 +79,12 @@ _VIEW = Depends(require(Permission.FLEET_VIEW))
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
 
+#: The one document version a hub applies, exports and serves schemas for.
+DOCUMENT_VERSION = 2
+#: The code a document version other than :data:`DOCUMENT_VERSION` is refused under.
+VERSION_RETIRED = "config_version_retired"
+
 _SCHEMAS = {
-    "work-sources": WorkSourceDocument,
-    "repositories": RepositoryDocument,
-    "scopes": ScopeDocument,
-    "routines": RoutineDocument,
-}
-_SCHEMAS_V2 = {
     "forges": ForgeEntry,
     "work-sources": WorkSourceEntry,
     "repositories": RepositoryEntry,
@@ -104,9 +99,20 @@ _REPOSITORY_KEYED = (RecordKind.REPOSITORY, RecordKind.PROJECT_REPOSITORY_LINK)
 _WORK_SOURCE_KEYED = (RecordKind.WORK_SOURCE, RecordKind.PROJECT_SOURCE_LINK)
 _FORGE_KEYED = (RecordKind.FORGE,)
 
-#: The old address fields of each document entry, read into what the entry says of its forge.
-_REPOSITORY_ADDRESS = "forge_api_url"
-_WORK_SOURCE_ADDRESSES = ("api_base", "web_base")
+
+def _version_retired(loc: list[str], version: object) -> HTTPException:
+    """422 on ``loc`` for a document version this hub no longer reads."""
+    stated = "no version" if version is None else f"version {version if isinstance(version, int) else repr(version)}"
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[
+            {
+                "loc": loc,
+                "msg": f"{stated} is retired; send a version {DOCUMENT_VERSION} document",
+                "type": VERSION_RETIRED,
+            }
+        ],
+    )
 
 
 def _labels(
@@ -186,11 +192,14 @@ LANDING_POLICIES_KEY = "x-blizzard-landing-policies"
 
 
 @router.get("/schema/{kind}", dependencies=[_VIEW])
-def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = 1) -> dict[str, object]:
-    """The JSON Schema of a record kind's document model; 404 for a kind with none yet. The `repositories` schema
-    lists, under `x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer
-    (`requires`) and the ones it uses when offered (`uses`)."""
-    model = (_SCHEMAS if version == 1 else _SCHEMAS_V2).get(kind)
+def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION) -> dict[str, object]:
+    """The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422
+    `config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,
+    every landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered
+    (`uses`)."""
+    if version != DOCUMENT_VERSION:
+        raise _version_retired(["query", "version"], version)
+    model = _SCHEMAS.get(kind)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no document schema for {kind!r}")
     schema = model.model_json_schema()
@@ -255,13 +264,12 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
     return key
 
 
-def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
+def _entries(document: ConfigDocumentV2) -> DocumentEntries:
     """The domain's entries from a validated document: each entry's create fields, a sparse edit of only the
-    fields the entry states (``model_fields_set``), and what it says of its forge — the old address fields it states."""
+    fields the entry states (``model_fields_set``), and the forge it names."""
     sources: list[DeclaredWorkSource] = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "slug"}
-        addresses = {name: stated.pop(name) for name in _WORK_SOURCE_ADDRESSES if name in stated}
         reference = stated.pop("forge", UNSET)
         sources.append(
             DeclaredWorkSource(
@@ -271,13 +279,12 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
                     provider=entry.provider, locator=entry.locator, annotate=entry.annotate, secret=entry.secret
                 ),
                 edit=WorkSourceEdit(**stated),
-                forge=ForgeChoice(forge=reference, **addresses),
+                forge=ForgeChoice(forge=reference),
             )
         )
     repositories: list[DeclaredRepository] = []
     for repo in document.repositories:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
-        address = stated.pop(_REPOSITORY_ADDRESS, UNSET)
         reference = stated.pop("forge", UNSET)
         policy = repo.landing_policy
         if "landing_policy" in stated:
@@ -295,7 +302,7 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
                     park_timeout_hours=repo.park_timeout_hours,
                 ),
                 edit=RepositoryEdit(**stated),
-                forge=ForgeChoice(forge=reference, api_base=address),
+                forge=ForgeChoice(forge=reference),
             )
         )
     scopes = [
@@ -341,9 +348,7 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
                 edit=ForgeEdit(**{name: getattr(f, name) for name in f.model_fields_set if name != "kind"}),
             )
             for f in document.forges
-        )
-        if isinstance(document, ConfigDocumentV2)
-        else (),
+        ),
         work_sources=tuple(sources),
         repositories=tuple(repositories),
         projects=tuple(_project_declaration(entry) for entry in document.projects),
@@ -408,7 +413,7 @@ def _refusal(exc: ApplyEntryRefused) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc.section}[{exc.index}]: {cause}")
 
 
-def _document(body: bytes, content_type: str | None) -> ConfigDocument | ConfigDocumentV2:
+def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
     codec = codec_for_media_type(content_type or "")
     if codec is None:
         raise HTTPException(
@@ -424,10 +429,11 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument | ConfigD
                 {"loc": ["body"], "msg": exc.problem, "type": "value_error", "line": exc.line, "column": exc.column}
             ],
         ) from exc
+    version = mapping.get("version")
+    if version != DOCUMENT_VERSION:
+        raise _version_retired(["body", "version"], version)
     try:
-        version = mapping.get("version")
-        model = ConfigDocumentV2 if version == 2 else ConfigDocument
-        return model.model_validate(mapping)
+        return ConfigDocumentV2.model_validate(mapping)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -436,10 +442,9 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument | ConfigD
 
 
 def _apply(
-    document: ConfigDocument | ConfigDocumentV2,
+    document: ConfigDocumentV2,
     identity: ResolvedIdentity,
     services: TenantServices,
-    response: Response,
     *,
     dry_run: bool,
 ) -> ConfigApplyResponse:
@@ -451,7 +456,6 @@ def _apply(
         dry_run=dry_run,
         apply_id=applied.apply_id,
         outcomes=[_outcome(o) for o in applied.outcomes],
-        warnings=warned(response, applied.warnings),
     )
 
 
@@ -460,16 +464,10 @@ _APPLY_BODY = {
     "content": {
         media_type: {
             "schema": {
-                "oneOf": [
-                    {"$ref": "#/components/schemas/ConfigDocument"},
-                    {"$ref": "#/components/schemas/ConfigDocumentV2"},
-                ],
+                "oneOf": [{"$ref": "#/components/schemas/ConfigDocumentV2"}],
                 "discriminator": {
                     "propertyName": "version",
-                    "mapping": {
-                        "1": "#/components/schemas/ConfigDocument",
-                        "2": "#/components/schemas/ConfigDocumentV2",
-                    },
+                    "mapping": {"2": "#/components/schemas/ConfigDocumentV2"},
                 },
             }
         }
@@ -481,30 +479,29 @@ _APPLY_BODY = {
 @router.post("/apply", response_model=ConfigApplyResponse, openapi_extra={"requestBody": _APPLY_BODY})
 async def apply_config(
     request: Request,
-    response: Response,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     services: Services,
     dry_run: bool = False,
 ) -> ConfigApplyResponse:
-    """Reconcile a version 1 or 2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is
-    absent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`
-    rolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415
-    unknown `Content-Type`; a refusal leaves the store unchanged. An entry's address — a work source's `api_base` and
-    `web_base`, a repository's `forge_api_url` — resolves to the tenant's forge with that origin, planned in the same
-    transaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for
-    a stored record that states no address keeps its forge. Version 2 declares forges and names them by id or slug."""
+    """Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,
+    edit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,
+    and every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,
+    with the same `outcomes` and no `apply_id`. 422 invalid — `config_version_retired` for any `version` but 2, a
+    missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged."""
     document = _document(await request.body(), request.headers.get("content-type"))
-    return await run_in_threadpool(_apply, document, identity, services, response, dry_run=dry_run)
+    return await run_in_threadpool(_apply, document, identity, services, dry_run=dry_run)
 
 
-@router.get("/export", response_model=ConfigDocument | ConfigDocumentV2, dependencies=[_VIEW])
+@router.get("/export", response_model=ConfigDocumentV2, dependencies=[_VIEW])
 def export_config(
-    services: Services, version: Annotated[int, Query(ge=1, le=2)] = 1
-) -> ConfigDocument | ConfigDocumentV2:
-    """Every project with its standing links, every active, non-built-in work source and repository, and every
-    active scope and routine (its linked scope set included) named in its project by slug, with every field, and
-    every active secret name, as a document that applies back as a no-op. Retired records are left out, since
-    applying one would enable it."""
+    services: Services, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION
+) -> ConfigDocumentV2:
+    """Every project with its standing links, every active forge, every active, non-built-in work source and
+    repository, and every active scope and routine (its linked scope set included) named in its project by slug, with
+    every field, and every active secret name, as a version-2 document that applies back as a no-op. Retired records
+    are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`."""
+    if version != DOCUMENT_VERSION:
+        raise _version_retired(["query", "version"], version)
     retired = services.secret_catalog.retired_names()
     projects = services.projects.list_all()
     slug_of: dict[str, str] = {project.project_id: project.slug for project in projects}
@@ -522,8 +519,8 @@ def export_config(
     project_ids = [project.project_id for project in projects]
     source_links = services.project_links.sources_of_projects(project_ids)
     repository_links = services.project_links.repositories_of_projects(project_ids)
-    common = ConfigDocument(
-        version=1,
+    return ConfigDocumentV2(
+        version=DOCUMENT_VERSION,
         projects=[
             ProjectDocument(
                 slug=project.slug,
@@ -539,33 +536,6 @@ def export_config(
             for project in projects
         ],
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
-        work_sources=[
-            WorkSourceDocument(
-                slug=r.slug,
-                name=r.name,
-                provider=r.fields.provider,
-                locator=r.fields.locator,
-                api_base=forges[r.fields.forge_id].fields.api_base,
-                web_base=forges[r.fields.forge_id].fields.web_base,
-                annotate=r.fields.annotate,
-                secret=r.fields.secret,
-            )
-            for r in sources
-        ],
-        repositories=[
-            RepositoryDocument(
-                slug=r.slug,
-                name=r.name,
-                forge_api_url=forges[r.fields.forge_id].fields.api_base,
-                owner=r.fields.owner,
-                repo=r.fields.repo,
-                base_branch=r.fields.base_branch,
-                secret_name=r.fields.secret_name,
-                landing_policy=r.fields.landing_policy,
-                park_timeout_hours=r.fields.park_timeout_hours,
-            )
-            for r in repositories
-        ],
         scopes=[
             ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])
             for s in sorted(services.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))
@@ -585,15 +555,6 @@ def export_config(
             )
             for r in live_routines
         ],
-    )
-    if version == 1:
-        return common
-    return ConfigDocumentV2(
-        version=2,
-        projects=common.projects,
-        secrets=common.secrets,
-        scopes=common.scopes,
-        routines=common.routines,
         forges=[
             ForgeEntry(slug=f.slug, name=f.name, kind=f.kind, api_base=f.fields.api_base, web_base=f.fields.web_base)
             for f in services.forge_records.list_all(include_retired=False)

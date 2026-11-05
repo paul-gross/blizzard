@@ -18,7 +18,6 @@ const JIRA: WorkSourceSummary = {
   name: 'Acme Jira',
   provider: 'jira',
   locator: 'ACME',
-  api_base: 'https://acme.atlassian.net',
   secret: 'jira-token',
   annotate: false,
   edit: false,
@@ -28,9 +27,8 @@ const JIRA: WorkSourceSummary = {
   created_by_name: null,
   built_in: false,
   retired: false,
-  web_base: null,
 };
-const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
+const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
 const HISTORY = {
   changes: [
     {

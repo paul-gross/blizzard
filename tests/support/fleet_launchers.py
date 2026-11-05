@@ -40,6 +40,7 @@ from tests.support.scaffolding import (
     create_repositories,
     create_work_sources,
     daemon_log_sink,
+    ensure_fixture_forge,
     fixture_repositories,
     fixture_work_source,
     listening_args,
@@ -211,9 +212,10 @@ def run_hub(
         await_http(proc, client, "/api/health", log=log)
         if not rehost:
             # The one work source every scenario ingests against.
-            sources = [fixture_work_source(REPO_NAME, REPO, forge_url, annotate=annotate)]
+            forge = ensure_fixture_forge(client, forge_url)
+            sources = [fixture_work_source(REPO_NAME, REPO, forge, annotate=annotate)]
             create_work_sources(client, sources)
-            create_repositories(client, fixture_repositories(sources, forge_url))
+            create_repositories(client, fixture_repositories(sources, forge))
         yield client
     finally:
         client.close()

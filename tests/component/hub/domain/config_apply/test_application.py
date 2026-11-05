@@ -17,7 +17,7 @@ from blizzard.hub.domain.config_apply.entries import DeclaredRepository, Documen
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit
-from tests.support.scaffolding import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub, seed_forge
 
 _AT = datetime(2031, 5, 6, 7, 8, 9, tzinfo=UTC)
 
@@ -28,7 +28,7 @@ _ENTRIES = DocumentEntries(
             name=None,
             draft=RepositoryDraft(owner="acme", repo="blizzard", base_branch="master", secret_name="gh"),
             edit=RepositoryEdit(),
-            forge=ForgeChoice(api_base="https://api.github.com"),
+            forge=ForgeChoice(forge="github"),
         ),
     ),
     projects=(ProjectDeclaration(slug="web", edit=ProjectEdit(name="Web"), sources=None, repositories=("blizzard",)),),
@@ -39,6 +39,7 @@ _ENTRIES = DocumentEntries(
 def hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    seed_forge(hub.engine, "https://api.github.com")
     return hub
 
 
@@ -75,7 +76,6 @@ def test_a_real_apply_mints_its_apply_id_and_record_ids_from_the_clock(hub: HubH
         before=None, limit=50, record_kind=None, record_key=None, project_id=None
     )
     assert {change.record_kind.value for change in changes if change.apply_id == applied.apply_id} == {
-        "forge",
         "repository",
         "project",
         "project_repository_link",
@@ -90,11 +90,10 @@ def test_a_dry_run_mints_no_apply_id_and_rolls_back(hub: HubHarness) -> None:
 
     assert applied.apply_id is None
     assert [(o.kind.value, o.key, o.op.value if o.op else None) for o in applied.outcomes] == [
-        ("forge", "github", "create"),
         ("repository", "blizzard", "create"),
         ("project", "web", "create"),
         ("project_repository_link", "web/blizzard", "create"),
     ]
     assert hub.services.repository_records.list_all(include_retired=True) == []
-    assert hub.services.forge_records.list_all(include_retired=True) == []
+    assert [forge.slug for forge in hub.services.forge_records.list_all(include_retired=True)] == ["github"]
     assert hub.services.config_changes.count(record_kind=None, record_key=None, project_id=None) == before

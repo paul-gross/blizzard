@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.wire.base import WireModel
-from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
+from blizzard.wire.forge import DEPRECATED_FIELD, MovedFieldsRequest, OldFieldWarning
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -30,10 +30,6 @@ class WorkSourceSummary(WireModel):
     forge_id: str | None = None
     forge_slug: str | None = None
     forge_name: str | None = None
-    #: The API origin of the forge the source names — read ``forge_id`` instead.
-    api_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
-    #: The web origin of the forge the source names — read ``forge_id`` instead.
-    web_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     secret: str | None = None
     revision: int | None = None
     created_at: str | None = None
@@ -41,64 +37,41 @@ class WorkSourceSummary(WireModel):
     created_by_name: str | None = None
     retired: bool = False
     built_in: bool = False
-    #: One entry per old address field the write that answered this used — empty on every other answer.
-    warnings: list[OldFieldWarning] = []
+    #: Always empty.
+    warnings: list[OldFieldWarning] = Field(default=[], json_schema_extra=DEPRECATED_FIELD)
 
 
-class WorkSourceDocument(BaseModel):
-    """A work source as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
-    ``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label — the
-    slug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.
-    ``secret`` names a stored secret."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    slug: str
-    name: str | None = None
-    provider: str
-    locator: str
-    api_base: str | None = None
-    web_base: str | None = None
-    annotate: bool = False
-    secret: str | None = None
+#: The address fields a work source's forge now carries.
+WORK_SOURCE_MOVED_FIELDS = ("api_base", "web_base")
 
 
-class WorkSourceCreateRequest(BaseModel):
+class WorkSourceCreateRequest(MovedFieldsRequest):
     """The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` — a forge's id
-    or slug — beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with
-    that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub. The
-    web origin belongs to the forge: a ``web_base`` other than the forge's is refused, and a blank one means the
-    forge's."""
+    or slug — naming the forge it is on. A body naming no forge is refused."""
 
-    model_config = ConfigDict(extra="forbid")
+    moved_fields = WORK_SOURCE_MOVED_FIELDS
 
     slug: str
     name: str | None = None
     provider: str
     locator: str
     forge: str | None = None
-    api_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
-    web_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     annotate: bool = False
     secret: str | None = None
 
 
-class WorkSourcePatchRequest(BaseModel):
+class WorkSourcePatchRequest(MovedFieldsRequest):
     """A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
-    field but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;
-    ``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one
-    other than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null
-    ``secret`` clears it. A slug that changes keeps resolving to the source until another claims it."""
+    field but ``secret``, which it clears. ``forge`` re-points the source at a forge by id or slug. A slug that changes
+    keeps resolving to the source until another claims it."""
 
-    model_config = ConfigDict(extra="forbid")
+    moved_fields = WORK_SOURCE_MOVED_FIELDS
 
     slug: str | None = None
     name: str | None = None
     provider: str | None = None
     locator: str | None = None
     forge: str | None = None
-    api_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
-    web_base: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     annotate: bool | None = None
     secret: str | None = None
 

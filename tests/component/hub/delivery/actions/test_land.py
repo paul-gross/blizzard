@@ -853,7 +853,7 @@ nodes:
 
 _REPOSITORIES = tuple(
     RepositorySeed(
-        forge_api_url=f"http://forge.{host}",
+        api_base=f"http://forge.{host}",
         owner="acme",
         repo=name,
         base_branch="main",
@@ -988,14 +988,14 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
 def test_one_owner_repo_held_for_two_records_fails_before_the_pass(tmp_path: Path) -> None:
     twins = (
         RepositorySeed(
-            forge_api_url="http://forge.one",
+            api_base="http://forge.one",
             owner="acme",
             repo="widget",
             base_branch="main",
             secret_name="fixture-forge-token",
         ),
         RepositorySeed(
-            forge_api_url="http://forge.two",
+            api_base="http://forge.two",
             owner="acme",
             repo="widget",
             base_branch="main",

@@ -42,7 +42,13 @@ from tests.rehearsal.stores import (
 from tests.support.fleet_launchers import REPO, mock_bin_dir, run_forge
 from tests.support.fleet_world import REPO_NAME, mint_world
 from tests.support.repo_files import repo_root
-from tests.support.scaffolding import ensure_fixture_secret, fixture_repositories, fixture_work_source, url_of
+from tests.support.scaffolding import (
+    ensure_fixture_forge,
+    ensure_fixture_secret,
+    fixture_repositories,
+    fixture_work_source,
+    url_of,
+)
 
 _GATE = "BLIZZARD_REHEARSAL"
 _BASELINE = "BLIZZARD_REHEARSAL_BASELINE"
@@ -358,10 +364,11 @@ class _Rehearsal:
         created = client.post("/api/projects", json={"name": "Rehearsal", "slug": _PROJECT})
         assert created.status_code == 201, created.text
         ensure_fixture_secret(client)
-        source = fixture_work_source(REPO_NAME, REPO, self.forge_api)
-        assert client.post("/api/work-sources", json=source.model_dump()).status_code == 201
-        assert client.put(f"/api/projects/{_PROJECT}/source-links/{source.slug}").status_code == 200
-        for repository in fixture_repositories([source], self.forge_api):
+        forge = ensure_fixture_forge(client, self.forge_api)
+        source = fixture_work_source(REPO_NAME, REPO, forge)
+        assert client.post("/api/work-sources", json=source).status_code == 201
+        assert client.put(f"/api/projects/{_PROJECT}/source-links/{source['slug']}").status_code == 200
+        for repository in fixture_repositories([source], forge):
             assert client.post("/api/repositories", json=repository).status_code == 201
             assert client.put(f"/api/projects/{_PROJECT}/repository-links/{repository['slug']}").status_code == 200
         minted = client.post("/api/graphs", json={"definition_yaml": _graph_yaml(self.leg.baseline)})

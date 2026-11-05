@@ -34,9 +34,6 @@ nodes:
         failure: {description: Failed to deliver., to: build}
 `;
 
-/** The warning the hub records when a repository or work source names its forge by the old address fields. */
-const OLD_FIELD_KIND = 'config-old-field-used';
-
 /** Pushes one operational event as the runner `runner` would, and asserts the hub folded it. */
 async function pushEvent(
   runner: FleetClient,
@@ -270,7 +267,7 @@ test.describe('on a fresh hub', () => {
     // Live-rendered rows carry the `→` transition arrow; backfill-rendered rows are the bare chunk ref. The flip proves
     // the backfill path, not leftover replay.
     const mintRows = (messages: string[]): string[] =>
-      messages.filter((message) => message !== eventMessage && !message.includes(OLD_FIELD_KIND));
+      messages.filter((message) => message !== eventMessage);
     const firstMints = mintRows(firstLoad);
     const reloadMints = mintRows(reloaded);
     expect(firstMints).toHaveLength(2);

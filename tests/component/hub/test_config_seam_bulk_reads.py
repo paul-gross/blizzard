@@ -57,14 +57,25 @@ nodes:
 """
 
 
+#: The forge every source and repository here is on.
+_GITHUB = {"slug": "github", "kind": "github", "api_base": "https://api.github.com"}
+
+
 def _source(slug: str) -> dict[str, object]:
-    return {"slug": slug, "provider": "github", "locator": f"acme/{slug}", "secret": "gh", "annotate": False}
+    return {
+        "slug": slug,
+        "provider": "github",
+        "locator": f"acme/{slug}",
+        "forge": "github",
+        "secret": "gh",
+        "annotate": False,
+    }
 
 
 def _repository(slug: str) -> dict[str, object]:
     return {
         "slug": slug,
-        "forge_api_url": "https://api.github.com",
+        "forge": "github",
         "owner": "acme",
         "repo": slug,
         "base_branch": "master",
@@ -73,7 +84,7 @@ def _repository(slug: str) -> dict[str, object]:
 
 
 def _apply(hub: HubHarness, document: dict[str, object]) -> list[str]:
-    applied = hub.client.post("/api/config/apply", json={"version": 1, **document})
+    applied = hub.client.post("/api/config/apply", json={"version": 2, "forges": [_GITHUB], **document})
     assert applied.status_code == 200, applied.text
     return [outcome["op"] for outcome in applied.json()["outcomes"]]
 
@@ -360,17 +371,12 @@ def test_enabled_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hu
 # --- Call sites ----------------------------------------------------------------------------
 
 
-def _apply_statements(hub: HubHarness, document: dict[str, object]) -> tuple[list[str], int, int]:
-    """The ops a no-op apply of ``document`` answers, the statements it issues besides recording its
-    ``config-old-field-used`` events — each one ``event_log`` insert under its tenant lock, one per old address field
-    an entry states, so they grow with the entries by design — and how many events it recorded."""
+def _apply_statements(hub: HubHarness, document: dict[str, object]) -> tuple[list[str], int]:
+    """The ops a no-op apply of ``document`` answers, and the statements it issues."""
     ops: list[str] = []
     with capture_statements(hub.engine) as statements:
         ops.extend(_apply(hub, document))
-    texts = [statement.lstrip().upper() for statement, _ in statements]
-    events = [i for i, text in enumerate(texts) if text.startswith("INSERT INTO EVENT_LOG")]
-    recording = {*events, *(i - 1 for i in events)}
-    return ops, len(texts) - len(recording), len(events)
+    return ops, len(statements)
 
 
 def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path: Path) -> None:
@@ -381,10 +387,8 @@ def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path
         exported = hub.client.get("/api/config/export").json()
         assert len(exported["projects"]) == n + 1
         export = count_queries(hub.engine, lambda hub=hub: hub.client.get("/api/config/export"))
-        ops, apply, events = _apply_statements(hub, exported)
+        ops, apply = _apply_statements(hub, exported)
         assert set(ops) == {"unchanged"}
-        # Each exported source states api_base and web_base, each repository forge_api_url.
-        assert events == 3 * n
         counts.append((export, apply))
     assert counts[0] == counts[1]
 

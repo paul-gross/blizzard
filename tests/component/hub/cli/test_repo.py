@@ -18,7 +18,7 @@ from tests.support.worker_http import Bound, bind_stubs
 
 _HUB = "http://hub.local:8421"
 _SENTINEL = "tok-planted-repo"
-_COORDINATE = ["--forge-api-url", "https://forge.invalid/api", "--owner", "paul-gross", "--repo", "blizzard"]
+_COORDINATE = ["--forge", "forge-invalid", "--owner", "paul-gross", "--repo", "blizzard"]
 
 
 _bound: dict[str, Bound] = {}
@@ -45,7 +45,13 @@ def _repo(args: list[str]):
     return _cli("repo", args)
 
 
+def _seed_forge() -> None:
+    created = _cli("forge", ["create", "forge-invalid", "--kind", "github", "--api-base", "https://forge.invalid/api"])
+    assert created.exit_code == 0, created.output
+
+
 def _seed() -> None:
+    _seed_forge()
     assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
     created = _repo(["create", "blizzard", *_COORDINATE, "--base-branch", "master", "--secret", "gh-test"])
     assert created.exit_code == 0, created.output
@@ -125,26 +131,22 @@ def test_retire_enable_and_the_change_log(client: TestClient) -> None:
     assert _SENTINEL not in text + json.dumps(raw)
 
 
-def test_create_names_its_forge_by_exactly_one_flag_and_warns_on_the_old_one(client: TestClient) -> None:
+def test_create_names_its_forge_by_forge_and_the_hub_refuses_one_naming_none(client: TestClient) -> None:
+    _seed_forge()
     assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
-    old = _repo(["create", "blizzard", *_COORDINATE, "--base-branch", "master", "--secret", "gh-test"])
-    assert old.exit_code == 0, old.output
-    assert "warning: forge_api_url is deprecated" in old.stderr
-    assert "forge-invalid" in old.stderr
-
     named = ["--owner", "paul-gross", "--repo", "other", "--base-branch", "master", "--secret", "gh-test"]
     by_forge = _repo(["create", "other", "--forge", "forge-invalid", *named])
     assert by_forge.exit_code == 0, by_forge.output
-    assert "warning:" not in by_forge.stderr
     assert client.get("/api/repositories/other").json()["forge_slug"] == "forge-invalid"
     assert "forge forge-invalid" in _repo(["get", "other"]).output
 
-    both = _repo(
-        ["create", "third", "--forge", "forge-invalid", "--forge-api-url", "https://forge.invalid/api", *named]
-    )
     neither = _repo(["create", "third", *named])
-    assert (both.exit_code, neither.exit_code) == (2, 2)
-    assert "exactly one of --forge and --forge-api-url" in neither.output
+    assert neither.exit_code == 1
+    assert "forge" in neither.output
+    assert client.get("/api/repositories/third").status_code == 404
+    old = _repo(["create", "third", "--forge-api-url", "https://forge.invalid/api", *named])
+    assert old.exit_code == 2
+    assert "No such option" in old.output
 
 
 def test_show_prints_the_policy_and_a_forge_its_capabilities(client: TestClient) -> None:
@@ -181,6 +183,7 @@ def test_edit_refuses_an_unknown_policy_a_timeout_off_park_and_a_value_beside_it
 
 
 def test_create_takes_a_policy_and_clearing_the_timeout_on_edit_is_accepted(client: TestClient) -> None:
+    _seed_forge()
     assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
     created = _repo(
         [

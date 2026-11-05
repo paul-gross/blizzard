@@ -32,7 +32,6 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
 )
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -46,7 +45,6 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.secrets import SecretName, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
-    WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceId,
@@ -233,20 +231,6 @@ def test_a_stale_revision_conflicts_and_writes_nothing(world: _World) -> None:
     with pytest.raises(ConfigRevisionConflict):
         world.authoring.retire_work_source(record, OP, if_match=1)
     assert world.count() == before
-
-
-def test_a_cleared_address_moves_the_source_to_github_and_its_own_web_origin_with_it(world: _World) -> None:
-    record = world.authoring.create_work_source_naming(
-        "demo",
-        None,
-        WorkSourceDraft("github", "acme/demo", False, "gh"),
-        ForgeChoice(api_base="https://api.x", web_base="https://web.x"),
-        OP,
-    ).record
-    ghe = world.forges.get(record.fields.forge_id)
-    assert ghe is not None and ghe.fields == ForgeFields("https://api.x", "https://web.x")
-    world.authoring.edit_work_source_naming(record, WorkSourceEdit(), ForgeChoice(api_base=None), OP)
-    assert world.source().fields.forge_id == _FORGE_ID
 
 
 def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) -> None:

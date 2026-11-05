@@ -19,6 +19,7 @@ from tests.support.scaffolding import (
     build_hub,
     count_queries,
     create_repositories,
+    ensure_fixture_forge,
     fixture_repository,
     ingest,
     stamp,
@@ -197,7 +198,9 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
 
 def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("one", "http://forge.example", owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("one", ensure_fixture_forge(hub.client, "http://forge.example"), owner="acme")]
+    )
     record = next(
         r["repository_id"] for r in hub.client.get("/api/repositories").json()["repositories"] if r["slug"] == "one"
     )

@@ -10,13 +10,20 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
-from tests.support.scaffolding import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub, ensure_fixture_forge
 
-_SOURCE = {"slug": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
+_SOURCE = {
+    "slug": "demo",
+    "provider": "github",
+    "locator": "acme/demo",
+    "secret": "gh",
+    "annotate": True,
+    "forge": "github",
+}
 _OTHER_SOURCE = {**_SOURCE, "slug": "infra", "locator": "acme/infra"}
 _REPO = {
     "slug": "blizzard",
-    "forge_api_url": "https://api.github.com",
+    "forge": "github",
     "owner": "acme",
     "repo": "blizzard",
     "base_branch": "master",
@@ -43,11 +50,12 @@ _WEB = {"slug": "web", "name": "Web", "sources": ["demo"], "repositories": ["bli
 def hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    ensure_fixture_forge(hub.client, "https://api.github.com")
     return hub
 
 
 def _apply(hub: HubHarness, document: dict[str, object], *, dry_run: bool = False) -> httpx2.Response:
-    return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 1, **document})
+    return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 2, **document})
 
 
 def _rows(applied: httpx2.Response) -> list[tuple[str, str, str]]:
@@ -93,7 +101,6 @@ def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
 def test_a_projects_entry_creates_the_project_and_its_links_with_the_apply_id(hub: HubHarness) -> None:
     applied = _apply(hub, {"work_sources": [_SOURCE], "repositories": [_REPO], "projects": [_WEB]})
     assert _rows(applied) == [
-        ("forge", "github", "create"),
         ("work_source", "demo", "create"),
         ("repository", "blizzard", "create"),
         ("project", "web", "create"),
@@ -104,7 +111,6 @@ def test_a_projects_entry_creates_the_project_and_its_links_with_the_apply_id(hu
     apply_id = applied.json()["apply_id"]
     written = [c for c in _changes(hub) if c["apply_id"] == apply_id]
     assert {(c["record_kind"], c["door"]) for c in written} == {
-        ("forge", "apply"),
         ("work_source", "apply"),
         ("repository", "apply"),
         ("project", "apply"),
