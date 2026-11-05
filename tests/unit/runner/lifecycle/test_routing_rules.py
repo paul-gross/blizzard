@@ -21,14 +21,14 @@ def _answer(*projects: ServedProject) -> ServedProjectsAnswer:
 
 
 def test_each_binding_routes_the_project_its_declared_entry_resolved_to_in_configuration_order() -> None:
-    bindings = (BindingDeclaration("web", "ws_b", 2), BindingDeclaration("pr_api", "ws_a", 1))
+    bindings = (BindingDeclaration("web", "ws_b"), BindingDeclaration("pr_api", "ws_a"))
     answer = _answer(ServedProject("pr_api", project_id="pr_api"), ServedProject("web", project_id="pr_web"))
 
     routing = routing_map(bindings, answer)
 
     assert routing.claims() == (
-        RoutedBinding(project="web", project_id="pr_web", workspace_id="ws_b", agents=2),
-        RoutedBinding(project="pr_api", project_id="pr_api", workspace_id="ws_a", agents=1),
+        RoutedBinding(project="web", project_id="pr_web", workspace_id="ws_b"),
+        RoutedBinding(project="pr_api", project_id="pr_api", workspace_id="ws_a"),
     )
     assert routing.conflicts == ()
     assert (routing.project_id("web"), routing.project_id("pr_api")) == ("pr_web", "pr_api")
@@ -36,9 +36,9 @@ def test_each_binding_routes_the_project_its_declared_entry_resolved_to_in_confi
 
 def test_an_unresolved_or_unanswered_entry_routes_nothing() -> None:
     bindings = (
-        BindingDeclaration("gone", "ws_a", 1),
-        BindingDeclaration("later", "ws_a", 1),
-        BindingDeclaration("web", "ws_a", 1),
+        BindingDeclaration("gone", "ws_a"),
+        BindingDeclaration("later", "ws_a"),
+        BindingDeclaration("web", "ws_a"),
     )
     routing = routing_map(bindings, _answer(ServedProject("gone"), ServedProject("web", project_id="pr_web")))
 
@@ -47,14 +47,14 @@ def test_an_unresolved_or_unanswered_entry_routes_nothing() -> None:
 
 
 def test_no_answer_yet_routes_nothing() -> None:
-    assert routing_map((BindingDeclaration("web", "ws_a", 1),), None).claims() == ()
+    assert routing_map((BindingDeclaration("web", "ws_a"),), None).claims() == ()
 
 
 def test_two_entries_resolving_to_one_project_are_a_conflict_and_route_no_claim() -> None:
     bindings = (
-        BindingDeclaration("web", "ws_a", 1),
-        BindingDeclaration("pr_web", "ws_b", 1),
-        BindingDeclaration("api", "ws_a", 1),
+        BindingDeclaration("web", "ws_a"),
+        BindingDeclaration("pr_web", "ws_b"),
+        BindingDeclaration("api", "ws_a"),
     )
     answer = _answer(
         ServedProject("web", project_id="pr_web"),

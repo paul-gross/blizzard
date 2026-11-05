@@ -67,7 +67,7 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
         identity_verdict=None,
         runner_name=config.name,
         workspace_id=config.home_workspace.id,
-        bindings=tuple(BindingDeclaration(b.project, b.workspace, config.agents) for b in config.bindings or ()),
+        bindings=tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings or ()),
         agents=config.agents,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({}), workspace_id="ws-1"),

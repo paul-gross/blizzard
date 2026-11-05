@@ -114,9 +114,7 @@ def _ctx(
         workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1, project=project), agents=1
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=project), agents=1),
         identity=identity,
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),

@@ -93,7 +93,7 @@ def _ctx(
             config=LoopConfig(
                 runner_name="r1",
                 runner_id="rn_1",
-                bindings=serving(1),
+                bindings=serving(),
                 agents=1,
                 context_warn_tokens=warn,
                 context_sample_interval_seconds=interval,

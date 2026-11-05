@@ -159,7 +159,7 @@ class LoopWiring:
             bindings=(
                 None
                 if config.bindings is None
-                else tuple(BindingDeclaration(b.project, b.workspace, config.agents) for b in config.bindings)
+                else tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings)
             ),
             agents=config.agents,
             subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,

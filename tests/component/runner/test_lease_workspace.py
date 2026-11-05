@@ -74,7 +74,7 @@ def _config() -> LoopConfig:
     return LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
-        bindings=(BindingDeclaration("pr_a", "ws_a", 1), BindingDeclaration("pr_b", "ws_b", 1)),
+        bindings=(BindingDeclaration("pr_a", "ws_a"), BindingDeclaration("pr_b", "ws_b")),
         agents=2,
     )
 

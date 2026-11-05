@@ -279,11 +279,10 @@ class SubscriptionDeclaration:
 @domain_model
 @dataclass(frozen=True)
 class BindingDeclaration:
-    """One project this runner serves through a workspace of its host, with the agents it runs there at once."""
+    """One project this runner serves through a workspace of its host."""
 
     project: str
     workspace_id: str
-    agents: int
 
 
 @domain_model

@@ -54,9 +54,7 @@ def _ctx(*, subscription: str | None = _SLUG) -> tuple[Any, FakeHub, LoopContext
         harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), subscription=subscription
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), subscription=subscription),
         subscriptions=subscriptions,
     )
     return store, hub, ctx

@@ -713,7 +713,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path: 
     hub.chunks["ch_1"] = _running_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     # A claimable chunk in the queue too, so FILL's own gate is exercised by the same pass
-    # (capacity is not what stops it: bindings=serving(2), agents=2 with one lease held).
+    # (capacity is not what stops it: bindings=serving(), agents=2 with one lease held).
     hub.queue = [QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
     ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
     hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
@@ -729,7 +729,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path: 
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2), agents=2),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=2),
     )
     _pause_locally(store, ctx, paused=True)
 
