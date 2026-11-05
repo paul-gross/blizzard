@@ -35240,7 +35240,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until\nanother claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work\nsource holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,\nan `api_base` or `web_base` naming the source's own forge. `forge` re-points the source at a forge.",
+        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until\nanother claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work\nsource holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,\na `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at\na forge.",
         "operationId": "patch_work_source_api_work_sources__source__patch",
         "parameters": [
           {

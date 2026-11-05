@@ -257,7 +257,8 @@ def patch_work_source(
     credential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until
     another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work
     source holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,
-    an `api_base` or `web_base` naming the source's own forge. `forge` re-points the source at a forge."""
+    a `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at
+    a forge."""
     present = request.model_fields_set
     edit = WorkSourceEdit(**{name: getattr(request, name) for name in present if name != FORGE_FIELD})
     try:
