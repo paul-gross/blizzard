@@ -55,6 +55,11 @@ dependencies = [
     # hold the emitted HTTP and database semconv versions still.
     "opentelemetry-instrumentation-httpx==0.66b0",
     "opentelemetry-instrumentation-sqlalchemy==0.66b0",
+    # A cadence's five-field cron schedule, evaluated forward and backward from any instant under
+    # `zoneinfo` with Debian cron's daylight-saving handling; reached only through `hub/domain/cadence/schedule.py`.
+    "cronsim>=2.7",
+    # The IANA zone database, so `zoneinfo` resolves a cadence's zone on a slim image as on a workstation.
+    "tzdata",
 ]
 
 # The sqlite/systemd path stays lean by default (`bzh:sql-portable`) — the postgres

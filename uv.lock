@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -74,6 +74,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "click" },
+    { name = "cronsim" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx2" },
@@ -89,6 +90,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "sqlalchemy" },
     { name = "structlog" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -119,6 +121,7 @@ mutation = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "click", specifier = ">=8.1.0" },
+    { name = "cronsim", specifier = ">=2.7" },
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "fastapi", specifier = ">=0.142.0" },
     { name = "httpx2", specifier = ">=2.16.0" },
@@ -136,6 +139,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sqlalchemy", specifier = ">=2.0,<3.0" },
     { name = "structlog", specifier = ">=24.0.0" },
+    { name = "tzdata" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 provides-extras = ["postgres", "egress"]
@@ -356,6 +360,14 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/fd/3f939c2847f4a72c20cff8b1ac33da78ea91a2d38d9b43336e60db719103/coverage-7.16.2-cp315-cp315t-win_amd64.whl", hash = "sha256:2aca0bdfa9e91621d5b09d815357bf63def4fc0e9cb66da67bf2cf93f3b1a6f5", size = 227374, upload-time = "2026-09-27T12:28:55.158Z" },
     { url = "https://files.pythonhosted.org/packages/5a/35/b98cdc354c952402132e675a87f2cc3227fb68f959c84aaa491fbe15933d/coverage-7.16.2-cp315-cp315t-win_arm64.whl", hash = "sha256:b88841e654f09732804809e435b3e005a929ffd9998b872b7b213957b8759cb8", size = 227064, upload-time = "2026-09-27T12:28:57.075Z" },
     { url = "https://files.pythonhosted.org/packages/3f/0c/7a64e1ac90541a8edf50daef0914848011fb057a5bf55284a4811e21939a/coverage-7.16.2-py3-none-any.whl", hash = "sha256:11d28e9123a9156cb405d8d27b44256c9a58fb5decc2073a8f17862057e3aa0f", size = 215754, upload-time = "2026-09-27T12:28:59.075Z" },
+]
+
+[[package]]
+name = "cronsim"
+version = "2.8"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/44/8f64773169b6621b435f6045457250d51f775e495fa81766f7657a12539e/cronsim-2.8-py3-none-any.whl", hash = "sha256:62115cabaa121953ac4bbf2e66808b5229ca6e47372a74e752b42fcdf28324a5", size = 14526, upload-time = "2026-11-05T05:29:29.493Z" },
 ]
 
 [[package]]
