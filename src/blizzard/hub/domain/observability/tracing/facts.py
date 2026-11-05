@@ -162,17 +162,6 @@ class TracedHubTurn:
 
 @domain_model
 @dataclass(frozen=True)
-class TracedHubExecSlot:
-    """A ``hub_exec_slot`` row — keyed by node, with no epoch. Read for the history the slot recorded before turns."""
-
-    slot_id: str
-    node_id: str
-    acquired_at: datetime
-    released_at: datetime | None = None
-
-
-@domain_model
-@dataclass(frozen=True)
 class TracedHubPoll:
     """A ``hub_node_poll`` row, recorded at the epoch the chunk arrived at the hub node with."""
 
@@ -246,7 +235,6 @@ class StepFacts:
     questions: tuple[TracedQuestion, ...] = ()
     pauses: tuple[TracedPause, ...] = ()
     hub_turns: tuple[TracedHubTurn, ...] = ()
-    hub_exec_slots: tuple[TracedHubExecSlot, ...] = ()
     hub_polls: tuple[TracedHubPoll, ...] = ()
     bounces: tuple[TracedBounce, ...] = ()
     routes_created: tuple[TracedRouteCreation, ...] = ()

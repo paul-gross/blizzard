@@ -291,12 +291,6 @@ _FLEET_CONFIG_REASON = (
 # A declared singleton (superuser_bootstrap).
 _SINGLETON_REASON = "a declared singleton (superuser_bootstrap) — at most one live row plus a short history."
 
-# The deprecated slot table, read only for the history it recorded before turns (hub_exec_slot).
-_HUB_EXEC_SLOT_REASON = (
-    "the trace corpus's read of the deprecated slot table's past rows: nothing writes it now, so the "
-    "tenant-scoped read sees only the history recorded before turns, never another tenant's slots."
-)
-
 # The hub's tenant deletion facts (tenant_deletions), read for the deletions still underway.
 _TENANT_DELETIONS_REASON = (
     "one fact per tenant the hub ever deleted, read whole by the tenant-teardown sweep for the deletions still "
@@ -325,7 +319,6 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("auth_facts", 200, _FLEET_CONFIG_REASON),
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
-    TableWideAllowance("hub_exec_slot", 50, _HUB_EXEC_SLOT_REASON),
     TableWideAllowance("tenant_deletions", 200, _TENANT_DELETIONS_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("forge_lifecycle_facts", 200, _FLEET_CONFIG_REASON),

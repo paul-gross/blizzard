@@ -101,6 +101,18 @@ older hub then runs each node's untouched `run:` again. A chunk escalated meanwh
 
 ## Upgrading to the next release
 
+### Runners below 0.4 are refused
+
+The hub↔runner floor rises from 0.2 to 0.4, so the hub refuses a runner older than 0.4. This reverses the usual
+hub-first order: move every runner host onto 0.4 or later before the hub takes this release.
+
+A runner that lags is refused at registration with `409 RunnerVersionRefusal`, and the runner halts. Upgrade that host
+and restart its runner; nothing on the hub needs to change.
+
+The same release drops the `hub_exec_slot` table, so a hub step run before turns loses its slot-keyed `hub exec` spans.
+To go back, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)); the downgrade recreates
+the table empty.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.
