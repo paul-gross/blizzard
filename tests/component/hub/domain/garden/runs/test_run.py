@@ -17,6 +17,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
@@ -24,7 +25,8 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support.garden_delivery_world import add_op, garden_delta, post
+from tests.support.garden_delivery_world import add_op, garden_delivery_recorder, garden_delta
+from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -393,7 +395,8 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
     run = hub.services.run_context.for_chunk(minted)
     assert run is not None and run.routine_name == "gardening"
     deliver = next(node for node in graph.nodes if node.name == "deliver")
-    assert hub.services.hub_markers.record_marker(
+    assert record_hub_asset(
+        hub,
         result.chunk_id,
         node_id=deliver.node_id,
         node_name="deliver",
@@ -401,9 +404,10 @@ def test_a_routine_whose_name_differs_from_its_slug_records_the_slug_as_lineage(
         name="delta",
         content=garden_delta(findings=[add_op()]),
     )
-    resp = post(hub, result.chunk_id, delta=["delta"], node_id=deliver.node_id)
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    outcome = garden_delivery_recorder(hub).record(
+        chunk=minted, node=deliver, epoch=1, run=run, delta_names=["delta"], proposal_names=[]
+    )
+    assert outcome is DeliveryOutcome.RECORDED
     with hub.engine.connect() as conn:
         lineage = conn.execute(hub_scoped(sa.select(s.findings.c.routine_name))).scalars().all()
     assert lineage == ["gardening"]
