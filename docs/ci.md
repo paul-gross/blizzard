@@ -32,9 +32,9 @@ seams-mocked and token-free, needing no real forge, no tokens, and no network be
 on `master`.
 
 The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
-shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the collected suite,
-chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job
-reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
+shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the
+collected suite, chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A
+`*-result` job reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
 `upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
 Unset, the variable keeps the whole suite; the local commands below run unsharded.
 
