@@ -66,7 +66,7 @@ raise any cap that recent figure would cross.
 
 `worker_programs`, `worker_program_services` and `harness_telemetry` configure the runner's receiver; the hub never read
 them. If `blizzard-hub.toml`'s `[tracing]` table carries any of them, delete them, or move them to `blizzard-host.toml`
-where the runner reads them. The hub now refuses to start with one present, and its error names `blizzard-host.toml`.
+where the runner reads them. The hub refuses to start with one present, and its error names `blizzard-host.toml`.
 
 ### Hub nodes run no commands
 

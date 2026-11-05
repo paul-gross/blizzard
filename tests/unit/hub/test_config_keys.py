@@ -34,7 +34,6 @@ _SAMPLES: dict[str, object] = {
     "public_url": "https://hub.example",
     "trusted_proxies": ["127.0.0.1"],
     "tracing.platform_sample_ratio": 0.5,
-    "tracing.worker_programs": False,
     **{f"sweeps.{name}.mode": "stepped" for name in SweepName},
 }
 

@@ -463,14 +463,6 @@
       "type": "integer"
     },
     {
-      "default": false,
-      "deprecated": true,
-      "path": "tracing.harness_telemetry",
-      "replaced_by": null,
-      "required": false,
-      "type": "boolean"
-    },
-    {
       "default": 86400,
       "deprecated": false,
       "path": "tracing.max_lag_seconds",
@@ -517,22 +509,6 @@
       "replaced_by": null,
       "required": false,
       "type": "integer"
-    },
-    {
-      "default": null,
-      "deprecated": true,
-      "path": "tracing.worker_program_services",
-      "replaced_by": null,
-      "required": false,
-      "type": "open table"
-    },
-    {
-      "default": false,
-      "deprecated": true,
-      "path": "tracing.worker_programs",
-      "replaced_by": null,
-      "required": false,
-      "type": "boolean"
     },
     {
       "default": null,
