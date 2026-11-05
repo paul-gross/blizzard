@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261104_0900_drop_graph_nodes_run",
+  "head_revision": "20261105_0900_routine_slug",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -7025,6 +7025,12 @@
           "server_default": false,
           "type": "String"
         },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "String"
+        },
         "tenant_id": {
           "deprecated": null,
           "nullable": false,
@@ -7074,7 +7080,7 @@
       "unique": [
         [
           "project_id",
-          "name"
+          "slug"
         ]
       ]
     },

@@ -742,7 +742,8 @@ routines = Table(
     "routines",
     metadata,
     Column("routine_id", String, primary_key=True, info={"hub_unique": True}),  # rtn_<ulid>
-    Column("name", String, nullable=False),
+    Column("name", String, nullable=False),  # the editable display name
+    Column("slug", String, nullable=False, server_default=""),  # the immutable lineage and handle
     Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id
     Column("default_scope_id", String, ForeignKey("scopes.scope_id", name="fk_routines_scopes"), nullable=False),
     # Nullable JSON model preferences and effort; empty means express none.
@@ -754,11 +755,11 @@ routines = Table(
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routines_tenant_id"), nullable=False),
     Column("project_id", String, ForeignKey("projects.project_id", name="fk_routines_projects"), nullable=False),
-    UniqueConstraint("project_id", "name", name="uq_routines_project_name"),
+    UniqueConstraint("project_id", "slug", name="uq_routines_project_slug"),
 )
 
-# A routine by name across the tenant's projects, for the reads that name no project.
-Index("ix_routines_tenant_name", routines.c.tenant_id, routines.c.name)
+# A routine by slug across the tenant's projects, for the reads that name no project.
+Index("ix_routines_tenant_slug", routines.c.tenant_id, routines.c.slug)
 
 # Mutable routine-to-scope membership.
 

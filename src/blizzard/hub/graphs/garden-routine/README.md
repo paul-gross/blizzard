@@ -51,7 +51,7 @@ Conventions for the `prompts/` tree are owned by the
 - **The plan's "strategy" is the target's own gardening-axes registry, not a field the charge carries.** The plan
   artifact had `survey.md` read "the strategy" straight out of the chunk's work item and stop-and-escalate when a named
   standard did not exist; `canon:gardening-axes` already owns this ground, so `survey.md` instead resolves the routine's
-  own name as an axis from the registry the target project declares, follows that entry's Criteria pointer to the
+  own slug as an axis from the registry the target project declares, follows that entry's Criteria pointer to the
   standard's actual home, and records its declared Measurement — naming the registry by concept only, never by path, so
   the one packaged graph still drives a non-blizzard deployment unchanged.
 - **`survey` gained a `no-strategy` choice, mirroring `excessive` exactly.** An axis the target's registry does not

@@ -1,6 +1,6 @@
 """Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep.
 
-A routine's name is unique only within its project: the create and the project's listing sit under
+A routine's slug is unique only within its project: the create and the project's listing sit under
 ``/api/projects/{project}``. The un-nested listing reads the whole tenant or the project ``?project=``
 names; the un-nested create stays as a deprecated alias acting in the call's project. Routes keyed by
 ``routine_id`` keep their paths, since the id settles the project.
@@ -41,9 +41,10 @@ from blizzard.hub.domain.garden.routines import (
     RoutineDefaultScopeUnlinkError,
     RoutineEdit,
     RoutineGraphUnresolvedError,
-    RoutineNameImmutableError,
-    RoutineNameTakenError,
     RoutineScopeOtherProject,
+    RoutineSlugError,
+    RoutineSlugImmutableError,
+    RoutineSlugTakenError,
 )
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaseline
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
@@ -74,6 +75,7 @@ project_router = APIRouter(prefix="/api/projects/{project}", tags=["routines"], 
 def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
+        slug=routine.slug,
         name=routine.name,
         graph_name=routine.graph_name,
         default_scope_slug=routine.default_scope_slug,
@@ -127,6 +129,7 @@ def _create(
         slug = ScopeSlug.parse(request.default_scope_slug)
         routine = services.routine_authoring.create(
             project=project,
+            slug=request.slug,
             name=request.name,
             graph_name=request.graph_name,
             default_scope_slug=slug,
@@ -137,7 +140,8 @@ def _create(
         )
     except (
         ScopeSlugError,
-        RoutineNameTakenError,
+        RoutineSlugError,
+        RoutineSlugTakenError,
         RoutineGraphUnresolvedError,
         RoutineScopeOtherProject,
         InvalidHarnesses,
@@ -154,7 +158,7 @@ def create_routine(
     services: Services,
     project: CallProject,
 ) -> RoutineView:
-    """Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate name
+    """Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate slug
     in the project, a malformed default scope slug, or a graph name with no enabled mint. Deprecated: `POST
     /api/projects/{project}/routines`."""
     return _create(request, identity, door, services, project)
@@ -168,7 +172,7 @@ def create_project_routine(
     services: Services,
     project: PathProject,
 ) -> RoutineView:
-    """Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate name in the
+    """Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
     project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project."""
     return _create(request, identity, door, services, project)
 
@@ -248,10 +252,10 @@ def routine_trend(
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
     withdrawn roll-ups, and the age cut against `introduced_boundary`. `routine` is read in the project
     `?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an
-    unknown routine name in that project; 422 on a malformed instant, a non-positive `period_days`, a
+    unknown routine slug in that project; 422 on a malformed instant, a non-positive `period_days`, a
     non-positive span, or a span/`period_days` pair bucketing past the period cap."""
     project_id = project if project is not None else project_of_call(services).project_id
-    found = services.routines.get_by_name(project_id, routine)
+    found = services.routines.get_by_slug(project_id, routine)
     if found is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     parsed_since = _parse_instant(since, field="since")
@@ -312,7 +316,7 @@ def routine_proposal_counts(
     if routine is not None:
         if project_id is None:
             project_id = project_of_call(services).project_id
-        if services.routines.get_by_name(project_id, routine) is None:
+        if services.routines.get_by_slug(project_id, routine) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     rows = services.garden_proposals.counts_by_class(
         since=parsed_since, until=parsed_until, routine_name=routine, project_id=project_id, origin=origin
@@ -454,10 +458,10 @@ def edit_routine(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Apply only the fields present — the graph, the default scope, and the model, effort,
-    and harness defaults; an explicit `null` clears `default_effort`. A present `name` must
+    """Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
+    and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
     restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
-    id; 422 on a name change, a `null` field, a malformed default scope slug, or a graph name
+    id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
     with no enabled mint; 409 on a stale `If-Match` naming the current revision."""
     routine = _routine_or_404(routine_id, services)
     try:
@@ -470,7 +474,7 @@ def edit_routine(
         raise _revision_conflict(exc) from exc
     except (
         ScopeSlugError,
-        RoutineNameImmutableError,
+        RoutineSlugImmutableError,
         RoutineGraphUnresolvedError,
         RoutineScopeOtherProject,
         InvalidHarnesses,

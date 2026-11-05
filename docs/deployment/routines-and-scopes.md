@@ -4,7 +4,7 @@ A **scope** is an operator-authored slug plus a description; a **routine** names
 scope, and model/effort run defaults. Both are hub-stored records — the hub indexes and hands back a scope slug, never
 resolving what it names, and nothing here filters by scope; that is a separate surface.
 
-Both belong to a project: a scope's slug and a routine's name are unique within it. Every verb that creates one, or
+Both belong to a project: a scope's slug and a routine's slug are unique within it. Every verb that creates one, or
 names one by slug or name, takes `--project <id|slug>` when the tenant holds several projects, and a listing verb takes
 it to show one project's records ([projects.md](./projects.md#a-call-that-names-no-project)).
 
@@ -27,27 +27,29 @@ list. The selected child route remains in the URL, so a detail can still be open
 
 ## Routines
 
-`blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort] [--harnesses]`, `list`,
-`get <routine_id>`, and
-`edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]`
+`blizzard hub routine create <slug> <graph_name> <default_scope_slug> [--name <display name>] [--model] [--effort] [--harnesses]`,
+`list`, `get <routine_id>`, and
+`edit <routine_id> [--name <display name>] [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]`
 are the routine verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a
 currently-enabled graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it.
 Restating the graph a routine already points at is accepted even after that graph retires. `DEFAULT_SCOPE_SLUG` is
 minted through the same path `scope create` uses if the slug is unseen, so a routine's default scope never needs a
 separate `scope create` first.
 
-A routine's `name` is its lineage and is immutable once minted: `routine edit` never changes it, and a create naming an
-already-existing routine name is refused rather than duplicating it. `routine_id` is the id every other verb addresses
-the routine by; an edit may restate the current name, which changes nothing, and is refused if it names a different one.
-A routine running the `garden-routine` graph resolves its axis from this same `name` — the target project's
-gardening-axes registry must declare an entry under it. Naming one the registry does not declare is not refused at
-create time: every run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is
-immutable, that cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend
-history over, corrects it. A routine running the `ideation` graph resolves its axis the same way, under the same
-immutable `name`, but an undeclared axis parks the run on a question instead of filing a finding: answered once the
-registry declares the axis, the run sweeps; answered that the absence stands, the run ends without delivering anything,
-and only a new routine corrects the name. An `ideation` run also accepts `--mode delta` like any other but always sweeps
-its whole scope — that graph has no delta mode.
+A routine's `slug` is its lineage and handle, and is immutable once minted: `routine edit` never changes it, and a
+create naming an already-existing routine slug — a retired routine's included — is refused rather than duplicating it. A
+routine's `name` is a free, editable display name: `create` takes it with `--name` and defaults it to the slug, and
+`edit --name` changes it. Display names are not unique. `routine_id` is the id every other verb addresses the routine
+by; an edit may restate the current slug, which changes nothing, and is refused if it names a different one. A routine
+running the `garden-routine` graph resolves its axis from the slug — the target project's gardening-axes registry must
+declare an entry under it. Naming one the registry does not declare is not refused at create time: every run instead
+bails out with a single `undeclared-axis` finding, at full model cost. Because the slug is immutable, that cannot be
+fixed with `routine edit` either — only a new routine, starting its own baselines and trend history over, corrects it. A
+routine running the `ideation` graph resolves its axis the same way, under the same immutable slug, but an undeclared
+axis parks the run on a question instead of filing a finding: answered once the registry declares the axis, the run
+sweeps; answered that the absence stands, the run ends without delivering anything, and only a new routine corrects the
+slug. A run's title shows the routine's display name, and its charge names the display name and the slug. An `ideation`
+run also accepts `--mode delta` like any other but always sweeps its whole scope — that graph has no delta mode.
 
 `get` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
 routine sweeps a set of scopes, not only its default; `blizzard hub routine scope add <routine_id> <scope_slug>` and
@@ -56,20 +58,20 @@ set. Both are idempotent and never mint or retire a scope — naming one `scope 
 no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's own default
 scope, which stays a member of its set for as long as it is the default.
 
-`routine retire <name> [--by operator]` and `routine enable <name> [--by operator]` are a routine's own reversible
+`routine retire <slug> [--by operator]` and `routine enable <slug> [--by operator]` are a routine's own reversible
 brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and
 neither touches the stored row, its findings, proposals, or closures. A repeated retire or enable writes nothing.
 `routine list
 --include-retired` includes a retired routine in the listing, marked; every other verb still resolves a
-retired routine's `name` to its `routine_id` the same way a live one does, so it reaches the domain's own retired
-refusal rather than reading as unknown.
+retired routine's slug to its `routine_id` the same way a live one does, so it reaches the domain's own retired refusal
+rather than reading as unknown.
 
 ## Revisions and the change log
 
 Scopes and routines are configured records. Each carries a `revision` that every committed write moves by one — an edit,
 a retire or enable that flips the state, and a routine's scope link or unlink — and each such write appends one row to
-the configuration change log ([config-changes.md](config-changes.md)), keyed by the scope's slug or the routine's
-`name`. A write that would change nothing writes nothing: no revision, no row.
+the configuration change log ([config-changes.md](config-changes.md)), keyed by the scope's slug or the routine's slug.
+A write that would change nothing writes nothing: no revision, no row.
 
 Over HTTP, `PATCH /api/scopes/{slug}` and `PATCH /api/routines/{routine_id}` are sparse: an absent field is unchanged, a
 present one is set, and a field that is not part of the record is refused. A routine's `graph_name` and
@@ -79,10 +81,10 @@ document ([config-documents.md](config-documents.md)).
 
 ## Running one
 
-`blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a hub work item
+`blizzard hub routine run <slug> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a hub work item
 from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet claimable — until
 `blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints that next step.
-`NAME` resolves to the routine's `routine_id` through the routine list; `--scope` overrides the routine's own default
+`SLUG` resolves to the routine's `routine_id` through the routine list; `--scope` overrides the routine's own default
 with a scope already linked into the routine's own related set — naming one that is not, or a slug no scope row holds,
 refuses rather than minting it (`routine scope add` links one first). `--mode` defaults to `full`; a requested `delta`
 against a routine/scope pair with no recorded baseline downgrades to `full` rather than refusing — the CLI names the
@@ -102,18 +104,18 @@ routine; the dialog steers those pairs to full rather than offering a delta with
 
 ## Reading a routine's health
 
-`blizzard hub routine trend <name> --since <time> --until <time> --introduced-boundary <time> [--period-days <n>]`
+`blizzard hub routine trend <slug> --since <time> --until <time> --introduced-boundary <time> [--period-days <n>]`
 reports finding inflow against outflow over the window: per-period created and per-kind exit counts, the outflow/
 withdrawn roll-ups, and the introduced-age cut against `--introduced-boundary`.
 
-`blizzard hub routine sweeps <name> --since <time> --until <time>` reports two things at once: a last-swept table —
-`name`'s declared scope set, retired scopes filtered out unless already swept while linked, each with its newest
+`blizzard hub routine sweeps <slug> --since <time> --until <time>` reports two things at once: a last-swept table — the
+routine's declared scope set, retired scopes filtered out unless already swept while linked, each with its newest
 delivered finding set's instant and per-repository revisions, or `never` when the pair has recorded none — and a
 measurement series, the opaque text each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table,
 the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never "never". The
 span is any positive `[since, until)` and is not capped, because comparing measurements across history needs it.
 
-`blizzard hub routine proposal-counts [<name>] --since <time> --until <time>` reports how many garden proposals landed
+`blizzard hub routine proposal-counts [<slug>] --since <time> --until <time>` reports how many garden proposals landed
 in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item
 counts. Name a routine to see only its rows, or omit it to see every routine's rows at once.
 

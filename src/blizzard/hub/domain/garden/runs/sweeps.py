@@ -156,11 +156,11 @@ class GardenSweepsService:
         live_declared, newest = sweep_coverage(
             declared,
             self._scopes.retired_slugs(routine.project_id),
-            self._repo.last_swept_by_scope(routine.project_id, routine.name),
+            self._repo.last_swept_by_scope(routine.project_id, routine.slug),
         )
         measurements = declared_readings(
-            declared, self._repo.measurements_in_window(routine.project_id, routine.name, since=since, until=until)
+            declared, self._repo.measurements_in_window(routine.project_id, routine.slug, since=since, until=until)
         )
         return compute_sweeps(
-            newest, measurements, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until
+            newest, measurements, routine_name=routine.slug, scope_slugs=live_declared, since=since, until=until
         )

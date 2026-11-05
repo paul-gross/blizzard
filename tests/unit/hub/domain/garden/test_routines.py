@@ -26,9 +26,10 @@ from blizzard.hub.domain.garden.routines import (
     RoutineEdit,
     RoutineGraphUnresolvedError,
     RoutineLifecycle,
-    RoutineNameImmutableError,
-    RoutineNameTakenError,
     RoutineScopeMembership,
+    RoutineSlugError,
+    RoutineSlugImmutableError,
+    RoutineSlugTakenError,
     require_graph_change_resolves,
 )
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
@@ -125,7 +126,7 @@ class _FakeRoutineRepo:
 
     joins: _FakeRoutineScopeRepo = field(default_factory=_FakeRoutineScopeRepo)
     by_id: dict[str, Routine] = field(default_factory=dict[str, Routine])
-    by_name: dict[str, Routine] = field(default_factory=dict[str, Routine])
+    by_slug: dict[str, Routine] = field(default_factory=dict[str, Routine])
     changes: list[ConfigChange] = field(default_factory=list[ConfigChange])
     mints: list[ScopeMint] = field(default_factory=list[ScopeMint])
     updates: list[int] = field(default_factory=list[int])
@@ -134,13 +135,13 @@ class _FakeRoutineRepo:
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)
 
-    def get_by_name(self, project_id: str, name: str) -> Routine | None:
-        routine = self.by_name.get(name)
+    def get_by_slug(self, project_id: str, slug: str) -> Routine | None:
+        routine = self.by_slug.get(slug)
         return routine if routine is not None and routine.project_id == project_id else None
 
     def _write(self, routine: Routine, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
         self.by_id[routine.routine_id] = routine
-        self.by_name[routine.name] = routine
+        self.by_slug[routine.slug] = routine
         self.joins.linked.add((routine.routine_id, routine.default_scope_slug))
         self.changes.append(change)
         if scope_mint is not None:
@@ -206,7 +207,51 @@ def test_create_mints_an_rtn_prefixed_id() -> None:
     assert routine.name == "nightly"
 
 
-def test_create_writes_revision_one_and_a_create_change_keyed_on_the_name() -> None:
+def test_create_with_only_a_name_takes_the_name_as_its_slug() -> None:
+    authoring, routines, _, _ = _authoring()
+
+    routine = _create(authoring)
+
+    assert (routine.slug, routine.name) == ("nightly", "nightly")
+    assert routines.changes[-1].record_key == "nightly"
+
+
+def test_create_with_a_slug_and_a_name_keeps_each() -> None:
+    authoring, routines, _, _ = _authoring()
+
+    routine = _create(authoring, slug="nightly", name="Nightly Sweep")
+
+    assert (routine.slug, routine.name) == ("nightly", "Nightly Sweep")
+    assert routines.changes[-1].record_key == "nightly"
+    assert FieldChange("name", None, "Nightly Sweep") in routines.changes[-1].diff
+
+
+def test_create_with_only_a_slug_takes_the_slug_as_its_name() -> None:
+    authoring, _, _, _ = _authoring()
+
+    routine = _create(authoring, slug="nightly", name=None)
+
+    assert (routine.slug, routine.name) == ("nightly", "nightly")
+
+
+def test_create_stating_a_malformed_slug_is_refused_naming_it() -> None:
+    authoring, routines, _, _ = _authoring()
+
+    with pytest.raises(RoutineSlugError, match="Bad Slug"):
+        _create(authoring, slug="Bad Slug")
+    assert routines.by_id == {}
+    assert routines.mints == []
+
+
+def test_create_with_only_a_name_does_not_shape_check_the_slug_it_takes() -> None:
+    authoring, _, _, _ = _authoring()
+
+    routine = _create(authoring, name="Arch Sweep")
+
+    assert (routine.slug, routine.name) == ("Arch Sweep", "Arch Sweep")
+
+
+def test_create_writes_revision_one_and_a_create_change_keyed_on_the_slug() -> None:
     authoring, routines, _, _ = _authoring()
 
     routine = _create(authoring, default_effort="high")
@@ -223,11 +268,11 @@ def test_create_writes_revision_one_and_a_create_change_keyed_on_the_name() -> N
     assert (change.actor, change.door) == ("usr_1", Door.CLI)
 
 
-def test_create_naming_an_existing_name_is_refused() -> None:
+def test_create_naming_an_existing_slug_is_refused() -> None:
     authoring, _, _, _ = _authoring()
     _create(authoring)
 
-    with pytest.raises(RoutineNameTakenError, match="nightly"):
+    with pytest.raises(RoutineSlugTakenError, match="nightly"):
         _create(authoring)
 
 
@@ -327,20 +372,36 @@ def test_create_normalizes_harnesses() -> None:
 # --- The sparse edit ------------------------------------------------------------
 
 
-def test_edit_naming_a_different_name_is_refused_naming_the_current_one() -> None:
-    authoring, _, _, _ = _authoring()
-    routine = _create(authoring)
-
-    with pytest.raises(RoutineNameImmutableError, match="nightly"):
-        authoring.edit(routine, RoutineEdit(name="renamed"), _CTX)
-
-
-def test_edit_restating_the_name_alone_writes_nothing() -> None:
+def test_edit_naming_a_different_slug_is_refused_naming_the_current_one() -> None:
     authoring, routines, _, _ = _authoring()
     routine = _create(authoring)
 
-    assert authoring.edit(routine, RoutineEdit(name="nightly"), _CTX) is routine
+    with pytest.raises(RoutineSlugImmutableError, match="nightly"):
+        authoring.edit(routine, RoutineEdit(slug="renamed"), _CTX)
     assert routines.updates == []
+
+
+def test_edit_restating_the_slug_and_name_alone_writes_nothing() -> None:
+    authoring, routines, _, _ = _authoring()
+    routine = _create(authoring)
+
+    assert authoring.edit(routine, RoutineEdit(slug="nightly", name="nightly"), _CTX) is routine
+    assert routines.updates == []
+
+
+def test_edit_changing_the_name_is_recorded_first_in_the_change_row() -> None:
+    authoring, routines, _, _ = _authoring()
+    routine = _create(authoring)
+
+    edited = authoring.edit(routine, RoutineEdit(name="Nightly Sweep", default_effort="high"), _CTX)
+
+    assert (edited.slug, edited.name, edited.revision) == ("nightly", "Nightly Sweep", 2)
+    change = routines.changes[-1]
+    assert (change.record_key, change.op) == ("nightly", ChangeOp.EDIT)
+    assert change.diff == (
+        FieldChange("name", "nightly", "Nightly Sweep"),
+        FieldChange("default_effort", None, "high"),
+    )
 
 
 def test_edit_of_one_field_leaves_the_others_and_moves_the_revision_by_one() -> None:
@@ -362,7 +423,8 @@ def test_edit_of_the_full_payload_sets_every_field() -> None:
     edited = authoring.edit(
         routine,
         RoutineEdit(
-            name="nightly",
+            slug="nightly",
+            name="Nightly",
             graph_name="beta",
             default_scope_slug=ScopeSlug.parse("other"),
             default_model=["blizzard:advanced"],
@@ -372,6 +434,7 @@ def test_edit_of_the_full_payload_sets_every_field() -> None:
         _CTX,
     )
 
+    assert (edited.slug, edited.name) == ("nightly", "Nightly")
     assert edited.graph_name == "beta"
     assert edited.default_scope_slug == "other"
     assert edited.default_model == ["blizzard:advanced"]
@@ -386,7 +449,7 @@ def test_edit_clears_default_effort_with_null() -> None:
     assert authoring.edit(routine, RoutineEdit(default_effort=None), _CTX).default_effort is None
 
 
-@pytest.mark.parametrize("name", ["graph_name", "default_scope_slug", "default_model", "default_harnesses"])
+@pytest.mark.parametrize("name", ["name", "graph_name", "default_scope_slug", "default_model", "default_harnesses"])
 def test_edit_refuses_null_on_a_required_field_naming_it(name: str) -> None:
     authoring, _, _, _ = _authoring()
     routine = _create(authoring)
@@ -489,6 +552,7 @@ class _RoutineFields(TypedDict, total=False):
 def _routine(**overrides: Unpack[_RoutineFields]) -> Routine:
     return Routine(
         routine_id="rtn_1",
+        slug="nightly",
         name="nightly",
         graph_name="alpha",
         default_scope_slug="blizzard",

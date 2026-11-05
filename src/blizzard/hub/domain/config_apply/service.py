@@ -451,6 +451,7 @@ class ConfigApplication:
             ),
             routines=tuple(
                 RoutineDeclaration(
+                    slug=routine.slug,
                     name=routine.name,
                     graph_name=routine.graph_name,
                     default_scope_slug=routine.default_scope_slug,
@@ -485,11 +486,11 @@ class ConfigApplication:
         for entry in declaration.routines:
             assert isinstance(entry, RoutineDeclaration)
             graph_names.add(entry.graph_name)
-            names.setdefault(entry.project_id, []).append(entry.name)
+            names.setdefault(entry.project_id, []).append(entry.handle)
         routines: dict[tuple[str, str], NamedRetirableConfiguredRecord] = {
             (project_id, name): routine
             for project_id, project_names in names.items()
-            for name, routine in self._routines.get_many_by_name(project_id, project_names).items()
+            for name, routine in self._routines.get_many_by_slug(project_id, project_names).items()
         }
         ids = {key: r.routine_id for key, r in routines.items() if isinstance(r, Routine)}
         scope_links = self._routine_scopes.list_scopes_for(list(ids.values()))

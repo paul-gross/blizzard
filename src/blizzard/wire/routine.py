@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
@@ -13,8 +13,18 @@ from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
 
 
+def _require_handle(slug: str | None, name: str | None) -> None:
+    """A routine states its ``slug``, its ``name``, or both; with only one, the other takes the same value."""
+    if slug is None and name is None:
+        raise ValueError("a routine states a slug, a name, or both")
+
+
 class RoutineCreateRequest(BaseModel):
-    name: str
+    """``slug`` is the routine's lineage and handle, ``name`` its display name; at least one is stated, and with
+    one missing the request resolves to the same value for both."""
+
+    slug: str | None = None
+    name: str | None = None
     graph_name: str
     default_scope_slug: str
     default_model: list[str] = []
@@ -22,16 +32,22 @@ class RoutineCreateRequest(BaseModel):
     # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
 
+    @model_validator(mode="after")
+    def _handle_stated(self) -> RoutineCreateRequest:
+        _require_handle(self.slug, self.name)
+        return self
+
 
 class RoutineDocument(BaseModel):
-    """A routine as a document entry, keyed by its immutable ``name`` — the model whose JSON Schema
-    ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the default scope
-    always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
+    """A routine as a document entry, keyed by its immutable ``slug`` (or, in the older form, its ``name``) — the
+    model whose JSON Schema ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the
+    default scope always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
     stored or declared in the same document, and ``graph_name`` must name an enabled graph."""
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
+    slug: str | None = None
+    name: str | None = None
     graph_name: str
     default_scope_slug: str
     default_model: list[str] = []
@@ -39,14 +55,20 @@ class RoutineDocument(BaseModel):
     default_harnesses: list[str] = []
     scopes: list[str] = []
 
+    @model_validator(mode="after")
+    def _handle_stated(self) -> RoutineDocument:
+        _require_handle(self.slug, self.name)
+        return self
+
 
 class RoutineEditRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set. A present
-    ``name`` must equal the routine's current one; an explicit ``null`` clears
+    ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
     ``default_effort`` and is refused on every other field."""
 
     model_config = ConfigDict(extra="forbid")
 
+    slug: str | None = None
     name: str | None = None
     graph_name: str | None = None
     default_scope_slug: str | None = None
@@ -65,6 +87,9 @@ class RoutineView(WireModel):
     """A routine as served by the create/list/read/edit/lifecycle routes."""
 
     routine_id: str
+    #: The routine's lineage and handle; immutable.
+    slug: str
+    #: The routine's editable display name.
     name: str
     graph_name: str
     default_scope_slug: str
@@ -123,6 +148,7 @@ class RoutineRunResponse(WireModel):
     ref: str
     title: str
     body: str
+    #: The routine's slug.
     routine_name: str
     scope_slug: str
     effective_mode: Annotated[RunMode | Unrecognized, OPEN]

@@ -189,10 +189,10 @@ class GardenTrendService:
         self._repo = repo
 
     def trend(self, routine: Routine, window: TrendWindow) -> Trend:
-        facts = self._repo.facts_for_trend(routine.project_id, routine.name, since=window.since, until=window.until)
+        facts = self._repo.facts_for_trend(routine.project_id, routine.slug, since=window.since, until=window.until)
         return compute_trend(
             facts,
-            routine_name=routine.name,
+            routine_name=routine.slug,
             since=window.since,
             until=window.until,
             period_days=window.period_days,

@@ -24,7 +24,9 @@ class RetirableConfiguredRecord(ConfiguredRecord, Protocol):
 
 class NamedRetirableConfiguredRecord(RetirableConfiguredRecord, Protocol):
     @property
-    def name(self) -> str: ...
+    def handle(self) -> str:
+        """The key the record's change rows and document entry carry."""
+        ...
 
 
 class SluggedRetirableConfiguredRecord(RetirableConfiguredRecord, Protocol):

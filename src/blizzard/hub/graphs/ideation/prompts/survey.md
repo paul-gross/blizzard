@@ -6,7 +6,7 @@ intent and enforce nothing: nothing you record is a rule the target broke.
 
 ## Your charge
 
-The chunk's work item carries the routine and the scope. The routine's name is the axis: the target's own agent-context
+The chunk's work item carries the routine and the scope. The routine's slug is the axis: the target's own agent-context
 entry point routes to the gardening-axes registry that declares every axis it tends — go only as far as that route
 names, never hunting the target for something registry-shaped. The entry names what to look for (Evaluates), what you
 cover (Scope), a pointer to the intent it judges against (Criteria — follow it, and run any read the entry names), and

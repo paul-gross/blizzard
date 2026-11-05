@@ -153,11 +153,13 @@ class RecordDeclaration(Protocol):
     that ``settle``s the record afterwards."""
 
     @property
-    def name(self) -> str: ...
+    def handle(self) -> str:
+        """The slug or name the document entry is keyed by."""
+        ...
 
     @property
     def key(self) -> tuple[str, str]:
-        """The ``(project id, name)`` that tells the entry's record apart from every other of its kind."""
+        """The ``(project id, handle)`` that tells the entry's record apart from every other of its kind."""
         ...
 
     def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
@@ -466,10 +468,10 @@ class _DeclaredRecordSection:
         return entry.key
 
     def label(self, entry: RecordDeclaration) -> str:
-        return entry.name
+        return entry.handle
 
     def handle(self, record: NamedRetirableConfiguredRecord) -> str:
-        return record.name
+        return record.handle
 
     def guard(self, entry: RecordDeclaration, record: NamedRetirableConfiguredRecord | None) -> None:
         entry.check(self._stored.references, record)

@@ -117,6 +117,11 @@ class Scope:
         """The key the scope's change rows and document entry carry — its slug."""
         return self.slug
 
+    @property
+    def handle(self) -> str:
+        """The key the document apply addresses the scope by — its slug."""
+        return self.slug
+
     @staticmethod
     def allows(verb: ScopeVerb, *, retired: bool) -> bool:
         """Whether ``verb`` is legal on a scope whose newest lifecycle fact reads

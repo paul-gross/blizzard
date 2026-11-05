@@ -180,6 +180,7 @@ def _project() -> Project:
 def _routine(name: str = "nightly", *, project_id: str = _PROJECT) -> Routine:
     return Routine(
         routine_id="routine_1",
+        slug=name,
         name=name,
         graph_name="g",
         default_scope_slug="runner",

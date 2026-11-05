@@ -1,8 +1,8 @@
 """SQLAlchemy adapter for the routine repository seam (package-private).
 
-All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness is enforced
-by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_project_name`` backstops
-a concurrent create, its ``IntegrityError`` re-raised as ``RoutineNameTakenError``, never swallowed.
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Slug uniqueness is enforced
+by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_project_slug`` backstops
+a concurrent create, its ``IntegrityError`` re-raised as ``RoutineSlugTakenError``, never swallowed.
 The default and linked scopes are stored by ``scope_id`` and read back as slugs, each resolved within
 the routine's project. Every write commits its change row — and a default scope's mint — in the same transaction."""
 
@@ -22,7 +22,7 @@ from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineNameTakenError
+from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
 
 # Appends the config audit record on the caller's connection, atomically with the write.
@@ -58,6 +58,7 @@ HARNESSES = ModelColumn()
 
 def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
     return {
+        "name": routine.name,
         "graph_name": routine.graph_name,
         "default_scope_id": scope_id_of(stmts, routine.default_scope_slug, routine.project_id),
         "default_model": MODEL.encode(routine.default_model),
@@ -99,7 +100,7 @@ def move_revision(conn: Connection, routine: Routine, from_revision: int, **valu
         current = conn.execute(
             statements_of(conn).select(routines, routines.c.revision).where(routines.c.routine_id == routine.routine_id)
         ).scalar_one()
-        raise ConfigRevisionConflict("routine", routine.name, current=current)
+        raise ConfigRevisionConflict("routine", routine.slug, current=current)
 
 
 def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> None:
@@ -110,7 +111,7 @@ def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> 
         .values(
             routine_id=routine.routine_id,
             project_id=routine.project_id,
-            name=routine.name,
+            slug=routine.slug,
             **_columns(statements_of(conn), routine),
             created_at=routine.created_at,
             revision=routine.revision,
@@ -187,10 +188,10 @@ class RoutineStore:
                     ensure_scope(conn, scope_mint)
                 insert_routine(conn, routine, change)
         except IntegrityError as exc:
-            # The post-write re-check: a concurrent create that took the name first
+            # The post-write re-check: a concurrent create that took the slug first
             # loses here, and reads as the same refusal the domain's pre-check raises.
-            if self.get_by_name(routine.project_id, routine.name) is not None:
-                raise RoutineNameTakenError(routine.name) from exc
+            if self.get_by_slug(routine.project_id, routine.slug) is not None:
+                raise RoutineSlugTakenError(routine.slug) from exc
             raise
         return routine
 
@@ -217,20 +218,20 @@ class RoutineStore:
     def get(self, routine_id: str) -> Routine | None:
         return self._one(routines.c.routine_id == routine_id, "get")
 
-    def get_by_name(self, project_id: str, name: str) -> Routine | None:
-        return self._one((routines.c.project_id == project_id) & (routines.c.name == name), "get_by_name")
+    def get_by_slug(self, project_id: str, slug: str) -> Routine | None:
+        return self._one((routines.c.project_id == project_id) & (routines.c.slug == slug), "get_by_slug")
 
-    def get_many_by_name(self, project_id: str, names: Sequence[str]) -> dict[str, Routine]:
+    def get_many_by_slug(self, project_id: str, slugs: Sequence[str]) -> dict[str, Routine]:
         found: dict[str, Routine] = {}
-        if not names:
+        if not slugs:
             return found
-        with self._store.read("get_many_by_name") as conn:
-            for batch in id_batches(names):
+        with self._store.read("get_many_by_slug") as conn:
+            for batch in id_batches(slugs):
                 rows = conn.execute(
-                    _routine_select(self._store).where(routines.c.project_id == project_id, routines.c.name.in_(batch))
+                    _routine_select(self._store).where(routines.c.project_id == project_id, routines.c.slug.in_(batch))
                 ).all()
                 retired = _retired_ids(conn, [row.routine_id for row in rows])
-                found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
+                found.update({row.slug: self._of(row, retired=row.routine_id in retired) for row in rows})
         return found
 
     def _one(self, where: ColumnElement[bool], operation: str) -> Routine | None:
@@ -263,6 +264,7 @@ class RoutineStore:
     def _of(row: Row[Any], *, retired: bool) -> Routine:
         return Routine(
             routine_id=row.routine_id,
+            slug=row.slug,
             name=row.name,
             graph_name=row.graph_name,
             default_scope_slug=row.default_scope_slug,

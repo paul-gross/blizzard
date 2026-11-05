@@ -71,6 +71,7 @@ def test_routine_create_posts_name_graph_and_scope() -> None:
             201,
             {
                 "routine_id": "rtn_1",
+                "slug": "nightly",
                 "name": "nightly",
                 "graph_name": "alpha",
                 "default_scope_slug": "blizzard",
@@ -91,7 +92,7 @@ def test_routine_create_posts_name_graph_and_scope() -> None:
         (
             "http://hub.local:8421/api/routines",
             {
-                "name": "nightly",
+                "slug": "nightly",
                 "graph_name": "alpha",
                 "default_scope_slug": "blizzard",
                 "default_model": [],
@@ -103,6 +104,34 @@ def test_routine_create_posts_name_graph_and_scope() -> None:
     assert "rtn_1" in result.output
 
 
+def test_routine_create_name_option_sends_the_display_name_beside_the_slug() -> None:
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(201, {"routine_id": "rtn_1", "slug": "nightly", "name": "Nightly Sweep"})
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        hub_group,
+        ["routine", "create", "nightly", "alpha", "blizzard", "--name", "Nightly Sweep"],
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "slug": "nightly",
+            "name": "Nightly Sweep",
+            "graph_name": "alpha",
+            "default_scope_slug": "blizzard",
+            "default_model": [],
+            "default_effort": None,
+            "default_harnesses": [],
+        }
+    ]
+
+
 def test_routine_create_collects_repeated_model_options() -> None:
     calls: list[tuple[str, dict[str, object]]] = []
 
@@ -110,7 +139,7 @@ def test_routine_create_collects_repeated_model_options() -> None:
         url: str, *, json: dict[str, object], timeout: float, headers: dict[str, str] | None = None
     ) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
+        return _FakeResponse(201, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly"})
 
     bound = bind_stubs(post=fake_post)
     bound.runner.invoke(
@@ -129,7 +158,7 @@ def test_routine_create_collects_repeated_harnesses_options() -> None:
         url: str, *, json: dict[str, object], timeout: float, headers: dict[str, str] | None = None
     ) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
+        return _FakeResponse(201, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly"})
 
     bound = bind_stubs(post=fake_post)
     bound.runner.invoke(
@@ -165,7 +194,15 @@ def test_routine_list_prints_each_row() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
-            [{"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"}],
+            [
+                {
+                    "routine_id": "rtn_1",
+                    "slug": "nightly",
+                    "name": "nightly",
+                    "graph_name": "alpha",
+                    "default_scope_slug": "blizzard",
+                }
+            ],
         )
 
     bound = bind_stubs(get=_in_one_project(fake_get))
@@ -194,6 +231,7 @@ def test_routine_list_marks_a_retired_row() -> None:
             [
                 {
                     "routine_id": "rtn_1",
+                    "slug": "nightly",
                     "name": "nightly",
                     "graph_name": "alpha",
                     "default_scope_slug": "blizzard",
@@ -227,14 +265,14 @@ def test_routine_retire_posts_to_the_retire_endpoint() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "nightly", "name": "nightly"}])
 
     doors: list[str | None] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
         doors.append((headers or {}).get("X-Blizzard-Door"))
-        return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": True})
+        return _FakeResponse(202, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly", "retired": True})
 
     bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
     result = bound.runner.invoke(
@@ -251,11 +289,11 @@ def test_routine_enable_posts_to_the_enable_endpoint() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "nightly", "name": "nightly"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
-        return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": False})
+        return _FakeResponse(202, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly", "retired": False})
 
     bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
     result = bound.runner.invoke(
@@ -271,7 +309,7 @@ def test_routine_retire_unknown_name_raises_without_a_retire_request() -> None:
     post_calls: list[str] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "other", "name": "other"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append(url)
@@ -293,6 +331,7 @@ def test_routine_show_prints_the_whole_record() -> None:
             200,
             {
                 "routine_id": "rtn_1",
+                "slug": "nightly",
                 "name": "nightly",
                 "graph_name": "alpha",
                 "default_scope_slug": "blizzard",
@@ -318,6 +357,7 @@ def test_routine_show_prints_the_harnesses_default() -> None:
             200,
             {
                 "routine_id": "rtn_1",
+                "slug": "nightly",
                 "name": "nightly",
                 "graph_name": "alpha",
                 "default_scope_slug": "blizzard",
@@ -345,6 +385,7 @@ def test_routine_show_lists_the_routines_scopes() -> None:
             200,
             {
                 "routine_id": "rtn_1",
+                "slug": "nightly",
                 "name": "nightly",
                 "graph_name": "alpha",
                 "default_scope_slug": "blizzard",
@@ -379,7 +420,9 @@ def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[Result, list[ob
 
     def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         patch_calls.append(json)
-        return _FakeResponse(status, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
+        return _FakeResponse(
+            status, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly", "graph_name": "beta"}
+        )
 
     bound = bind_stubs(get=_in_one_project(fake_get), patch=fake_patch)
     result = bound.runner.invoke(
@@ -388,11 +431,18 @@ def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[Result, list[ob
     return result, patch_calls
 
 
-def test_routine_edit_patches_without_reading_or_restating_the_name() -> None:
+def test_routine_edit_patches_without_reading_or_restating_the_slug() -> None:
     result, patch_calls = _invoke_routine_edit("--graph", "beta", "--scope", "blizzard")
 
     assert result.exit_code == 0, result.output
     assert patch_calls == [{"graph_name": "beta", "default_scope_slug": "blizzard"}]
+
+
+def test_routine_edit_name_sends_the_display_name() -> None:
+    result, patch_calls = _invoke_routine_edit("--name", "Nightly Sweep")
+
+    assert result.exit_code == 0, result.output
+    assert patch_calls == [{"name": "Nightly Sweep"}]
 
 
 def test_routine_edit_sends_only_the_options_given() -> None:
@@ -569,7 +619,9 @@ def test_routine_run_resolves_name_then_posts() -> None:
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         get_calls.append(params)
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening", "graph_name": "alpha"}])
+        return _FakeResponse(
+            200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening", "graph_name": "alpha"}]
+        )
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
@@ -580,7 +632,7 @@ def test_routine_run_resolves_name_then_posts() -> None:
                 "source": "hub",
                 "ref": "1",
                 "title": "gardening run (full)",
-                "body": "Routine: gardening (graph: alpha)",
+                "body": "Routine: gardening (slug: gardening, graph: alpha)",
                 "routine_name": "gardening",
                 "scope_slug": "blizzard",
                 "effective_mode": "full",
@@ -610,7 +662,7 @@ def test_routine_run_threads_scope_mode_and_note() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append((url, json))
@@ -643,7 +695,7 @@ def test_routine_run_threads_scope_mode_and_note() -> None:
 
 def test_routine_run_names_a_downgrade_in_its_output() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(
@@ -675,7 +727,7 @@ def test_routine_run_unknown_name_raises_without_a_run_request() -> None:
     post_calls: list[str] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "other", "name": "other"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         post_calls.append(url)
@@ -691,7 +743,7 @@ def test_routine_run_unknown_name_raises_without_a_run_request() -> None:
 
 def test_routine_run_maps_a_409_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
@@ -708,7 +760,7 @@ def test_routine_run_maps_a_503_to_a_click_exception() -> None:
     503 — surfaced as the body's own reason, so the operator reads what refused."""
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(503, {"detail": "scope 'blizzard' is retired"})
@@ -731,7 +783,7 @@ def test_routine_run_mode_option_is_choice_restricted() -> None:
 
 def test_routine_run_maps_a_422_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
@@ -1106,3 +1158,95 @@ def test_routine_proposal_counts_header_names_the_routine_scope_only_when_there_
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[0] == header
+
+
+# --- Resolution by slug, not display name ---------------------------------------------
+
+_RENAMED_ROWS = [
+    {"routine_id": "rtn_other", "slug": "other", "name": "nightly"},
+    {"routine_id": "rtn_1", "slug": "nightly", "name": "Nightly Sweep"},
+]
+
+
+@pytest.mark.parametrize(
+    ("args", "method", "path"),
+    [
+        (["retire", "nightly"], "post", "/api/routines/rtn_1/retire"),
+        (["enable", "nightly"], "post", "/api/routines/rtn_1/enable"),
+        (["run", "nightly"], "post", "/api/routines/rtn_1/run"),
+        (
+            ["sweeps", "nightly", "--since", "2026-01-01T00:00:00Z", "--until", "2026-01-15T00:00:00Z"],
+            "get",
+            "/api/routines/rtn_1/sweeps",
+        ),
+    ],
+)
+def test_routine_verbs_resolve_the_routine_by_its_slug_not_its_display_name(
+    args: list[str], method: str, path: str
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> _FakeResponse:
+        if url.endswith("/api/routines"):
+            return _FakeResponse(200, _RENAMED_ROWS)
+        calls.append(("get", url))
+        return _FakeResponse(
+            200,
+            {
+                "routine_name": "nightly",
+                "since": "2026-01-01T00:00:00+00:00",
+                "until": "2026-01-15T00:00:00+00:00",
+                "last_swept": [],
+                "measurements": [],
+            },
+        )
+
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+        calls.append(("post", url))
+        if url.endswith("/run"):
+            return _FakeResponse(
+                201,
+                {
+                    "chunk_id": "ch_1",
+                    "source": "hub",
+                    "ref": "1",
+                    "title": "Nightly Sweep run (full)",
+                    "body": "Routine: Nightly Sweep (slug: nightly, graph: alpha)",
+                    "routine_name": "nightly",
+                    "scope_slug": "blizzard",
+                    "effective_mode": "full",
+                    "downgraded": False,
+                    "baseline_finding_set_id": None,
+                    "baseline_revisions": None,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+        return _FakeResponse(202, {"routine_id": "rtn_1", "slug": "nightly", "name": "Nightly Sweep", "retired": True})
+
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", *args], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == [(method, f"http://hub.local:8421{path}")]
+
+
+def test_routine_list_prints_the_slug_and_the_display_name() -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            [
+                {
+                    "routine_id": "rtn_1",
+                    "slug": "nightly",
+                    "name": "Nightly Sweep",
+                    "graph_name": "alpha",
+                    "default_scope_slug": "blizzard",
+                }
+            ],
+        )
+
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "slug=nightly  name=Nightly Sweep" in result.output

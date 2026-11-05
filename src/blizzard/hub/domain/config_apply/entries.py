@@ -65,10 +65,12 @@ class DeclaredScope:
 @domain_model
 @dataclass(frozen=True)
 class DeclaredRoutine:
-    """A routine the document names within ``project`` — a project slug, ``None`` for the tenant's only one. A
-    ``scopes`` of ``None`` leaves the stored linked scope set."""
+    """A routine the document names within ``project`` — a project slug, ``None`` for the tenant's only one — by
+    ``slug`` or, in the older form, ``name`` alone; at least one is stated. A ``scopes`` of ``None`` leaves the
+    stored linked scope set."""
 
-    name: str
+    slug: str | None
+    name: str | None
     graph_name: str
     default_scope_slug: str
     default_model: Sequence[str]

@@ -377,6 +377,7 @@ def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) 
     return stamp(
         hub.routines,
         routine_id=routine_id,
+        slug=routine_id,
         name=routine_id,
         graph_name="gr",
         default_scope_id=default_scope_id,

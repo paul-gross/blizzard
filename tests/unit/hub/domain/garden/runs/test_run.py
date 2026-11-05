@@ -46,6 +46,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _ROUTINE = Routine(
     routine_id="rtn_1",
+    slug="gardening",
     name="gardening",
     graph_name="default",
     default_scope_slug="blizzard",
@@ -381,6 +382,7 @@ def test_run_uses_the_injected_clock_not_the_wall_clock() -> None:
 def test_compose_charge_names_the_routine_graph_and_scope() -> None:
     charge = compose_charge(
         routine_name="gardening",
+        routine_slug="gardening",
         graph_name="default",
         scope_slug="blizzard",
         scope_description="the hub itself",
@@ -389,7 +391,7 @@ def test_compose_charge_names_the_routine_graph_and_scope() -> None:
         baseline=None,
         note=None,
     )
-    assert "Routine: gardening (graph: default)" in charge
+    assert "Routine: gardening (slug: gardening, graph: default)" in charge
     assert "Scope: blizzard — the hub itself" in charge
     assert "Mode: full" in charge
 
@@ -397,6 +399,7 @@ def test_compose_charge_names_the_routine_graph_and_scope() -> None:
 def test_compose_charge_names_the_downgrade() -> None:
     charge = compose_charge(
         routine_name="gardening",
+        routine_slug="gardening",
         graph_name="default",
         scope_slug="blizzard",
         scope_description="",
@@ -421,6 +424,7 @@ def test_compose_charge_names_the_baseline_revisions() -> None:
     )
     charge = compose_charge(
         routine_name="gardening",
+        routine_slug="gardening",
         graph_name="default",
         scope_slug="blizzard",
         scope_description="",
@@ -436,6 +440,7 @@ def test_compose_charge_names_the_baseline_revisions() -> None:
 def test_compose_charge_appends_the_note_as_a_this_run_section() -> None:
     charge = compose_charge(
         routine_name="gardening",
+        routine_slug="gardening",
         graph_name="default",
         scope_slug="blizzard",
         scope_description="",
@@ -451,6 +456,7 @@ def test_compose_charge_appends_the_note_as_a_this_run_section() -> None:
 def test_compose_charge_omits_the_this_run_section_with_no_note() -> None:
     charge = compose_charge(
         routine_name="gardening",
+        routine_slug="gardening",
         graph_name="default",
         scope_slug="blizzard",
         scope_description="",
