@@ -73,6 +73,13 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.services import (
+    CadenceAttention,
+    CadenceAuthoring,
+    CadenceLifecycle,
+    CadenceReading,
+)
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
@@ -218,6 +225,7 @@ from blizzard.hub.secrets import StoreSecretReader, secret_cipher
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
+from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
@@ -408,6 +416,14 @@ class TenantServices:
     routine_authoring: RoutineAuthoring
     #: The routine retire/enable brake.
     routine_lifecycle: RoutineLifecycle
+    #: The cadence read Protocol — the same store instance as ``cadence_authoring``'s writes.
+    cadences: IReadCadenceRepository
+    #: Create and edit a cadence, refusing an admission the writer may not make.
+    cadence_authoring: CadenceAuthoring
+    #: The cadence retire/enable brake.
+    cadence_lifecycle: CadenceLifecycle
+    #: List and show cadences with their attention, resolved in bulk.
+    cadence_reading: CadenceReading
     #: Mint and ingest a hub work item from a routine, in one act.
     routine_run: RunService
     #: The per-scope delta baseline a routine has swept, and how much has landed since.
@@ -1057,6 +1073,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
+    cadence_store = CadenceStore(tenant_connections)
     config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, events=event_log, offers=forges)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
@@ -1363,6 +1380,15 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
+        cadences=cadence_store,
+        cadence_authoring=CadenceAuthoring(cadences=cadence_store, clock=clock),
+        cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
+        cadence_reading=CadenceReading(
+            cadences=cadence_store,
+            attention=CadenceAttention(
+                routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
+            ),
+        ),
         routine_run=RunService(
             routines=routine_store,
             scopes=scope_store,

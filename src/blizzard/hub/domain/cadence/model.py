@@ -17,9 +17,19 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.schedule import Schedule
+from blizzard.hub.domain.config import lifecycle
+from blizzard.hub.domain.config.changes import (
+    RETIRED_FIELD,
+    ChangeContext,
+    ChangeOp,
+    ConfigChange,
+    FieldChange,
+    RecordKind,
+)
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 _SPACING_PATTERN = re.compile(r"^([0-9]+)([mhd])$")
 _UNIT_MINUTES = {"m": 1, "h": 60, "d": 24 * 60}
@@ -178,7 +188,8 @@ def _chore_spec(shape: ChoreShape, where: str) -> ChoreSpec:
         if not shape.scopes:
             raise ConfigFieldError(f"{where}.scopes", "a scope list names at least one scope")
         selection = ScopeSelection.LISTED
-        scopes = tuple(_slug(slug, f"{where}.scopes[{i}]") for i, slug in enumerate(shape.scopes))
+        # A listed set has no order; it is held sorted, each slug once.
+        scopes = tuple(sorted({_slug(slug, f"{where}.scopes[{i}]") for i, slug in enumerate(shape.scopes)}))
     try:
         mode = RunMode(shape.mode) if shape.mode is not None else RunMode.FULL
     except ValueError as exc:
@@ -321,11 +332,127 @@ def attention(chores: Sequence[Chore], *, retired: bool, facts: AttentionFacts) 
     return tuple(found)
 
 
+class CadenceSlugTakenError(ValueError):
+    """A cadence create names a slug its project already holds, retired cadences included."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"a cadence with slug {slug!r} already exists in this project")
+        self.slug = slug
+
+
+class CadenceAdmissionRefused(PermissionError):
+    """A write would leave a live cadence keeping a promoting chore, and the writer may not admit work to the ready
+    queue."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"cadence {slug!r} would admit work to the ready queue, which this identity may not do")
+        self.slug = slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class ScheduleShape:
+    """A schedule table as written, before validation; ``None`` is a field left unstated."""
+
+    cron: str | None
+    zone: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class CadenceShape:
+    """A cadence as a create writes it, before validation. ``schedule`` is ``None`` when no table is stated, and
+    ``name`` when the slug stands for it."""
+
+    slug: str | None
+    name: str | None = None
+    schedule: ScheduleShape | None = None
+    spacing: str | None = None
+    anchor: str | None = None
+    chores: Sequence[ChoreShape] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class CadenceEdit:
+    """A sparse cadence edit: :data:`UNSET` leaves a field, ``None`` clears ``schedule``, ``spacing``, or
+    ``anchor`` and is refused on ``name``. ``chores``, when stated, is the whole list, matched to the stored chores
+    by key."""
+
+    name: str | None | UnsetType = UNSET
+    schedule: ScheduleShape | None | UnsetType = UNSET
+    spacing: str | None | UnsetType = UNSET
+    anchor: str | None | UnsetType = UNSET
+    chores: Sequence[ChoreShape] | UnsetType = UNSET
+
+    def touches_rhythm(self) -> bool:
+        return any(value is not UNSET for value in (self.schedule, self.spacing, self.anchor))
+
+
+#: The field a chore's diff entry is named under, before its key.
+CHORES_FIELD = "chores"
+
+
+def _schedule_value(rhythm: Rhythm) -> dict[str, str] | None:
+    schedule = rhythm.schedule
+    return None if schedule is None else {"cron": schedule.cron, "zone": schedule.zone}
+
+
+def _chore_value(spec: ChoreSpec) -> dict[str, object]:
+    """A chore as its change row reports it, in the shape it is written."""
+    scopes: object = {
+        ScopeSelection.ALL: ALL_SCOPES,
+        ScopeSelection.LISTED: list(spec.scopes),
+        ScopeSelection.DEFAULT: None,
+    }[spec.selection]
+    return {
+        "routine": spec.routine_slug,
+        "scopes": scopes,
+        "mode": spec.mode.value,
+        "note": spec.note,
+        "promote": spec.promote,
+    }
+
+
+def _chore_changes(stored: Sequence[Chore], merge: ChoreMerge) -> tuple[FieldChange, ...]:
+    """One entry per chore added, changed, or removed, named ``chores.<key>``, then ``chores.order`` when the
+    chores kept on both sides are written in another order."""
+    held = {chore.key: chore.spec for chore in stored}
+    written = {chore.key: chore.spec for chore in merge.chores}
+    entries = [
+        *(FieldChange(f"{CHORES_FIELD}.{key}", None, _chore_value(written[key])) for key in merge.added),
+        *(
+            FieldChange(f"{CHORES_FIELD}.{key}", _chore_value(held[key]), _chore_value(written[key]))
+            for key in merge.changed
+        ),
+        *(FieldChange(f"{CHORES_FIELD}.{key}", _chore_value(held[key]), None) for key in merge.removed),
+    ]
+    old_order = [chore.key for chore in stored if chore.key in written]
+    new_order = [chore.key for chore in merge.chores if chore.key in held]
+    if old_order != new_order:
+        entries.append(FieldChange(f"{CHORES_FIELD}.order", old_order, new_order))
+    return tuple(entries)
+
+
+def _parse_rhythm(schedule: ScheduleShape | None, spacing: str | None, anchor: str | None, *, at: datetime) -> Rhythm:
+    return Rhythm.parse(
+        cron=schedule.cron if schedule is not None else None,
+        zone=schedule.zone if schedule is not None else None,
+        has_schedule=schedule is not None,
+        spacing=spacing,
+        anchor=anchor,
+        at=at,
+    )
+
+
 @domain_model
 @dataclass(frozen=True)
 class Cadence:
     """A stored cadence: a project's rhythm and the chores sharing it, in the order written. ``retired``
-    derives from the newest lifecycle fact."""
+    derives from the newest lifecycle fact.
+
+    Each verb returns the record to write with the :class:`ConfigChange` committed beside it, or ``None`` when the
+    verb changes nothing and so writes nothing."""
 
     cadence_id: str
     slug: str
@@ -337,11 +464,111 @@ class Cadence:
     revision: int = 1
     retired: bool = False
 
+    @classmethod
+    def new(
+        cls, shape: CadenceShape, *, project_id: str, ctx: ChangeContext, at: datetime
+    ) -> tuple[Cadence, ConfigChange]:
+        """A new cadence of ``project_id`` at revision 1 with its ``create`` change, refused naming the field when
+        its shape cannot mean anything. Its id and every chore's are minted here, from ``at``."""
+        if not shape.slug:
+            raise ConfigFieldError("slug", "a cadence states its slug")
+        slug = _slug(shape.slug, "slug")
+        rhythm = _parse_rhythm(shape.schedule, shape.spacing, shape.anchor, at=at)
+        merge = merge_chores((), parse_chores(shape.chores), at=at)
+        record = cls(
+            cadence_id=Id.mint_at(IdPrefix.CADENCE, at).value,
+            slug=slug,
+            name=shape.name or slug,
+            rhythm=rhythm,
+            chores=merge.chores,
+            created_at=at,
+            project_id=project_id,
+        )
+        changes = (*record._fields_diff(None), *_chore_changes((), merge))
+        return record, record._change(ctx, 1, ChangeOp.CREATE, changes, at)
+
     def admits(self) -> bool:
         """Whether the cadence, as it stands, would admit work to the ready queue: live, keeping a promoting
         chore."""
         return not self.retired and any(chore.spec.promote for chore in self.chores)
 
+    def require_admission(self, *, may_admit: bool) -> None:
+        """:class:`CadenceAdmissionRefused` when this cadence admits work and the writer may not."""
+        if self.admits() and not may_admit:
+            raise CadenceAdmissionRefused(self.slug)
+
     def attention(self, facts: AttentionFacts) -> tuple[Attention, ...]:
         """What stops this cadence's errands, read against ``facts``."""
         return attention(self.chores, retired=self.retired, facts=facts)
+
+    def require_revision(self, if_match: int | None) -> None:
+        """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
+        lifecycle.require_revision(if_match, self.revision, kind="cadence", key=self.slug)
+
+    def edit(
+        self, edit: CadenceEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Cadence, ConfigChange] | None:
+        """Apply a sparse edit, legal from either state. The revision check comes first, even for an edit that
+        changes nothing; the merged rhythm and chores are validated as a create's are."""
+        self.require_revision(if_match)
+        if edit.name is None:
+            raise ConfigFieldError("name", "must not be null")
+        name = self.name if edit.name is UNSET else edit.name
+        rhythm = self._merged_rhythm(edit, at=at) if edit.touches_rhythm() else self.rhythm
+        if edit.chores is UNSET:
+            merge = ChoreMerge(self.chores, (), (), ())
+        else:
+            merge = merge_chores(self.chores, parse_chores(edit.chores), at=at)
+        merged = replace(self, name=name, rhythm=rhythm, chores=merge.chores)
+        changes = (*merged._fields_diff(self), *_chore_changes(self.chores, merge))
+        if not changes:
+            return None
+        edited = replace(merged, revision=self.revision + 1)
+        return edited, self._change(ctx, edited.revision, ChangeOp.EDIT, changes, at)
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Cadence, ConfigChange] | None:
+        """Retire or enable; ``None`` when the cadence already stands there (a redundant verb writes nothing)."""
+        self.require_revision(if_match)
+        op = lifecycle.transition(self.retired, retired)
+        if op is None:
+            return None
+        moved = replace(self, revision=self.revision + 1, retired=retired)
+        flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
+        return moved, self._change(ctx, moved.revision, op, flip, at)
+
+    def _merged_rhythm(self, edit: CadenceEdit, *, at: datetime) -> Rhythm:
+        """The stored rhythm with each stated field of ``edit`` over it, validated whole."""
+        held = self.rhythm
+        held_schedule = None if held.schedule is None else ScheduleShape(held.schedule.cron, held.schedule.zone)
+        held_spacing = None if held.spacing is None else f"{held.spacing.minutes}m"
+        held_anchor = None if held.anchor is None else held.anchor.value
+        return _parse_rhythm(
+            held_schedule if edit.schedule is UNSET else edit.schedule,
+            held_spacing if edit.spacing is UNSET else edit.spacing,
+            held_anchor if edit.anchor is UNSET else edit.anchor,
+            at=at,
+        )
+
+    def _fields_diff(self, old: Cadence | None) -> tuple[FieldChange, ...]:
+        """The cadence's own fields that differ from ``old``, by wire name; with no ``old`` (a create), every
+        field against ``None``."""
+
+        def values(record: Cadence) -> tuple[object, ...]:
+            rhythm = record.rhythm
+            spacing = None if rhythm.spacing is None else rhythm.spacing.minutes
+            anchor = None if rhythm.anchor is None else rhythm.anchor.value
+            return record.name, _schedule_value(rhythm), spacing, anchor
+
+        names = ("name", "schedule", "spacing_minutes", "anchor")
+        old_values = (None,) * len(names) if old is None else values(old)
+        return lifecycle.field_changes(zip(names, old_values, values(self), strict=True))
+
+    def _change(
+        self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
+    ) -> ConfigChange:
+        """The change row a verb on this cadence writes, keyed by its slug, in the cadence's project."""
+        return ConfigChange.of(
+            ctx, RecordKind.CADENCE, self.slug, revision, op, changes, at, project_id=self.project_id
+        )

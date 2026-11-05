@@ -116,10 +116,10 @@ def test_a_chore_with_only_its_key_and_routine_takes_every_default() -> None:
     assert spec == ChoreSpec("arch", "architecture-sweep", ScopeSelection.DEFAULT, (), RunMode.FULL, None, True)
 
 
-def test_a_chore_states_all_scopes_or_a_list_in_the_order_written() -> None:
+def test_a_chore_states_all_scopes_or_a_list_held_sorted() -> None:
     every, listed = parse_chores([_shape(scopes="all", mode="delta"), _shape("tests", scopes=["b", "a"])])
     assert (every.selection, every.scopes, every.mode) == (ScopeSelection.ALL, (), RunMode.DELTA)
-    assert (listed.selection, listed.scopes) == (ScopeSelection.LISTED, ("b", "a"))
+    assert (listed.selection, listed.scopes) == (ScopeSelection.LISTED, ("a", "b"))
 
 
 def test_chores_keep_the_order_written() -> None:
