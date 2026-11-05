@@ -686,6 +686,13 @@ export type ArtifactView = {
 };
 
 /**
+ * AttentionReason
+ *
+ * Why a cadence cannot run an errand — the refusals a hand-started run would meet, shown beforehand.
+ */
+export type AttentionReason = 'routine_unknown' | 'routine_retired' | 'graph_unresolved' | 'scope_unknown' | 'scope_retired' | 'scope_unlinked' | 'no_scopes' | 'no_chores';
+
+/**
  * BacklogPageView
  *
  * ``GET /api/backlog``'s own bounded page: ``next_cursor``
@@ -918,6 +925,221 @@ export type BounceView = {
 };
 
 /**
+ * CadenceAttentionView
+ *
+ * One thing that stops a cadence's errands: the chore by key (``None`` for the whole cadence), the scope when
+ * it stops one errand, and why.
+ */
+export type CadenceAttentionView = {
+    /**
+     * Chore
+     */
+    chore: string | null;
+    reason: AttentionReason;
+    /**
+     * Scope
+     */
+    scope: string | null;
+};
+
+/**
+ * CadenceCreateRequest
+ *
+ * Create a cadence in the path's project; its slug is free there, retired cadences included.
+ */
+export type CadenceCreateRequest = {
+    /**
+     * Anchor
+     */
+    anchor?: string | null;
+    /**
+     * Chores
+     */
+    chores?: Array<ChoreDocument>;
+    /**
+     * Name
+     */
+    name?: string | null;
+    schedule?: CadenceScheduleDocument | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Spacing
+     */
+    spacing?: string | null;
+};
+
+/**
+ * CadenceEditRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set. An explicit ``null`` clears ``schedule``,
+ * ``spacing``, or ``anchor`` and is refused on ``name`` and ``chores``. ``chores`` is the whole list; a chore
+ * whose key stays keeps its id. The slug is immutable, so a body carrying it is refused.
+ */
+export type CadenceEditRequest = {
+    /**
+     * Anchor
+     */
+    anchor?: string | null;
+    /**
+     * Chores
+     */
+    chores?: Array<ChoreDocument> | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    schedule?: CadenceScheduleDocument | null;
+    /**
+     * Spacing
+     */
+    spacing?: string | null;
+};
+
+/**
+ * CadenceEntry
+ *
+ * A cadence entry of a document: the cadence, in ``project`` — an id or a slug; named as a scope entry's is.
+ * Its chores name routines and scopes of that project, by slug.
+ */
+export type CadenceEntry = {
+    /**
+     * Anchor
+     */
+    anchor?: string | null;
+    /**
+     * Chores
+     */
+    chores?: Array<ChoreDocument>;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Project
+     */
+    project?: string | null;
+    schedule?: CadenceScheduleDocument | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Spacing
+     */
+    spacing?: string | null;
+};
+
+/**
+ * CadenceLifecycleRequest
+ *
+ * Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.
+ */
+export type CadenceLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * CadenceScheduleDocument
+ *
+ * The moments a cadence may fire: a five-field cron expression read as wall-clock time in an IANA ``zone``.
+ * Both are required; a table missing one is refused naming it.
+ */
+export type CadenceScheduleDocument = {
+    /**
+     * Cron
+     */
+    cron?: string | null;
+    /**
+     * Zone
+     */
+    zone?: string | null;
+};
+
+/**
+ * CadenceScheduleView
+ *
+ * A cadence's schedule as stored.
+ */
+export type CadenceScheduleView = {
+    /**
+     * Cron
+     */
+    cron: string;
+    /**
+     * Zone
+     */
+    zone: string;
+};
+
+/**
+ * CadenceView
+ *
+ * A cadence as served by the create, list, read, edit, and lifecycle routes, with its attention as it stands at
+ * the read — empty when nothing stops its errands, or when it is retired.
+ */
+export type CadenceView = {
+    /**
+     * Anchor
+     */
+    anchor: string | null;
+    /**
+     * Attention
+     */
+    attention: Array<CadenceAttentionView>;
+    /**
+     * Cadence Id
+     */
+    cadence_id: string;
+    /**
+     * Chores
+     */
+    chores: Array<ChoreView>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string | null;
+    /**
+     * Project Name
+     */
+    project_name: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug: string | null;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    schedule: CadenceScheduleView | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Spacing Minutes
+     */
+    spacing_minutes: number | null;
+};
+
+/**
  * CapturedLandingTermsView
  *
  * Repository terms captured by the submission's first turn.
@@ -964,6 +1186,73 @@ export type CheckResult = {
  * cross-graph ``graph``.
  */
 export type ChoiceTargetKind = 'node' | 'done' | 'graph' | 'escalate';
+
+/**
+ * ChoreDocument
+ *
+ * One chore of a cadence, keyed within it by ``key``. ``scopes`` is ``"all"``, a list of scope slugs, or
+ * absent for one run over the routine's default scope; ``mode`` is ``full`` when absent and ``promote`` true.
+ */
+export type ChoreDocument = {
+    /**
+     * Key
+     */
+    key: string;
+    mode?: RunMode | null;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Promote
+     */
+    promote?: boolean | null;
+    /**
+     * Routine
+     */
+    routine: string;
+    /**
+     * Scopes
+     */
+    scopes?: 'all' | Array<string> | null;
+};
+
+/**
+ * ChoreView
+ *
+ * One chore of a cadence, in the order written.
+ */
+export type ChoreView = {
+    /**
+     * Chore Id
+     */
+    chore_id: string;
+    /**
+     * Key
+     */
+    key: string;
+    mode: RunMode;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Promote
+     */
+    promote: boolean;
+    /**
+     * Routine
+     */
+    routine: string;
+    /**
+     * Scopes
+     */
+    scopes: 'all' | Array<string> | null;
+    /**
+     * Scopes Set At
+     */
+    scopes_set_at: string;
+};
 
 export type ChunkChangeCause = 'minted' | 'promoted' | 'demoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'released' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited';
 
@@ -2380,11 +2669,16 @@ export type ConfigChangesPage = {
  *
  * A declarative configuration document. Each entry is the kind's own document model, so a field an
  * entry omits is left as stored; projects reconcile before scopes and routines, and scopes before
- * routines, so an entry may name a project or a scope the same document declares; ``secrets`` lists
+ * routines, so an entry may name a project or a scope the same document declares; cadences reconcile after
+ * routines, so a document may declare a routine and the cadence that keeps it; ``secrets`` lists
  * secret names that must already be active. ``GET /api/config/export`` writes every field of every
  * entry, ``projects`` first, and names every project by its slug.
  */
 export type ConfigDocument = {
+    /**
+     * Cadences
+     */
+    cadences?: Array<CadenceEntry>;
     /**
      * Projects
      */
@@ -2421,6 +2715,10 @@ export type ConfigDocument = {
  * A declarative document whose forge records and references are explicit.
  */
 export type ConfigDocumentV2 = {
+    /**
+     * Cadences
+     */
+    cadences?: Array<CadenceEntry>;
     /**
      * Forges
      */
@@ -5617,7 +5915,7 @@ export type HubEventView = {
  *
  * One tag per hub entity kind; a member formats as its own value.
  */
-export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn';
+export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn' | 'cad' | 'chr';
 
 /**
  * IntendedMigrationPatch
@@ -7025,7 +7323,7 @@ export type ReceiverStatus = {
  * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
  * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
  */
-export type RecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'scope' | 'routine' | 'project' | 'project_source_link' | 'project_repository_link';
+export type RecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'scope' | 'routine' | 'cadence' | 'project' | 'project_source_link' | 'project_repository_link';
 
 /**
  * RecordRefView
@@ -12651,6 +12949,192 @@ export type RepositionBacklogApiBacklogPositionPostResponses = {
 
 export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogApiBacklogPositionPostResponses[keyof RepositionBacklogApiBacklogPositionPostResponses];
 
+export type ListCadencesApiCadencesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
+    url: '/api/cadences';
+};
+
+export type ListCadencesApiCadencesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCadencesApiCadencesGetError = ListCadencesApiCadencesGetErrors[keyof ListCadencesApiCadencesGetErrors];
+
+export type ListCadencesApiCadencesGetResponses = {
+    /**
+     * Response List Cadences Api Cadences Get
+     *
+     * Successful Response
+     */
+    200: Array<CadenceView>;
+};
+
+export type ListCadencesApiCadencesGetResponse = ListCadencesApiCadencesGetResponses[keyof ListCadencesApiCadencesGetResponses];
+
+export type GetCadenceApiCadencesCadenceIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Cadence Id
+         */
+        cadence_id: string;
+    };
+    query?: never;
+    url: '/api/cadences/{cadence_id}';
+};
+
+export type GetCadenceApiCadencesCadenceIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCadenceApiCadencesCadenceIdGetError = GetCadenceApiCadencesCadenceIdGetErrors[keyof GetCadenceApiCadencesCadenceIdGetErrors];
+
+export type GetCadenceApiCadencesCadenceIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CadenceView;
+};
+
+export type GetCadenceApiCadencesCadenceIdGetResponse = GetCadenceApiCadencesCadenceIdGetResponses[keyof GetCadenceApiCadencesCadenceIdGetResponses];
+
+export type EditCadenceApiCadencesCadenceIdPatchData = {
+    body: CadenceEditRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Cadence Id
+         */
+        cadence_id: string;
+    };
+    query?: never;
+    url: '/api/cadences/{cadence_id}';
+};
+
+export type EditCadenceApiCadencesCadenceIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditCadenceApiCadencesCadenceIdPatchError = EditCadenceApiCadencesCadenceIdPatchErrors[keyof EditCadenceApiCadencesCadenceIdPatchErrors];
+
+export type EditCadenceApiCadencesCadenceIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CadenceView;
+};
+
+export type EditCadenceApiCadencesCadenceIdPatchResponse = EditCadenceApiCadencesCadenceIdPatchResponses[keyof EditCadenceApiCadencesCadenceIdPatchResponses];
+
+export type EnableCadenceApiCadencesCadenceIdEnablePostData = {
+    body: CadenceLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Cadence Id
+         */
+        cadence_id: string;
+    };
+    query?: never;
+    url: '/api/cadences/{cadence_id}/enable';
+};
+
+export type EnableCadenceApiCadencesCadenceIdEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableCadenceApiCadencesCadenceIdEnablePostError = EnableCadenceApiCadencesCadenceIdEnablePostErrors[keyof EnableCadenceApiCadencesCadenceIdEnablePostErrors];
+
+export type EnableCadenceApiCadencesCadenceIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: CadenceView;
+};
+
+export type EnableCadenceApiCadencesCadenceIdEnablePostResponse = EnableCadenceApiCadencesCadenceIdEnablePostResponses[keyof EnableCadenceApiCadencesCadenceIdEnablePostResponses];
+
+export type RetireCadenceApiCadencesCadenceIdRetirePostData = {
+    body: CadenceLifecycleRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Cadence Id
+         */
+        cadence_id: string;
+    };
+    query?: never;
+    url: '/api/cadences/{cadence_id}/retire';
+};
+
+export type RetireCadenceApiCadencesCadenceIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireCadenceApiCadencesCadenceIdRetirePostError = RetireCadenceApiCadencesCadenceIdRetirePostErrors[keyof RetireCadenceApiCadencesCadenceIdRetirePostErrors];
+
+export type RetireCadenceApiCadencesCadenceIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: CadenceView;
+};
+
+export type RetireCadenceApiCadencesCadenceIdRetirePostResponse = RetireCadenceApiCadencesCadenceIdRetirePostResponses[keyof RetireCadenceApiCadencesCadenceIdRetirePostResponses];
+
 export type ChunkCountsApiChunkCountsGetData = {
     body?: never;
     path?: never;
@@ -16819,6 +17303,79 @@ export type PatchProjectApiProjectsProjectPatchResponses = {
 };
 
 export type PatchProjectApiProjectsProjectPatchResponse = PatchProjectApiProjectsProjectPatchResponses[keyof PatchProjectApiProjectsProjectPatchResponses];
+
+export type ListProjectCadencesApiProjectsProjectCadencesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/projects/{project}/cadences';
+};
+
+export type ListProjectCadencesApiProjectsProjectCadencesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectCadencesApiProjectsProjectCadencesGetError = ListProjectCadencesApiProjectsProjectCadencesGetErrors[keyof ListProjectCadencesApiProjectsProjectCadencesGetErrors];
+
+export type ListProjectCadencesApiProjectsProjectCadencesGetResponses = {
+    /**
+     * Response List Project Cadences Api Projects  Project  Cadences Get
+     *
+     * Successful Response
+     */
+    200: Array<CadenceView>;
+};
+
+export type ListProjectCadencesApiProjectsProjectCadencesGetResponse = ListProjectCadencesApiProjectsProjectCadencesGetResponses[keyof ListProjectCadencesApiProjectsProjectCadencesGetResponses];
+
+export type CreateProjectCadenceApiProjectsProjectCadencesPostData = {
+    body: CadenceCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/cadences';
+};
+
+export type CreateProjectCadenceApiProjectsProjectCadencesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectCadenceApiProjectsProjectCadencesPostError = CreateProjectCadenceApiProjectsProjectCadencesPostErrors[keyof CreateProjectCadenceApiProjectsProjectCadencesPostErrors];
+
+export type CreateProjectCadenceApiProjectsProjectCadencesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CadenceView;
+};
+
+export type CreateProjectCadenceApiProjectsProjectCadencesPostResponse = CreateProjectCadenceApiProjectsProjectCadencesPostResponses[keyof CreateProjectCadenceApiProjectsProjectCadencesPostResponses];
 
 export type ListProjectFindingsApiProjectsProjectFindingsGetData = {
     body?: never;

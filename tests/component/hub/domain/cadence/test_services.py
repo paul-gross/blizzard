@@ -53,7 +53,9 @@ def _shape(slug: str, *chores: ChoreShape) -> CadenceShape:
 
 
 def _create(hub: HubHarness, shape: CadenceShape, *, may_admit: bool = True) -> Cadence:
-    return hub.services.cadence_authoring.create(shape, project_id=_project(hub), ctx=_CTX, may_admit=may_admit)
+    return hub.services.cadence_authoring.create(
+        shape, project=project_record(hub, _project(hub)), ctx=_CTX, may_admit=may_admit
+    )
 
 
 def test_a_create_keeping_a_promoting_chore_needs_may_admit(hub: HubHarness) -> None:

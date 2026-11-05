@@ -182,7 +182,7 @@ def _create(
     try:
         cadence = services.cadence_authoring.create(
             cadence_shape(request),
-            project_id=project.project_id,
+            project=project,
             ctx=change_context(identity, door),
             may_admit=may_admit(identity.permissions),
         )

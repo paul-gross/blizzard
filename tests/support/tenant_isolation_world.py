@@ -11,6 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.scaffolding import (
@@ -75,6 +76,13 @@ class _Tenant:
 def _ok(response: httpx2.Response, status: int) -> dict[str, Any]:
     assert response.status_code == status, f"{response.request.method} {response.request.url}: {response.text}"
     return response.json() if response.content else {}
+
+
+def _project(harness: TenantHarness, project_id: str) -> Project:
+    """The stored ``Project`` ``project_id`` names in ``harness``'s tenant."""
+    project = harness.services.projects.get(ProjectId(project_id))
+    assert project is not None, f"{project_id} is not stored"
+    return project
 
 
 def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
@@ -182,7 +190,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
             spacing="1d",
             chores=(ChoreShape(f"{label}-chore", f"{label}-routine", scopes=[f"{label}-scope"]),),
         ),
-        project_id=default_project(hub.engine, harness.tenant),
+        project=_project(harness, default_project(hub.engine, harness.tenant)),
         ctx=ChangeContext(actor=f"{label}-operator", door=Door.API),
         may_admit=True,
     )

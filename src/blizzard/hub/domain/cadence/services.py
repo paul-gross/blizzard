@@ -29,6 +29,7 @@ from blizzard.hub.domain.garden.brake import BrakeVerb
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.projects.model import Project
 
 
 @domain_model
@@ -126,8 +127,9 @@ class CadenceAuthoring:
         self._cadences = cadences
         self._clock = clock
 
-    def create(self, shape: CadenceShape, *, project_id: str, ctx: ChangeContext, may_admit: bool) -> Cadence:
-        """Create a cadence in ``project_id``; its slug is free there, retired cadences included."""
+    def create(self, shape: CadenceShape, *, project: Project, ctx: ChangeContext, may_admit: bool) -> Cadence:
+        """Create a cadence in ``project``; its slug is free there, retired cadences included."""
+        project_id = project.project_id
         cadence, change = Cadence.new(shape, project_id=project_id, ctx=ctx, at=self._clock.now())
         if self._cadences.get_by_slug(project_id, cadence.slug) is not None:
             raise CadenceSlugTakenError(cadence.slug)

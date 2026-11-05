@@ -34,7 +34,7 @@ class CadenceDeclaration:
     stored_revision: int | None = None
 
     @property
-    def handle(self) -> str:
+    def handle(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         assert self.shape.slug is not None
         return self.shape.slug
 

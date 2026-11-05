@@ -1494,13 +1494,13 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 ChoreShape("every", "nightly", scopes="all"),
             ),
         ),
-        project_id=garden_project,
+        project=garden_project_record,
         ctx=operator,
         may_admit=True,
     )
     retired_cadence = hub.services.cadence_authoring.create(
         CadenceShape(slug="census-retired", spacing="7d", chores=(ChoreShape("plain", "gardening"),)),
-        project_id=garden_project,
+        project=garden_project_record,
         ctx=operator,
         may_admit=True,
     )

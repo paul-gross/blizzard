@@ -31,7 +31,14 @@ from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, Re
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.cadence_store import CadenceStore
-from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    project_record,
+)
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 
@@ -56,7 +63,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 def _create(hub: HubHarness, shape: CadenceShape = _SHAPE) -> Cadence:
     return hub.services.cadence_authoring.create(
-        shape, project_id=default_project(hub.engine), ctx=_CTX, may_admit=True
+        shape, project=project_record(hub, default_project(hub.engine)), ctx=_CTX, may_admit=True
     )
 
 
