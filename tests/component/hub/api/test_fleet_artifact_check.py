@@ -13,7 +13,7 @@ from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import build_hub, hub_store_connections, seed_work_item
+from tests.support.scaffolding import build_hub, hub_store_connections, seed_work_item
 
 _NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)
 
