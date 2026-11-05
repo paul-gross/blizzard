@@ -961,6 +961,17 @@ def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain
     assert (recorded, log.kinds) == (2, ["forge-rate-limited", "forge-budget-low"])
 
 
+def _set_test_legacy_run(world: World, legacy_run: str | None) -> None:
+    with world.hub.engine.begin() as conn:
+        conn.execute(
+            hub_scoped(
+                update(s.graph_nodes)
+                .where(s.graph_nodes.c.executor == "hub", s.graph_nodes.c.action.like("test.%"))
+                .values(legacy_run=legacy_run)
+            )
+        )
+
+
 def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry_order(
     world: World, tmp_path: Path
 ) -> None:
@@ -973,11 +984,15 @@ def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry
     assert later < earlier
     assert world.submissions(earlier) == world.submissions(later) == []
 
+    # The walk down past the `graph_nodes.run` drop restores each hub row's step list from its `legacy_run`, and a
+    # test action has no packaged one, so the rows carry a stand-in for the walk and lose it once back at head.
+    _set_test_legacy_run(world, json.dumps([]))
     world.hub.engine.dispose()
     migrations = Migrations(HubConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'hub.db'}"), world.hub.clock).runner
     migrations.downgrade("20261025_0900_forges")
     assert s.flow_submissions.name not in inspect(world.hub.engine).get_table_names()
     migrations.upgrade("head")
+    _set_test_legacy_run(world, None)
 
     action = _HeldLanding()
     actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])
