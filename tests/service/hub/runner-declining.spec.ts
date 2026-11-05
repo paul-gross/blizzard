@@ -1,4 +1,4 @@
-import { expect, type RunnerDeclining, test } from '../../harness/fixtures';
+import { expect, type RunnerDeclining, test, RUNNER_VERSION } from '../../harness/fixtures';
 
 // A runner's declining report over a real hub: a registration naming none reads as declining nothing; one naming
 // reasons shows them, superseded whole by the next registration. The test mints a runner, so it owns its tenant.
@@ -11,7 +11,7 @@ const PACE: RunnerDeclining = { lever: 'pace', detail: '7d 86% spent, 71% elapse
 test('test_a_hub_shows_the_reasons_a_runner_reports_and_nothing_from_one_that_predates_the_field', async ({ api, fleet }) => {
   const runner = await fleet('older-runner');
   const register = async (declared: { declining?: RunnerDeclining[] } = {}) => {
-    const registered = await runner.post('/api/fleet/runners', { data: { workspace_id: 'w1', capabilities: CAPABILITIES, ...declared } });
+    const registered = await runner.post('/api/fleet/runners', { data: { version: RUNNER_VERSION, workspace_id: 'w1', capabilities: CAPABILITIES, ...declared } });
     expect(registered.status).toBe(201);
   };
   /** The reasons the operator registry shows the runner declining on. */
