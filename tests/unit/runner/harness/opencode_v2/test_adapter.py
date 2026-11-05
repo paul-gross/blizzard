@@ -27,6 +27,7 @@ from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest
 from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter, Step
 from blizzard.runner.harness.opencode_v2.service import ServiceUnavailableError
 from blizzard.runner.harness.opencode_v2.shapes import Tokens
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
@@ -85,7 +86,9 @@ class _Keeper:
         return ServiceIdentity("svc-1", 100, self.version)
 
 
-def _adapter(tmp_path: Path, *, keeper: _Keeper | None = None, **kwargs: Any) -> tuple[OpenCodeTwoAdapter, _Launcher]:
+def _adapter(
+    tmp_path: Path, *, keeper: _Keeper | None = None, hold: VersionHold | None = None, **kwargs: Any
+) -> tuple[OpenCodeTwoAdapter, _Launcher]:
     launcher = _Launcher()
     adapter = OpenCodeTwoAdapter(
         runner_id="run_1",
@@ -93,6 +96,7 @@ def _adapter(tmp_path: Path, *, keeper: _Keeper | None = None, **kwargs: Any) ->
         launcher=launcher,
         keeper=keeper or _Keeper(),
         versions=VersionProbe(CHILDREN, tool_env()),
+        hold=hold or VersionHold(),
         request_dir=tmp_path / "requests",
         clock=_Clock(),
         model="openai/gpt-6-luna",
@@ -189,17 +193,47 @@ def test_the_advertised_version_is_the_services_and_the_binarys_while_none_answe
     assert adapter.observe_version() == "2.1.4"
 
 
-def test_a_launch_on_a_service_whose_version_changed_is_refused_once_then_accepted(tmp_path: Path) -> None:
+def test_a_launch_on_a_service_whose_version_changed_since_it_was_advertised_is_refused_until_observed(
+    tmp_path: Path,
+) -> None:
     keeper = _Keeper()
     adapter, launcher = _adapter(tmp_path, keeper=keeper)
     assert adapter.observe_version() == "2.1.4"
     adapter.spawn(_envelope(), _preamble(tmp_path), None)
     keeper.version = "2.2.0"
-    with pytest.raises(HarnessVersionChangedError, match=r"2\.2\.0, not 2\.1\.4"):
-        adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    for _ in range(2):
+        with pytest.raises(HarnessVersionChangedError, match=r"2\.2\.0, not 2\.1\.4"):
+            adapter.spawn(_envelope(), _preamble(tmp_path), None)
     assert len(launcher.requests) == 1
+    assert adapter.observe_version() == "2.2.0"
     adapter.spawn(_envelope(), _preamble(tmp_path), None)
     assert len(launcher.requests) == 2
+
+
+def test_a_launch_matching_a_version_the_runner_advertised_afresh_is_never_refused(tmp_path: Path) -> None:
+    keeper = _Keeper()
+    adapter, launcher = _adapter(tmp_path, keeper=keeper)
+    assert adapter.observe_version() == "2.1.4"
+    keeper.version = "2.2.0"
+    assert adapter.observe_version() == "2.2.0"
+    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    assert len(launcher.requests) == 1
+
+
+def test_a_service_seen_on_another_major_version_refuses_every_launch_until_restart(tmp_path: Path) -> None:
+    keeper = _Keeper()
+    hold = VersionHold()
+    adapter, launcher = _adapter(tmp_path, keeper=keeper, hold=hold)
+    assert adapter.observe_version() == "2.1.4"
+    keeper.version = "3.0.0"
+    with pytest.raises(HarnessVersionChangedError, match="restart the runner"):
+        adapter.resume_with_message(str(tmp_path), "ses_1", "go")
+    assert adapter.observe_version() == "3.0.0"
+    keeper.version = "2.1.4"
+    assert adapter.observe_version() == "2.1.4"
+    with pytest.raises(HarnessVersionChangedError, match=r"3\.0\.0, outside"):
+        adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    assert launcher.requests == [] and hold.foreign == "3.0.0"
 
 
 def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:

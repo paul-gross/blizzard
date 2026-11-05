@@ -39,6 +39,7 @@ from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
 from blizzard.runner.harness.opencode_v2.shapes import parse_message, parse_session
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -288,6 +289,7 @@ def _adapter(engine: Engine, executor: ThreadPoolExecutor) -> OpenCodeTwoAdapter
         launcher=ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN),
         keeper=ServiceKeeper(str(engine.binary), worker_env, CHILDREN, UrllibServiceTransport()),
         versions=version_probe(),
+        hold=VersionHold(),
         request_dir=engine.requests,
         clock=SystemClock(),
         binary=str(engine.binary),

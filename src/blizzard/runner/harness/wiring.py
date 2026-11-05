@@ -18,13 +18,14 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.binding_selection import HarnessFamilies, BindingSelection, select_bindings
+from blizzard.runner.harness.binding_selection import BindingSelection, HarnessFamilies, select_bindings
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, WORKER_SETTINGS_FILENAME
 from blizzard.runner.harness.declaration import (
     HarnessSection,
     IHarnessDeclaration,
     IHarnessSectionKind,
+    IVersionSelectedDeclaration,
     SharedHarnessInputs,
 )
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
@@ -129,6 +130,11 @@ def harness_families() -> HarnessFamilies:
         families[declaration.harness_id] = (*families.get(declaration.harness_id, ()), declaration)
     if set(families) != {kind.harness_id for kind in HARNESS_SECTION_KINDS}:
         raise RuntimeError("every harness section kind needs a declaration, and every declaration a section")
+    if any(
+        len(family) > 1 and not all(isinstance(member, IVersionSelectedDeclaration) for member in family)
+        for family in families.values()
+    ):
+        raise RuntimeError("every declaration sharing a harness id must be chosen by its binary's version")
     return {kind.harness_id: families[kind.harness_id] for kind in HARNESS_SECTION_KINDS}
 
 

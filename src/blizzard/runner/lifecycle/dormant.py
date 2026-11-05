@@ -718,21 +718,22 @@ class DormantSession:
             points.boundary_recorded()
         # Observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
-        version = harness.observe_version()
+        version = spawner.advertised_version(session.harness_id, harness.observe_version)
         spawn_cwd = SpawnCwd.of_session(self.ctx.workspaces.spawn_root(bindings[0].workspace_id), bindings[0].workdir)
-        resumed = harness.resume_with_message(
-            spawn_cwd,
-            session.session_id,
-            message,
-            stdout_path=spawner.stdout_path(lease.lease_id),
-            preamble=spawner.preamble(lease, bindings),
-            chunk_id=lease.chunk_id,
-            model=lease.resolved_model,
-            # Reasserted, not sticky — see the judge call site's note.
-            effort=lease.resolved_effort,
-            # Reasserted, not sticky either — mirrors effort's treatment.
-            compaction_window=lease.resolved_compaction_window,
-        )
+        with spawner.reobserving_a_changed_version(session.harness_id):
+            resumed = harness.resume_with_message(
+                spawn_cwd,
+                session.session_id,
+                message,
+                stdout_path=spawner.stdout_path(lease.lease_id),
+                preamble=spawner.preamble(lease, bindings),
+                chunk_id=lease.chunk_id,
+                model=lease.resolved_model,
+                # Reasserted, not sticky — see the judge call site's note.
+                effort=lease.resolved_effort,
+                # Reasserted, not sticky either — mirrors effort's treatment.
+                compaction_window=lease.resolved_compaction_window,
+            )
         points.launched()  # the process exists; nothing about it is durable yet
         stamped = at if at is not None else self.ctx.clock.now()
         assert lease.session is not None

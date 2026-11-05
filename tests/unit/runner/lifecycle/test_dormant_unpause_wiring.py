@@ -20,7 +20,8 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import HarnessVersionChangedError, WorkerHandle
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.model import Lease, NewLease
@@ -677,3 +678,23 @@ def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the
 
     assert relaunch == []
     assert len(rig.wake) == 1
+
+
+class _VersionChangedResume(FakeHarness):
+    def resume_with_message(self, *args: object, **kwargs: object) -> Any:
+        raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+
+
+def test_a_resume_refused_for_a_changed_version_records_the_advertised_one_and_drops_it(tmp_path: Path):
+    """A resume records the version the runner advertised, and one refused because that version changed leaves it to
+    be observed afresh, as a fresh spawn's refusal does."""
+    rig = _rig(tmp_path)
+    versions = HarnessVersionCache(clock=rig.clock)
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.1.4") == "2.1.4"
+    ctx = replace(rig.ctx, harness_versions=versions)
+    harness = _VersionChangedResume(handle=_HANDLE, verdict="pass")
+
+    with pytest.raises(HarnessVersionChangedError):
+        DormantSession(ctx, rig.lease)._wake("go", rig.bindings, harness=harness)  # pyright: ignore[reportPrivateUsage]
+
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.2.0") == "2.2.0"

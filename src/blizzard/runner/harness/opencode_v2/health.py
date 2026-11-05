@@ -22,6 +22,7 @@ from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE_TEXT,
     normalize_opencode_v2_version,
 )
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 
 _log = get_logger("blizzard.runner.harness.opencode")
 
@@ -31,10 +32,17 @@ class OpenCodeTwoHealthProbe:
     decides availability."""
 
     def __init__(
-        self, binary: str, *, keeper: IServiceKeeper, corpus: ICompatibilityCorpus, versions: VersionProbe
+        self,
+        binary: str,
+        *,
+        keeper: IServiceKeeper,
+        hold: VersionHold,
+        corpus: ICompatibilityCorpus,
+        versions: VersionProbe,
     ) -> None:
         self._binary = binary
         self._keeper = keeper
+        self._hold = hold
         self._corpus = corpus
         self._versions = versions
         try:
@@ -51,15 +59,22 @@ class OpenCodeTwoHealthProbe:
         return self._versions.observe_version(self._binary) is not None
 
     def config_conflicts(self) -> tuple[str, ...]:
-        """A binary and an answering service of different major versions, which the runner cannot drive."""
+        """A service seen outside OpenCode 2's range since the runner started, and a binary and an answering service
+        of different major versions: the runner can drive neither."""
         identity = self._keeper.answering()
+        service = None if identity is None else normalize_opencode_v2_version(identity.version) or identity.version
+        self._hold.observe(service)
+        held = self._held()
         binary = normalize_opencode_v2_version(self._versions.observe_version(self._binary))
-        if identity is None or binary is None:
+        if service is None or binary is None or _major(binary) == _major(service):
+            return held
+        return (*held, f"{self._binary} is version {binary}, but the OpenCode service it manages is version {service}")
+
+    def _held(self) -> tuple[str, ...]:
+        foreign = self._hold.foreign
+        if foreign is None:
             return ()
-        service = normalize_opencode_v2_version(identity.version) or identity.version
-        if _major(binary) == _major(service):
-            return ()
-        return (f"{self._binary} is version {binary}, but the OpenCode service it manages is version {service}",)
+        return (f"the OpenCode service reported version {foreign} since the runner started; restart the runner",)
 
     def supported_version(self) -> SpecifierSet:
         return ADMITTED_OPENCODE_V2_RANGE

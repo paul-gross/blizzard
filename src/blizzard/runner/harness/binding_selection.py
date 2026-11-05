@@ -54,4 +54,4 @@ def select_bindings(
     )
 
 
-__all__ = ["HarnessFamilies", "BindingSelection", "select_bindings", "select_declaration"]
+__all__ = ["BindingSelection", "HarnessFamilies", "select_bindings", "select_declaration"]

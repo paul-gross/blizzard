@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, runtime_checkable
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigKey, ConfigView
@@ -185,6 +185,7 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         ...
 
 
+@runtime_checkable
 class IVersionSelectedDeclaration(IHarnessDeclaration[SectionT_contra], Protocol[SectionT_contra]):
     """A declaration one of several sharing a harness id, chosen by the version its configured binary reports."""
 

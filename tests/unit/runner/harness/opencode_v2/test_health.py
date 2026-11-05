@@ -15,6 +15,7 @@ from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
 from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from tests.support.child_launch import CHILDREN, tool_env
 
 
@@ -35,12 +36,17 @@ class _Tiers:
 
 
 def _probe(tmp_path: Path, binary_version: str, service_version: str | None) -> OpenCodeTwoHealthProbe:
+    return _probe_of(tmp_path, binary_version, _Service(service_version))
+
+
+def _probe_of(tmp_path: Path, binary_version: str, service: _Service) -> OpenCodeTwoHealthProbe:
     binary = tmp_path / "opencode"
     binary.write_text(f"#!/bin/sh\necho '{binary_version}'\n")
     binary.chmod(0o755)
     return OpenCodeTwoHealthProbe(
         str(binary),
-        keeper=_Service(service_version),
+        keeper=service,
+        hold=VersionHold(),
         corpus=CommittedCorpus(),
         versions=VersionProbe(CHILDREN, tool_env()),
     )
@@ -78,3 +84,14 @@ def test_the_service_version_is_admitted_by_the_opencode_2_range_alone(
     )
     result = cache.refresh("opencode", adapter=_Tiers(), observed_version=observed)
     assert result is not None and result.available is available and result.cause is cause
+
+
+def test_a_service_seen_on_another_major_version_stays_a_conflict_after_it_returns(tmp_path: Path) -> None:
+    service = _Service("2.1.4")
+    probe = _probe_of(tmp_path, "2.1.4", service)
+    assert probe.config_conflicts() == ()
+    service.version = "3.0.0"
+    assert probe.config_conflicts()
+    service.version = "2.1.4"
+    (conflict,) = probe.config_conflicts()
+    assert "3.0.0" in conflict and "restart the runner" in conflict

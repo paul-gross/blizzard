@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
-from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
@@ -25,7 +25,7 @@ from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
-from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE, normalize_opencode_v2_version
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold, admits_opencode_v2_version
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -56,6 +56,12 @@ def driver_command() -> tuple[str, ...]:
     none."""
     script = Path(sys.executable).with_name("blizzard")
     return (str(script),) if script.is_file() else ("blizzard",)
+
+
+@cache
+def version_hold(binary: str) -> VersionHold:
+    """The one hold ``binary``'s adapter and health probe share for this process."""
+    return VersionHold()
 
 
 def _keeper(section: OpenCodeConfiguration, worker_env: AllowlistedEnv, children: IChildProcesses) -> ServiceKeeper:
@@ -90,8 +96,7 @@ class OpenCodeTwoDeclaration:
         return section.binary
 
     def admits_version(self, raw: str | None) -> bool:
-        version = normalize_opencode_v2_version(raw)
-        return version is not None and version_admitted(version, ADMITTED_OPENCODE_V2_RANGE)
+        return admits_opencode_v2_version(raw)
 
     def binding(
         self,
@@ -109,6 +114,7 @@ class OpenCodeTwoDeclaration:
             launcher=launcher,
             keeper=_keeper(section, shared.worker_env, children),
             versions=VersionProbe(children, shared.worker_env.tool()),
+            hold=version_hold(section.binary),
             request_dir=shared.root / REQUEST_DIRNAME,
             clock=clock,
             binary=section.binary,
@@ -132,6 +138,7 @@ class OpenCodeTwoDeclaration:
         return OpenCodeTwoHealthProbe(
             section.binary,
             keeper=_keeper(section, shared.worker_env, children),
+            hold=version_hold(section.binary),
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
         )
