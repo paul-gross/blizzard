@@ -26,7 +26,7 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 | `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                                 |
 | `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                                      |
 | `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed.          |
-| `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                         |
+| `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients and the stub operation tables.                            |
 | `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                            |
 | `npm run storybook:build` | `ng run fleet:build-storybook`    | Build the static workshop into `dist/storybook`.                                         |
 | `npm run story-render`    | `tsc --noEmit … && … && node …`   | Type-check the stories, build the workshop, and render every story in headless Chromium. |

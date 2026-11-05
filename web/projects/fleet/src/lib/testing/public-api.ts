@@ -9,7 +9,12 @@ export { settle } from './settle';
 export { hiddenAtContainerWidth, resolveContainerStyle } from './container-query';
 export {
   stubRequestClient,
+  stubHubClient,
+  stubRunnerClient,
   stubError,
+  type StubRoutes,
+  type StubRouteHandler,
+  type StubDetailBody,
   type RequestClientStub,
   type CapturedRequest,
   type StubHttpError,
