@@ -25,15 +25,10 @@ re-fetches on an unknown `kid`, but the key itself never comes back.
 ciphertext is useless without it, and a lost key means every secret must be set again. It is absent when
 `BZ_HUB_SECRET_KEY` supplies the key, which then belongs in your own secret management.
 
-**Hub workdirs.** `data/hub_workdirs/` (`config.data_dir / "hub_workdirs"`) is deprecated: it held the scratch git
-clones a hub `run:` step used, and nothing writes it any more. An existing directory carries no state the store lacks,
-so it is reclaimable: skip it, and delete it once the hub has moved.
-
 [`contracts/config/hub.json`](../contracts/config/README.md) lists these paths beside the config keys the hub reads; the
 merge gate fails when one moves without the document.
 
-Signing keys, secret keys, and hub workdirs live on the `blizzard_hub-data` volume regardless of which store backend
-runs.
+Signing keys and secret keys live on the `blizzard_hub-data` volume regardless of which store backend runs.
 
 **Caddy state.** The `caddy-data` and `caddy-config` volumes hold the minted TLS certificate and Caddy's own state;
 backing them up is optional — losing them costs one re-issuance from Let's Encrypt on next boot, not data.

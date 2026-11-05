@@ -671,12 +671,6 @@
       "mode": null,
       "path": "data/hub.db",
       "written_by": []
-    },
-    {
-      "holds": "deprecated: scratch clones a hub `run:` step used; no hub step writes it any more, so it is reclaimable",
-      "mode": null,
-      "path": "data/hub_workdirs",
-      "written_by": []
     }
   ]
 }

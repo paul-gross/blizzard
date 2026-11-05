@@ -41,3 +41,10 @@ surface = "cli"
 where = "hub record-marker"
 reason = "command removed"
 because = "0.4's record-marker refuses on every invocation, recording nothing (v0.4.0-rc.1:src/blizzard/hub/cli/marker.py:8-17), and nothing in 0.4 runs it: a hub node runs no commands, so its only caller, a hub node's run: script, no longer exists; a person running it is told it is removed in either release."
+
+[[allowance]]
+line = "0.4"
+surface = "config"
+where = "data/hub_workdirs"
+reason = "durable path removed"
+because = "0.4 lists data/hub_workdirs as a deprecated, reclaimable durable path (v0.4.0-rc.1:src/blizzard/hub/config_keys.py:127-130) that no 0.4 code writes or reads: its only writer was a hub node's run: step, and a hub node runs no commands; the hub now deletes the directory on boot, so an operator has nothing to carry or back up."

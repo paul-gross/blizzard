@@ -126,6 +126,8 @@ loses nothing it still uses. Each removed surface and what replaced it:
   could not translate is kept in `graph_nodes.legacy_run`.
 - `blizzard hub record-marker` is gone: a hub node's action records its own markers.
 - A `bounce-envelope` artifact's `step` is gone: a bounce names the `action` whose pass answered it.
+- The hub's `data/hub_workdirs` directory is gone: the hub removes it on boot, and nothing replaces it, since a hub node
+  runs no command that needs a scratch clone.
 - The `blizzard.hub.run_step.name` and `blizzard.hub.run_step.exit_code` span attributes leave the trace contract, which
   rises to schema 4: read `blizzard.hub.action.name` and `blizzard.hub.action.choice` on the `hub action pass` span
   ([Upgrading from trace schema 3](./deployment/tracing.md#upgrading-from-trace-schema-3)). Each of these answered only
