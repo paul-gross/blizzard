@@ -44,7 +44,8 @@ function row(id: string, agents: number, agentsInUse: number): RunnerRow {
     subscription_unrostered: false,
     subscriptionPaces: [],
     subscriptionName: null,
-    bindingLines: [{ project: 'p', workspaceId: 'ws_a', unreported: false, agents, agentsInUse }],
+    agents,
+    bindingLines: [{ project: 'p', workspaceId: 'ws_a', unreported: false, agentsInUse }],
   } as unknown as RunnerRow;
 }
 

@@ -78,7 +78,7 @@ def _ctx(store: SqlAlchemyRunnerStore, *, config: LoopConfig | None = None):
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=config or LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1),
+        config=config or LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1),
     )
 
 
@@ -213,7 +213,7 @@ def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp
     config = LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
-        bindings=serving(1),
+        bindings=serving(),
         agents=1,
         worker_stdout_dir=str(stdout_dir),
     )

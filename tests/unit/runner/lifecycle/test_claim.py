@@ -119,7 +119,7 @@ def _setup(
     hub = _ScriptedClaimHub(outcomes)
     views = _RecordingChunkViews(hub=hub)
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, queue_strict=strict
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, queue_strict=strict
     )
     ctx = make_context(
         store,

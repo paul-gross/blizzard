@@ -241,7 +241,7 @@ _THIRD = """
 [[runner]]
 id = "rn_three"
 name = "r-three"
-projects = [{ project = "p", workspace = "ws", agents = 1 }]
+projects = [{ project = "p", workspace = "ws" }]
 
 [runner.harness]
 autonomy = "full"
@@ -356,7 +356,7 @@ def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tabl
             ("worker_settings_path",): '"/new/w.json"',
             ("harness", "config_dir"): '"/new/bundle"',
             ("opencode", "worker_config_path"): '"/new/o.json"',
-            ("projects",): '[{ project = "p", workspace = "w", agents = 1 }]',
+            ("projects",): '[{ project = "p", workspace = "w" }]',
         },
         strict=STRICT,
     )
@@ -364,7 +364,7 @@ def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tabl
     assert runner["worker_settings_path"] == "/new/w.json"
     assert runner["harness"] == {"config_dir": "/new/bundle"}
     assert runner["opencode"] == {"worker_config_path": "/new/o.json"}
-    assert runner["projects"] == [{"project": "p", "workspace": "w", "agents": 1}]
+    assert runner["projects"] == [{"project": "p", "workspace": "w"}]
     with pytest.raises(ConfigError, match="sets none of"):
         with_runner_values(table, {("opencode", "auth_path"): '"/x"'}, strict=STRICT)
 

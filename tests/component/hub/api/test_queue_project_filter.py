@@ -132,17 +132,18 @@ def test_projects_narrows_to_the_union_it_names_in_queue_order(tmp_path: Path) -
     assert _peek(hub, token, projects=[]) == []
 
 
-def test_sending_project_and_projects_together_is_refused(tmp_path: Path) -> None:
+def test_a_legacy_project_beside_projects_is_ignored(tmp_path: Path) -> None:
     hub, _ = _two_project_hub(tmp_path)
     token = seed_runner(hub, "r-both", projects=("default", "beta"))
 
     resp = hub.client.post(
         "/api/fleet/queue/peek",
-        json={"capabilities": _CAPABILITY, "project": "beta", "projects": ["beta"]},
+        json={"capabilities": _CAPABILITY, "project": "beta", "projects": []},
         headers=_bearer(token),
     )
 
-    assert resp.status_code == 422, resp.text
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["entries"] == []
 
 
 def test_a_per_project_hold_offers_the_next_project_past_an_unusable_head(tmp_path: Path) -> None:

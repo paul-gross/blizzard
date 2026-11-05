@@ -82,7 +82,7 @@ def _ctx(
     store = make_store("sqlite://")
     fake_hub = hub if hub is not None else FakeHub()
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, subscription=subscription
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, subscription=subscription
     )
     subscriptions = (
         (ResolvedSubscription(slug=_SLUG, name="Team", provider=provider, sample_interval_seconds=300),)

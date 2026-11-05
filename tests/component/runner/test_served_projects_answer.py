@@ -95,7 +95,7 @@ def _ctx(tmp_path: Path, hub: FakeHub, projects: tuple[str, ...] | None) -> Loop
         ),
         probe=FakeProbe(alive=set()),
         config=LoopConfig(
-            runner_name="r", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, projects=projects
+            runner_name="r", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, projects=projects
         ),
     )
     return dataclasses.replace(ctx, identity=RunnerIdentityHolder(store.runner_identity()))

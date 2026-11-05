@@ -235,7 +235,7 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path: Path):
         harness=harness,
         probe=probe,
         config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, chunk_cap_usd=5.0
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, chunk_cap_usd=5.0
         ),
     )
 

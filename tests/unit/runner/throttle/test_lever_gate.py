@@ -62,7 +62,7 @@ def _ctx(throttle: ThrottleSettings | None) -> LoopContext:
         config=LoopConfig(
             runner_name="r1",
             runner_id=FIXTURE_RUNNER_ID,
-            bindings=serving(1),
+            bindings=serving(),
             agents=1,
             subscription=_SLUG,
             throttle=throttle,

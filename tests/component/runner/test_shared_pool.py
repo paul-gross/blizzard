@@ -77,7 +77,7 @@ def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceR
         harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name=runner_id, runner_id=runner_id, bindings=serving(1), agents=1),
+        config=LoopConfig(runner_name=runner_id, runner_id=runner_id, bindings=serving(), agents=1),
         workspaces=workspaces,
     )
 

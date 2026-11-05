@@ -71,7 +71,7 @@ def list_runners(request: Request) -> HostRunnerListResponse:
         runner = wiring.for_runner(served)
         config = runner.config()
         bindings = [
-            HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=config.binding_agents(b))
+            HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=config.agents)
             for b in config.bindings or ()
         ]
         current = runner.maybe_identity_verdict()

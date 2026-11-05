@@ -58,8 +58,8 @@ def test_a_bindings_registration_and_a_project_narrowed_peek_run_against_the_moc
             workspace_id="ws-a",
             capabilities=_CAPABILITIES,
             bindings=[
-                RunnerBinding(project="default", workspace_id="ws-a", agents=1),
-                RunnerBinding(project="web", workspace_id="ws-x", agents=1),
+                RunnerBinding(project="default", workspace_id="ws-a"),
+                RunnerBinding(project="web", workspace_id="ws-x"),
             ],
             subscription="max",
         )
@@ -68,7 +68,7 @@ def test_a_bindings_registration_and_a_project_narrowed_peek_run_against_the_moc
         assert registered.status_code == 201, registered.text
         answer = RunnerRegistrationResponse.model_validate(registered.json())
         everything = _peek(hub, runner["token"], QueuePeekRequest(capabilities=_CAPABILITIES))
-        web_only = _peek(hub, runner["token"], QueuePeekRequest(capabilities=_CAPABILITIES, project="web"))
+        web_only = _peek(hub, runner["token"], QueuePeekRequest(capabilities=_CAPABILITIES, projects=["web"]))
 
     assert [p.entry for p in answer.projects or []] == ["default", "web"]
     assert [(b.project, b.workspace_unreported) for b in answer.bindings or []] == [("default", False), ("web", True)]

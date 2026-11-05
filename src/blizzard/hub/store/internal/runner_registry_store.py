@@ -815,7 +815,7 @@ class RunnerRegistryStore:
             gates=tuple(gates),
             host_id=row.host_id,
             bindings=(
-                tuple(RunnerBinding(b["project"], b["workspace_id"], b["agents"]) for b in binding_entries)
+                tuple(RunnerBinding(b["project"], b["workspace_id"]) for b in binding_entries)
                 if binding_entries is not None
                 else None
             ),
@@ -849,11 +849,11 @@ def _served_json(served: tuple[ServedEntry, ...]) -> str:
 
 
 def _bindings_json(bindings: tuple[RunnerBinding, ...] | None) -> str | None:
-    """The declared bindings as stored: a JSON list of ``{project, workspace_id, agents}``; ``NULL`` for none sent,
+    """The declared bindings as stored: a JSON list of ``{project, workspace_id}``; ``NULL`` for none sent,
     kept distinct from ``[]``."""
     if bindings is None:
         return None
-    return json.dumps([{"project": b.project, "workspace_id": b.workspace_id, "agents": b.agents} for b in bindings])
+    return json.dumps([{"project": b.project, "workspace_id": b.workspace_id} for b in bindings])
 
 
 def _declining_json(declining: tuple[RunnerDeclining, ...] | None) -> str | None:

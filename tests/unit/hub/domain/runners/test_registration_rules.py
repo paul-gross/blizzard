@@ -311,7 +311,7 @@ def test_a_registration_repeating_what_is_held_changes_nothing() -> None:
         replace(_SAME, capabilities=(RunnerCapability(harness_id="claude"),)),
         replace(_SAME, subscriptions=(DeclaredSubscription(slug="s", name="S", provider="p"),)),
         replace(_SAME, gates=()),
-        replace(_SAME, bindings=(RunnerBinding(project="p", workspace_id="ws-a", agents=1),)),
+        replace(_SAME, bindings=(RunnerBinding(project="p", workspace_id="ws-a"),)),
         replace(_SAME, subscription=None),
         replace(_SAME, agents=2),
     ],

@@ -299,7 +299,7 @@ def _with_a_second_runner(root: Path, name: str = "r-two") -> None:
     """Append a ``[[runner]]`` with no id to ``root``'s host file, as an operator adding one by hand would."""
     append_runner(
         HostLayout(root),
-        runner_toml(scaffold_runner(root, name, bindings=(ProjectBinding("default", DEFAULT_WORKSPACE_ID, 1),))),
+        runner_toml(scaffold_runner(root, name, bindings=(ProjectBinding("default", DEFAULT_WORKSPACE_ID),))),
         strict=STRICT,
     )
 

@@ -35,7 +35,7 @@ def test_the_local_reason_is_kept_only_while_the_local_brake_is_on() -> None:
 # --- Capacities.of ----------------------------------------------------------------------
 
 
-_BINDINGS = (BindingDeclaration("a", "ws1", 4), BindingDeclaration("b", "ws2", 2))
+_BINDINGS = (BindingDeclaration("a", "ws1"), BindingDeclaration("b", "ws2"))
 _ROUTING = routing_map(
     _BINDINGS,
     ServedProjectsAnswer(
@@ -52,7 +52,7 @@ def test_every_binding_reports_the_runners_free_agents() -> None:
         free=3,
         bindings=(
             BindingCapacity(project="a", project_id="pr_a", workspace_id="ws1", agents=4, used=1, free=3),
-            BindingCapacity(project="b", project_id="pr_b", workspace_id="ws2", agents=2, used=0, free=3),
+            BindingCapacity(project="b", project_id="pr_b", workspace_id="ws2", agents=4, used=0, free=3),
         ),
     )
 

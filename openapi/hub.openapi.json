@@ -12233,17 +12233,6 @@
             "title": "Policy",
             "type": "string"
           },
-          "project": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project"
-          },
           "projects": {
             "anyOf": [
               {
@@ -14392,12 +14381,8 @@
         "type": "object"
       },
       "RunnerBinding": {
-        "description": "One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host\n``workspace_id`` it works in, and the ``agents`` it runs there at once.",
+        "description": "One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host\n``workspace_id`` it works in. The runner's agents are shared, so no binding carries a count.",
         "properties": {
-          "agents": {
-            "title": "Agents",
-            "type": "integer"
-          },
           "project": {
             "title": "Project",
             "type": "string"
@@ -14409,16 +14394,16 @@
         },
         "required": [
           "project",
-          "workspace_id",
-          "agents"
+          "workspace_id"
         ],
         "title": "RunnerBinding",
         "type": "object"
       },
       "RunnerBindingView": {
-        "description": "A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not\nreported the workspace, so the hub offers the runner no work through the binding.",
+        "description": "A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not\nreported the workspace, so the hub offers the runner no work through the binding. ``agents`` is deprecated, removed\nin 0.6: it repeats the runner's shared count, ``0`` where the runner sent none, and no client reads it.",
         "properties": {
           "agents": {
+            "deprecated": true,
             "title": "Agents",
             "type": "integer"
           },

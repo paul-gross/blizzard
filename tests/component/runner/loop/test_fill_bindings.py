@@ -69,7 +69,7 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 def _bindings() -> tuple[BindingDeclaration, ...]:
     # Each binding's own `agents` is the runner's count here; the fill reads the runner's one count, never these.
-    return (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("pr_b", "ws_b", 2))
+    return (BindingDeclaration("pr_a", "ws_a"), BindingDeclaration("pr_b", "ws_b"))
 
 
 def _ctx(
@@ -240,7 +240,7 @@ def test_an_entry_outside_the_named_projects_from_an_unfiltered_hub_ends_the_fil
 
 def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_both(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    bindings = (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("alpha", "ws_b", 2))
+    bindings = (BindingDeclaration("pr_a", "ws_a"), BindingDeclaration("alpha", "ws_b"))
     hub = _Hub()
     hub.queue = [_entry("ch_a", "pr_a")]
 

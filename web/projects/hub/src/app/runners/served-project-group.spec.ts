@@ -66,8 +66,8 @@ describe('ServedProjectGroup', () => {
     fixture.componentRef.setInput('unassigned', false);
     fixture.componentRef.setInput('unresolved', []);
     fixture.componentRef.setInput('bindings', [
-      { project: 'Default', workspaceId: 'ws-1', agents: 3, agentsInUse: 1, unreported: false },
-      { project: 'Glacier', workspaceId: 'ws-9', agents: 1, agentsInUse: 0, unreported: true },
+      { project: 'Default', workspaceId: 'ws-1', agentsInUse: 1, unreported: false },
+      { project: 'Glacier', workspaceId: 'ws-9', agentsInUse: 0, unreported: true },
     ]);
     fixture.componentRef.setInput('subscription', 'Anthropic Max');
     await fixture.whenStable();

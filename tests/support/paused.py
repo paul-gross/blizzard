@@ -100,7 +100,7 @@ def _ceiling_config(cap: float | None, *, window_hours: float = 24.0, agents: in
     return LoopConfig(
         runner_name="r1",
         runner_id="rn_1",
-        bindings=serving(agents),
+        bindings=serving(),
         agents=agents,
         runner_ceiling_usd=cap,
         runner_ceiling_window_hours=window_hours,

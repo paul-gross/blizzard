@@ -135,7 +135,7 @@ def test_a_runner_is_addressed_by_the_first_workspace_its_bindings_name(tmp_path
     workspaces = (HostWorkspace("ws_a", root=str(tmp_path / "a")), HostWorkspace("ws_b", root=str(tmp_path / "b")))
     unbound = RunnerConfig(root=tmp_path, db_url="sqlite://", workspaces=workspaces)
     bound_to_b = RunnerConfig(
-        root=tmp_path, db_url="sqlite://", workspaces=workspaces, bindings=(ProjectBinding("pr_1", "ws_b", 1),)
+        root=tmp_path, db_url="sqlite://", workspaces=workspaces, bindings=(ProjectBinding("pr_1", "ws_b"),)
     )
 
     assert unbound.home_workspace.id == "ws_a"
@@ -152,7 +152,7 @@ def test_a_runners_home_skips_a_bound_workspace_the_host_does_not_declare(tmp_pa
         root=tmp_path,
         db_url="sqlite://",
         workspaces=workspaces,
-        bindings=(ProjectBinding("pr_1", "ws_gone", 1), ProjectBinding("pr_2", "ws_b", 1)),
+        bindings=(ProjectBinding("pr_1", "ws_gone"), ProjectBinding("pr_2", "ws_b")),
     )
 
     assert config.bound_workspace_ids == ("ws_gone", "ws_b")

@@ -89,7 +89,7 @@ def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub | None = None, harness: Fake
         config=LoopConfig(
             runner_name="r1",
             runner_id=FIXTURE_RUNNER_ID,
-            bindings=serving(1),
+            bindings=serving(),
             agents=1,
             runner_dir="/tmp/runner-dir",
         ),

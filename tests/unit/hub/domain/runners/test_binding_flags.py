@@ -17,8 +17,8 @@ from blizzard.hub.domain.runners.registration import (
 )
 
 _AT = datetime(2026, 10, 12, tzinfo=UTC)
-_A = RunnerBinding("alpha", "ws-a", 1)
-_X = RunnerBinding("beta", "ws-x", 1)
+_A = RunnerBinding("alpha", "ws-a")
+_X = RunnerBinding("beta", "ws-x")
 
 
 def _host(*workspaces: str, roster: tuple[str, ...] = ("max",), reported: bool = True) -> Host:
@@ -92,7 +92,7 @@ def test_a_project_reached_only_through_flagged_bindings_is_not_offered() -> Non
 
 
 def test_a_project_with_one_unflagged_binding_is_offered() -> None:
-    runner = _runner((RunnerBinding("alpha", "ws-x", 1), _A), None, _SERVED[:1])
+    runner = _runner((RunnerBinding("alpha", "ws-x"), _A), None, _SERVED[:1])
 
     assert offered_projects(runner, _host("ws-a")) == {"prj_a"}
 
@@ -105,14 +105,14 @@ def test_an_unrostered_subscription_without_bindings_offers_nothing() -> None:
     assert offered_projects(_runner(None, "other", _SERVED), _host()) == frozenset()
 
 
-def test_project_keeps_the_entry_it_names_by_entry_or_by_resolved_id() -> None:
+def test_projects_keeps_the_entry_a_single_name_matches_by_entry_or_by_resolved_id() -> None:
     runner = _runner((_A, _X), None, _SERVED)
     host = _host("ws-a", "ws-x")
 
-    assert offered_projects(runner, host, project="beta") == {"prj_b"}
-    assert offered_projects(runner, host, project="prj_b") == {"prj_b"}
-    assert offered_projects(runner, host, project="gamma") == frozenset()
-    assert offered_projects(runner, host, project="old") == frozenset()
+    assert offered_projects(runner, host, projects=["beta"]) == {"prj_b"}
+    assert offered_projects(runner, host, projects=["prj_b"]) == {"prj_b"}
+    assert offered_projects(runner, host, projects=["gamma"]) == frozenset()
+    assert offered_projects(runner, host, projects=["old"]) == frozenset()
 
 
 def test_projects_keeps_the_union_of_the_entries_it_names() -> None:
@@ -130,10 +130,10 @@ def test_projects_cannot_widen_what_a_flag_withholds() -> None:
     assert offered_projects(runner, _host("ws-a"), projects=["alpha", "beta"]) == {"prj_a"}
 
 
-def test_project_cannot_widen_what_a_flag_withholds() -> None:
+def test_projects_cannot_widen_what_a_flag_withholds_by_entry() -> None:
     runner = _runner((_X,), None, _SERVED)
 
-    assert offered_projects(runner, _host("ws-a"), project="beta") == frozenset()
+    assert offered_projects(runner, _host("ws-a"), projects=["beta"]) == frozenset()
 
 
 def test_a_runner_is_claimable_on_what_the_peek_offers_unless_a_runner_level_bar_stands() -> None:

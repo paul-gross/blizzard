@@ -25,19 +25,20 @@ function card(id: string, over: Partial<HostCard> = {}): HostCard {
   };
 }
 
-function row(id: string, bindings: { agents: number; agentsInUse: number }[] = []): RunnerRow {
+function row(id: string, agents: number | null = null, inUse: number[] = []): RunnerRow {
   return {
     runner_id: id,
     runner_name: `name-${id}`,
     online: true,
     connection: RunnerConnection.ONLINE,
-    bindingLines: bindings.map((b) => ({ project: 'p', workspaceId: 'ws', unreported: false, ...b })),
+    agents,
+    bindingLines: inUse.map((agentsInUse) => ({ project: 'p', workspaceId: 'ws', unreported: false, agentsInUse })),
   } as unknown as RunnerRow;
 }
 
 const GROUPS: HostGroups<RunnerRow> = {
   cards: [
-    { card: card('hs_AAAA1111'), rows: [row('rn_1', [{ agents: 2, agentsInUse: 1 }]), row('rn_2', [{ agents: 3, agentsInUse: 2 }])] },
+    { card: card('hs_AAAA1111'), rows: [row('rn_1', 2, [1]), row('rn_2', 3, [2])] },
     { card: card('hs_BBBB2222'), rows: [] },
   ],
   hostless: [row('rn_SOLO0001')],

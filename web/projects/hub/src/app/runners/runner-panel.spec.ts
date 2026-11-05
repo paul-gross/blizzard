@@ -261,6 +261,7 @@ describe('RunnerPanel host cards', () => {
       runner('rA', {
         runner_name: 'alpha',
         host_id: 'h1',
+        agents: 3,
         projects: [{ entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default' }],
         bindings: [
           { project: 'default', workspace_id: 'ws-1', agents: 2 },

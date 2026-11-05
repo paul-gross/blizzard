@@ -17,28 +17,25 @@ import type { ChunkSummary } from 'fleet/shell';
 import { servedProjects } from '../core/project-serving';
 
 /** One binding line under a hosted runner row: the project it binds, by display name, the
- * workspace it binds it in, and its agents in use of those it declares. `unreported` marks a
+ * workspace it binds it in, and its agents in use. `unreported` marks a
  * workspace its host does not report. */
 export interface BindingLine {
   readonly project: string;
   readonly workspaceId: string;
-  readonly agents: number;
   readonly agentsInUse: number;
   readonly unreported: boolean;
 }
 
 /** A row carrying binding lines — a runner row, or anything shaped like one — and the agent count its runner
- * registered, absent for a previous-minor runner. */
+ * registered, absent for a runner that declared none. */
 interface BoundRow {
   readonly agents?: number | null;
   readonly bindingLines: readonly BindingLine[];
 }
 
-/** A runner's declared agents: the count it registered, else the sum of its binding lines' (a previous-minor
- * runner declares per binding); `null` when it declares none. */
+/** A runner's declared agents: the count it registered; `null` when it declares none. */
 function runnerAgents(row: BoundRow): number | null {
-  if (row.agents != null) return row.agents;
-  return row.bindingLines.length === 0 ? null : row.bindingLines.reduce((sum, line) => sum + line.agents, 0);
+  return row.agents ?? null;
 }
 
 /** The agents `rows` declare — the sum of their runners' declared agents; `null` for none declared. */
@@ -123,7 +120,6 @@ function bindingUses(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]
     return {
       project: entry?.name ?? entry?.slug ?? binding.project,
       workspaceId: binding.workspace_id,
-      agents: binding.agents,
       agentsInUse: matched.length,
       unreported: binding.workspace_unreported ?? false,
       environmentsInUse: matched.reduce((sum, chunk) => sum + (chunk.environment_count ?? 0), 0),
@@ -137,7 +133,6 @@ export function bindingLines(runner: RunnerRegistryView, chunks: readonly ChunkS
   return bindingUses(runner, chunks).map((use) => ({
     project: use.project,
     workspaceId: use.workspaceId,
-    agents: use.agents,
     agentsInUse: use.agentsInUse,
     unreported: use.unreported,
   }));

@@ -244,7 +244,7 @@ def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_defa
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, default_retries_max=5
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, default_retries_max=5
     )
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
@@ -266,7 +266,7 @@ def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configu
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, default_retries_max=2
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, default_retries_max=2
     )
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
@@ -673,7 +673,7 @@ def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_
     config = LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
-        bindings=serving(1),
+        bindings=serving(),
         agents=1,
         platform_tracing=platform_tracing,
     )
@@ -1403,7 +1403,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2), agents=2, queue_strict=True
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=2, queue_strict=True
         ),
     )
 
@@ -1458,7 +1458,7 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path: Path):
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, queue_strict=True
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, queue_strict=True
         ),
     )
 
@@ -1491,7 +1491,7 @@ def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path: Path, s
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, queue_strict=strict
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, queue_strict=strict
         ),
     )
 
@@ -1607,7 +1607,7 @@ def test_fill_respects_the_bindings_agents(tmp_path: Path):
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(alive={_ALIVE}),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1),
     )
 
     Fill(ctx).run()
@@ -1665,7 +1665,7 @@ def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path: Path):
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2), agents=2),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=2),
     )
 
     Fill(ctx).run()
@@ -2835,7 +2835,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path: Path, workspace_ro
     config = LoopConfig(
         runner_name="r1",
         runner_id="rn_1",
-        bindings=serving(1),
+        bindings=serving(),
         agents=1,
         runner_dir=runner_dir,
     )
@@ -2913,7 +2913,7 @@ def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
-    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, runner_dir="")
+    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, runner_dir="")
     ctx = make_context(
         store,
         hub=FakeHub(),
@@ -3007,7 +3007,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 
     hub = FakeHub()
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3056,7 +3056,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 
     hub = FakeHub()
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3107,7 +3107,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path: P
     assert store.bindings_for_chunk("ch_1") == []  # released, not merely never bound
 
     config = LoopConfig(
-        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3143,7 +3143,7 @@ def _cap_config(cap: float | None, runner_dir: str = "/tmp/runner-dir"):
     return LoopConfig(
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
-        bindings=serving(1),
+        bindings=serving(),
         agents=1,
         chunk_cap_usd=cap,
         runner_dir=runner_dir,
@@ -3917,7 +3917,7 @@ def test_pull_registers_the_gates_this_runner_imposes(tmp_path: Path):
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, gates=("build", "review")
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(), agents=1, gates=("build", "review")
         ),
     )
 

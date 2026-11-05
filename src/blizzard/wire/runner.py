@@ -59,20 +59,20 @@ class ServedProjectView(WireModel):
 
 class RunnerBinding(BaseModel):
     """One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host
-    ``workspace_id`` it works in, and the ``agents`` it runs there at once."""
+    ``workspace_id`` it works in. The runner's agents are shared, so no binding carries a count."""
 
     project: str
     workspace_id: str
-    agents: int
 
 
 class RunnerBindingView(WireModel):
     """A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not
-    reported the workspace, so the hub offers the runner no work through the binding."""
+    reported the workspace, so the hub offers the runner no work through the binding. ``agents`` is deprecated, removed
+    in 0.6: it repeats the runner's shared count, ``0`` where the runner sent none, and no client reads it."""
 
     project: str
     workspace_id: str
-    agents: int
+    agents: int = Field(deprecated=True)
     workspace_unreported: bool = False
 
 

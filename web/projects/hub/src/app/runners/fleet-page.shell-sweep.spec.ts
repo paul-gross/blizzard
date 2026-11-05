@@ -118,7 +118,7 @@ const row = (id: string, name: string, hostId: string | null): RunnerRow => ({
   runner_id: id,
   runner_name: name,
   host_id: hostId,
-  bindingLines: hostId ? [{ project: 'Blizzard', workspaceId: LONG, agents: 3, agentsInUse: 1, unreported: false }] : [],
+  bindingLines: hostId ? [{ project: 'Blizzard', workspaceId: LONG, agentsInUse: 1, unreported: false }] : [],
 });
 const ROWS = [
   row('rn_01KXKVVF1J3D6H6VYZ3XYNALFA', 'runner-alpha', CARDS[0].hostId),
