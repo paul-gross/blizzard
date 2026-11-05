@@ -181,8 +181,12 @@ class ToolState:
     @property
     def child_session_id(self) -> str | None:
         """The child session a ``subagent`` call spawned, as its state records it."""
-        child = self.metadata.get("sessionID")
-        return child if isinstance(child, str) and child else None
+        return _child_session_id(self.metadata)
+
+
+def _child_session_id(metadata: JsonObject) -> str | None:
+    child = metadata.get("sessionID")
+    return child if isinstance(child, str) and child else None
 
 
 @domain_model
