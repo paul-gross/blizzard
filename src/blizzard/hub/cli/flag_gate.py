@@ -23,6 +23,12 @@ def hub_flags(ctx: click.Context) -> Mapping[str, bool]:
     return dict(resp.json()["flags"])
 
 
+def hub_flag_on(flag: str, ctx: click.Context) -> bool:
+    """Whether the addressed hub answers ``flag`` on, for a verb that reads a flag rather than being held behind
+    one; a flag the answer omits, or a hub too old to answer, reads off."""
+    return hub_flags(ctx).get(flag, False)
+
+
 def hub_flag_command(flag: str, *, registry: FlagRegistry) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a hub verb behind ``flag``."""
     return flag_command(flag, "hub", hub_flags, registry=registry)

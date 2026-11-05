@@ -1,4 +1,10 @@
 # Every flag the fleet ships dark. A flag is declared under [flag.<name>] with owner, summary, scope, and default;
 # retiring one moves its name to [retired] with its scope. Nothing here is a version or a date.
 
+[flag.cadences]
+owner = "epic:cadence"
+summary = "Cadences mint errands on their rhythm"
+scope = "hub"
+default = "off"
+
 [retired]

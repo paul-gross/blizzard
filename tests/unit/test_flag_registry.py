@@ -51,9 +51,11 @@ def _flag(**fields: str) -> str:
     return "[flag.thing]\n" + "".join(f'{key} = "{value}"\n' for key, value in body.items())
 
 
-def test_the_packaged_registry_loads_and_is_empty() -> None:
+def test_the_packaged_registry_loads_with_its_declarations() -> None:
     registry = packaged_flag_registry()
-    assert dict(registry.live) == {}
+    assert sorted(registry.live) == ["cadences"]
+    cadences = registry.live["cadences"]
+    assert (cadences.owner, cadences.scope, cadences.default) == ("epic:cadence", "hub", False)
     assert dict(registry.retired) == {}
 
 
@@ -205,6 +207,7 @@ _READ_CALLS = frozenset(
         "flag_option",
         "hub_flag_command",
         "hub_flag_option",
+        "hub_flag_on",
         "runner_flag_command",
         "runner_flag_option",
     }

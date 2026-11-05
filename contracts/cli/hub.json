@@ -715,6 +715,980 @@
       "path": "hub analytics",
       "short_help": "Read analytics derived from worker transcripts."
     },
+    "cadence": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "chore": {
+          "commands": {
+            "add": {
+              "help": "Add chore KEY to cadence SLUG, running --routine over its default scope unless --scope or --all-scopes.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "slug",
+                  "opts": [
+                    "slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "The routine the chore runs, by slug.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "routine",
+                  "opts": [
+                    "--routine"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Run over this scope slug; repeatable.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "scopes",
+                  "opts": [
+                    "--scope"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Run over every scope linked to the routine.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "all_scopes",
+                  "opts": [
+                    "--all-scopes"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The run mode; full when unstated.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "mode",
+                  "opts": [
+                    "--mode"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "choice"
+                },
+                {
+                  "help": "A note each run's charge carries.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "note",
+                  "opts": [
+                    "--note"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Leave each minted chunk not ready rather than promoting it.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hold",
+                  "opts": [
+                    "--hold"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "project",
+                  "opts": [
+                    "--project"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub cadence chore add",
+              "short_help": "Add chore KEY to cadence SLUG, running --routine over its default scope unless --scope or --all-scopes."
+            },
+            "edit": {
+              "help": "Change chore KEY of cadence SLUG; only the options given change, and the chore keeps its id.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "slug",
+                  "opts": [
+                    "slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "The routine the chore runs, by slug.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "routine",
+                  "opts": [
+                    "--routine"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Run over this scope slug; repeatable.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "scopes",
+                  "opts": [
+                    "--scope"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Run over every scope linked to the routine.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "all_scopes",
+                  "opts": [
+                    "--all-scopes"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Run over the routine's default scope.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "default_scope",
+                  "opts": [
+                    "--default-scope"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The run mode.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "mode",
+                  "opts": [
+                    "--mode"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "choice"
+                },
+                {
+                  "help": "A note each run's charge carries.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "note",
+                  "opts": [
+                    "--note"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Leave each minted chunk not ready, or promote it.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hold",
+                  "opts": [
+                    "--hold"
+                  ],
+                  "required": false,
+                  "secondary_opts": [
+                    "--promote"
+                  ],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "project",
+                  "opts": [
+                    "--project"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub cadence chore edit",
+              "short_help": "Change chore KEY of cadence SLUG; only the options given change, and the chore keeps its id."
+            },
+            "remove": {
+              "help": "Remove chore KEY from cadence SLUG; adding the key back later mints a new chore.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "slug",
+                  "opts": [
+                    "slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "project",
+                  "opts": [
+                    "--project"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "tenant",
+                  "opts": [
+                    "--tenant"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub cadence chore remove",
+              "short_help": "Remove chore KEY from cadence SLUG; adding the key back later mints a new chore."
+            }
+          },
+          "help": "Add, edit, or remove a cadence's chores \u2014 each an edit of the cadence.",
+          "params": [],
+          "path": "hub cadence chore",
+          "short_help": "Add, edit, or remove a cadence's chores \u2014 each an edit of the cadence."
+        },
+        "create": {
+          "help": "Create a cadence whose slug is SLUG, with no chores yet; it states a schedule, a spacing, or both.\n\nSLUG is the cadence's immutable handle within its project.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The cadence's display name; defaults to the slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A five-field cron expression, read as wall-clock time in --zone.",
+              "hidden": false,
+              "kind": "option",
+              "name": "cron",
+              "opts": [
+                "--cron"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The IANA time zone --cron is read in.",
+              "hidden": false,
+              "kind": "option",
+              "name": "zone",
+              "opts": [
+                "--zone"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The least time between an errand's runs: a whole number and m, h, or d.",
+              "hidden": false,
+              "kind": "option",
+              "name": "spacing",
+              "opts": [
+                "--spacing"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "What --spacing counts from; started when unstated.",
+              "hidden": false,
+              "kind": "option",
+              "name": "anchor",
+              "opts": [
+                "--anchor"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence create",
+          "short_help": "Create a cadence whose slug is SLUG, with no chores yet; it states a schedule, a spacing, or both."
+        },
+        "edit": {
+          "help": "Change cadence SLUG's name, schedule, spacing, or anchor; only the options given change, and its slug never\nchanges.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The cadence's display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A five-field cron expression; the stored zone is kept unless --zone.",
+              "hidden": false,
+              "kind": "option",
+              "name": "cron",
+              "opts": [
+                "--cron"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The IANA time zone; the stored cron is kept unless --cron.",
+              "hidden": false,
+              "kind": "option",
+              "name": "zone",
+              "opts": [
+                "--zone"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Clear the schedule.",
+              "hidden": false,
+              "kind": "option",
+              "name": "no_schedule",
+              "opts": [
+                "--no-schedule"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The least time between an errand's runs: a whole number and m, h, or d.",
+              "hidden": false,
+              "kind": "option",
+              "name": "spacing",
+              "opts": [
+                "--spacing"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "What the spacing counts from.",
+              "hidden": false,
+              "kind": "option",
+              "name": "anchor",
+              "opts": [
+                "--anchor"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Clear the spacing, and the anchor with it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "no_spacing",
+              "opts": [
+                "--no-spacing"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence edit",
+          "short_help": "Change cadence SLUG's name, schedule, spacing, or anchor; only the options given change, and its slug never changes."
+        },
+        "enable": {
+          "help": "Re-enable a retired cadence SLUG.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Who is re-enabling, recorded as the actor.",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence enable",
+          "short_help": "Re-enable a retired cadence SLUG."
+        },
+        "get": {
+          "help": "One cadence's whole record \u2014 its rhythm, its chores with their ids, and its attention.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence get",
+          "short_help": "One cadence's whole record \u2014 its rhythm, its chores with their ids, and its attention."
+        },
+        "list": {
+          "help": "List every cadence \u2014 its id, slug, name, rhythm, chore count, and attention.\n\nExcludes a retired cadence unless --include-retired.",
+          "params": [
+            {
+              "help": "Include retired cadences.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence list",
+          "short_help": "List every cadence \u2014 its id, slug, name, rhythm, chore count, and attention."
+        },
+        "retire": {
+          "help": "Retire cadence SLUG \u2014 a reversible brake: a retired cadence mints nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Who is retiring, recorded as the actor.",
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence retire",
+          "short_help": "Retire cadence SLUG \u2014 a reversible brake: a retired cadence mints nothing."
+        }
+      },
+      "help": "Manage cadences \u2014 a project's rhythms \u2014 and the chores each keeps.",
+      "params": [],
+      "path": "hub cadence",
+      "short_help": "Manage cadences \u2014 a project's rhythms \u2014 and the chores each keeps."
+    },
     "chunk": {
       "aliases": [
         "show",

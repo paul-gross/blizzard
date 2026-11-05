@@ -35,9 +35,9 @@ def _ignored(captured: list[EventDict]) -> dict[str, str]:
     return {str(e["flag"]): str(e["reason"]) for e in captured if e.get("event") == "flag override ignored"}
 
 
-def test_a_hub_over_the_packaged_registry_answers_an_empty_map(tmp_path: Path) -> None:
+def test_a_hub_over_the_packaged_registry_answers_its_defaults(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/flags").json() == {"flags": {}, "overridden": []}
+    assert hub.client.get("/api/flags").json() == {"flags": {"cadences": False}, "overridden": []}
     health = hub.client.get("/api/health").json()
     assert health["overridden"] == []
     assert health["status"] == "ok"
