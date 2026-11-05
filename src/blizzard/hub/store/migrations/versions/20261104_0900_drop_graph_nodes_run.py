@@ -4,7 +4,7 @@ Downgrade re-adds it as nullable Text and gives each hub row the ``run`` an olde
 it holds one, else the step list its action was in the packaged graphs, none for ``pass``. A row naming an action
 with no step list — a test action — refuses the downgrade, naming the row.
 Revision ID: 20261104_0900_drop_graph_nodes_run
-Revises: 20261101_0900_turn_page
+Revises: 20261102_0900_drop_hub_exec_slot
 """
 
 from __future__ import annotations
