@@ -152,7 +152,7 @@ def runner_view(
         retired_by=r.retired_by,
         gates=list(r.gates),
         projects=served_views(r.served, projects),
-        bindings=binding_views(r.bindings, flags),
+        bindings=binding_views(r.bindings, flags, r.agents),
         subscription=r.subscription,
         subscription_unrostered=flags.subscription_unrostered,
         declining=declining_views(r),
@@ -216,7 +216,7 @@ def registry_view(
         unenforceable_gates=unenforceable_views(r.gates, executors),
         projects=served_views(r.served, projects, claimable_projects(r, host_of(r, hosts))),
         host_id=r.host_id,
-        bindings=binding_views(r.bindings, flags),
+        bindings=binding_views(r.bindings, flags, r.agents),
         subscription=r.subscription,
         subscription_unrostered=flags.subscription_unrostered,
         declining=declining_views(r),
@@ -245,15 +245,18 @@ def flags_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> Bin
     return flag_bindings(registration.bindings, registration.subscription, host_of(registration, hosts))
 
 
-def binding_views(bindings: Iterable[RunnerBinding] | None, flags: BindingFlags) -> list[RunnerBindingView] | None:
-    """Each declared binding with its workspace flag; ``None`` when the runner declared none."""
+def binding_views(
+    bindings: Iterable[RunnerBinding] | None, flags: BindingFlags, agents: int | None
+) -> list[RunnerBindingView] | None:
+    """Each declared binding with its workspace flag; ``None`` when the runner declared none. The deprecated
+    ``agents`` of each is the runner's shared count, ``0`` where it sent none."""
     if bindings is None:
         return None
     return [
         RunnerBindingView(
             project=b.project,
             workspace_id=b.workspace_id,
-            agents=b.agents,
+            agents=agents or 0,
             workspace_unreported=flags.workspace_unreported(b),
         )
         for b in bindings

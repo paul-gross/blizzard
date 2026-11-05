@@ -69,10 +69,10 @@ def test_the_runners_token_variable_follows_its_name(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("projects", "served"),
     [
-        ('[{ project = "default", workspace = "workspace-local", agents = 1 }]', ("default",)),
+        ('[{ project = "default", workspace = "workspace-local" }]', ("default",)),
         (
-            '[{ project = "blizzard", workspace = "workspace-local", agents = 2 }, '
-            '{ project = "prj_01J0000000000000000000000", workspace = "workspace-local", agents = 1 }]',
+            '[{ project = "blizzard", workspace = "workspace-local" }, '
+            '{ project = "prj_01J0000000000000000000000", workspace = "workspace-local" }]',
             ("blizzard", "prj_01J0000000000000000000000"),
         ),
     ],
@@ -99,8 +99,8 @@ def test_a_runner_with_no_projects_key_is_halted_naming_the_key(tmp_path: Path) 
 
 
 def test_bindings_survive_a_round_trip(tmp_path: Path) -> None:
-    projects = '[{ project = "a", workspace = "workspace-local", agents = 3 }, { project = "b", workspace = "workspace-local", agents = 1 }]'
-    write_minimal_host(tmp_path, projects=projects)
+    projects = '[{ project = "a", workspace = "workspace-local" }, { project = "b", workspace = "workspace-local" }]'
+    write_minimal_host(tmp_path, projects=projects, agents=4)
     loaded = load_host_config(tmp_path)
     (tmp_path / "blizzard-host.toml").write_text(loaded.to_toml())
     reloaded = load_host_config(tmp_path)
@@ -128,23 +128,21 @@ _BARE = (
 )
 
 
-def test_an_unset_runner_count_is_the_sum_of_the_bindings_and_warns_deprecated(tmp_path: Path) -> None:
-    host = _agents_host(tmp_path, _BOTH)
-    (entry,) = host.runners
-    assert entry.own is not None and entry.own.agents == 5
-    assert any("deprecated" in warning for warning in host.warnings)
-
-
-def test_a_runner_count_wins_over_the_bindings_and_warns_they_are_ignored(tmp_path: Path) -> None:
+def test_a_binding_setting_agents_halts_the_runner_naming_the_runner_key(tmp_path: Path) -> None:
     host = _agents_host(tmp_path, "agents = 4\n" + _BOTH)
     (entry,) = host.runners
-    assert entry.own is not None and entry.own.agents == 4
-    assert [w for w in host.warnings if "ignored" in w] and len([w for w in host.warnings if "r-claude" in w]) == 1
+    assert any("`[[runner]] agents`" in error for error in entry.errors)
+
+
+def test_a_binding_setting_agents_halts_the_runner_without_a_runner_count_too(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, _BOTH)
+    assert any("`[[runner]] agents`" in error for error in host.runners[0].errors)
 
 
 def test_a_runner_count_with_bare_bindings_is_quiet(tmp_path: Path) -> None:
     host = _agents_host(tmp_path, "agents = 4\n" + _BARE)
-    assert host.runners[0].warnings == ()
+    assert host.runners[0].errors == ()
+    assert host.warnings == ()
     assert host.runner_config(_TOKEN).agents == 4
 
 

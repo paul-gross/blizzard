@@ -89,7 +89,7 @@ const ROW: RunnerRow = {
   served: [],
   unassigned: false,
   unresolved: [],
-  bindingLines: [{ project: 'Blizzard', workspaceId: WORKSPACE, agents: 6, agentsInUse: 2, unreported: false }],
+  bindingLines: [{ project: 'Blizzard', workspaceId: WORKSPACE, agentsInUse: 2, unreported: false }],
   subscriptionName: null,
   claims: CLAIMS,
   used: 2,

@@ -57,8 +57,8 @@ describe('bindingLines', () => {
     ]);
 
     expect(lines).toEqual([
-      { project: 'Default', workspaceId: 'ws-1', agents: 3, agentsInUse: 2, unreported: false },
-      { project: 'Glacier', workspaceId: 'ws-9', agents: 1, agentsInUse: 1, unreported: true },
+      { project: 'Default', workspaceId: 'ws-1', agentsInUse: 2, unreported: false },
+      { project: 'Glacier', workspaceId: 'ws-9', agentsInUse: 1, unreported: true },
     ]);
   });
 
@@ -130,7 +130,7 @@ describe('bindingLines', () => {
 
   it('keeps the binding as the runner wrote it when no entry resolves it, and is empty for a host-less runner', () => {
     expect(bindingLines(runner('rA', { bindings: [{ project: 'gone', workspace_id: 'ws-1', agents: 2, workspace_unreported: false }] }), [])).toEqual([
-      { project: 'gone', workspaceId: 'ws-1', agents: 2, agentsInUse: 0, unreported: false },
+      { project: 'gone', workspaceId: 'ws-1', agentsInUse: 0, unreported: false },
     ]);
     expect(bindingLines(runner('rC'), [])).toEqual([]);
   });

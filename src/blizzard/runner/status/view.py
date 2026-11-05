@@ -136,7 +136,7 @@ class Capacities:
                     project=binding.project,
                     project_id=project_id,
                     workspace_id=binding.workspace_id,
-                    agents=binding.agents,
+                    agents=agents,
                     used=in_use,
                     free=free,
                 )

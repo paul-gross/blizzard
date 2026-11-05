@@ -1630,17 +1630,15 @@ FIXTURE_PROJECT_ID = "project-fixture"
 
 
 def serving(
-    agents: int = 1, *, project: str = FIXTURE_PROJECT_ID, workspace_id: str = TEST_WORKSPACE_ID
+    *, project: str = FIXTURE_PROJECT_ID, workspace_id: str = TEST_WORKSPACE_ID
 ) -> tuple[BindingDeclaration, ...]:
-    """A runner's bindings: one project bound to one workspace, running ``agents`` at once."""
-    return (BindingDeclaration(project=project, workspace_id=workspace_id, agents=agents),)
+    """A runner's bindings: one project bound to one workspace."""
+    return (BindingDeclaration(project=project, workspace_id=workspace_id),)
 
 
-def fixture_route(agents: int = 1, *, workspace_id: str = TEST_WORKSPACE_ID) -> RoutedBinding:
+def fixture_route(*, workspace_id: str = TEST_WORKSPACE_ID) -> RoutedBinding:
     """The default binding as the routing map resolves it — the project its entry names is itself."""
-    return RoutedBinding(
-        project=FIXTURE_PROJECT_ID, project_id=FIXTURE_PROJECT_ID, workspace_id=workspace_id, agents=agents
-    )
+    return RoutedBinding(project=FIXTURE_PROJECT_ID, project_id=FIXTURE_PROJECT_ID, workspace_id=workspace_id)
 
 
 def single_workspace(

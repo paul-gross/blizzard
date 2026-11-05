@@ -154,8 +154,9 @@ describe('FleetRunnerRow', () => {
   it('heads the row with its harnesses and agents, and says none for an empty binds line', async () => {
     const { el } = await render(
       row('rn_sum', {
+        agents: 3,
         capabilities: [{ harness_id: 'claude-code', available: true }],
-        bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agents: 3, agentsInUse: 1, unreported: false }],
+        bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agentsInUse: 1, unreported: false }],
       }),
       { hosted: true },
     );
@@ -191,7 +192,7 @@ describe('FleetRunnerRow', () => {
 
   it('renders a hosted runner’s binding lines', async () => {
     const { el } = await render(
-      row('rn_bound', { bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agents: 3, agentsInUse: 1, unreported: false }] }),
+      row('rn_bound', { bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agentsInUse: 1, unreported: false }] }),
       { hosted: true },
     );
 

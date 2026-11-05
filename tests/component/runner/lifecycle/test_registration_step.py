@@ -56,7 +56,7 @@ def _ctx(
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=_IDLE_HANDLE, verdict=None),
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name=name, bindings=serving(1), agents=1, runner_id=configured),
+        config=LoopConfig(runner_name=name, bindings=serving(), agents=1, runner_id=configured),
         registered=registered,
     )
     return replace(ctx, identity=RunnerIdentityHolder(store.runner_identity()))
@@ -77,7 +77,7 @@ def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
         identity=ctx.identity,
         runner_name=ctx.config.runner_name,
         workspace_id="ws1",
-        bindings=serving(1),
+        bindings=serving(),
         agents=1,
         hub_url="http://hub.example",
         workspaces=single_workspace(FakeProvider({})),
@@ -164,7 +164,7 @@ def test_a_rebuilt_store_records_the_configured_id_again_at_its_next_registratio
 def test_a_registration_declares_the_bindings_and_subscription_its_config_carries(tmp_path: Path) -> None:
     hub = FakeHub()
     ctx = _ctx(tmp_path / "runner.db", hub)
-    bindings = (BindingDeclaration("blizzard", "ws1", 2), BindingDeclaration("docs", "ws1", 1))
+    bindings = (BindingDeclaration("blizzard", "ws1"), BindingDeclaration("docs", "ws1"))
     ctx = replace(
         ctx, config=replace(ctx.config, bindings=bindings, subscription="anthropic", projects=("blizzard", "docs"))
     )

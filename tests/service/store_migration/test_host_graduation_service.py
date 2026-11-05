@@ -143,17 +143,12 @@ def _seed_store(store: Path) -> None:
 
 def _graduate(root: Path) -> None:
     """The graduation conversion an operator makes by hand: the flat file's keys move to their host homes, a
-    ``db_url`` naming the directory's own ``data/runner.db`` is dropped, the old ``max_agents`` is split across the
-    bindings at least one each, and the token moves to the runner's own variable."""
+    ``db_url`` naming the directory's own ``data/runner.db`` is dropped, the old ``max_agents`` becomes the runner's
+    ``agents``, and the token moves to the runner's own variable."""
     layout = HostLayout(root)
     flat = tomllib.loads(layout.legacy_config_path.read_text())
     projects = list(flat["projects"])
-    agents = [1] * len(projects)
-    agents[0] += max(flat["max_agents"] - len(projects), 0)
-    bindings = ", ".join(
-        f'{{ project = "{project}", workspace = "{flat["workspace_id"]}", agents = {count} }}'
-        for project, count in zip(projects, agents, strict=True)
-    )
+    bindings = ", ".join(f'{{ project = "{project}", workspace = "{flat["workspace_id"]}" }}' for project in projects)
     kept_db_url = "" if flat["db_url"] == f"sqlite:///{layout.legacy_store_path}" else f'db_url = "{flat["db_url"]}"\n'
     layout.config_path.write_text(
         kept_db_url + f'host = "{flat["host"]}"\n'
@@ -171,6 +166,7 @@ def _graduate(root: Path) -> None:
         "[[runner]]\n"
         f'id = "{flat["runner_id"]}"\n'
         f'name = "{flat["name"]}"\n'
+        f"agents = {flat['max_agents']}\n"
         f"projects = [{bindings}]\n"
         f"gates = {json.dumps(flat['gates'])}\n"
         "[runner.harness]\n"

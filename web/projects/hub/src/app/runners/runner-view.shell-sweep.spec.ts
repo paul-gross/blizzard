@@ -96,8 +96,8 @@ const ROW: RunnerRow = {
   unassigned: false,
   unresolved: [],
   bindingLines: [
-    { project: 'Blizzard', workspaceId: 'ws_a', agents: 6, agentsInUse: 4, unreported: false },
-    { project: 'Celestial Navigation Platform', workspaceId: 'ws_b', agents: 3, agentsInUse: 0, unreported: false },
+    { project: 'Blizzard', workspaceId: 'ws_a', agentsInUse: 4, unreported: false },
+    { project: 'Celestial Navigation Platform', workspaceId: 'ws_b', agentsInUse: 0, unreported: false },
   ],
   subscriptionName: null,
   online: true,

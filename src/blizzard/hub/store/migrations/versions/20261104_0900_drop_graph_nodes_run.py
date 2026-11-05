@@ -4,7 +4,7 @@ Downgrade re-adds it as nullable Text and gives each hub row the ``run`` an olde
 it holds one, else the step list its action was in the packaged graphs, none for ``pass``. A row naming an action
 with no step list — a test action — refuses the downgrade, naming the row.
 Revision ID: 20261104_0900_drop_graph_nodes_run
-Revises: 20261102_0900_drop_hub_exec_slot
+Revises: 20261104_0900_binding_agents_retired
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20261104_0900_drop_graph_nodes_run"
-down_revision: str | None = "20261102_0900_drop_hub_exec_slot"
+down_revision: str | None = "20261104_0900_binding_agents_retired"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

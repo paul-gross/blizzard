@@ -20,12 +20,11 @@ __all__ = ["RoutedBinding", "RoutingConflict", "RoutingMap", "routing_map"]
 @domain_model
 @dataclass(frozen=True)
 class RoutedBinding:
-    """One binding whose entry resolved: the entry as declared, the project id it names, its workspace and agents."""
+    """One binding whose entry resolved: the entry as declared, the project id it names, and its workspace."""
 
     project: str
     project_id: str
     workspace_id: str
-    agents: int
 
 
 @domain_model
@@ -62,7 +61,6 @@ def routing_map(bindings: Sequence[BindingDeclaration], answer: ServedProjectsAn
             project=binding.project,
             project_id=project_id,
             workspace_id=binding.workspace_id,
-            agents=binding.agents,
         )
         for binding in bindings
         if (project_id := resolved.get(binding.project)) is not None

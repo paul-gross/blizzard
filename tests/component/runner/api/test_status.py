@@ -95,7 +95,7 @@ def _app_with_status(
         hub_version=hub_version,
         runner_name=config.name,
         workspace_id=TEST_WORKSPACE_ID,
-        bindings=serving(agents) if bindings is None else bindings,
+        bindings=serving() if bindings is None else bindings,
         agents=agents,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({env: f"/ws/{env}" for env in pool})),
@@ -187,8 +187,8 @@ def test_summary_reports_the_hub_version_and_window_the_latest_registration_answ
 
 def test_summary_names_each_project_two_bindings_resolve_to(tmp_path: Path) -> None:
     bindings = (
-        BindingDeclaration("pr_a", TEST_WORKSPACE_ID, 1),
-        BindingDeclaration("alpha", TEST_WORKSPACE_ID, 1),
+        BindingDeclaration("pr_a", TEST_WORKSPACE_ID),
+        BindingDeclaration("alpha", TEST_WORKSPACE_ID),
     )
     app, store = _app_with_status(tmp_path, bindings=bindings)
     store.record_runner_identity(

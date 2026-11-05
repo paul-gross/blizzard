@@ -6877,10 +6877,6 @@ export type QueuePeekRequest = {
      */
     policy?: string;
     /**
-     * Project
-     */
-    project?: string | null;
-    /**
      * Projects
      */
     projects?: Array<string> | null;
@@ -8164,13 +8160,9 @@ export type RunnerAddResponse = {
  * RunnerBinding
  *
  * One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host
- * ``workspace_id`` it works in, and the ``agents`` it runs there at once.
+ * ``workspace_id`` it works in. The runner's agents are shared, so no binding carries a count.
  */
 export type RunnerBinding = {
-    /**
-     * Agents
-     */
-    agents: number;
     /**
      * Project
      */
@@ -8185,11 +8177,14 @@ export type RunnerBinding = {
  * RunnerBindingView
  *
  * A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not
- * reported the workspace, so the hub offers the runner no work through the binding.
+ * reported the workspace, so the hub offers the runner no work through the binding. ``agents`` is deprecated, removed
+ * in 0.6: it repeats the runner's shared count, ``0`` where the runner sent none, and no client reads it.
  */
 export type RunnerBindingView = {
     /**
      * Agents
+     *
+     * @deprecated
      */
     agents: number;
     /**

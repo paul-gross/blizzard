@@ -460,11 +460,10 @@ class DeclaredSubscription:
 @dataclass(frozen=True)
 class RunnerBinding:
     """One project a runner serves through one workspace of its host, as the runner declared it: ``project`` by id or
-    slug, the host ``workspace_id`` it works in, and the ``agents`` it runs there at once."""
+    slug, and the host ``workspace_id`` it works in."""
 
     project: str
     workspace_id: str
-    agents: int
 
 
 @domain_model

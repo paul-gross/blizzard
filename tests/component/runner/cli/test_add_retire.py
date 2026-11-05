@@ -56,7 +56,7 @@ def test_add_mints_the_runner_under_the_host_and_writes_its_token_directory_and_
     host = load_host_config(root)
     added = host.runners[1]
     assert (added.id, added.subscription) == ("rn_init2", host.runners[0].subscription)
-    assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "workspace-local", None)]
+    assert [(b.project, b.workspace) for b in added.bindings] == [("default", "workspace-local")]
     assert added.own is not None and added.own.agents == 1
     assert all(isinstance(p, BuiltRunner) for p in host.projections())
     assert "starts" not in result.output  # no host is running here
@@ -86,9 +86,9 @@ def test_add_binds_each_project_to_its_workspace_and_sums_per_project_agents_int
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.declared[-1] == ("p1", "p2")
     added = load_host_config(root).runners[1]
-    assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [
-        ("p1", "workspace-local", None),
-        ("p2", "workspace-local", None),
+    assert [(b.project, b.workspace) for b in added.bindings] == [
+        ("p1", "workspace-local"),
+        ("p2", "workspace-local"),
     ]
     assert added.own is not None and added.own.agents == 5
 

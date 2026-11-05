@@ -298,7 +298,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(
         config=LoopConfig(
             runner_name="r1",
             runner_id=FIXTURE_RUNNER_ID,
-            bindings=serving(1),
+            bindings=serving(),
             agents=1,
         ),
         spawn_root=workspace_root,

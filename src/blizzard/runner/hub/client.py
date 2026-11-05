@@ -279,11 +279,10 @@ class SubscriptionDeclaration:
 @domain_model
 @dataclass(frozen=True)
 class BindingDeclaration:
-    """One project this runner serves through a workspace of its host, with the agents it runs there at once."""
+    """One project this runner serves through a workspace of its host."""
 
     project: str
     workspace_id: str
-    agents: int
 
 
 @domain_model
@@ -598,12 +597,11 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         capabilities: Sequence[HarnessCapability],
         *,
         policy: QueueMatchPolicy,
-        project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
         """``POST /api/fleet/queue/peek`` — at most one queue entry matching ``capabilities``
-        under ``policy``, narrowed to ``project`` — or to the ``projects`` it names, whose
-        per-project hold they also scope — when one is named; a refusal raises ``HubClientError``."""
+        under ``policy``, narrowed to the ``projects`` it names, whose per-project hold
+        they also scope, when any are named; a refusal raises ``HubClientError``."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:

@@ -90,10 +90,9 @@ const CARD: HostCard = {
   subscriptionPaces: [],
 };
 
-const binding = (agents: number, agentsInUse: number, project = 'Blizzard') => ({
+const binding = (agentsInUse: number, project = 'Blizzard') => ({
   project,
   workspaceId: 'ws-1',
-  agents,
   agentsInUse,
   unreported: false,
 });
@@ -194,7 +193,7 @@ describe('RunnerPanelView', () => {
           used: 2,
           gates: ['build'],
           capabilities: [{ harness_id: 'claude', version: '1', tiers: [], default: true, available: true }],
-          bindingLines: [binding(3, 1)],
+          bindingLines: [binding(1)],
         }),
       ],
       [CARD],
@@ -218,7 +217,7 @@ describe('RunnerPanelView', () => {
 
   it('draws one env strip per pool — each host workspace reporting a capacity, then each host-less pool', async () => {
     const el = await render(
-      [row('rn_hosted', { host_id: 'h1', bindingLines: [binding(3, 1)] }), row('rn_solo', { env_capacity: 4, used: 1 })],
+      [row('rn_hosted', { host_id: 'h1', bindingLines: [binding(1)] }), row('rn_solo', { env_capacity: 4, used: 1 })],
       [CARD],
     );
 
@@ -235,7 +234,7 @@ describe('RunnerPanelView', () => {
 
   it('draws one agents bar per runner, and none for a runner declaring none', async () => {
     const el = await render(
-      [row('rn_bound', { host_id: 'h1', bindingLines: [binding(2, 2, 'blizzard'), binding(1, 0, 'winter')] }), row('rn_solo')],
+      [row('rn_bound', { host_id: 'h1', agents: 3, bindingLines: [binding(2, 'blizzard'), binding(0, 'winter')] }), row('rn_solo')],
       [CARD],
     );
 

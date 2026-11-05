@@ -19,7 +19,7 @@ from tests.support.scaffolding import default_tenant, migrate_to
 
 pytestmark = [pytest.mark.component]
 
-_PARENT = "20261102_0900_drop_hub_exec_slot"
+_PARENT = "20261104_0900_binding_agents_retired"
 _DROP = "20261104_0900_drop_graph_nodes_run"
 
 _AT = datetime(2026, 11, 4, tzinfo=UTC)

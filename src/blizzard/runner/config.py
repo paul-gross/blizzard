@@ -735,12 +735,11 @@ def bound_workspace_ids(bindings: tuple[ProjectBinding, ...] | None) -> tuple[st
 @domain_model
 @dataclass(frozen=True)
 class ProjectBinding:
-    """One ``[[runner]] projects`` binding: a project and the workspace it runs in. ``agents`` is the deprecated
-    per-binding count, ``None`` unless the file declared one; the runner's count is :attr:`RunnerConfig.agents`."""
+    """One ``[[runner]] projects`` binding: a project and the workspace it runs in. The runner's agents are shared
+    by every binding: :attr:`RunnerConfig.agents`."""
 
     project: str
     workspace: str
-    agents: int | None = None
 
 
 @domain_model
@@ -809,11 +808,11 @@ class RunnerConfig:
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
     #: The declared subscription this runner names — none or one — which it samples and reports.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
-    #: The projects this runner serves, each bound to a workspace of its host with its agent count, in file order;
+    #: The projects this runner serves, each bound to a workspace of its host in file order;
     #: sent at every registration beside :attr:`projects`. ``None`` — a config built without a host file — sends none.
     bindings: tuple[ProjectBinding, ...] | None = None
-    #: How many agents this runner runs at once, shared by every binding: ``[[runner]] agents``, else the sum of the
-    #: bindings' deprecated ``agents``. ``0`` — a config built without a host file — runs none.
+    #: How many agents this runner runs at once, shared by every binding: ``[[runner]] agents``. ``0`` — a config
+    #: built without a host file — runs none.
     agents: int = 0
     #: The throttles the gate asks beside the subscription floor; ``None`` configures none.
     throttle: ThrottleSettings | None = None
@@ -935,10 +934,6 @@ class RunnerConfig:
             transcripts_root=self.transcripts_root,
             sections=self.harness_sections,
         )
-
-    def binding_agents(self, binding: ProjectBinding) -> int:
-        """The ``agents`` a binding reports: its declared value, or the runner's count when it declares none."""
-        return self.agents if binding.agents is None else binding.agents
 
     @property
     def bound_workspaces(self) -> tuple[HostWorkspace, ...]:

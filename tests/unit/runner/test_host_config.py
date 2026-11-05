@@ -82,7 +82,8 @@ envs = ["e3"]
 id = "rn_ONE"
 name = "r-one"
 subscription = "openai"
-projects = [{ project = "blizzard", workspace = "ws-a", agents = 2 }, { project = "other", workspace = "ws-a", agents = 3 }]
+agents = 5
+projects = [{ project = "blizzard", workspace = "ws-a" }, { project = "other", workspace = "ws-a" }]
 gates = ["review"]
 runner_prompt = "be brief"
 transcripts_root = "/tmp/t"
@@ -210,9 +211,9 @@ def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
     (entry,) = reloaded.runners
     assert entry.id is None
     assert (entry.name, entry.subscription) == (runner_config.DEFAULT_RUNNER_NAME, "anthropic")
-    assert [(b.project, b.workspace, b.agents) for b in entry.bindings] == [
-        ("alpha", runner_config.DEFAULT_WORKSPACE_ID, None),
-        ("beta", runner_config.DEFAULT_WORKSPACE_ID, None),
+    assert [(b.project, b.workspace) for b in entry.bindings] == [
+        ("alpha", runner_config.DEFAULT_WORKSPACE_ID),
+        ("beta", runner_config.DEFAULT_WORKSPACE_ID),
     ]
     assert entry.own is not None and entry.own.agents == 1
     assert [s.slug for s in reloaded.subscriptions] == ["anthropic"]
@@ -379,12 +380,12 @@ def test_a_runner_error_halts_that_runner_and_leaves_its_sibling_intact(tmp_path
     [
         ("", "has no id"),
         ('id = "x"\nsubscription = "nope"', "does not declare"),
-        ('id = "x"\nprojects = [{ project = "p", workspace = "nowhere", agents = 1 }]', "'nowhere'"),
-        ('id = "x"\nprojects = [{ project = "p", workspace = "ws", agents = 0 }]', "agents must be a positive integer"),
+        ('id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "nowhere" }]', "'nowhere'"),
+        ('id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "ws", agents = 1 }]', "`[[runner]] agents`"),
         ('id = "x"\nprojects = [{ project = "p", workspace = "ws" }]', "has no agents"),
         ('id = "x"\nagents = 0\nprojects = [{ project = "p", workspace = "ws" }]', "agents must be a positive integer"),
         (
-            'id = "x"\nprojects = [{ project = "p", workspace = "ws", agents = 1 }, { project = "p", workspace = "ws", agents = 1 }]',
+            'id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "ws" }, { project = "p", workspace = "ws" }]',
             "bound more than once",
         ),
         ('id = "x"\n[runner.claude_code]\nenabled = false\n[runner.opencode]\nenabled = false', "enable at least one"),
@@ -420,10 +421,10 @@ def test_a_runner_with_no_projects_key_is_a_runner_error_and_an_empty_list_serve
 def test_a_runner_may_bind_projects_to_several_workspaces(tmp_path: Path) -> None:
     text = (
         '[[workspace]]\nid = "a"\nenvs = ["e1"]\n[[workspace]]\nid = "b"\nenvs = ["e2"]\n[[runner]]\nname = "r-one"\nid = "x"\n'
-        'projects = [{ project = "p", workspace = "a", agents = 1 }, { project = "q", workspace = "b", agents = 1 }]\n'
+        'agents = 1\nprojects = [{ project = "p", workspace = "a" }, { project = "q", workspace = "b" }]\n'
     )
     built = _built(load_host_config(_write(tmp_path / "host", text)), _TOKEN)
-    assert [(b.project, b.workspace, b.agents) for b in built.config.bindings or ()] == [("p", "a", 1), ("q", "b", 1)]
+    assert [(b.project, b.workspace) for b in built.config.bindings or ()] == [("p", "a"), ("q", "b")]
 
 
 @pytest.mark.parametrize(
@@ -619,9 +620,9 @@ def test_a_flat_runner_file_graduates_to_one_workspace_and_one_runner_under_the_
     assert (workspace.id, workspace.envs, workspace.max_environments) == ("ws-box", ("e1", "e2"), 3)
     runner = host.sole_runner("box")
     assert (runner.id, runner.errors) == ("rn_graduated", ())
-    assert [(b.project, b.workspace, b.agents) for b in runner.bindings] == [
-        ("default", "ws-box", None),
-        ("web", "ws-box", None),
+    assert [(b.project, b.workspace) for b in runner.bindings] == [
+        ("default", "ws-box"),
+        ("web", "ws-box"),
     ]
     assert runner.own is not None and runner.own.agents == 2
     [subscription] = host.subscriptions
@@ -657,7 +658,7 @@ def test_winter_workspaces_on_one_root_naming_disjoint_environments_load(tmp_pat
 
 def test_a_flat_runner_file_naming_no_projects_graduates_bound_to_what_the_hub_last_served(tmp_path: Path) -> None:
     runner = _graduated(tmp_path, {"runner_id": "legacy-name"}, served=("default",)).sole_runner("legacy-name")
-    assert [(b.project, b.workspace, b.agents) for b in runner.bindings] == [("default", "workspace-local", None)]
+    assert [(b.project, b.workspace) for b in runner.bindings] == [("default", "workspace-local")]
     assert runner.own is not None and runner.own.agents == 1
 
 

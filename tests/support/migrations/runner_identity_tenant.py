@@ -40,7 +40,7 @@ def started_context(store: SqlAlchemyRunnerStore, hub: FakeHub, *, checked: bool
         ),
         probe=FakeProbe(alive=set()),
         clock=FixedClock(NOW),
-        config=LoopConfig(runner_name="r-claude", runner_id=RUNNER, bindings=serving(1), agents=1),
+        config=LoopConfig(runner_name="r-claude", runner_id=RUNNER, bindings=serving(), agents=1),
         registered=False,
         identity_verdict=None if checked else IdentityVerdictHolder("blizzard runner store reset /runner"),
     )

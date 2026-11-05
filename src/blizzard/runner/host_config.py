@@ -260,8 +260,6 @@ class RunnerEntry:
     own: RunnerConfig | None = None
     #: The runner errors found reading the entry; :meth:`HostConfig.projections` adds the host-dependent ones.
     errors: tuple[str, ...] = ()
-    #: What reading the entry earns a start-up warning for, such as a deprecated key.
-    warnings: tuple[str, ...] = ()
 
 
 @domain_model
@@ -947,7 +945,6 @@ def parse(
         warnings=(
             *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
             *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held),
-            *(warning for entry in entries for warning in entry.warnings),
         ),
     )
 
@@ -1129,8 +1126,7 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
         if key in raw:
             problems.add(f"{key!r} has no home under a host: it is {home}")
     bindings = _bindings(raw, problems)
-    warnings: list[str] = []
-    agents = _runner_agents(raw, bindings, problems, warnings)
+    agents = _runner_agents(raw, bindings, problems)
     own = problems.attempt(
         "its tables",
         lambda: replace(_own_tables(raw, root=root, db_url=db_url, path=path), agents=agents),
@@ -1143,28 +1139,20 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
         bindings=bindings,
         own=own,
         errors=tuple(problems.found),
-        warnings=tuple(f"runner {name}: {warning}" for warning in warnings),
     )
 
 
-def _runner_agents(raw: ConfigView, bindings: tuple[ProjectBinding, ...], errors: _Errors, warnings: list[str]) -> int:
-    """The runner's one agent count: its own ``agents`` when set, else the sum of its bindings' deprecated ``agents``
-    — an error when some binding declares none."""
-    declared = [binding.agents for binding in bindings if binding.agents is not None]
+def _runner_agents(raw: ConfigView, bindings: tuple[ProjectBinding, ...], errors: _Errors) -> int:
+    """The runner's one agent count: its own ``agents``, an error when a runner with bindings sets none."""
     if "agents" in raw:
         agents = raw.get("agents")
         if isinstance(agents, bool) or not isinstance(agents, int) or agents < 1:
             errors.add(f"agents must be a positive integer, got {agents!r}")
             return 0
-        if declared:
-            warnings.append("agents is set, so the per-binding `agents` in `projects` are ignored")
         return agents
-    if len(declared) < len(bindings):
+    if bindings:
         errors.add("has no agents: set `agents` on the runner")
-        return 0
-    if declared:
-        warnings.append("the per-binding `agents` in `projects` is deprecated: set `agents` on the runner")
-    return sum(declared)
+    return 0
 
 
 def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
@@ -1181,7 +1169,6 @@ def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
         entry = raw.element("projects", binding)
         project = entry.get("project") if isinstance(binding, dict) else None
         workspace = entry.get("workspace") if isinstance(binding, dict) else None
-        agents = entry.get("agents") if isinstance(binding, dict) else None
         if (
             not isinstance(project, str)
             or not project.strip()
@@ -1191,13 +1178,13 @@ def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
             errors.add(f"projects entry {binding!r} must name a project and a workspace")
             continue
         label = f"binding of project {project.strip()!r}"
-        if agents is not None and (isinstance(agents, bool) or not isinstance(agents, int) or agents < 1):
-            errors.add(f"{label}: agents must be a positive integer, got {agents!r}")
+        if isinstance(binding, dict) and entry.get("agents") is not None:
+            errors.add(f"{label}: `agents` has no home on a binding: it is `[[runner]] agents`")
             continue
         if any(bound.project == project.strip() for bound in bindings):
             errors.add(f"{label}: project {project.strip()!r} is bound more than once")
             continue
-        bindings.append(ProjectBinding(project.strip(), workspace.strip(), agents))
+        bindings.append(ProjectBinding(project.strip(), workspace.strip()))
     return tuple(bindings)
 
 
