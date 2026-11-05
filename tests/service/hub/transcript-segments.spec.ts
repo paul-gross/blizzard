@@ -1,4 +1,4 @@
-import { expect, test, type TranscriptSegmentRecord } from '../../harness/fixtures';
+import { expect, test, type TranscriptSegmentRecord, RUNNER_VERSION } from '../../harness/fixtures';
 
 // exemplar: bzh:service-fixtures-only, bzh:service-clients-only, bzh:service-isolation-earned.
 
@@ -86,7 +86,7 @@ test('test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped', async (
   // The enrollment stops the token the add minted from resolving: every later call carries the enrolled one.
   const headers = { Authorization: `Bearer ${enroll.body.token}` };
   const register = await runner.post('/api/fleet/runners', {
-    data: { name: 'r1', workspace_id: 'ws-1', capabilities: [{ harness_id: 'claude', default: true }] },
+    data: { name: 'r1', version: RUNNER_VERSION, workspace_id: 'ws-1', capabilities: [{ harness_id: 'claude', default: true }] },
     headers,
   });
   expect(register.status).toBe(201);

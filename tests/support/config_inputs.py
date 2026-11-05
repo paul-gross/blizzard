@@ -16,7 +16,6 @@ from blizzard.foundation.config_keys import ConfigRegistry
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.cli.runtime import packaged_version_window
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.event_log_opener import system_event_log_opener
@@ -30,8 +29,9 @@ FLAG_REGISTRY: Final = packaged_flag_registry()
 #: Each daemon's flags at the packaged defaults, with no overrides.
 HUB_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "hub", {}).flags
 RUNNER_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "runner", {}).flags
-#: The version window packaged with the wheel, as the hub's root reads it.
-VERSION_WINDOW: Final[VersionWindow] = packaged_version_window()
+#: The version window the suite's hubs run under: a floor below the handshake, so a runner the test registers without
+#: a reported version is admitted.
+VERSION_WINDOW: Final[VersionWindow] = VersionWindow(floor="0.2", opening=None)
 #: Whether the suite's in-process config reads are strict.
 STRICT: Final = True
 

@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261101_0900_turn_page",
+  "head_revision": "20261102_0900_drop_hub_exec_slot",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -4899,76 +4899,6 @@
       "foreign_keys": [],
       "primary_key": [
         "id"
-      ],
-      "unique": []
-    },
-    "hub_exec_slot": {
-      "checks": [],
-      "columns": {
-        "acquired_at": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "DateTime"
-        },
-        "holder_chunk_id": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        },
-        "node_id": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        },
-        "released_at": {
-          "deprecated": null,
-          "nullable": true,
-          "server_default": false,
-          "type": "DateTime"
-        },
-        "slot_id": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        },
-        "tenant_id": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        }
-      },
-      "deprecated": "0.3",
-      "foreign_keys": [
-        {
-          "columns": [
-            "holder_chunk_id"
-          ],
-          "references": {
-            "columns": [
-              "chunk_id"
-            ],
-            "table": "chunks"
-          }
-        },
-        {
-          "columns": [
-            "tenant_id"
-          ],
-          "references": {
-            "columns": [
-              "tenant_id"
-            ],
-            "table": "tenants"
-          }
-        }
-      ],
-      "primary_key": [
-        "slot_id"
       ],
       "unique": []
     },

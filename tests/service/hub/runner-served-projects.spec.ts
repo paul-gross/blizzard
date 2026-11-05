@@ -1,4 +1,4 @@
-import { expect, test } from '../../harness/fixtures';
+import { expect, test, RUNNER_VERSION } from '../../harness/fixtures';
 
 // The projects a runner serves, over a real hub: what adding and registering store, what the matched peek then offers,
 // and how a claim of an unserved project's chunk is refused. Each test mints a runner and reads the tenant's project
@@ -47,7 +47,7 @@ test('test_a_registration_naming_no_projects_keeps_the_declaration_and_an_empty_
 
   const register = async (declared: { projects?: string[] } = {}) => {
     const registered = await runner.post('/api/fleet/runners', {
-      data: { workspace_id: 'w1', capabilities: CAPABILITIES, ...declared },
+      data: { version: RUNNER_VERSION, workspace_id: 'w1', capabilities: CAPABILITIES, ...declared },
     });
     expect(registered.status).toBe(201);
     return registered.body;
@@ -86,7 +86,7 @@ test('test_adding_a_runner_naming_no_projects_serves_a_one_project_tenants_proje
   const mine = listed.body.runners.find((candidate: { runner_id: string }) => candidate.runner_id === runner.runnerId);
   expect(mine.projects.map((view: ServedView) => [view.entry, view.project_id, view.slug])).toEqual([[project.id, project.id, 'default']]);
 
-  const registered = await runner.post('/api/fleet/runners', { data: { workspace_id: 'w1', capabilities: CAPABILITIES } });
+  const registered = await runner.post('/api/fleet/runners', { data: { version: RUNNER_VERSION, workspace_id: 'w1', capabilities: CAPABILITIES } });
   expect(registered.status).toBe(201);
   expect(servedIds(registered.body.projects)).toEqual([project.id]);
 });
@@ -100,7 +100,7 @@ test('test_adding_a_runner_naming_no_projects_serves_nothing_on_a_two_project_te
   const mine = listed.body.runners.find((candidate: { runner_id: string }) => candidate.runner_id === runner.runnerId);
   expect(mine.projects).toEqual([]);
 
-  const registered = await runner.post('/api/fleet/runners', { data: { workspace_id: 'w1', capabilities: CAPABILITIES } });
+  const registered = await runner.post('/api/fleet/runners', { data: { version: RUNNER_VERSION, workspace_id: 'w1', capabilities: CAPABILITIES } });
   expect(registered.status).toBe(201);
   expect(registered.body.projects).toEqual([]);
 });
@@ -116,7 +116,7 @@ test('test_claiming_an_unserved_projects_chunk_is_a_project_denial_an_older_runn
   expect(created.status).toBe(201);
   const beta = created.body.project_id as string;
   const runner = await fleet('beta-only', { projects: ['beta'] });
-  const registered = await runner.post('/api/fleet/runners', { data: { workspace_id: 'w1', capabilities: CAPABILITIES } });
+  const registered = await runner.post('/api/fleet/runners', { data: { version: RUNNER_VERSION, workspace_id: 'w1', capabilities: CAPABILITIES } });
   expect(registered.status).toBe(201);
   expect(servedIds(registered.body.projects)).toEqual([beta]);
 

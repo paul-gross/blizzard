@@ -42,7 +42,6 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedDemotion,
     TracedEpochOwner,
     TracedEscalation,
-    TracedHubExecSlot,
     TracedHubPoll,
     TracedHubTurn,
     TracedLease,
@@ -206,7 +205,6 @@ TRACE_READERS: dict[Table, tuple[str, TraceReader]] = {
     s.questions: _bespoke("questions", lambda conn, ids: _questions(conn, ids)),
     s.chunk_pause_facts: _mapped("pauses", lambda r: TracedPause(str(r.id), r.paused, r.set_at)),
     s.flow_submissions: _bespoke("hub_turns", lambda conn, ids: _turns(conn, ids)),
-    s.hub_exec_slot: _bespoke("hub_exec_slots", lambda conn, ids: _slots(conn, ids)),
     s.hub_node_poll: _mapped("hub_polls", lambda r: TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at)),
     s.chunk_bounces: _mapped("bounces", lambda r: TracedBounce(r.epoch, r.cause, r.recorded_at)),
     s.route_created: _mapped("routes_created", lambda r: TracedRouteCreation(r.created_at)),
@@ -271,15 +269,6 @@ def _turns(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubTurn
         for r in rows:
             chunk_id, node_id = visits[r.submission_id]
             grouped[chunk_id].append(TracedHubTurn(r.turn_id, node_id, r.started_at, r.ended_at))
-    return grouped
-
-
-def _slots(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubExecSlot]]:
-    slot = s.hub_exec_slot
-    stmt = OPEN_TENANTS.select(slot).where(slot.c.holder_chunk_id.in_(ids)).order_by(slot.c.acquired_at)
-    grouped: dict[str, list[TracedHubExecSlot]] = defaultdict(list)
-    for r in conn.execute(stmt).all():
-        grouped[r.holder_chunk_id].append(TracedHubExecSlot(r.slot_id, r.node_id, r.acquired_at, r.released_at))
     return grouped
 
 

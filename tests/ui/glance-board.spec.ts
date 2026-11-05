@@ -1,4 +1,4 @@
-import { expect, stepChunkUntil, test } from '../harness/fixtures';
+import { expect, stepChunkUntil, test, RUNNER_VERSION } from '../harness/fixtures';
 
 // The mobile glance board at the narrow viewport, where `/board` routes to the glance shell: while the chunks read is in
 // flight the list shows loading, never empty, and a chunk with no billed cost shows its estimate, never a plain billed
@@ -61,7 +61,7 @@ test('test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero', as
   expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
   const runner = await fleet('r1');
   const registered = await runner.post('/api/fleet/runners', {
-    data: { name: 'r1', workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
+    data: { name: 'r1', version: RUNNER_VERSION, workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
   });
   expect(registered.status).toBe(201);
   const claim = await runner.post('/api/fleet/routes', { data: { chunk_id: chunkId, workspace_id: 'w1', environment_ids: ['e'] } });

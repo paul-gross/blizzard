@@ -268,7 +268,6 @@ def _intervals(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...], en
     if step.kind is StepKind.HUB:
         node_id = step.position.node_id
         held = [(turn.turn_id, turn.node_id, turn.started_at, turn.ended_at) for turn in facts.hub_turns]
-        held += [(slot.slot_id, slot.node_id, slot.acquired_at, slot.released_at) for slot in facts.hub_exec_slots]
         for held_id, held_node_id, started_at, ended_at in held:
             if held_node_id != node_id or not step.start <= started_at <= end:
                 continue

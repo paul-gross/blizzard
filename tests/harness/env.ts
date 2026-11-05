@@ -78,3 +78,6 @@ export function daemonEnv(extra: Record<string, string> = {}, configHome?: strin
   }
   return { ...env, ...contract.set };
 }
+
+/** A version a test runner reports at registration: a line inside the hub's window, whose floor refuses an unversioned runner. */
+export const RUNNER_VERSION = '0.4.0';
