@@ -245,6 +245,15 @@ def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) 
     assert world.count() == before
 
 
+def test_one_locator_is_held_once_on_each_forge(world: _World) -> None:
+    ghe = world.authoring.create_forge("ghe", "GHE", "github", ForgeFields("https://ghe.acme.example/api/v3", None), OP)
+    world.authoring.create_work_source("demo", None, _FIELDS, OP)
+
+    twin = world.authoring.create_work_source("demo2", None, replace(_FIELDS, forge_id=ghe.forge_id), OP)
+
+    assert (twin.fields.locator, twin.fields.forge_id) == (_FIELDS.locator, ghe.forge_id)
+
+
 def test_a_retired_source_keeps_its_locator_claim(world: _World) -> None:
     record = world.authoring.create_work_source("demo", None, _FIELDS, OP)
     world.authoring.retire_work_source(record, OP)

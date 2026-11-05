@@ -2719,7 +2719,6 @@ def seed_drainable_history(
             {
                 "work_source_id": _DRAINABLE_SOURCE,
                 "forge_id": _DRAINABLE_FORGE,
-                "api_base": GITHUB_API_BASE,
                 "slug": "github",
                 "name": "github",
                 "provider": "github",

@@ -404,21 +404,17 @@ work_sources = Table(
     Column("name", String, nullable=False),
     Column("provider", String, nullable=False),
     Column("locator", String, nullable=False),
-    # Kept equal to the named forge's addresses by the store; read by nothing but a hub walked back past the forges.
-    Column("api_base", String, nullable=True, info={"deprecated": "0.3"}),
-    Column("web_base", String, nullable=True, info={"deprecated": "0.3"}),
     Column("annotate", Boolean, nullable=False),
     Column("secret_name", String, nullable=True),
     Column("revision", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_sources_tenant_id"), nullable=False),
-    # The forge the source reads its tracker on; nullable and without a foreign key through the forge transition,
-    # ``hub:forge-reference-standing`` and ``hub:forge-references-in-tenant`` holding what the constraints would.
-    Column("forge_id", String, nullable=True),
+    # The forge the source reads its tracker on.
+    Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_work_sources_forges"), nullable=False),
     PrimaryKeyConstraint("work_source_id", name="pk_work_sources"),
     UniqueConstraint("tenant_id", "slug", name="uq_work_sources_tenant_slug"),
-    UniqueConstraint("tenant_id", "provider", "locator", name="uq_work_sources_tenant_provider_locator"),
+    UniqueConstraint("tenant_id", "provider", "forge_id", "locator", name="uq_work_sources_tenant_provider_locator"),
     ForeignKeyConstraint(
         ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_work_sources_secrets"
     ),
@@ -478,8 +474,6 @@ repositories = Table(
     Column("repository_id", String, nullable=False, info={"hub_unique": True}),  # repo_<ulid>
     Column("slug", String, nullable=False),
     Column("name", String, nullable=False),
-    # Kept equal to the named forge's ``api_base`` by the store; read by nothing but a hub walked back past the forges.
-    Column("forge_api_url", String, nullable=False, info={"deprecated": "0.3"}),
     Column("owner", String, nullable=False),
     Column("repo", String, nullable=False),
     Column("base_branch", String, nullable=False),
@@ -488,16 +482,15 @@ repositories = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_repositories_tenant_id"), nullable=False),
-    # The forge the repository lives on; nullable and without a foreign key through the forge transition, as
-    # ``work_sources.forge_id`` is.
-    Column("forge_id", String, nullable=True),
+    # The forge the repository lives on.
+    Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_repositories_forges"), nullable=False),
     # How work lands into the repository; the hub writes it explicitly, the default speaks for an older writer.
     Column("landing_policy", String, nullable=False, server_default="merge-on-checks"),
     # How long a parked change may wait; null is the default.
     Column("park_timeout_hours", Integer, nullable=True),
     PrimaryKeyConstraint("repository_id", name="pk_repositories"),
     UniqueConstraint("tenant_id", "slug", name="uq_repositories_tenant_slug"),
-    UniqueConstraint("tenant_id", "forge_api_url", "owner", "repo", name="uq_repositories_tenant_coordinate"),
+    UniqueConstraint("tenant_id", "forge_id", "owner", "repo", name="uq_repositories_tenant_coordinate"),
     ForeignKeyConstraint(
         ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_repositories_secrets"
     ),

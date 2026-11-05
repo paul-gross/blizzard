@@ -27,7 +27,7 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, NewForge
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, PARKING_POLICIES, parse_policy
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
@@ -591,13 +591,10 @@ class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol
     """Adds the repository-record writes; each method commits ``change`` in the same
     transaction as the record write."""
 
-    def create(
-        self, record: ConfiguredRepository, *, change: ConfigChange, forge: NewForge | None = None
-    ) -> ConfiguredRepository:
-        """Insert, taking ``record.slug`` from any repository that left it, after creating ``forge``, when given, in the
-        same transaction. :class:`RepositorySlugTaken` / :class:`RepositoryCoordinateTaken` on a collision;
-        :class:`RepositorySecretUnavailable` when the secret is missing or retired; :class:`ForgeOriginTaken` /
-        :class:`ForgeSlugTaken` when another forge holds ``forge``'s origin or slug."""
+    def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
+        """Insert, taking ``record.slug`` from any repository that left it. :class:`RepositorySlugTaken` /
+        :class:`RepositoryCoordinateTaken` on a collision; :class:`RepositorySecretUnavailable` when the secret is
+        missing or retired."""
         ...
 
     def update(
@@ -607,11 +604,8 @@ class IWriteRepositoryRecordRepository(IReadRepositoryRecordRepository, Protocol
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
-        forge: NewForge | None = None,
     ) -> ConfiguredRepository:
-        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision — after creating ``forge``, when
-        given, in the same transaction, :class:`ForgeOriginTaken` or :class:`ForgeSlugTaken` when another forge holds
-        its origin or slug;
+        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
         :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
         the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this
         repository's former slug at ``change.recorded_at``. :class:`RepositorySlugTaken` when another repository holds

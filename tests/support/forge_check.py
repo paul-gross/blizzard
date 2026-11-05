@@ -7,11 +7,37 @@ from datetime import UTC, datetime
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.store.schema import repositories, secrets, work_sources
+from blizzard.foundation.store.utc import UtcDateTime
+from blizzard.hub.store.schema import secrets
 from tests.support.scaffolding import stamp
 
 _AT = datetime(2026, 10, 6, 9, 0, tzinfo=UTC)
 _SECRET = "forge-token"
+
+# The address-bearing tables as a store before the forge migration holds them, frozen to the columns a seed writes:
+# a later revision drops the address columns from ``schema.py``.
+_frozen = sa.MetaData()
+repositories = sa.Table(
+    "repositories",
+    _frozen,
+    *(sa.Column(c, sa.String()) for c in ("repository_id", "slug", "name", "forge_api_url", "owner", "repo")),
+    *(sa.Column(c, sa.String()) for c in ("base_branch", "secret_name")),
+    sa.Column("revision", sa.Integer()),
+    sa.Column("created_at", UtcDateTime()),
+    sa.Column("created_by", sa.String()),
+    sa.Column("tenant_id", sa.String()),
+)
+work_sources = sa.Table(
+    "work_sources",
+    _frozen,
+    *(sa.Column(c, sa.String()) for c in ("work_source_id", "slug", "name", "provider", "locator")),
+    *(sa.Column(c, sa.String()) for c in ("api_base", "web_base", "secret_name")),
+    sa.Column("annotate", sa.Boolean()),
+    sa.Column("revision", sa.Integer()),
+    sa.Column("created_at", UtcDateTime()),
+    sa.Column("created_by", sa.String()),
+    sa.Column("tenant_id", sa.String()),
+)
 
 
 def seed_addresses(

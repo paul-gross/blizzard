@@ -223,14 +223,16 @@ def _work_sources(
     outcomes: list[ImportOutcome],
 ) -> tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]:
     slugs = {record.slug for record in existing.work_sources}
-    locators = {(record.fields.provider, record.fields.locator) for record in existing.work_sources}
+    locators = {
+        (record.fields.provider, record.fields.forge_id, record.fields.locator) for record in existing.work_sources
+    }
     planned: list[tuple[ConfiguredWorkSource, ConfigChange]] = []
     for source in legacy.sources:
         forges.foresee(OriginChoice(api_base=source.api_base, web_base=source.web_base), WORK_SOURCE_ORIGIN_RULES)
     for source in legacy.sources:
         # The block's name becomes the source's display name, and the slug derived from it its handle.
         slug = derive_slug(source.name, fallback="source")
-        if slug in slugs or (source.provider, source.repo) in locators:
+        if slug in slugs:
             outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, slug, created=False))
             continue
         draft = WorkSourceDraft(
@@ -244,6 +246,9 @@ def _work_sources(
             forge = forges.decide(
                 choice, WORK_SOURCE_ORIGIN_RULES, provider=source.provider, section=WORK_SOURCES_SECTION, index=0
             )
+            if (source.provider, forge.forge_id, source.repo) in locators:
+                outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, slug, created=False))
+                continue
             fields = draft.on(forge.forge_id)
             planned.append(
                 ConfiguredWorkSource.new(

@@ -5,8 +5,7 @@ from the append-only ``work_source_lifecycle_facts`` table, newest-fact-wins per
 (``bzh:facts-not-status``). Every write commits its change row in the same transaction.
 
 Every write takes the named forge's row lock after the tenant's, refuses a forge that is gone, retired, or of another
-kind than the source's provider, and stores the forge's addresses in the deprecated ``api_base`` and ``web_base``
-columns."""
+kind than the source's provider."""
 
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, ForgeKindMismatch, ForgeOriginTaken, ForgeSlugTaken, NewForge
+from blizzard.hub.domain.config.forges import ForgeId, ForgeKindMismatch
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
@@ -36,9 +35,9 @@ from blizzard.hub.domain.config.work_sources import (
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 
-# Shares forge resolution and insertion on the caller's connection.
+# Shares forge resolution on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.forge_record_store import StandingForge, insert_new_forge, referred_forge
+from blizzard.hub.store.internal.forge_record_store import StandingForge, referred_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 
@@ -47,9 +46,6 @@ from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-
-#: What creating the forge a write names refuses when another forge holds its origin or slug.
-_FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 
 _SLUGS = SlugTables(work_sources, work_source_former_slugs, "work_source_id", WorkSourceSlugTaken)
 
@@ -88,6 +84,7 @@ def _locator_holder(conn: Connection, record: ConfiguredWorkSource) -> str | Non
         .select(work_sources, work_sources.c.slug)
         .where(
             work_sources.c.provider == record.fields.provider,
+            work_sources.c.forge_id == record.fields.forge_id,
             work_sources.c.locator == record.fields.locator,
             work_sources.c.work_source_id != record.work_source_id,
         )
@@ -95,7 +92,7 @@ def _locator_holder(conn: Connection, record: ConfiguredWorkSource) -> str | Non
     return None if row is None else row.slug
 
 
-def _columns(record: ConfiguredWorkSource, forge: StandingForge) -> dict[str, object]:
+def _columns(record: ConfiguredWorkSource) -> dict[str, object]:
     f = record.fields
     return {
         "slug": record.slug,
@@ -103,8 +100,6 @@ def _columns(record: ConfiguredWorkSource, forge: StandingForge) -> dict[str, ob
         "provider": f.provider,
         "locator": f.locator,
         "forge_id": f.forge_id,
-        "api_base": forge.api_base,
-        "web_base": forge.web_base,
         "annotate": f.annotate,
         "secret_name": f.secret,
     }
@@ -114,7 +109,7 @@ def insert_record(conn: Connection, record: ConfiguredWorkSource, change: Config
     """The create body, inside the caller's transaction. :class:`WorkSourceSecretUnavailable`,
     :class:`WorkSourceSlugTaken` or :class:`WorkSourceLocatorTaken` when refused, and the forge refusals of
     :func:`referred_forge`."""
-    forge = _check_forge(conn, record, enabled=not record.retired)
+    _check_forge(conn, record, enabled=not record.retired)
     _check_secret(conn, record.fields.secret)
     _SLUGS.claim(conn, record.work_source_id, record.slug)
     holder = _locator_holder(conn, record)
@@ -125,7 +120,7 @@ def insert_record(conn: Connection, record: ConfiguredWorkSource, change: Config
         .insert(work_sources)
         .values(
             work_source_id=record.work_source_id,
-            **_columns(record, forge),
+            **_columns(record),
             revision=record.revision,
             created_at=record.created_at,
             created_by=record.created_by,
@@ -138,7 +133,7 @@ def update_record(
     conn: Connection, record: ConfiguredWorkSource, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
-    forge = _check_forge(conn, record, enabled=not record.retired)
+    _check_forge(conn, record, enabled=not record.retired)
     _check_secret(conn, record.fields.secret)
     if left_slug is not None:
         _SLUGS.claim(conn, record.work_source_id, record.slug)
@@ -149,7 +144,7 @@ def update_record(
         statements_of(conn)
         .update(work_sources)
         .where(work_sources.c.work_source_id == record.work_source_id, work_sources.c.revision == from_revision)
-        .values(**_columns(record, forge), revision=record.revision)
+        .values(**_columns(record), revision=record.revision)
     ).rowcount
     if moved != 1:
         raise ConfigRevisionConflict(
@@ -207,9 +202,7 @@ class WorkSourceRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(
-        self, record: ConfiguredWorkSource, *, change: ConfigChange, forge: NewForge | None = None
-    ) -> ConfiguredWorkSource:
+    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
         try:
             with self._store.write(
                 "create",
@@ -218,11 +211,8 @@ class WorkSourceRecordStore:
                     WorkSourceSlugTaken,
                     WorkSourceLocatorTaken,
                     IntegrityError,
-                    *_FORGE_REFUSALS,
                 ),
             ) as conn:
-                if forge is not None:
-                    insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
@@ -235,13 +225,11 @@ class WorkSourceRecordStore:
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
-        forge: NewForge | None = None,
     ) -> ConfiguredWorkSource:
         try:
             with self._store.write(
                 "update",
                 expect=(
-                    *_FORGE_REFUSALS,
                     ConfigFieldError,
                     WorkSourceLocatorTaken,
                     WorkSourceSlugTaken,
@@ -249,8 +237,6 @@ class WorkSourceRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
-                if forge is not None:
-                    insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc

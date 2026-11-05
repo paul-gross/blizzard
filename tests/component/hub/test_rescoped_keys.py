@@ -127,9 +127,9 @@ def _row(table: sa.Table, key: Mapping[str, object], n: int) -> dict[str, object
 _KEYS: list[tuple[str, dict[str, object]]] = [
     ("secrets", {"name": "gh"}),
     ("work_sources", {"slug": "acme"}),
-    ("work_sources", {"provider": "github", "locator": "acme/demo"}),
+    ("work_sources", {"provider": "github", "forge_id": "frg_github", "locator": "acme/demo"}),
     ("repositories", {"slug": "demo"}),
-    ("repositories", {"forge_api_url": "https://api.github.com", "owner": "acme", "repo": "demo"}),
+    ("repositories", {"forge_id": "frg_github", "owner": "acme", "repo": "demo"}),
     ("keyed_locks", {"namespace": "graph_name", "key": "release"}),
     ("routines", {"name": "nightly"}),
     ("work_items", {"source": "hub", "ref": "1"}),

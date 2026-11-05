@@ -36,7 +36,6 @@ from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
-from blizzard.hub.store.schema import repositories, work_sources
 from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
@@ -62,20 +61,6 @@ class _World:
 
     def ghe(self) -> ConfiguredForge:
         return self.authoring.create_forge("ghe", "Acme GHE", "github", ForgeFields(_GHE, None), _CLI)
-
-    def columns(self, table: str, key: str) -> tuple[object, ...]:
-        """A record's deprecated address columns, as a hub walked back past the forges would read them."""
-        scoped = hub_store_connections(self.engine)
-        with scoped.read("columns") as conn:
-            if table == "repositories":
-                query = scoped.select(repositories, repositories.c.forge_id, repositories.c.forge_api_url).where(
-                    repositories.c.repository_id == key
-                )
-            else:
-                query = scoped.select(
-                    work_sources, work_sources.c.forge_id, work_sources.c.api_base, work_sources.c.web_base
-                ).where(work_sources.c.work_source_id == key)
-            return tuple(conn.execute(query).one())
 
 
 @pytest.fixture
@@ -169,21 +154,6 @@ def test_an_address_field_on_an_edit_is_refused_naming_the_records_forge(world: 
     with pytest.raises(FieldMovedToForge, match="forge ghe"):
         world.authoring.edit_work_source_naming(source, WorkSourceEdit(annotate=True), choice, _CLI)
     assert world.sources.get(source.work_source_id) == source
-
-
-def test_a_forge_edit_rewrites_every_referrers_address_columns(world: _World) -> None:
-    forge = world.ghe()
-    repo = world.authoring.create_repository("demo", None, _REPO.on(forge.forge_id), _CLI)
-    source = world.authoring.create_work_source("demo", None, _SOURCE.on(forge.forge_id), _CLI)
-    moved = world.authoring.edit_forge(
-        forge, ForgeEdit(api_base="https://ghe.acme.example/api/v3", web_base="https://code.acme.example"), _CLI
-    )
-    assert world.columns("repositories", repo.repository_id) == (forge.forge_id, moved.fields.api_base)
-    assert world.columns("work_sources", source.work_source_id) == (
-        forge.forge_id,
-        "https://ghe.acme.example/api/v3",
-        "https://code.acme.example",
-    )
 
 
 def test_a_repository_edit_names_its_forge_by_id_in_the_change_log(world: _World) -> None:

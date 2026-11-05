@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 import sqlalchemy as sa
@@ -37,6 +38,11 @@ def _snapshot(engine: sa.Engine) -> dict[str, object]:
 def _reshaped(engine: sa.Engine) -> dict[str, object]:
     snapshot = _snapshot(engine)
     return {table: snapshot[table] for table in _RESHAPED}
+
+
+def _landing_columns(reshaped: dict[str, object]) -> set[tuple[object, ...]]:
+    shape = cast("tuple[frozenset[tuple[object, ...]], ...]", reshaped["repositories"])
+    return {c for c in shape[0] if c[0] in {"landing_policy", "park_timeout_hours"}}
 
 
 def _columns(engine: sa.Engine, table: str) -> dict[str, bool]:
@@ -70,7 +76,12 @@ def test_the_upgrade_reshapes_the_store_as_the_schema_declares(tmp_path: Path) -
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)
-        assert _reshaped(engine) == _reshaped(declared)
+        migrated, schema = _reshaped(engine), _reshaped(declared)
+        # A later revision rekeys `repositories` on its forge, so only the two columns this one adds are compared there.
+        assert {t: v for t, v in migrated.items() if t != "repositories"} == {
+            t: v for t, v in schema.items() if t != "repositories"
+        }
+        assert _landing_columns(migrated) == _landing_columns(schema)
     finally:
         declared.dispose()
     assert _columns(engine, "repositories")["landing_policy"] is False
