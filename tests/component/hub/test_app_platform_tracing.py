@@ -362,7 +362,6 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
         ACTION_CHOICE,
         ACTION_NAME,
         ACTION_PASS_SPAN,
-        RUN_STEP_SPAN,
     )
     from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
     from blizzard.hub.store import schema as s
@@ -441,8 +440,6 @@ def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_co
     (merge,) = [step for step in steps if step.kind is StepKind.HUB]
     told = [span for span in assemble_step(facts, merge, steps) if span.name == "hub exec"]
     assert [(span.context.trace_id, span.context.span_id) for span in told] == [(hub_exec.trace_id, hub_exec.span_id)]
-    # The retired step loop emits no step span.
-    assert not [span for span in spans if span.name == RUN_STEP_SPAN]
 
 
 def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authenticated_operator(tmp_path: Path) -> None:

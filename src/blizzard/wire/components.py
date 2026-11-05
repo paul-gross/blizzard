@@ -33,7 +33,7 @@ from blizzard.foundation.runner_event_types import (
     TakeoverChangeCause,
 )
 from blizzard.foundation.sign_in_refusal import SignInRefusal
-from blizzard.wire.bounce import BounceAction, BounceEnvelope, BounceFailedStep, BouncePullRequest, BounceUnlandedRepo
+from blizzard.wire.bounce import BounceAction, BounceEnvelope, BouncePullRequest, BounceUnlandedRepo
 from blizzard.wire.finding import (
     AddFindingOp,
     FindingCandidate,
@@ -84,7 +84,6 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
         FindingCandidate,
         BounceEnvelope,
         BounceAction,
-        BounceFailedStep,
         BounceUnlandedRepo,
         BouncePullRequest,
         ProjectRequiredBody,

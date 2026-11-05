@@ -9,12 +9,11 @@ import { DeliveryDrawer } from './delivery-drawer';
 
 const CHUNK = 'ch_01drawer000000000000000000';
 
-const TAIL = Array.from({ length: 20 }, (_, i) => `out ${i}`).join('\n');
 const ENVELOPE = JSON.stringify({
   cause: 'failure',
   detail: 'checks failed in `test`',
   unlanded: [],
-  step: { name: 'test', exit_code: 1, output_tail: TAIL, log_artifact: 'hub-log.land' },
+  step: { name: 'test', exit_code: 1, output_tail: 'out 19', log_artifact: 'hub-log.land' },
   action: null,
 });
 
@@ -87,22 +86,16 @@ describe('DeliveryDrawer', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="detail-close"]')).toBeNull();
   });
 
-  it('folds a bounce\'s long step output to its last lines, unfolding it on demand, its reason without code ticks', async () => {
+  it('reads a bounce stored with a step by its reason without code ticks, drawing no step output', async () => {
     configure(chunkDetail({ chunk_id: CHUNK, history: [], bounces: [bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-60) })] }));
     const fixture = create();
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const entry = el.querySelector<HTMLElement>('[data-testid="delivery-history-entry"]')!;
-    const tail = () => entry.querySelector('.tail')!.textContent!.split('\n');
 
     expect(entry.querySelector('.text')?.textContent?.trim()).toBe('bounced · failure');
-    expect(entry.querySelector('.detail')?.textContent?.trim()).toBe('checks failed in test');
-    expect(tail()).toHaveLength(12);
-    expect(tail().at(-1)).toBe('out 19');
-
-    entry.querySelector<HTMLButtonElement>('.fold')!.click();
-    await fixture.whenStable();
-    expect(tail()).toHaveLength(20);
-    expect(entry.querySelector('.fold')?.textContent?.trim()).toBe('show less');
+    expect([...entry.querySelectorAll('.detail')].map((each) => each.textContent?.trim())).toEqual(['checks failed in test']);
+    expect(entry.textContent).not.toContain('exited');
+    expect(entry.textContent).not.toContain('out 19');
   });
 });

@@ -17,6 +17,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
+from tests.support.hub_node_artifacts import record_landing
 from tests.support.scaffolding import (
     chunk_stores,
     default_project,
@@ -81,20 +82,21 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
         revisions={"blizzard": "a1b2c3d"},
         measurement=None,
     )
-    delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
-    delivery.record_delivery_repo_landed(
+    stores = chunk_stores(engine, FixedClock(instant=_NOW))
+    delivery = stores.delivery
+    record_landing(
+        stores.artifacts,
         "ch_2",
         repo="blizzard",
         commit_hash="e4f5",
-        repository_id=None,
         at=baseline_at + timedelta(hours=1),
         close_decision=decide_close_enqueue([], lambda _: True),
     )
-    delivery.record_delivery_repo_landed(
+    record_landing(
+        stores.artifacts,
         "ch_2",
         repo="other-repo",
         commit_hash="9988",
-        repository_id=None,
         at=baseline_at + timedelta(hours=1),
         close_decision=decide_close_enqueue([], lambda _: True),
     )

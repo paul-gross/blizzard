@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
+from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     HubHarness,
@@ -179,8 +180,8 @@ def _record_asset(hub: HubHarness, chunk_id: str, name: str, content: str) -> No
     assert graph is not None
     node = graph.node_by_name("deliver")
     assert node is not None
-    assert hub.services.hub_markers.record_marker(
-        chunk_id, node_id=node.node_id, node_name="deliver", epoch=_EPOCH, name=name, content=content
+    assert record_hub_asset(
+        hub, chunk_id, node_id=node.node_id, node_name="deliver", epoch=_EPOCH, name=name, content=content
     )
 
 
@@ -226,13 +227,12 @@ def test_record_findings_records_the_chunks_review_delta(tmp_path: Path) -> None
 def test_record_findings_without_a_delta_answers_invalid_with_the_recorders_explanation(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     chunk_id = _at_deliver(hub, _graph("record-findings", ("recorded", "invalid", "failure")))
-    route = hub.client.post(
-        f"/api/chunks/{chunk_id}/review-findings-delivery?node_id={_node_id(hub, chunk_id)}&epoch={_EPOCH}"
-    ).json()
 
     assert _visit(hub, chunk_id) == "invalid"
-    assert route["outcome"] == "invalid"
-    assert _artifact(hub, chunk_id, "review-findings-failure") == route["detail"]
+    assert (
+        _artifact(hub, chunk_id, "review-findings-failure")
+        == f"no 'review-finding-delta' artifact found for chunk {chunk_id}"
+    )
     assert _findings(hub) == 0
 
 

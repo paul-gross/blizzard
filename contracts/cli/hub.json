@@ -7019,35 +7019,6 @@
       "path": "hub queue",
       "short_help": "Read and reorder the queue of ready chunks runners claim from."
     },
-    "record-marker": {
-      "help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way. A hub\nnode's action records its own markers. Removed in 0.5.",
-      "params": [
-        {
-          "hidden": false,
-          "kind": "argument",
-          "name": "name",
-          "opts": [
-            "name"
-          ],
-          "required": true,
-          "secondary_opts": [],
-          "type": "text"
-        },
-        {
-          "hidden": false,
-          "kind": "argument",
-          "name": "content",
-          "opts": [
-            "content"
-          ],
-          "required": false,
-          "secondary_opts": [],
-          "type": "text"
-        }
-      ],
-      "path": "hub record-marker",
-      "short_help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way."
-    },
     "repo": {
       "aliases": [
         "show",

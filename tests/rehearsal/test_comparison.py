@@ -103,3 +103,13 @@ def test_reflection_drift_sets_aside_what_postgres_alone_reflects_differently() 
         "position": {"type": "Double", "server_default": False},
     }}}}  # fmt: skip
     assert reflection_drift(reflected, committed) == []
+
+
+def test_a_null_run_refilled_by_the_downgrade_is_the_restore_not_a_loss() -> None:
+    before = {"graph_nodes": {"('nd_1',)": {"run": "None"}}}
+    refilled = {"graph_nodes": {"('nd_1',)": {"run": '\'[{"command": "land"}]\''}}}
+    assert row_losses(before, refilled) == []
+    seeded = {"graph_nodes": {"('nd_1',)": {"run": "'seeded'"}}}
+    assert row_losses(seeded, refilled) == [
+        "table graph_nodes: row ('nd_1',) column run: 'seeded' became '[{\"command\": \"land\"}]'"
+    ]

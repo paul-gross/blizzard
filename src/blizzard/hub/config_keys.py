@@ -38,7 +38,6 @@ from blizzard.hub.layout import (
     SECRET_KEYS_PARTS,
     SIGNING_KEYS_PARTS,
     STORE_FILENAME,
-    WORKDIRS_DIRNAME,
 )
 
 HUB_REGISTRY_NAME = "hub"
@@ -124,9 +123,5 @@ HUB_REGISTRY = ConfigRegistry(
         DurablePath(f"{DATA_DIRNAME}/{STORE_FILENAME}", "the default store, with its -wal sidecar when one exists"),
         DurablePath("/".join((DATA_DIRNAME, *SIGNING_KEYS_PARTS)), "the IdP signing keypairs and their meta.json"),
         DurablePath("/".join((DATA_DIRNAME, *SECRET_KEYS_PARTS)), "the keys that seal every stored secret"),
-        DurablePath(
-            f"{DATA_DIRNAME}/{WORKDIRS_DIRNAME}",
-            "deprecated: scratch clones a hub `run:` step used; no hub step writes it any more, so it is reclaimable",
-        ),
     ),
 )

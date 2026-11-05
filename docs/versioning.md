@@ -125,7 +125,8 @@ is a breaking schema raise whose new shape cannot carry both names, such as one 
 it may rename or reassign a span name with no deprecation period, and its upgrade note names the change. Every breaking
 trace change raises `blizzard.trace.schema_version` and the instrumentation scope version together, so a backend can
 tell shapes apart without reading the release notes. [`docs/deployment/tracing.md`](./deployment/tracing.md) describes
-the shape for operators. A raised schema version comes with an upgrade note; schema 3's is
+the shape for operators. A raised schema version comes with an upgrade note; schema 4's is
+[Upgrading from trace schema 3](./deployment/tracing.md#upgrading-from-trace-schema-3), schema 3's is
 [Upgrading from trace schema 2](./deployment/tracing.md#upgrading-from-trace-schema-2), and schema 2's is
 [Upgrading from trace schema 1](./deployment/tracing.md#upgrading-from-trace-schema-1).
 

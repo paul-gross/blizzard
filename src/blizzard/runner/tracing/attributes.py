@@ -11,7 +11,7 @@ from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.platform_tracing import attributes as platform_attributes
 
 INSTRUMENTATION_SCOPE = "blizzard.runner.runner_spans"
-INSTRUMENTATION_SCOPE_VERSION = "3"
+INSTRUMENTATION_SCOPE_VERSION = "4"
 DEFAULT_SERVICE_NAME = "blizzard-runner"
 
 # Dimensions

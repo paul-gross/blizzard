@@ -16,9 +16,6 @@ import {
 
 import { ordinal, placeStateLabel, placeStateTone } from '../core/flow-place.model';
 
-/** The lines of a failed step's output the history shows before its expander. */
-export const OUTPUT_TAIL_LINES = 12;
-
 /** A link the drawer draws. */
 export interface DrawerLink {
   readonly text: string;
@@ -39,15 +36,6 @@ export interface DrawerRepo {
   readonly lastAttempt: { readonly outcome: string; readonly tone: Tone; readonly age: string; readonly title: string } | null;
 }
 
-/** A failed step a bounce names. */
-export interface DrawerStep {
-  readonly name: string;
-  readonly exitCode: number | null;
-  readonly outputTail: string | null;
-  /** Whether the tail runs past {@link OUTPUT_TAIL_LINES}, so it folds. */
-  readonly long: boolean;
-}
-
 /** One entry of the delivery history. */
 export interface HistoryEntry {
   readonly id: string;
@@ -65,7 +53,6 @@ export interface HistoryEntry {
   readonly tone: HistoryTone;
   /** A bounce's full account. */
   readonly detail: string | null;
-  readonly step: DrawerStep | null;
   /** The key of the bounce's log artifact, or `null`. */
   readonly logKey: string | null;
   /** Whether this is a graph transition stitched in beside a delivery event, drawn secondary to the events. */
@@ -162,7 +149,7 @@ interface Draft extends Omit<HistoryEntry, 'repos'> {
 }
 
 function draft(id: string, at: string, now: number, repo: string | null, text: string, tone: HistoryTone): Draft {
-  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, tone, detail: null, step: null, logKey: null, transition: false, move: null };
+  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, tone, detail: null, logKey: null, transition: false, move: null };
 }
 
 /**
@@ -244,13 +231,10 @@ function logKey(detail: ChunkDetail, name: string | null, at: string): string | 
 
 function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: number, now: number): Draft {
   const envelope = parseBounceEnvelope(bounce.envelope);
-  const step = envelope?.step ?? null;
-  const tail = step?.output_tail ?? null;
   return {
     ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced', bounce.rework)),
     repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
     detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
-    step: step ? { name: step.name, exitCode: step.exit_code, outputTail: tail, long: (tail?.split('\n').length ?? 0) > OUTPUT_TAIL_LINES } : null,
     logKey: logKey(detail, envelope?.action?.log_artifact ?? null, bounce.recorded_at),
   };
 }
@@ -374,10 +358,4 @@ export function deliveryDrawerView(
   const forges = flowForges(flows, repositories);
   const repos = chunkForges(detail, forges).map((forge) => repoBlock(detail, forge, forges, now));
   return { repos, history: deliveryHistory(detail, forges, now), summary: summary(detail, repos, now) };
-}
-
-/** A tail's first {@link OUTPUT_TAIL_LINES} lines, or all of it when unfolded. */
-export function outputTail(step: DrawerStep, unfolded: boolean): string {
-  if (!step.outputTail) return '';
-  return unfolded || !step.long ? step.outputTail : step.outputTail.split('\n').slice(-OUTPUT_TAIL_LINES).join('\n');
 }

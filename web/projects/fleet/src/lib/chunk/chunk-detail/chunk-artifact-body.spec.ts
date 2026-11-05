@@ -11,6 +11,7 @@ import {
   surveyArtifactView,
 } from 'fleet/testing';
 import { ChunkArtifactBody } from './chunk-artifact-body';
+import { parseBounceEnvelope } from './parse-bounce-envelope';
 
 const ASSET: ArtifactView = assetArtifactView({
   epoch: 1,
@@ -234,7 +235,6 @@ describe('ChunkArtifactBody', () => {
       cause: 'poll-timeout',
       detail: 'no verdict',
       unlanded: [{ repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: null }],
-      step: { name: 'tests', exit_code: 600, output_tail: 'boom', log_artifact: 'hub-log.tests' },
     });
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
@@ -242,18 +242,17 @@ describe('ChunkArtifactBody', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="artifact-bounce-cause"]')?.textContent).toContain('poll-timeout');
     expect(el.querySelector('[data-testid="artifact-bounce-detail"]')?.textContent).toContain('no verdict');
-    expect(el.querySelector('[data-testid="artifact-bounce-facts"]')?.textContent).toContain('600');
+    expect(el.querySelector('[data-testid="artifact-bounce-unlanded-0"]')?.textContent).toContain('acme/one');
     el.querySelector<HTMLElement>('[data-testid="artifact-bounce-raw-toggle"]')!.click();
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="artifact-bounce-raw"]')?.textContent).toBe(raw);
   });
 
-  it('renders the action a pass answered, and no step row, on an action envelope', async () => {
+  it('renders the action a pass answered on an action envelope', async () => {
     const raw = JSON.stringify({
       cause: 'failure',
       detail: 'acme/one did not land: `land` answered failure',
       unlanded: [{ repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: null }],
-      step: null,
       action: { name: 'land', choice: 'failure', log_artifact: 'hub-log.land' },
     });
     const fixture = TestBed.createComponent(ChunkArtifactBody);
@@ -261,12 +260,29 @@ describe('ChunkArtifactBody', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="artifact-bounce-action"]')?.textContent).toContain('land answered failure');
-    expect(el.querySelector('[data-testid="artifact-bounce-step"]')).toBeNull();
     expect(el.querySelector('[data-testid="artifact-bounce-unlanded-0"]')?.textContent).toContain('acme/one');
   });
 
+  it('renders an envelope stored with a step by its detail, with no Step or Output row', async () => {
+    const raw = JSON.stringify({
+      cause: 'failure',
+      detail: 'acme/one did not land: `tests` exited 2',
+      unlanded: [],
+      step: { name: 'tests', exit_code: 2, output_tail: '2 failed, 40 passed', log_artifact: 'hub-log.tests' },
+    });
+    expect(parseBounceEnvelope(raw)).not.toBeNull();
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifact-bounce-detail"]')?.textContent).toContain('acme/one did not land: `tests` exited 2');
+    expect(el.querySelector('[data-testid="artifact-bounce-step"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifact-bounce-output"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifact-bounce-facts"]')?.textContent).not.toContain('2 failed');
+  });
+
   it('renders a bounce-envelope that does not validate verbatim', async () => {
-    const raw = '{"cause":"poll-timeout","detail":"no verdict","step":{"name":"tests"}}';
+    const raw = '{"cause":"poll-timeout","detail":"no verdict","action":{"name":"land"}}';
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
     await fixture.whenStable();

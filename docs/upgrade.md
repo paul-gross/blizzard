@@ -113,6 +113,26 @@ The same release drops the `hub_exec_slot` table, so a hub step run before turns
 To go back, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)); the downgrade recreates
 the table empty.
 
+It also removes the surfaces 0.3 deprecated, which only a hub node's `run:` script used. A hub node runs no commands
+since 0.3, so a hub that has carried every node onto an action ([Hub nodes run no commands](#hub-nodes-run-no-commands))
+loses nothing it still uses. Each removed surface and what replaced it:
+
+- `POST /api/chunks/{chunk_id}/hub-markers` is gone: a hub node's action records its own markers.
+- `POST /api/chunks/{chunk_id}/garden-delivery` is gone: the `garden-deliver` action delivers a routine run's delta and
+  proposals.
+- `POST /api/chunks/{chunk_id}/review-findings-delivery` is gone: the `record-findings` action records a review's
+  deferred findings.
+- The hub store's `graph_nodes.run` column is dropped: a hub node is taken by its `action`, and a command the carry-over
+  could not translate is kept in `graph_nodes.legacy_run`.
+- `blizzard hub record-marker` is gone: a hub node's action records its own markers.
+- A `bounce-envelope` artifact's `step` is gone: a bounce names the `action` whose pass answered it.
+- The hub's `data/hub_workdirs` directory is gone: the hub removes it on boot, and nothing replaces it, since a hub node
+  runs no command that needs a scratch clone.
+- The `blizzard.hub.run_step.name` and `blizzard.hub.run_step.exit_code` span attributes leave the trace contract, which
+  rises to schema 4: read `blizzard.hub.action.name` and `blizzard.hub.action.choice` on the `hub action pass` span
+  ([Upgrading from trace schema 3](./deployment/tracing.md#upgrading-from-trace-schema-3)). Each of these answered only
+  a script, and a client still calling a removed path or command is answered as an unknown one.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

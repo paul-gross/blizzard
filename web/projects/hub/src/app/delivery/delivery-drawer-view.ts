@@ -1,10 +1,10 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { type ChunkDetail, KitAsyncState, type KitAsyncStateValue, KitButton, KitSkeleton, toneColor } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { ChunkDetailHeader } from '../core/chunk-detail-header/chunk-detail-header';
-import { type DeliveryDrawerView as DrawerViewValue, type DrawerStep, outputTail } from './delivery-history.model';
+import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.model';
 
 /**
  * The drawer's face for one chunk: the board dock's chunk header (without its actions), a block per repository it
@@ -36,23 +36,4 @@ export class DeliveryDrawerView {
   /** The loading skeleton's bar widths, in percent: two repository cards, six history rows. */
   protected readonly skRepos = [70, 55];
   protected readonly skHistory = [62, 48, 70, 40, 56, 66];
-
-  /** The history entries whose step output is unfolded. */
-  private readonly unfolded = signal<ReadonlySet<string>>(new Set());
-
-  protected isUnfolded(id: string): boolean {
-    return this.unfolded().has(id);
-  }
-
-  protected tail(id: string, step: DrawerStep): string {
-    return outputTail(step, this.isUnfolded(id));
-  }
-
-  protected toggle(id: string): void {
-    this.unfolded.update((held) => {
-      const next = new Set(held);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }
 }

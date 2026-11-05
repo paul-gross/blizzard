@@ -165,24 +165,6 @@ class ChunkDeliveryStore:
                 )
             )
 
-    def record_delivery_repo_landed(
-        self,
-        chunk_id: str,
-        *,
-        repo: str,
-        commit_hash: str,
-        repository_id: str | None,
-        at: datetime,
-        close_decision: CloseEnqueueDecision,
-    ) -> None:
-        with self._store.write("record_delivery_repo_landed") as conn:
-            conn.execute(
-                self._store.insert(s.delivery_repo_landed).values(
-                    chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, repository_id=repository_id, landed_at=at
-                )
-            )
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-
     def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None:
         with self._store.write("record_delivery_landed") as conn:
             conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))

@@ -319,31 +319,6 @@
   color: var(--label);
   overflow-wrap: anywhere;
 }
-.tail {
-  align-self: stretch;
-  margin: 2px 0;
-  padding: 4px 6px;
-  max-height: calc(12 * 1.35em + 8px);
-  overflow: hidden;
-  background: black;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  line-height: 1.35;
-  white-space: pre-wrap;
-}
-.tail.open {
-  max-height: none;
-}
-.fold {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--cyan);
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  cursor: pointer;
-}
 .empty {
   margin: 6px 10px;
   color: var(--label);
@@ -389,8 +364,4 @@
 }
 :host(.mobile) .entry {
   column-gap: 8px;
-}
-:host(.mobile) .tail {
-  max-width: 100%;
-  overflow-x: auto;
 }

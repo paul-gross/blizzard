@@ -51,7 +51,7 @@ def test_every_serialized_form_validates_and_round_trips_without_a_dropped_key(
 
     assert parsed.model_dump(mode="json") == json.loads(body)
     assert [u.pr is not None for u in parsed.unlanded] == [bool(pr_markers), False]
-    assert json.loads(body)["step"] is None
+    assert "step" not in json.loads(body)
     assert (parsed.action is not None) is (action is not None)
 
 
@@ -62,8 +62,11 @@ def test_a_pass_bounce_reads_the_action_and_the_choice_it_answered() -> None:
     assert body["action"] == {"name": "land", "choice": "failure", "log_artifact": "hub-log.land"}
 
 
-def test_a_stored_step_envelope_still_validates_with_no_action() -> None:
+def test_a_stored_step_envelope_still_validates_with_its_step_ignored() -> None:
     parsed = BounceEnvelope.model_validate(_LEGACY_STEP_BODY)
 
     assert parsed.action is None
-    assert parsed.model_dump(mode="json", exclude={"action"}) == _LEGACY_STEP_BODY
+    assert parsed.model_dump(mode="json") == {
+        **{k: v for k, v in _LEGACY_STEP_BODY.items() if k != "step"},
+        "action": None,
+    }

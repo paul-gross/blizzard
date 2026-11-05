@@ -125,16 +125,6 @@
                   @if (entry.detail; as detail) {
                     <span class="detail" [title]="detail">{{ detail }}</span>
                   }
-                  @if (entry.step; as step) {
-                    <span class="detail">{{ step.name }} exited {{ step.exitCode ?? '?' }}</span>
-                    @if (step.outputTail) {
-                      <pre class="tail" [class.open]="isUnfolded(entry.id)">{{ tail(entry.id, step) }}</pre>
-                      @if (step.long) {
-                        <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the output, not an action: the kit button's bordered chrome would outweigh it. -->
-                        <button type="button" class="fold" (click)="toggle(entry.id)">{{ isUnfolded(entry.id) ? 'show less' : 'show all' }}</button>
-                      }
-                    }
-                  }
                 </span>
                 <span class="age">{{ entry.age }}</span>
               </li>

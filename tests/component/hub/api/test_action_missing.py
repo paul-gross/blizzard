@@ -1,6 +1,6 @@
 """A hub node naming no action, and an answer no edge routes, each escalate their chunk to a person once, at the
 next epoch, rather than stalling it; the boot pass reaches a chunk already standing at such a node; the invariant
-checker names the node; and a graph minted now stores no ``run`` (component tier)."""
+checker names the node; and a graph minted now keeps no ``legacy_run`` (component tier)."""
 
 from __future__ import annotations
 
@@ -219,20 +219,18 @@ def test_the_invariant_names_a_hub_node_with_no_action_pinning_a_live_chunk(tmp_
     assert "'merge'" in violation.detail
 
 
-def test_a_graph_minted_now_stores_no_run(tmp_path: Path) -> None:
+def test_a_graph_minted_now_keeps_no_legacy_run(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _chunk_id, _build_node_id, graph_id = _claimed(hub)
 
     with hub.engine.begin() as conn:
         rows = conn.execute(
             hub_scoped(
-                select(s.graph_nodes.c.name, s.graph_nodes.c.run, s.graph_nodes.c.legacy_run).where(
-                    s.graph_nodes.c.graph_id == graph_id
-                )
+                select(s.graph_nodes.c.name, s.graph_nodes.c.legacy_run).where(s.graph_nodes.c.graph_id == graph_id)
             )
         ).all()
 
-    assert sorted(tuple(row) for row in rows) == [("build", None, None), ("merge", None, None)]
+    assert sorted(tuple(row) for row in rows) == [("build", None), ("merge", None)]
 
 
 # --- An answer no edge routes --------------------------------------------------

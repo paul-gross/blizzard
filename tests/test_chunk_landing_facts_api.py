@@ -9,6 +9,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
+from tests.support.hub_node_artifacts import record_landing
 from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
 from tests.support.scaffolding import (
     add_tenant,
@@ -27,16 +28,16 @@ pytestmark = pytest.mark.component
 def test_page_cost_stays_flat_as_chunk_history_grows(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk = ingest_chunk(hub)
-    delivery = chunk_stores(hub.engine, hub.clock).delivery
+    artifacts = chunk_stores(hub.engine, hub.clock).artifacts
     decision = CloseEnqueueDecision(closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset())
 
     def add_facts(start: int, end: int) -> None:
         for i in range(start, end):
-            delivery.record_delivery_repo_landed(
+            record_landing(
+                artifacts,
                 chunk,
                 repo=f"repo-{i}",
                 commit_hash=f"sha-{i}",
-                repository_id=None,
                 at=hub.clock.now(),
                 close_decision=decision,
             )

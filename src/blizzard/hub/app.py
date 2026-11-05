@@ -146,7 +146,7 @@ from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
-from blizzard.hub.layout import SIGNING_KEYS_PARTS
+from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
@@ -614,6 +614,7 @@ def build_hosted_app(
     core = build_hub_core(engine, clock=resolved_clock)
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+    remove_retired_workdirs(config.data_dir)
 
     def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
         return WorkSourceEntry.registry(

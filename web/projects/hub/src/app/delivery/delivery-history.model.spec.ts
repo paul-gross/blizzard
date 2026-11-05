@@ -2,7 +2,7 @@ import { type ChunkDetail, type ChunkFlowPlaceView, type FlowFactView, type Flow
 import { assetArtifactView, bounceView, chunkDetail, FIXTURE_NOW, fixtureInstant, landedRepoView, prView, transitionView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
-import { deliveryDrawerView, deliveryHistory, type DrawerStep, OUTPUT_TAIL_LINES, outputTail } from './delivery-history.model';
+import { deliveryDrawerView, deliveryHistory } from './delivery-history.model';
 
 const MIN = 60;
 
@@ -154,11 +154,11 @@ describe('deliveryHistory', () => {
     expect(entries[0].move).toMatchObject({ from: 'ship', choice: 'conflict', to: 'resolve-scope' });
   });
 
-  it('reads a bounce with its repositories, detail, failed step and log', () => {
+  it('reads a bounce with its repositories, detail and log, ignoring a step it was stored with', () => {
     const envelope = JSON.stringify({
       cause: 'failure',
       detail: 'checks failed in `test`',
-      step: { name: 'test', exit_code: 1, output_tail: Array.from({ length: OUTPUT_TAIL_LINES + 3 }, (_, i) => `line ${i}`).join('\n'), log_artifact: 'test-log' },
+      step: { name: 'test', exit_code: 1, output_tail: 'boom', log_artifact: 'test-log' },
       unlanded: [{ repo: 'paul-gross/blizzard', branch: 'feat/x', commit: 'a'.repeat(40) }],
       action: { name: 'land', choice: 'failure', log_artifact: 'deliver-log' },
     });
@@ -169,12 +169,12 @@ describe('deliveryHistory', () => {
     ];
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'failure', envelope, recorded_at: fixtureInstant(-10 * MIN) })], artifacts }), FORGES, FIXTURE_NOW);
     expect(entry).toMatchObject({ text: 'bounced · failure', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
-    expect(entry.step).toMatchObject({ name: 'test', exitCode: 1, long: true });
+    expect(entry).not.toHaveProperty('step');
   });
 
   it('reads a bounce whose envelope is not JSON as carrying nothing but its cause', () => {
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', envelope: '<html>' })] }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · conflict', tone: 'needs', repos: null, detail: null, step: null, logKey: null });
+    expect(entry).toMatchObject({ text: 'bounced · conflict', tone: 'needs', repos: null, detail: null, logKey: null });
   });
 });
 
@@ -253,21 +253,5 @@ describe('deliveryDrawerView', () => {
     const open = deliveryDrawerView(detail({ flow_record: record.slice(0, 2) }), FLOWS, REPOSITORIES, FIXTURE_NOW)!;
     expect(open.summary).toMatchObject({ span: '[2h 0m]', spanLanded: false, reposLanded: 0 });
     expect(deliveryDrawerView(detail({}), FLOWS, REPOSITORIES, FIXTURE_NOW)!.summary.span).toBeNull();
-  });
-});
-
-describe('outputTail', () => {
-  const lines = (n: number) => Array.from({ length: n }, (_, i) => `l${i}`).join('\n');
-  const step = (tail: string | null, long: boolean): DrawerStep => ({ name: 'test', exitCode: 1, outputTail: tail, long });
-
-  it('shows a long tail\'s last lines folded, and all of it unfolded', () => {
-    const tail = lines(OUTPUT_TAIL_LINES + 5);
-    expect(outputTail(step(tail, true), false).split('\n')).toEqual(tail.split('\n').slice(-OUTPUT_TAIL_LINES));
-    expect(outputTail(step(tail, true), true)).toBe(tail);
-  });
-
-  it('shows a short tail whole, and nothing for none', () => {
-    expect(outputTail(step(lines(3), false), false)).toBe(lines(3));
-    expect(outputTail(step(null, false), false)).toBe('');
   });
 });

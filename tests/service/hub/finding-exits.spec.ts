@@ -1,4 +1,3 @@
-import * as fs from 'node:fs';
 import { expect, test, type HubApi, type MockRunner, type Repository } from '../../harness/fixtures';
 
 const routine = 'garden-service';
@@ -10,27 +9,30 @@ interface Garden {
   repository: Repository;
   head: string;
   routineId: string;
-  nodes: Record<string, string>;
 }
 
 async function garden(api: HubApi, runner: MockRunner, repository: Repository, head: string): Promise<Garden> {
-  const graphs = await api.get('/api/graphs');
-  expect(graphs.status).toBe(200);
-  const packaged = graphs.body.find((graph: { name: string }) => graph.name === 'garden-routine');
-  expect(packaged).toBeDefined();
-  const graph = await api.get(`/api/graphs/${packaged.graph_id}`);
-  expect(graph.status).toBe(200);
-  const nodes = Object.fromEntries(graph.body.nodes.map((node: { name: string; node_id: string }) => [node.name, node.node_id]));
   const created = await api.post('/api/routines', { data: {
     name: routine, graph_name: 'garden-routine', default_scope_slug: scope, default_model: [], default_effort: null,
   } });
   expect(created.status).toBe(201);
   const registered = await runner.drive('register');
   expect(registered.body.status).toBe(201);
-  return { api, runner, repository, head, routineId: created.body.routine_id, nodes };
+  return { api, runner, repository, head, routineId: created.body.routine_id };
 }
 
-async function deliver(g: Garden, ops: object[], options: { scope?: string; proposals?: object[]; routineId?: string } = {}) {
+/** What the deliver node's `garden-deliver` pass answered, and the refusal it recorded when it answered `invalid`. */
+interface Delivered {
+  outcome: string | undefined;
+  detail: string;
+}
+
+/**
+ * One routine run's whole delivery: mint the run, claim it as the mock runner and walk it through survey and reconcile
+ * (and propose, when `proposals` are given) to the graph's `deliver` node, whose `garden-deliver` action records the
+ * delta and docket. Resolves once the run has left `deliver`.
+ */
+async function deliver(g: Garden, ops: object[], options: { scope?: string; proposals?: object[]; routineId?: string } = {}): Promise<Delivered> {
   const targetScope = options.scope ?? scope;
   const proposals = options.proposals ?? [];
   const run = await g.api.post(`/api/routines/${options.routineId ?? g.routineId}/run`, {
@@ -41,21 +43,35 @@ async function deliver(g: Garden, ops: object[], options: { scope?: string; prop
   expect((await g.api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
   const claimed = await g.runner.drive('claim', { chunk_id: chunkId });
   expect(claimed.body.claimed).toBe(true);
-  const artifacts = [
-    { name: 'survey', kind: 'asset', content: '{}', attached: true },
-    { name: 'delta', kind: 'asset', content: JSON.stringify({
-      scope: targetScope, revisions: { [g.repository.name]: g.head }, measurement: 'service sweep', findings: ops,
-    }), attached: true },
-    ...(proposals.length ? [{ name: 'docket', kind: 'asset', content: JSON.stringify(proposals), attached: true }] : []),
-  ];
-  const completed = await g.runner.drive('complete', { chunk_id: chunkId, choice: 'found', artifacts });
-  expect(completed.body.response?.outcome).toBe('next');
+  const delta = { name: 'delta', kind: 'asset', content: JSON.stringify({
+    scope: targetScope, revisions: { [g.repository.name]: g.head }, measurement: 'service sweep', findings: ops,
+  }), attached: true };
+  const surveyed = await g.runner.drive('complete', {
+    chunk_id: chunkId, choice: 'found', artifacts: [{ name: 'survey', kind: 'asset', content: '{}', attached: true }, delta],
+  });
+  expect(surveyed.body.response?.outcome).toBe('next');
+  let handed;
+  if (proposals.length) {
+    const reconciled = await g.runner.drive('complete', { chunk_id: chunkId, choice: 'converged', artifacts: [delta] });
+    expect(reconciled.body.response?.outcome).toBe('next');
+    const docket = { name: 'docket', kind: 'asset', content: JSON.stringify(proposals), attached: true };
+    handed = await g.runner.drive('complete', { chunk_id: chunkId, choice: 'proposed', artifacts: [docket] });
+  } else {
+    handed = await g.runner.drive('complete', { chunk_id: chunkId, choice: 'nothing-to-propose', artifacts: [delta] });
+  }
+  expect(handed.body.response?.outcome).toBe('hub_node_taken');
+  await expect
+    .poll(async () => (await g.api.get(`/api/chunks/${chunkId}`)).body.current_node_name, { timeout: 60_000 })
+    .not.toBe('deliver');
   const detail = await g.api.get(`/api/chunks/${chunkId}`);
   expect(detail.status).toBe(200);
-  return g.api.post(`/api/chunks/${chunkId}/garden-delivery`, {
-    params: { node_id: g.nodes.deliver!, epoch: detail.body.latest_epoch },
-    data: { delta: ['delta'], proposals: proposals.length ? ['docket'] : [] },
-  });
+  const exit = (detail.body.history as { from_node_name: string; choice_name: string | null }[])
+    .filter((transition) => transition.from_node_name === 'deliver')
+    .at(-1);
+  const failure = (detail.body.artifacts as { name: string; content: string | null }[])
+    .filter((artifact) => artifact.name === 'garden-delivery-failure')
+    .at(-1);
+  return { outcome: exit?.choice_name ?? undefined, detail: failure?.content ?? '' };
 }
 
 function add_op(locus: string, introduced?: string) {
@@ -70,8 +86,7 @@ async function live(g: Garden) {
 
 async function seed(g: Garden, count: number, introduced?: string): Promise<string[]> {
   const response = await deliver(g, Array.from({ length: count }, (_, i) => add_op(`src/app.py:${i}`, introduced)));
-  expect(response.status).toBe(200);
-  expect(response.body.outcome).toBe('recorded');
+  expect(response.outcome).toBe('recorded');
   const rows = await live(g);
   expect(rows.length).toBeGreaterThanOrEqual(count);
   return rows.slice(0, count).map((row) => row.finding_id);
@@ -81,18 +96,6 @@ async function read_back(g: Garden, id: string) {
   const response = await g.api.get(`/api/findings/${id}`);
   expect(response.status).toBe(200);
   return response.body;
-}
-
-async function markMerged(g: Garden, chunkId: string) {
-  const detail = await g.api.get(`/api/chunks/${chunkId}`);
-  expect(detail.status).toBe(200);
-  const graph = await g.api.get(`/api/graphs/${detail.body.graph_id}`);
-  expect(graph.status).toBe(200);
-  const marker = await g.api.post(`/api/chunks/${chunkId}/hub-markers`, {
-    params: { node_id: graph.body.entry_node_id, epoch: 1 },
-    data: { name: `merged/${g.repository.name}`, content: 'landed' },
-  });
-  expect(marker.status).toBe(200);
 }
 
 test.describe('delivery and tenant-wide findings', () => {
@@ -184,15 +187,14 @@ test.describe('delivery and tenant-wide findings', () => {
     const [exited, flagged] = await seed(g, 2) as [string, string];
     expect((await api.post('/api/findings/wont-fix', { data: { finding_ids: [exited], note: 'declined' } })).status).toBe(200);
     const gone = await deliver(g, [{ op: 'gone', id: flagged, note: 'did not reproduce this sweep' }]);
-    expect(gone.body).toEqual({ outcome: 'recorded', detail: '' });
+    expect(gone).toEqual({ outcome: 'recorded', detail: '' });
     expect((await read_back(g, flagged)).state).toBe('gone');
     const rejected = await deliver(g, [{ op: 'observed', id: exited }]);
-    expect(rejected.status).toBe(200);
-    expect(rejected.body.outcome).toBe('invalid');
-    expect(rejected.body.detail).toContain(exited);
+    expect(rejected.outcome).toBe('invalid');
+    expect(rejected.detail).toContain(exited);
     expect((await read_back(g, exited)).state).toBe('wont-fix');
     const revived = await deliver(g, [{ op: 'observed', id: flagged }]);
-    expect(revived.body.outcome).toBe('recorded');
+    expect(revived.outcome).toBe('recorded');
     expect((await read_back(g, flagged)).state).toBe('live');
   });
 
@@ -206,7 +208,7 @@ test.describe('delivery and tenant-wide findings', () => {
     const local = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
       + `T${[date.getHours(), date.getMinutes(), date.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')}`;
     const recorded = await deliver(g, [add_op('src/app.py:1', g.head), add_op('src/app.py:2', g.head), add_op('src/app.py:3')]);
-    expect(recorded.body.outcome).toBe('recorded');
+    expect(recorded.outcome).toBe('recorded');
     const ids = Object.fromEntries((await live(g)).map((row) => [row.locus, row.finding_id]));
     for (const [verb, locus, note] of [
       ['resolve', 'src/app.py:1', 'fixed'], ['confirm-gone', 'src/app.py:2', 'gone'], ['wont-fix', 'src/app.py:3', 'declined'],
@@ -256,8 +258,8 @@ test.describe('delivery and tenant-wide findings', () => {
     for (const slug of [notLinked, retiredSwept]) expect((await api.post('/api/scopes', { data: { slug, description: '' } })).status).toBe(201);
     expect((await api.put(`/api/routines/${g.routineId}/scopes/${retiredSwept}`)).status).toBe(204);
     const recorded = await deliver(g, [add_op('src/app.py:1')]);
-    expect(recorded.body.outcome).toBe('recorded');
-    expect((await deliver(g, [add_op('src/app.py:2')], { scope: retiredSwept })).status).toBe(200);
+    expect(recorded.outcome).toBe('recorded');
+    expect((await deliver(g, [add_op('src/app.py:2')], { scope: retiredSwept })).outcome).toBe('recorded');
     expect((await api.post(`/api/scopes/${retiredSwept}/retire`, { data: { by: 'operator' } })).status).toBe(202);
     const response = await api.get(`/api/routines/${g.routineId}/sweeps`, { params: { since: shifted(-1).toISOString(), until: shifted(1).toISOString() } });
     expect(response.status).toBe(200);
@@ -279,7 +281,7 @@ test.describe('delivery and tenant-wide findings', () => {
     expect(commit.status).toBe(200);
     const g = await garden(api, await mockRunner('garden'), repo, commit.body.sha);
     const recorded = await deliver(g, [add_op('src/app.py:1')]);
-    expect(recorded.body.outcome).toBe('recorded');
+    expect(recorded.outcome).toBe('recorded');
     const before = await live(g);
     expect(before).toHaveLength(1);
     expect((await api.post(`/api/scopes/${scope}/retire`, { data: { by: 'operator' } })).status).toBe(202);
@@ -287,66 +289,6 @@ test.describe('delivery and tenant-wide findings', () => {
     expect(after.status).toBe(200);
     expect(after.body.findings.map((row: { finding_id: string }) => row.finding_id)).toEqual(before.map((row) => row.finding_id));
     expect(after.body.findings[0].state).toBe(before[0]!.state);
-  });
-
-  test('test_delivering_an_accepted_proposals_minted_item_closes_its_findings_to_delivered', async ({ api, forge, repository, mockRunner }) => {
-    const repo = await repository();
-    const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
-    expect(commit.status).toBe(200);
-    const g = await garden(api, await mockRunner('garden'), repo, commit.body.sha);
-    const [first, second] = await seed(g, 2) as [string, string];
-    const proposed = await deliver(g, [{ op: 'observed', id: first }, { op: 'observed', id: second }], { proposals: [
-      { ref: 'P1', class: 'handoff', title: 'answer both weeds', body: 'one response covering both findings', findings: [first, second] },
-    ] });
-    expect(proposed.body.outcome).toBe('recorded');
-    const listed = await api.get('/api/garden-proposals');
-    expect(listed.body.proposals).toHaveLength(1);
-    const proposal = listed.body.proposals[0];
-    expect(proposal.findings).toEqual([first, second]);
-    const accepted = await api.post(`/api/garden-proposals/${proposal.proposal_id}/accept`, { data: { reason: 'taking it' } });
-    expect(accepted.status).toBe(200);
-    expect(accepted.body.closure.item_outcome).toBe('minted');
-    const pointer = `${accepted.body.closure.source}:${accepted.body.closure.ref}`;
-    expect((await read_back(g, first)).state).toBe('live');
-    await markMerged(g, accepted.body.chunk_id);
-    await api.sweep('close_drain');
-    for (const id of [first, second]) expect(await read_back(g, id)).toMatchObject({ state: 'delivered', note: `delivered by ${pointer}` });
-  });
-
-  test('test_an_operator_proposal_over_two_routines_and_scopes_delivers_its_findings', async ({ api, forge, repository, mockRunner, cli }, testInfo) => {
-    const repo = await repository();
-    const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
-    expect(commit.status).toBe(200);
-    const g = await garden(api, await mockRunner('garden'), repo, commit.body.sha);
-    const [first] = await seed(g, 1) as [string];
-    const secondScope = 'garden-svc-2';
-    const secondRoutine = 'garden-service-2';
-    expect((await api.post('/api/scopes', { data: { slug: secondScope, description: '' } })).status).toBe(201);
-    const created = await api.post('/api/routines', { data: {
-      name: secondRoutine, graph_name: 'garden-routine', default_scope_slug: secondScope, default_model: [], default_effort: null,
-    } });
-    expect(created.status).toBe(201);
-    const recorded = await deliver(g, [add_op('src/other.py:1')], { scope: secondScope, routineId: created.body.routine_id });
-    expect(recorded.body.outcome).toBe('recorded');
-    const secondLive = await api.get('/api/findings', { params: { routine: secondRoutine, scope: secondScope } });
-    expect(secondLive.status).toBe(200);
-    const second = secondLive.body.findings[0].finding_id;
-    const bodyPath = testInfo.outputPath('body.md');
-    fs.writeFileSync(bodyPath, 'one response covering both findings');
-    const output = await cli(['hub', 'garden-proposal', 'create', '--title', 'answer both weeds', '--class', 'handoff',
-      '--body-file', bodyPath, '--finding', first, '--finding', second, '--json']);
-    expect(output.code).toBe(0);
-    const proposal = JSON.parse(output.stdout);
-    expect(proposal).toMatchObject({ origin: 'operator', routine_name: null });
-    expect(proposal.findings.sort()).toEqual([first, second].sort());
-    const accepted = await api.post(`/api/garden-proposals/${proposal.proposal_id}/accept`, { data: { reason: 'taking it' } });
-    expect(accepted.status).toBe(200);
-    expect(accepted.body.closure.item_outcome).toBe('minted');
-    const pointer = `${accepted.body.closure.source}:${accepted.body.closure.ref}`;
-    expect((await read_back(g, first)).state).toBe('live');
-    await markMerged(g, accepted.body.chunk_id);
-    await api.sweep('close_drain');
-    for (const id of [first, second]) expect(await read_back(g, id)).toMatchObject({ state: 'delivered', note: `delivered by ${pointer}` });
   });
 });
 

@@ -229,7 +229,7 @@ version, with their own `service.name`. The resource carries:
 | `service.version`               | `string` | The running hub's or runner's version.                                                                                                                                                                                    |
 | `blizzard.trace.schema_version` | `string` | The version of this contract.                                                                                                                                                                                             |
 
-`blizzard.trace.schema_version` is `3`. A breaking change to the shape raises it together with the scope version; a
+`blizzard.trace.schema_version` is `4`. A breaking change to the shape raises it together with the scope version; a
 backend that keys on either can tell shapes apart.
 
 ## Trace and span ids
@@ -362,9 +362,6 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
   - *The hub's action passes.* A hub node takes one pass of its action per turn: a span named `hub action pass`, a
     direct child of that turn's `hub exec` span, carrying the action's name and the choice it answered, never its visit
     or its effects. The hub takes the turn on its own, so no request links the `hub exec` span.
-  - *The deprecated `hub run step` span.* The hub no longer runs a `run:` step, so it no longer emits `hub run step` or
-    its two `blizzard.hub.run_step.*` attributes; read `hub action pass` and its `blizzard.hub.action.*` attributes
-    instead. Both attributes stay in the dictionary, deprecated, until the release that removes them.
   - *A restart between poll and exit.* A poll's spans parent on a step root the trace sweep exports only once that hub
     step closes. A restart between a poll and the exit of the hub node it drove can leave that root never exported. A
     trace backend then shows the poll's spans under a missing parent.
@@ -577,7 +574,7 @@ configures, with no daemon in between.
 - **When it is on.** Only when an OTLP endpoint is set, `OTEL_SDK_DISABLED` is not `true` and `OTEL_TRACES_EXPORTER` is
   not `none`. A worker's own environment never takes this path: a process that carries `BLIZZARD_TRACEPARENT` or
   `BLIZZARD_RUNNER_URL` records only the [worker span](#worker-spans), if any. `host` in either group, a bare
-  `blizzard hub` or `blizzard runner`, and `hub record-marker` are never traced.
+  `blizzard hub` or `blizzard runner` are never traced.
 - **What it records.** Each command is one root span with a trace of its own, always sampled, named for the command,
   such as `hub chunk list` or `runner status`, whichever alias ran it. It carries `blizzard.cli.command` and
   `process.exit.code`, and an error status for a non-zero exit. It never records an argument or option value, and no
@@ -599,28 +596,26 @@ configures, with no daemon in between.
 
 ### Platform attributes
 
-| Attribute                         | Type     | Meaning                                                                                                      |
-| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `blizzard.caller`                 | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
-| `blizzard.chunk.id`               | `string` | The chunk a request's route names.                                                                           |
-| `blizzard.cli.command`            | `string` | The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`.                          |
-| `blizzard.hub.action.choice`      | `string` | The choice a hub node's action pass answered; empty when it answered an escalation.                          |
-| `blizzard.hub.action.name`        | `string` | The hub action a hub node's pass took.                                                                       |
-| `blizzard.hub.run_step.exit_code` | `int`    | Deprecated: the exit code of a hub node's `run:` step, no longer emitted; read `blizzard.hub.action.choice`. |
-| `blizzard.hub.run_step.name`      | `string` | Deprecated: a hub node's `run:` step's authored name, no longer emitted; read `blizzard.hub.action.name`.    |
-| `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
-| `blizzard.runner.id`              | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
-| `blizzard.runner.name`            | `string` | The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.   |
-| `blizzard.tenant`                 | `string` | The tenant a request acts in, or the tenant the runner the span belongs to serves; absent until known.       |
-| `blizzard.tenant_name`            | `string` | The name of that tenant, as of when the span was told.                                                       |
-| `blizzard.tick.step`              | `string` | The tick step a child span covers.                                                                           |
-| `error.type`                      | `string` | The error class when the CLI's request failed.                                                               |
-| `http.request.method`             | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
-| `http.response.status_code`       | `int`    | The status the daemon answered the CLI's request with.                                                       |
-| `process.exit.code`               | `int`    | The exit code of the CLI command.                                                                            |
-| `server.address`                  | `string` | The host the CLI's request went to.                                                                          |
-| `server.port`                     | `int`    | The port the CLI's request went to.                                                                          |
-| `url.full`                        | `string` | The CLI request's URL, without query string or fragment.                                                     |
+| Attribute                    | Type     | Meaning                                                                                                      |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `blizzard.caller`            | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
+| `blizzard.chunk.id`          | `string` | The chunk a request's route names.                                                                           |
+| `blizzard.cli.command`       | `string` | The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`.                          |
+| `blizzard.hub.action.choice` | `string` | The choice a hub node's action pass answered; empty when it answered an escalation.                          |
+| `blizzard.hub.action.name`   | `string` | The hub action a hub node's pass took.                                                                       |
+| `blizzard.lease.id`          | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
+| `blizzard.runner.id`         | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.runner.name`       | `string` | The latest registered name of the runner the span belongs to, or of the runner a request authenticated as.   |
+| `blizzard.tenant`            | `string` | The tenant a request acts in, or the tenant the runner the span belongs to serves; absent until known.       |
+| `blizzard.tenant_name`       | `string` | The name of that tenant, as of when the span was told.                                                       |
+| `blizzard.tick.step`         | `string` | The tick step a child span covers.                                                                           |
+| `error.type`                 | `string` | The error class when the CLI's request failed.                                                               |
+| `http.request.method`        | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
+| `http.response.status_code`  | `int`    | The status the daemon answered the CLI's request with.                                                       |
+| `process.exit.code`          | `int`    | The exit code of the CLI command.                                                                            |
+| `server.address`             | `string` | The host the CLI's request went to.                                                                          |
+| `server.port`                | `int`    | The port the CLI's request went to.                                                                          |
+| `url.full`                   | `string` | The CLI request's URL, without query string or fragment.                                                     |
 
 ## Checking on tracing
 
@@ -681,7 +676,7 @@ If the exporter refuses a batch, the replay stops and reports what it had told b
 
 The hub mints each runner's id, `rn_` and a ULID, when an operator adds the runner, and the runner's name becomes a
 label beside it. Trace and span ids derive from the chunk, epoch and span role, never from a runner, so none changes,
-and the trace schema and scope versions stay `3`. From the upgrade on:
+and the trace schema and scope versions did not change. From the upgrade on:
 
 - **`blizzard.runner.id` carries the `rn_` id.** Spans told before the upgrade carry the runner's name there, and a
   backend keeps them as they were told; no replay is needed, and none rewrites them.
@@ -694,6 +689,18 @@ same span ids, now with the `rn_` id and the name, and a runner replay tells a l
 id of the runner's current registration, the one the hub's spans carry; a backend that dedupes on span ids keeps
 whichever it was told first. An upgraded runner tells nothing until its first registration with the upgraded hub, then
 tells the leases that closed meanwhile.
+
+## Upgrading from trace schema 3
+
+Trace schema 4 removes the `blizzard.hub.run_step.name` and `blizzard.hub.run_step.exit_code` platform attributes, which
+no release has emitted since the hub stopped running a node's `run:` step, and with them the `hub run step` span name. A
+dashboard or alert that selects either attribute or that span must read the `hub action pass` span and its
+`blizzard.hub.action.name` and `blizzard.hub.action.choice` instead. No trace or span id changes, and no span told under
+schema 3 carries what was removed, so nothing is deleted and nothing is replayed.
+
+1. Redeploy the hub and every runner on the release that carries schema 4, so their spans carry the same schema and
+   scope version.
+2. Repoint any query that still names a removed attribute or span.
 
 ## Upgrading from trace schema 2
 
@@ -722,7 +729,7 @@ Platform spans the hub told live are not stored, so no replay brings back those 
 Trace schema 2 put every span of a chunk in one trace, so every trace id changed. Spans told under schema 1 keep their
 old trace ids and would sit beside the new ones as separate traces, so the backend is rebuilt rather than mixed.
 
-1. Redeploy the hub and every runner on the release that carries schema 3 or a later one.
+1. Redeploy the hub and every runner on the release that carries schema 4 or a later one.
 2. Drop or segregate the schema 1 data however your backend allows. A backend with datasets: delete the datasets the
    fleet wrote (`blizzard-hub`, `blizzard-runner`, `blizzard-cli`, `blizzard-worker-program`, and the dataset of every
    service name `[tracing.worker_program_services]` maps a program to), keeping the environment and its ingest keys.

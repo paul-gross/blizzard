@@ -1,1 +1,50 @@
 # Recorded allowances for blizzard-compat, each keyed on a release line. README.md beside this file owns the format.
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "HubMarkerRequest"
+reason = "component schema deleted"
+because = "HubMarkerRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:479); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "HubMarkerResponse"
+reason = "component schema deleted"
+because = "HubMarkerResponse is the response of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:481); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "GardenDeliveryRequest"
+reason = "component schema deleted"
+because = "GardenDeliveryRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:514); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "GardenDeliveryResponse"
+reason = "component schema deleted"
+because = "GardenDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:516); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ReviewFindingsDeliveryResponse"
+reason = "component schema deleted"
+because = "ReviewFindingsDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/review-findings-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:563); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub record-marker"
+reason = "command removed"
+because = "0.4's record-marker refuses on every invocation, recording nothing (v0.4.0-rc.1:src/blizzard/hub/cli/marker.py:8-17), and nothing in 0.4 runs it: a hub node runs no commands, so its only caller, a hub node's run: script, no longer exists; a person running it is told it is removed in either release."
+
+[[allowance]]
+line = "0.4"
+surface = "config"
+where = "data/hub_workdirs"
+reason = "durable path removed"
+because = "0.4 lists data/hub_workdirs as a deprecated, reclaimable durable path (v0.4.0-rc.1:src/blizzard/hub/config_keys.py:127-130) that no 0.4 code writes or reads: its only writer was a hub node's run: step, and a hub node runs no commands; the hub now deletes the directory on boot, so an operator has nothing to carry or back up."

@@ -1187,11 +1187,11 @@
   "instrumentation_scopes": [
     {
       "name": "blizzard.hub.fleet_spans",
-      "version": "3"
+      "version": "4"
     },
     {
       "name": "blizzard.runner.runner_spans",
-      "version": "3"
+      "version": "4"
     }
   ],
   "link_reasons": [
@@ -1249,18 +1249,6 @@
       {
         "meaning": "The hub action a hub node's pass took.",
         "name": "blizzard.hub.action.name",
-        "type": "string"
-      },
-      {
-        "deprecated": true,
-        "meaning": "Deprecated: the exit code of a hub node's `run:` step, no longer emitted; read `blizzard.hub.action.choice`.",
-        "name": "blizzard.hub.run_step.exit_code",
-        "type": "int"
-      },
-      {
-        "deprecated": true,
-        "meaning": "Deprecated: a hub node's `run:` step's authored name, no longer emitted; read `blizzard.hub.action.name`.",
-        "name": "blizzard.hub.run_step.name",
         "type": "string"
       },
       {
@@ -1363,7 +1351,7 @@
       "type": "string"
     }
   ],
-  "schema_version": "3",
+  "schema_version": "4",
   "spans": [
     {
       "meaning": "One runner or hub attempt at a node, the root of a step, under the work root.",
