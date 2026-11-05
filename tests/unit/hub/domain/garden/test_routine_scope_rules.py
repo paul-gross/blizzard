@@ -15,11 +15,11 @@ from blizzard.hub.domain.garden.routines import (
     RoutineDefaultScopeUnlinkError,
     RoutineEdit,
     RoutineGraphUnresolvedError,
-    RoutineNameImmutableError,
-    RoutineNameTakenError,
+    RoutineSlugImmutableError,
+    RoutineSlugTakenError,
     RoutineVerb,
     require_graph_resolves,
-    require_name_free,
+    require_slug_free,
 )
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeVerb
 from blizzard.hub.domain.graph.model import Graph
@@ -34,6 +34,7 @@ _SCOPE = Scope(
 _OTHER_SCOPE = Scope(scope_id="scp_runner", slug="runner", description="", created_at=_T0, project_id=_PROJECT)
 _ROUTINE = Routine(
     routine_id="rtn_1",
+    slug="gardening",
     name="gardening",
     graph_name="default",
     default_scope_slug="blizzard",
@@ -128,14 +129,14 @@ def test_a_run_of_a_retired_routine_is_illegal() -> None:
 # --- authoring rules ---------------------------------------------------------
 
 
-def test_a_free_name_passes() -> None:
-    require_name_free(None, "gardening")
+def test_a_free_slug_passes() -> None:
+    require_slug_free(None, "gardening")
 
 
-def test_a_held_name_refuses_naming_it() -> None:
-    with pytest.raises(RoutineNameTakenError) as raised:
-        require_name_free(_ROUTINE, "gardening")
-    assert raised.value.name == "gardening"
+def test_a_held_slug_refuses_naming_it() -> None:
+    with pytest.raises(RoutineSlugTakenError) as raised:
+        require_slug_free(_ROUTINE, "gardening")
+    assert raised.value.slug == "gardening"
 
 
 def test_a_resolved_graph_passes_through() -> None:
@@ -164,6 +165,7 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
     assert minted.routine_id.startswith("rtn_")
     assert minted == Routine(
         routine_id=minted.routine_id,
+        slug="nightly",
         name="nightly",
         graph_name="default",
         default_scope_slug="blizzard",
@@ -177,9 +179,9 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
     assert (change.record_key, change.revision) == ("nightly", 1)
 
 
-def test_an_edit_keeping_the_name_yields_the_record_to_write() -> None:
+def test_an_edit_keeping_the_slug_yields_the_record_to_write() -> None:
     decided = _ROUTINE.edit(
-        RoutineEdit(name="gardening", graph_name="other", default_scope_slug=ScopeSlug.parse("runner")),
+        RoutineEdit(slug="gardening", graph_name="other", default_scope_slug=ScopeSlug.parse("runner")),
         _CTX,
         if_match=None,
         at=_T0,
@@ -189,10 +191,10 @@ def test_an_edit_keeping_the_name_yields_the_record_to_write() -> None:
     assert edited == replace(_ROUTINE, graph_name="other", default_scope_slug="runner", revision=2)
 
 
-def test_an_edit_renaming_the_routine_refuses_naming_the_current_name() -> None:
-    with pytest.raises(RoutineNameImmutableError) as raised:
-        _ROUTINE.edit(RoutineEdit(name="renamed"), _CTX, if_match=None, at=_T0)
-    assert raised.value.current_name == "gardening"
+def test_an_edit_changing_the_slug_refuses_naming_the_current_slug() -> None:
+    with pytest.raises(RoutineSlugImmutableError) as raised:
+        _ROUTINE.edit(RoutineEdit(slug="renamed"), _CTX, if_match=None, at=_T0)
+    assert raised.value.current_slug == "gardening"
 
 
 def test_the_default_scope_cannot_be_unlinked() -> None:

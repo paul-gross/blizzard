@@ -5,7 +5,7 @@ about it.
 
 ## Your charge
 
-The chunk's work item carries the routine, scope, and mode. The routine's name is the axis: the target's agent-context
+The chunk's work item carries the routine, scope, and mode. The routine's slug is the axis: the target's agent-context
 entry point routes to the gardening-axes registry that declares every axis it tends — go only as far as that route
 names, never hunting for something registry-shaped. The entry names what to look for (Evaluates), what you cover
 (Scope), the standard it judges against (Criteria — follow it, not the restatement), and what to record every run

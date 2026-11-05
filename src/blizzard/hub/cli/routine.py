@@ -36,7 +36,7 @@ class RoutineListing(Listing):
     def line(self, row: Any) -> str:
         marker = "  retired" if row.get("retired") else ""
         return (
-            f"{row['routine_id']}  name={row['name']}  graph={row['graph_name']}  "
+            f"{row['routine_id']}  slug={row['slug']}  name={row['name']}  graph={row['graph_name']}  "
             f"scope={row['default_scope_slug']}{marker}"
         )
 
@@ -49,7 +49,7 @@ class RoutineDetail:
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['routine_id']}  name={body['name']}  graph={body['graph_name']}"
+        yield f"{body['routine_id']}  slug={body['slug']}  name={body['name']}  graph={body['graph_name']}"
         yield f"  default scope: {body['default_scope_slug']}"
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
@@ -67,6 +67,7 @@ def routine_group() -> None:
 @click.argument("name")
 @click.argument("graph_name")
 @click.argument("default_scope_slug")
+@click.option("--name", "display_name", default=None, help="The routine's display name; defaults to the slug.")
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
 @click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
@@ -76,20 +77,23 @@ def routine_create(
     name: str,
     graph_name: str,
     default_scope_slug: str,
+    display_name: str | None,
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
     project: str | None,
 ) -> None:
-    """Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
+    """Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
 
-    DEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to
+    NAME is the routine's slug — its immutable lineage and handle; --name sets a display name that
+    defaults to the slug. DEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to
     an enabled graph."""
     resp = cli.send(
         "post",
         project_path(project, "/routines"),
         json_body={
-            "name": name,
+            "slug": name,
+            **({"name": display_name} if display_name is not None else {}),
             "graph_name": graph_name,
             "default_scope_slug": default_scope_slug,
             "default_model": list(default_model),
@@ -109,7 +113,7 @@ def routine_create(
 @click.option("--include-retired", is_flag=True, default=False, help="Include retired routines.")
 @project_option(required_by_hub=False)
 def routine_list(cli: CliContext, include_retired: bool, project: str | None) -> None:
-    """List every routine, newest first — routine_id, name, graph, default scope.
+    """List every routine, newest first — routine_id, slug, name, graph, default scope.
 
     Excludes a retired routine unless --include-retired."""
     params = {"include_retired": "true"} if include_retired else {}
@@ -120,7 +124,7 @@ def routine_list(cli: CliContext, include_retired: bool, project: str | None) ->
 @routine_group.command("get", cls=FleetCommand)
 @click.argument("routine_id")
 def routine_show(cli: CliContext, routine_id: str) -> None:
-    """One routine's whole record — name, graph, default scope, model/effort defaults,
+    """One routine's whole record — slug, name, graph, default scope, model/effort defaults,
     and its linked scopes."""
     resp = cli.get(
         f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
@@ -136,6 +140,7 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
 
 @routine_group.command("edit", cls=FleetCommand)
 @click.argument("routine_id")
+@click.option("--name", "display_name", default=None, help="The routine's display name.")
 @click.option("--graph", "graph_name", default=None, help="The routine's graph name.")
 @click.option("--scope", "default_scope_slug", default=None, help="The routine's default scope slug.")
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
@@ -151,6 +156,7 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
 def routine_edit(
     cli: CliContext,
     routine_id: str,
+    display_name: str | None,
     graph_name: str | None,
     default_scope_slug: str | None,
     default_model: tuple[str, ...],
@@ -158,13 +164,14 @@ def routine_edit(
     default_harnesses: tuple[str, ...],
     clear: tuple[str, ...],
 ) -> None:
-    """Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the
-    options given change, and its name never changes here.
+    """Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the
+    options given change, and its slug never changes.
 
     A given --model or --harnesses replaces the whole ordered list."""
     body: dict[str, Any] = {
         k: v
         for k, v in {
+            "name": display_name,
             "graph_name": graph_name,
             "default_scope_slug": default_scope_slug,
             "default_model": list(default_model) or None,
@@ -235,17 +242,17 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
 
 
 def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
-    """Resolve NAME to its routine_id within ``project``, including a retired routine — so a
+    """Resolve the routine slug NAME to its routine_id within ``project``, including a retired routine — so a
     retired routine resolves and reaches the domain's own retired refusal, not an
     ``unknown routine`` one. With no project named, NAME resolves only in a tenant holding
-    one project: a name is unique within its project alone."""
+    one project: a slug is unique within its project alone."""
     if project is None:
         projects = cli.get("/api/projects", "GET /projects").json()["projects"]
         if len(projects) > 1:
             raise project_required([{k: str(p[k]) for k in ("project_id", "slug", "name")} for p in projects])
     params = {"include_retired": "true"} | project_query(project)
     rows = cli.get("/api/routines", "GET /routines", params=params).json()
-    matched = next((r for r in rows if r["name"] == name), None)
+    matched = next((r for r in rows if r["slug"] == name), None)
     if matched is None:
         raise click.ClickException(f"unknown routine {name!r}")
     return str(matched["routine_id"])
@@ -256,7 +263,7 @@ def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
 @click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 @project_option(required_by_hub=True)
 def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> None:
-    """Retire routine NAME — a reversible brake; in-flight runs are untouched."""
+    """Retire routine NAME (its slug) — a reversible brake; in-flight runs are untouched."""
     _set_routine_lifecycle(cli, name, verb="retire", by=by, project=project)
 
 
@@ -265,7 +272,7 @@ def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> 
 @click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
 @project_option(required_by_hub=True)
 def routine_enable(cli: CliContext, name: str, by: str, project: str | None) -> None:
-    """Re-enable a retired routine NAME."""
+    """Re-enable a retired routine NAME (its slug)."""
     _set_routine_lifecycle(cli, name, verb="enable", by=by, project=project)
 
 
@@ -302,7 +309,7 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
 def routine_run(
     cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None, project: str | None
 ) -> None:
-    """Create a work item from routine NAME and a chunk carrying it.
+    """Create a work item from routine NAME (its slug) and a chunk carrying it.
 
     The chunk stays not ready until `blizzard hub chunk promote`. Refused when the routine
     is retired or ``--scope`` is not linked to it."""

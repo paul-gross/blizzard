@@ -1,4 +1,5 @@
-import { type GardenProposalView, type KitChipOption } from 'fleet';
+import { type GardenProposalView, type KitChipOption, type RoutineView } from 'fleet';
+import { routineDisplayName } from '../core/routine-display-name';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { type ProposalListRowVm } from './proposal-list';
 
@@ -66,19 +67,24 @@ export function classChipValue(cls: string | null): string {
   return cls === null ? ALL_CLASSES : CLASS_VALUE_PREFIX + cls;
 }
 
-/** Every routine present in the fetched data, alphabetized, each with an "All
+/** Every routine present in the fetched data, keyed by slug and labelled by display name, alphabetized, each with an "All
  * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
  * {@link proposalClassChips}. A routine-less operator-authored proposal
  * contributes no chip of its own: `null` names no routine to filter by. */
-export function proposalRoutineChips(proposals: readonly GardenProposalView[]): readonly KitChipOption[] {
-  const names = proposals.map((p) => p.routine_name).filter((name) => name !== null);
-  const routines = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+export function proposalRoutineChips(
+  proposals: readonly GardenProposalView[],
+  routines: readonly RoutineView[] | undefined,
+): readonly KitChipOption[] {
+  const slugs = proposals.map((p) => p.routine_name).filter((slug) => slug !== null);
+  const chips = Array.from(new Set(slugs))
+    .map((slug) => ({ slug, label: routineDisplayName(slug, routines) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
   return [
     { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
-    ...routines.map((r) => ({
-      value: r,
-      label: r,
-      testid: `gardening-proposal-routine-item-${r}`,
+    ...chips.map(({ slug, label }) => ({
+      value: slug,
+      label,
+      testid: `gardening-proposal-routine-item-${slug}`,
     })),
   ];
 }

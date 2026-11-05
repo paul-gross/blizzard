@@ -1,4 +1,4 @@
-import { type FindingView } from 'fleet';
+import { type FindingView, type RoutineView } from 'fleet';
 
 import { findingListRows } from './gardening-findings-page.model';
 
@@ -31,7 +31,7 @@ function finding(overrides: Partial<FindingView> = {}): FindingView {
 
 describe('findingListRows', () => {
   it('names both routine and scope on every row of an unfiltered bucket', () => {
-    expect(findingListRows([finding()], null, null)).toEqual([
+    expect(findingListRows([finding()], null, null, [])).toEqual([
       {
         findingId: 'fnd_1',
         findingClass: 'stale-docstring',
@@ -50,16 +50,22 @@ describe('findingListRows', () => {
   });
 
   it('drops the routine once a routine is selected, and the scope once a scope is', () => {
-    const [byRoutine] = findingListRows([finding()], 'nightly', null);
+    const [byRoutine] = findingListRows([finding()], 'nightly', null, []);
     expect(byRoutine.routineName).toBeNull();
     expect(byRoutine.scopeSlug).toBe('blizzard');
-    const [byScope] = findingListRows([finding()], null, 'blizzard');
+    const [byScope] = findingListRows([finding()], null, 'blizzard', []);
     expect(byScope.routineName).toBe('nightly');
     expect(byScope.scopeSlug).toBeNull();
   });
 
+  it("names a finding's routine by its display name, matched on the slug the finding carries", () => {
+    const routines = [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView];
+    expect(findingListRows([finding()], null, null, routines)[0].routineName).toBe('Nightly sweep');
+    expect(findingListRows([finding()], null, null, undefined)[0].routineName).toBe('nightly');
+  });
+
   it('reads a routine-less finding as a null routine name', () => {
-    const [row] = findingListRows([finding({ routine_name: null })], null, null);
+    const [row] = findingListRows([finding({ routine_name: null })], null, null, []);
     expect(row.routineName).toBeNull();
   });
 
@@ -68,11 +74,12 @@ describe('findingListRows', () => {
       [finding({ exit: 'outflow', source: 'review', severity: 'should-fix', raised_by_chunk_id: 'ch_3' })],
       'nightly',
       'blizzard',
+      [],
     );
     expect(row).toMatchObject({ exit: 'outflow', source: 'review', severity: 'should-fix', raisedByChunkId: 'ch_3' });
   });
 
   it('maps an empty bucket to no rows', () => {
-    expect(findingListRows([], null, null)).toEqual([]);
+    expect(findingListRows([], null, null, [])).toEqual([]);
   });
 });

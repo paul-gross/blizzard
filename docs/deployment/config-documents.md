@@ -48,7 +48,8 @@ scopes:
     project: blizzard
     description: The blizzard repository
 routines:
-  - name: architecture-drift
+  - slug: architecture-drift
+    name: Architecture drift
     graph_name: garden-routine
     default_scope_slug: blizzard
     default_model: [claude-opus]
@@ -64,11 +65,14 @@ retains its address fields. Each entry carries the fields its own record takes, 
 version 1. An unknown field is refused. `secrets` lists secret names that must already exist and be active; a document
 never carries a secret's value, so set one first with `blizzard hub secret create`.
 
-A scope entry is keyed by its `slug`, a routine entry by its `name`. A routine's `scopes` states its linked scope set,
-its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine entry
-names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's `scopes`
-section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to another
-graph; otherwise the entry is refused. An apply never creates a scope the document does not declare.
+A scope entry is keyed by its `slug`, and so is a routine entry; a routine's `name` is its editable display name. An
+entry states its `slug`, its `name`, or both. A `name`-only entry is the older form: it is keyed by the name as the
+slug, and it never touches the stored display name, so re-applying it after an operator renamed the routine leaves that
+name alone. An entry that states `slug` and `name` sets the display name. A routine's `scopes` states its linked scope
+set, its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine
+entry names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's
+`scopes` section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to
+another graph; otherwise the entry is refused. An apply never creates a scope the document does not declare.
 
 A work source entry and a repository entry are each keyed by its `slug`; its `name` is the display name, the slug when a
 new record's entry leaves it out and as stored when an existing record's does. An entry without a `slug` is refused
@@ -139,12 +143,13 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 ## Export
 
-`config export` prints every active forge, work source, repository, scope, and routine with every field, and every
-active secret name, as a document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired
-records are left out, because applying one would enable it again. Each work source and repository is written with its
-`slug` and `name`, each repository with its `landing_policy` and any `park_timeout_hours`, and each project's `color`,
-`sources` and `repositories` as slugs. A project that ranks a repository also gets its `landing_order`; one that ranks
-nothing gets none. The built-in `hub` work source is never exported.
+`config export` prints every active forge, work source, repository, scope, and routine with every field (a routine with
+both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op. `--format` is
+`yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again. Each work
+source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
+`park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
+repository also gets its `landing_order`; one that ranks nothing gets none. The built-in `hub` work source is never
+exported.
 
 The CLI exports version 2 by default; `--version 1` exports the old address-based shape. `GET /api/config/export`
 defaults to version 1 for existing clients; pass `?version=2` for the forge-based shape. In version 2, `forges` follows

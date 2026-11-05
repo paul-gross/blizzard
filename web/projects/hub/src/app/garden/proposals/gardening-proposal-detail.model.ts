@@ -6,9 +6,11 @@ import {
   type GardenProposalClosureView,
   type GardenProposalView,
   type KitAsyncStateValue,
+  type RoutineView,
   type WorkItemView,
 } from 'fleet';
 import { type FindingExitVars } from '../core/finding.mutations';
+import { routineDisplayName } from '../core/routine-display-name';
 import {
   type ProposalClosureVm,
   type ProposalEvidenceRowVm,
@@ -67,12 +69,17 @@ export function proposalWorkItemVm(
   return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
 }
 
-/** Who raised the proposal: an operator by name, or a routine run. */
-export function proposalOriginVm(proposal: GardenProposalView): ProposalOriginVm {
+/** Who raised the proposal: an operator by name, or a routine run — the routine read by its display name. */
+export function proposalOriginVm(proposal: GardenProposalView, routines: readonly RoutineView[] | undefined): ProposalOriginVm {
+  const slug = proposal.routine_name;
   if (proposal.origin === 'operator') {
-    return { kind: 'operator', createdBy: proposal.created_by!, routineName: proposal.routine_name };
+    return {
+      kind: 'operator',
+      createdBy: proposal.created_by!,
+      routineName: slug === null ? null : routineDisplayName(slug, routines),
+    };
   }
-  return { kind: 'routine-run', routineName: proposal.routine_name! };
+  return { kind: 'routine-run', routineName: routineDisplayName(slug!, routines) };
 }
 
 /** How the proposal closed; only an accepted-and-minted closure carries the work item. */
@@ -96,11 +103,12 @@ export function proposalClosureVm(
 export function proposalPanelVm(
   proposal: GardenProposalView | null,
   workItem: ProposalWorkItemVm | null,
+  routines: readonly RoutineView[] | undefined,
 ): ProposalPanelVm | null {
   if (proposal === null) return null;
   return {
     proposalId: proposal.proposal_id,
-    origin: proposalOriginVm(proposal),
+    origin: proposalOriginVm(proposal, routines),
     proposalClass: proposal.class,
     title: proposal.title,
     body: proposal.body,

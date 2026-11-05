@@ -4,6 +4,7 @@ whole run plan over already-loaded values — no repository, no clock."""
 from __future__ import annotations
 
 from collections.abc import Collection
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -31,6 +32,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="default", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 _ROUTINE = Routine(
     routine_id="rtn_1",
+    slug="gardening",
     name="gardening",
     graph_name="default",
     default_scope_slug="blizzard",
@@ -128,6 +130,7 @@ def test_a_plan_carries_the_graph_title_and_charge() -> None:
         title="gardening run (full)",
         charge=compose_charge(
             routine_name="gardening",
+            routine_slug="gardening",
             graph_name="default",
             scope_slug="blizzard",
             scope_description="the hub itself",
@@ -137,6 +140,23 @@ def test_a_plan_carries_the_graph_title_and_charge() -> None:
             note="look at the store",
         ),
     )
+
+
+def test_a_plan_titles_by_the_display_name_and_its_charge_names_name_and_slug() -> None:
+    routine = replace(_ROUTINE, name="Nightly Gardening")
+    plan = plan_run(
+        routine,
+        routine_retired=False,
+        graph=_GRAPH,
+        scope=_SCOPE,
+        scope_retired=False,
+        linked=("blizzard",),
+        requested_mode=RunMode.FULL,
+        baseline=None,
+        note=None,
+    )
+    assert plan.title == "Nightly Gardening run (full)"
+    assert plan.charge.splitlines()[0] == "Routine: Nightly Gardening (slug: gardening, graph: default)"
 
 
 def test_a_downgraded_plan_is_titled_by_its_effective_mode() -> None:

@@ -138,7 +138,7 @@ describe('the /gardening route subtree', () => {
     expect(el.querySelector('[data-testid="gardening-tab-routines"].active')).toBeTruthy();
   });
 
-  it('resolves /gardening/routines/:routineName to the routine detail', async () => {
+  it('resolves /gardening/routines/:routineSlug to the routine detail by slug, showing its display name', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, nested) => {
       const path = unnested(nested);
@@ -147,7 +147,8 @@ describe('the /gardening route subtree', () => {
         return [
           {
             routine_id: 'rtn_1',
-            name: 'nightly',
+            name: 'Nightly sweep',
+            slug: 'nightly',
             graph_name: 'garden-routine',
             default_scope_slug: 'blizzard',
             default_model: [],
@@ -179,7 +180,7 @@ describe('the /gardening route subtree', () => {
     await settle(fixture, 12);
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="gardening-routine-record"]')?.textContent).toContain('nightly');
+    expect(el.querySelector('[data-testid="gardening-routine-record"] h3')?.textContent).toBe('Nightly sweep');
   });
 
   it('resolves /gardening/runs to its own sub-tab, selecting nothing', async () => {

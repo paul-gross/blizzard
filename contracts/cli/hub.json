@@ -7658,7 +7658,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.\n\nDEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to\nan enabled graph.",
+          "help": "Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.\n\nNAME is the routine's slug \u2014 its immutable lineage and handle; --name sets a display name that\ndefaults to the slug. DEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to\nan enabled graph.",
           "params": [
             {
               "hidden": false,
@@ -7690,6 +7690,18 @@
                 "default_scope_slug"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The routine's display name; defaults to the slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -7779,10 +7791,10 @@
             }
           ],
           "path": "hub routine create",
-          "short_help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
+          "short_help": "Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its name never changes here.\n\nA given --model or --harnesses replaces the whole ordered list.",
+          "help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its slug never changes.\n\nA given --model or --harnesses replaces the whole ordered list.",
           "params": [
             {
               "hidden": false,
@@ -7792,6 +7804,18 @@
                 "routine_id"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The routine's display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -7905,10 +7929,10 @@
             }
           ],
           "path": "hub routine edit",
-          "short_help": "Change ROUTINE_ID's graph, default scope, or model/effort/harnesses defaults; only the options given change, and its name never changes here."
+          "short_help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the options given change, and its slug never changes."
         },
         "enable": {
-          "help": "Re-enable a retired routine NAME.",
+          "help": "Re-enable a retired routine NAME (its slug).",
           "params": [
             {
               "hidden": false,
@@ -7983,10 +8007,10 @@
             }
           ],
           "path": "hub routine enable",
-          "short_help": "Re-enable a retired routine NAME."
+          "short_help": "Re-enable a retired routine NAME (its slug)."
         },
         "get": {
-          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes.",
+          "help": "One routine's whole record \u2014 slug, name, graph, default scope, model/effort defaults,\nand its linked scopes.",
           "params": [
             {
               "hidden": false,
@@ -8037,10 +8061,10 @@
             }
           ],
           "path": "hub routine get",
-          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes."
+          "short_help": "One routine's whole record \u2014 slug, name, graph, default scope, model/effort defaults, and its linked scopes."
         },
         "list": {
-          "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.\n\nExcludes a retired routine unless --include-retired.",
+          "help": "List every routine, newest first \u2014 routine_id, slug, name, graph, default scope.\n\nExcludes a retired routine unless --include-retired.",
           "params": [
             {
               "help": "Include retired routines.",
@@ -8104,7 +8128,7 @@
             }
           ],
           "path": "hub routine list",
-          "short_help": "List every routine, newest first \u2014 routine_id, name, graph, default scope."
+          "short_help": "List every routine, newest first \u2014 routine_id, slug, name, graph, default scope."
         },
         "proposal-counts": {
           "help": "NAME's garden-proposal counts over --since/--until, split into open/passed/\naccepted-with-item/accepted-without-item per class, with created as their sum; omit\nNAME to see every routine's rows at once.",
@@ -8209,7 +8233,7 @@
           "short_help": "NAME's garden-proposal counts over --since/--until, split into open/passed/ accepted-with-item/accepted-without-item per class, with created as their sum; omit NAME to see every routine's rows at once."
         },
         "retire": {
-          "help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched.",
+          "help": "Retire routine NAME (its slug) \u2014 a reversible brake; in-flight runs are untouched.",
           "params": [
             {
               "hidden": false,
@@ -8284,10 +8308,10 @@
             }
           ],
           "path": "hub routine retire",
-          "short_help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched."
+          "short_help": "Retire routine NAME (its slug) \u2014 a reversible brake; in-flight runs are untouched."
         },
         "run": {
-          "help": "Create a work item from routine NAME and a chunk carrying it.\n\nThe chunk stays not ready until `blizzard hub chunk promote`. Refused when the routine\nis retired or ``--scope`` is not linked to it.",
+          "help": "Create a work item from routine NAME (its slug) and a chunk carrying it.\n\nThe chunk stays not ready until `blizzard hub chunk promote`. Refused when the routine\nis retired or ``--scope`` is not linked to it.",
           "params": [
             {
               "hidden": false,
@@ -8386,7 +8410,7 @@
             }
           ],
           "path": "hub routine run",
-          "short_help": "Create a work item from routine NAME and a chunk carrying it."
+          "short_help": "Create a work item from routine NAME (its slug) and a chunk carrying it."
         },
         "scope": {
           "commands": {

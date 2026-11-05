@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
 )
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceLocatorTaken, WorkSourceSlugTaken
-from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
+from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
@@ -75,7 +75,7 @@ _REFUSALS = (
     WorkSourceLocatorTaken,
     RepositorySlugTaken,
     RepositoryCoordinateTaken,
-    RoutineNameTakenError,
+    RoutineSlugTakenError,
     ScopeSlugTakenError,
     ProjectSlugTaken,
     LandingOrderConflict,
@@ -89,7 +89,7 @@ def _taken(record: object) -> Exception:
     if isinstance(record, ConfiguredWorkSource):
         return WorkSourceSlugTaken(record.slug)
     if isinstance(record, Routine):
-        return RoutineNameTakenError(record.name)
+        return RoutineSlugTakenError(record.slug)
     if isinstance(record, Scope):
         return ScopeSlugTakenError(record.name)
     if isinstance(record, Project):

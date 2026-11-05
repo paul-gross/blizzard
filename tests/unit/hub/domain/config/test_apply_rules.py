@@ -271,11 +271,13 @@ def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: Unpack[_Rout
     declared: _RoutineDeclared = {"graph_name": "alpha", "default_scope_slug": "core"}
     declared.update(fields)
     return RoutineDeclaration(
+        slug="nightly",
         name="nightly",
         default_model=(),
         default_effort=None,
         default_harnesses=(),
         edit=RoutineEdit(
+            slug="nightly",
             name="nightly",
             graph_name=declared["graph_name"],
             default_scope_slug=ScopeSlug(declared["default_scope_slug"]),
@@ -289,6 +291,7 @@ def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: Unpack[_Rout
 def _stored_routine(*, retired: bool = False) -> Routine:
     return Routine(
         routine_id="rtn_1",
+        slug="nightly",
         name="nightly",
         graph_name="alpha",
         default_scope_slug="core",

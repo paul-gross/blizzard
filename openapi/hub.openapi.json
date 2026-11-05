@@ -13479,6 +13479,7 @@
         "type": "object"
       },
       "RoutineCreateRequest": {
+        "description": "``slug`` is the routine's lineage and handle, ``name`` its display name; at least one is stated, and with\none missing the request resolves to the same value for both.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -13516,12 +13517,29 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           }
         },
         "required": [
-          "name",
           "graph_name",
           "default_scope_slug"
         ],
@@ -13530,7 +13548,7 @@
       },
       "RoutineEditRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``name`` must equal the routine's current one; an explicit ``null`` clears\n``default_effort`` and is refused on every other field.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears\n``default_effort`` and is refused on every other field.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -13603,6 +13621,17 @@
               }
             ],
             "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           }
         },
         "title": "RoutineEditRequest",
@@ -13648,8 +13677,15 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "project": {
             "anyOf": [
@@ -13669,10 +13705,20 @@
             },
             "title": "Scopes",
             "type": "array"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           }
         },
         "required": [
-          "name",
           "graph_name",
           "default_scope_slug"
         ],
@@ -13919,10 +13965,15 @@
           "routine_id": {
             "title": "Routine Id",
             "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
           }
         },
         "required": [
           "routine_id",
+          "slug",
           "name",
           "graph_name",
           "default_scope_slug",
@@ -31069,7 +31120,7 @@
         ]
       },
       "post": {
-        "description": "Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate name in the\nproject, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.",
+        "description": "Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the\nproject, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.",
         "operationId": "create_project_routine_api_projects__project__routines_post",
         "parameters": [
           {
@@ -32755,7 +32806,7 @@
       },
       "post": {
         "deprecated": true,
-        "description": "Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate name\nin the project, a malformed default scope slug, or a graph name with no enabled mint. Deprecated: `POST\n/api/projects/{project}/routines`.",
+        "description": "Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate slug\nin the project, a malformed default scope slug, or a graph name with no enabled mint. Deprecated: `POST\n/api/projects/{project}/routines`.",
         "operationId": "create_routine_api_routines_post",
         "parameters": [
           {
@@ -32915,7 +32966,7 @@
     },
     "/api/routines/trend": {
       "get": {
-        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. `routine` is read in the project\n`?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an\nunknown routine name in that project; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past the period cap.",
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. `routine` is read in the project\n`?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an\nunknown routine slug in that project; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past the period cap.",
         "operationId": "routine_trend_api_routines_trend_get",
         "parameters": [
           {
@@ -33052,7 +33103,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present \u2014 the graph, the default scope, and the model, effort,\nand harness defaults; an explicit `null` clears `default_effort`. A present `name` must\nrestate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a name change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint; 409 on a stale `If-Match` naming the current revision.",
+        "description": "Apply only the fields present \u2014 the display name, the graph, the default scope, and the model, effort,\nand harness defaults; an explicit `null` clears `default_effort`. A present `slug` must\nrestate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint; 409 on a stale `If-Match` naming the current revision.",
         "operationId": "edit_routine_api_routines__routine_id__patch",
         "parameters": [
           {

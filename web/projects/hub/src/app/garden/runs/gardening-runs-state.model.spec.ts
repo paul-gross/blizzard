@@ -1,4 +1,4 @@
-import type { RunRowView } from 'fleet';
+import type { RoutineView, RunRowView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { mintedAtFor, runListRows, summedCounts } from './gardening-runs-state.model';
@@ -46,7 +46,7 @@ describe('summedCounts', () => {
 
 describe('runListRows', () => {
   it('maps each run in order, reading escalated off a non-null escalation', () => {
-    expect(runListRows([DELIVERED_RUN, ESCALATED_RUN])).toEqual([
+    expect(runListRows([DELIVERED_RUN, ESCALATED_RUN], [])).toEqual([
       {
         chunkId: 'ch_1',
         routineName: 'nightly',
@@ -69,10 +69,15 @@ describe('runListRows', () => {
       },
     ]);
   });
+
+  it("names each run's routine by its display name, looked up by the slug the run carries", () => {
+    const rows = runListRows([DELIVERED_RUN], [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView]);
+    expect(rows[0].routineName).toBe('Nightly sweep');
+  });
 });
 
 describe('mintedAtFor', () => {
-  const rows = runListRows([DELIVERED_RUN, ESCALATED_RUN]);
+  const rows = runListRows([DELIVERED_RUN, ESCALATED_RUN], []);
 
   it('answers the minted instant off the matching row', () => {
     expect(mintedAtFor(rows, 'ch_2')).toBe('2026-01-11T00:00:00Z');

@@ -11,7 +11,7 @@ Both belong to a project. The listing verbs take `--project <id|slug>` to show o
 
 ## Findings
 
-`blizzard hub finding list [--routine <name>] [--scope <slug>] [--source routine|review] [--include-gone]` and
+`blizzard hub finding list [--routine <slug>] [--scope <slug>] [--source routine|review] [--include-gone]` and
 `get <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential, live
 only unless `--include-gone`, which also surfaces every exited finding alongside a merely `gone` one. `--routine` and
 `--scope` each narrow the list; with neither, it lists the tenant's findings. `state`, `live`, `last_seen_at`, and
@@ -105,7 +105,7 @@ proposal names a routine, and `created_by=` only on an operator-authored row. `l
 
 A proposal can be authored directly, not only raised by a routine's own delivery:
 `blizzard hub garden-proposal create
---title <text> --class <text> --body-file <path>|- [--routine <name>] [--finding <id>...]`
+--title <text> --class <text> --body-file <path>|- [--routine <slug>] [--finding <id>...]`
 mints an operator-authored proposal naming zero or more findings from any routines and scopes at once — a proposal
 carries no scope of its own — and an existing routine when `--routine` names one, or none at all.
 `edit <proposal_id> [--title <text>] [--class
@@ -164,7 +164,7 @@ docket. The buttons are withheld on a row that has already exited, and withheld 
 
 ## Trend
 
-`blizzard hub routine trend <name>` reads a routine's finding inflow-against-outflow over a window, taking `--since`,
+`blizzard hub routine trend <slug>` reads a routine's finding inflow-against-outflow over a window, taking `--since`,
 `--until`, and `--introduced-boundary` (each an instant, read in the operator's own local time, the same as
 `blizzard hub analytics`'s own since/until flags) plus an optional `--period-days` (default 7). Per period it reports
 findings created and exits per kind, plus the `outflow` (`resolved` and `gone-confirmed`) and `withdrawn` (the other
@@ -172,6 +172,6 @@ three exit kinds) roll-ups, and `reopened` — an exited finding's own undo, cou
 `created` or any exit count, so a resolve-reopen-resolve cycle inside one period reads as one creation, two exits, one
 reopen, not an unexplained imbalance. Alongside the periods, `age` cuts the window's created findings against
 `--introduced-boundary`: `recent` (at or after it), `older` (before it), and `unattributed` (no resolved `introduced`
-instant at all — never guessed into either bucket). An unknown routine name answers 404; a malformed instant, a
+instant at all — never guessed into either bucket). An unknown routine slug answers 404; a malformed instant, a
 `--period-days` under 1, `--until` not after `--since`, or a span/`--period-days` pair bucketing past 366 periods each
 answer 422.

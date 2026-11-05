@@ -9,7 +9,7 @@ const VM: ScopePanelVm = {
   description: 'the blizzard monorepo',
   retired: false,
   renderedRetired: false,
-  relatedRoutines: [{ name: 'nightly', isDefault: true }],
+  relatedRoutines: [{ slug: 'nightly', name: 'nightly', isDefault: true }],
   swept: { at: '2026-03-05T00:00:00Z', notSwept: 'not in 28 days' },
 };
 
@@ -248,7 +248,7 @@ describe('FleetScopePanel', () => {
 
   it('says so when no routine is related, and omits the default marker for a non-defaulting one', async () => {
     const fixture = await mount({
-      vm: { ...VM, relatedRoutines: [{ name: 'other', isDefault: false }] },
+      vm: { ...VM, relatedRoutines: [{ slug: 'other', name: 'other', isDefault: false }] },
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -298,6 +298,16 @@ describe('FleetScopePanel', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-routine-nightly"]')?.getAttribute('href')).toBe(
       '/gardening/routines/nightly',
     );
+  });
+
+  it("links a routine by its slug and shows its display name", async () => {
+    const el = (
+      await mount({ vm: { ...VM, relatedRoutines: [{ slug: 'nightly-v2', name: 'Nightly sweep', isDefault: false }] } })
+    ).nativeElement as HTMLElement;
+
+    const link = el.querySelector('[data-testid="gardening-scope-panel-routine-nightly-v2"]');
+    expect(link?.getAttribute('href')).toBe('/gardening/routines/nightly-v2');
+    expect(link?.textContent?.trim()).toBe('Nightly sweep');
   });
 
   // --- Pending lifecycle override (`bzh:frontend-pending-override`) ----------------

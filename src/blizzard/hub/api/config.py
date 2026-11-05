@@ -311,11 +311,14 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
     ]
     routines: list[DeclaredRoutine] = []
     for routine in document.routines:
-        stated = {
-            name: getattr(routine, name) for name in routine.model_fields_set if name not in ("scopes", "project")
-        }
+        # A name-only entry is the older form keyed by the name as the handle: it never touches the display name.
+        not_edits: set[str] = {"scopes", "project"}
+        if "slug" not in routine.model_fields_set:
+            not_edits.add("name")
+        stated = {name: getattr(routine, name) for name in routine.model_fields_set if name not in not_edits}
         routines.append(
             DeclaredRoutine(
+                slug=routine.slug,
                 name=routine.name,
                 graph_name=routine.graph_name,
                 default_scope_slug=routine.default_scope_slug,
@@ -506,7 +509,7 @@ def export_config(
     projects = services.projects.list_all()
     slug_of: dict[str, str] = {project.project_id: project.slug for project in projects}
     live_routines = [
-        r for r in sorted(services.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.name)) if not r.retired
+        r for r in sorted(services.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.slug)) if not r.retired
     ]
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     sources = services.work_source_records.list_all(include_retired=False)
@@ -570,6 +573,7 @@ def export_config(
         ],
         routines=[
             RoutineEntry(
+                slug=r.slug,
                 name=r.name,
                 graph_name=r.graph_name,
                 default_scope_slug=r.default_scope_slug,

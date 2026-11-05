@@ -42,6 +42,7 @@ function tokenColor(token: string): string {
  */
 const VM: RoutinePanelVm = {
   record: {
+    slug: 'nightly',
     name: 'nightly',
     graphName: 'garden-routine',
     defaultScopeSlug: 'blizzard',

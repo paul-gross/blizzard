@@ -15,7 +15,7 @@ blizzard hub config changes --kind forge --key github
 Rows come newest first. Each carries the acting user, the door, the kind and key of the record, the record's revision
 after the change, the operation, and the fields that changed. Without `--all` the verb prints the newest page; `--kind`
 is `forge`, `work_source`, `repository`, `secret`, `scope`, `routine`, or `project`, and `--key` narrows to one record —
-a scope's slug, a routine's `name`, or a project's, work source's or repository's id or slug. `--json` prints the raw
+a scope's slug, a routine's slug, or a project's, work source's or repository's id or slug. `--json` prints the raw
 rows.
 
 A forge's, a project's, a work source's and a repository's rows are keyed by id, as are a project link's rows by the

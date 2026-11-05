@@ -1,4 +1,4 @@
-import { type FindingView, type GardenProposalClosureView, type GardenProposalView } from 'fleet';
+import { type FindingView, type GardenProposalClosureView, type GardenProposalView, type RoutineView } from 'fleet';
 
 import {
   acceptedItemPointer,
@@ -155,11 +155,19 @@ describe('proposalWorkItemVm', () => {
 
 describe('proposalOriginVm', () => {
   it('names a routine run by its routine', () => {
-    expect(proposalOriginVm(proposal())).toEqual({ kind: 'routine-run', routineName: 'nightly' });
+    expect(proposalOriginVm(proposal(), [])).toEqual({ kind: 'routine-run', routineName: 'nightly' });
+  });
+
+  it("reads the routine's display name, looked up by the slug the proposal carries", () => {
+    const routines = [{ slug: 'nightly', name: 'Nightly sweep' } as RoutineView];
+    expect(proposalOriginVm(proposal(), routines)).toEqual({ kind: 'routine-run', routineName: 'Nightly sweep' });
+    expect(
+      proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: 'nightly' }), routines),
+    ).toEqual({ kind: 'operator', createdBy: 'alice', routineName: 'Nightly sweep' });
   });
 
   it('names an operator and the routine it may cite', () => {
-    expect(proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: null }))).toEqual({
+    expect(proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: null }), [])).toEqual({
       kind: 'operator',
       createdBy: 'alice',
       routineName: null,
@@ -197,11 +205,11 @@ describe('proposalClosureVm', () => {
 
 describe('proposalPanelVm', () => {
   it('reads null with nothing selected', () => {
-    expect(proposalPanelVm(null, WORK_ITEM)).toBeNull();
+    expect(proposalPanelVm(null, WORK_ITEM, [])).toBeNull();
   });
 
   it('maps a waiting proposal with no findings', () => {
-    expect(proposalPanelVm(proposal(), null)).toEqual({
+    expect(proposalPanelVm(proposal(), null, [])).toEqual({
       proposalId: 'gp_1',
       origin: { kind: 'routine-run', routineName: 'nightly' },
       proposalClass: 'stale-docstring',
@@ -214,7 +222,7 @@ describe('proposalPanelVm', () => {
   });
 
   it('maps the closure and flags cited findings', () => {
-    const vm = proposalPanelVm(proposal({ closure: closure(), findings: ['fnd_1'] }), WORK_ITEM);
+    const vm = proposalPanelVm(proposal({ closure: closure(), findings: ['fnd_1'] }), WORK_ITEM, []);
     expect(vm?.closure).toMatchObject({ kind: 'accepted', workItem: WORK_ITEM });
     expect(vm?.hasFindings).toBe(true);
   });

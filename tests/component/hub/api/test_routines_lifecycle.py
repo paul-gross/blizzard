@@ -171,14 +171,14 @@ def test_create_rejects_a_malformed_default_scope_slug_naming_it(tmp_path: Path)
     assert "Not A Slug" in resp.json()["detail"]
 
 
-def test_edit_naming_a_different_name_is_refused_naming_the_current_one(tmp_path: Path) -> None:
+def test_edit_naming_a_different_slug_is_refused_naming_the_current_one(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create(hub)
 
     resp = hub.client.patch(
         f"/api/routines/{routine['routine_id']}",
-        json={"name": "renamed", "graph_name": "alpha", "default_scope_slug": "blizzard"},
+        json={"slug": "renamed", "graph_name": "alpha", "default_scope_slug": "blizzard"},
     )
 
     assert resp.status_code == 422, resp.text

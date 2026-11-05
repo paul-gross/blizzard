@@ -266,11 +266,11 @@ class GardenProposal:
         finding_ids = citable_finding_ids(findings, require_unexited=True)
         require_own_project(findings, project_id)
         if routine is not None and routine.project_id != project_id:
-            raise GardenProposalRoutineOtherProjectError(routine.name)
+            raise GardenProposalRoutineOtherProjectError(routine.slug)
         return cls(
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
-            routine_name=routine.name if routine is not None else None,
+            routine_name=routine.slug if routine is not None else None,
             class_=class_,
             title=title,
             body=body,
@@ -532,7 +532,7 @@ class GardenProposalAuthoring:
         findings: Sequence[Finding],
     ) -> GardenProposal:
         """Mint an operator-authored proposal (:meth:`GardenProposal.operator`) in `project`, naming
-        `routine.name` when the caller resolved one, else none. `routine` must belong to `project`."""
+        `routine.slug` when the caller resolved one, else none. `routine` must belong to `project`."""
         at = self._clock.now()
         draft = GardenProposal.operator(
             Id.mint_at(IdPrefix.GARDEN_PROPOSAL, at).value,

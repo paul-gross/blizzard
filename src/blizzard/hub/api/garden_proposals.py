@@ -274,7 +274,7 @@ def _create(
 ) -> GardenProposalView:
     routine = None
     if request.routine is not None:
-        routine = services.routines.get_by_name(project.project_id, request.routine)
+        routine = services.routines.get_by_slug(project.project_id, request.routine)
         if routine is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown routine {request.routine!r}"

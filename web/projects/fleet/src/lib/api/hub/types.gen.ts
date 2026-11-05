@@ -8248,6 +8248,9 @@ export type RoutineBaselineView = {
 
 /**
  * RoutineCreateRequest
+ *
+ * ``slug`` is the routine's lineage and handle, ``name`` its display name; at least one is stated, and with
+ * one missing the request resolves to the same value for both.
  */
 export type RoutineCreateRequest = {
     /**
@@ -8273,14 +8276,18 @@ export type RoutineCreateRequest = {
     /**
      * Name
      */
-    name: string;
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
  * RoutineEditRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set. A present
- * ``name`` must equal the routine's current one; an explicit ``null`` clears
+ * ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
  * ``default_effort`` and is refused on every other field.
  */
 export type RoutineEditRequest = {
@@ -8308,6 +8315,10 @@ export type RoutineEditRequest = {
      * Name
      */
     name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
@@ -8340,7 +8351,7 @@ export type RoutineEntry = {
     /**
      * Name
      */
-    name: string;
+    name?: string | null;
     /**
      * Project
      */
@@ -8349,6 +8360,10 @@ export type RoutineEntry = {
      * Scopes
      */
     scopes?: Array<string>;
+    /**
+     * Slug
+     */
+    slug?: string | null;
 };
 
 /**
@@ -8516,6 +8531,10 @@ export type RoutineView = {
      * Routine Id
      */
     routine_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**

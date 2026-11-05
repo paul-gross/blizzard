@@ -21,7 +21,9 @@ from blizzard.hub.domain.garden.routines import (
     Routine,
     RoutineEdit,
     RoutineGraphUnresolvedError,
+    RoutineSlugError,
     require_graph_change_resolves,
+    resolved_handle,
 )
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
@@ -37,6 +39,10 @@ class ScopeDeclaration:
     description: str
     edit: ScopeEdit
     project_id: str
+
+    @property
+    def handle(self) -> str:
+        return self.name
 
     @property
     def key(self) -> tuple[str, str]:
@@ -66,10 +72,12 @@ class ScopeDeclaration:
 @domain_model
 @dataclass(frozen=True)
 class RoutineDeclaration:
-    """A routine the document names within ``project_id``: its create fields, the sparse edit of what it states,
-    and the linked scope set it states (``None`` leaves the stored set)."""
+    """A routine the document names within ``project_id``, by ``slug`` or — in the older form — by ``name`` alone:
+    its create fields, the sparse edit of what it states, and the linked scope set it states (``None`` leaves the
+    stored set). At least one of ``slug`` and ``name`` is stated."""
 
-    name: str
+    slug: str | None
+    name: str | None
     graph_name: str
     default_scope_slug: str
     default_model: Sequence[str]
@@ -80,8 +88,19 @@ class RoutineDeclaration:
     scopes: Sequence[str] | None = None
 
     @property
+    def handle(self) -> str:
+        """The key the stored routine is found by."""
+        return self._stated_handle()
+
+    def _stated_handle(self) -> str:
+        """The slug the entry states, else its name."""
+        handle = self.slug if self.slug is not None else self.name
+        assert handle is not None
+        return handle
+
+    @property
     def key(self) -> tuple[str, str]:
-        return (self.project_id, self.name)
+        return (self.project_id, self.handle)
 
     def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
         """The graph resolves to an enabled one when the entry creates the routine or moves it to another
@@ -91,6 +110,11 @@ class RoutineDeclaration:
             validated_harnesses(list(self.default_harnesses))
         except InvalidHarnesses as exc:
             raise ConfigFieldError("default_harnesses", str(exc)) from exc
+        if stored is None and self.slug is not None:
+            try:
+                resolved_handle(self.slug, self.name)
+            except RoutineSlugError as exc:
+                raise ConfigFieldError("slug", str(exc)) from exc
         try:
             require_graph_change_resolves(
                 stored.graph_name if isinstance(stored, Routine) else None,
@@ -108,6 +132,7 @@ class RoutineDeclaration:
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Routine, ConfigChange]:
         return Routine.new(
             project_id=self.project_id,
+            slug=self.slug,
             name=self.name,
             graph_name=self.graph_name,
             default_scope_slug=self.default_scope_slug,

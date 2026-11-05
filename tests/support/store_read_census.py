@@ -2749,8 +2749,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
     (IReadProjectLabels, "labels_for"): lambda w: ProjectLabels(w.hub.services.projects).labels_for([w.project_id]),
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
-    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name(w.project_id, "gardening"),
-    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(
+    (IReadRoutineRepository, "get_by_slug"): lambda w: w.hub.services.routines.get_by_slug(w.project_id, "gardening"),
+    (IReadRoutineRepository, "get_many_by_slug"): lambda w: w.hub.services.routines.get_many_by_slug(
         w.project_id, ["gardening"]
     ),
     (IReadRoutineRepository, "list_all"): lambda w: (

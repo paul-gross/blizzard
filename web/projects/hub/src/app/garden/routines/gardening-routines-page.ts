@@ -6,7 +6,7 @@ import { injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
-import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
+import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
@@ -52,18 +52,18 @@ export class GardeningRoutinesPage {
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
-  /** The `routineName` the active detail child names (`route-state.ts`). */
-  protected readonly routineNameParam = injectChildRouteParam('routineName');
+  /** The `routineSlug` the active detail child names (`route-state.ts`). */
+  protected readonly routineSlugParam = injectChildRouteParam('routineSlug');
 
   /** The effective selection: the route param if it still names a routine the
    * loaded data actually has, else `null` — never a stale highlight left over from
    * a routine that no longer exists. */
-  protected readonly selectedRoutineName = computed<string | null>(() =>
-    presentRoutineName(this.routineNameParam(), this.routines()),
+  protected readonly selectedRoutineSlug = computed<string | null>(() =>
+    presentRoutineSlug(this.routineSlugParam(), this.routines()),
   );
 
-  protected selectRoutine(name: string): void {
-    void this.router.navigate(this.lens.link(['/gardening', 'routines', name]), { queryParamsHandling: 'preserve' });
+  protected selectRoutine(slug: string): void {
+    void this.router.navigate(this.lens.link(['/gardening', 'routines', slug]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
@@ -81,8 +81,8 @@ export class GardeningRoutinesPage {
   constructor() {
     effect(() => {
       const settled = !this.routinesQuery.isPending() && !this.routinesQuery.isError();
-      const names = this.listRows().map((row) => row.name);
-      const first = firstRowToOpen(this.routineNameParam(), names, settled, this.mobile());
+      const slugs = this.listRows().map((row) => row.slug);
+      const first = firstRowToOpen(this.routineSlugParam(), slugs, settled, this.mobile());
       if (first === null) return;
       void this.router.navigate(this.lens.link(['/gardening', 'routines', first]), {
         replaceUrl: true,

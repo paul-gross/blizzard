@@ -5,6 +5,7 @@ import { asyncState, injectPendingMutationVariables, KitMasterDetail, KitChips, 
 import { FleetProposalList, type ProposalListRowVm } from './proposal-list';
 import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './garden-proposal.mutations';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
 import {
   ALL_CLASSES,
   ALL_ROUTINES,
@@ -60,6 +61,7 @@ export class GardeningProposalsPage {
   private readonly viewport = inject(ViewportService);
   private readonly url = injectQueryFilters();
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
@@ -117,7 +119,7 @@ export class GardeningProposalsPage {
    * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
    * {@link classChips}. A routine-less operator-authored proposal
    * contributes no chip of its own: `null` names no routine to filter by. */
-  protected readonly routineChips = computed<readonly KitChipOption[]>(() => proposalRoutineChips(this.proposals()));
+  protected readonly routineChips = computed<readonly KitChipOption[]>(() => proposalRoutineChips(this.proposals(), this.routinesQuery.data()));
 
   protected readonly routineChipValue = computed<string>(() => this.routineFilter() ?? ALL_ROUTINES);
 

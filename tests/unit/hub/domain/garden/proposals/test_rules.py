@@ -73,6 +73,7 @@ def _proposal(*, findings: list[str] | None = None) -> GardenProposal:
 def _routine(*, project_id: str = _PROJECT) -> Routine:
     return Routine(
         routine_id="routine_1",
+        slug="nightly",
         name="nightly",
         graph_name="g",
         default_scope_slug="blizzard",

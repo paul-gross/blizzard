@@ -19,7 +19,7 @@ import {
   measurementReadings,
   proposalCountsRows,
   relatedScopeRows,
-  routineByName,
+  routineBySlug,
   routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
@@ -32,7 +32,8 @@ import {
 
 const ROUTINE: RoutineView = {
   routine_id: 'rtn_1',
-  name: 'nightly',
+  slug: 'nightly',
+  name: 'Nightly sweep',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   default_model: ['claude-sonnet-5'],
@@ -46,7 +47,7 @@ const ROUTINE: RoutineView = {
   revision: null,
 };
 
-const OTHER_ROUTINE: RoutineView = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly' };
+const OTHER_ROUTINE: RoutineView = { ...ROUTINE, routine_id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep' };
 
 const EFFECTIVE_GRAPH: GraphSummaryView = {
   graph_id: 'gr_1',
@@ -167,17 +168,21 @@ const PARTS: RoutinePanelParts = {
   measurementsState: 'loading',
 };
 
-describe('routineByName', () => {
+describe('routineBySlug', () => {
   it('answers null on the bare child route', () => {
-    expect(routineByName(null, [ROUTINE])).toBeNull();
+    expect(routineBySlug(null, [ROUTINE])).toBeNull();
   });
 
-  it('finds the routine the name names', () => {
-    expect(routineByName('weekly', [ROUTINE, OTHER_ROUTINE])).toBe(OTHER_ROUTINE);
+  it('finds the routine the slug names', () => {
+    expect(routineBySlug('weekly', [ROUTINE, OTHER_ROUTINE])).toBe(OTHER_ROUTINE);
   });
 
-  it('answers null for a name no loaded routine carries', () => {
-    expect(routineByName('gone', [ROUTINE])).toBeNull();
+  it('never resolves a routine by its display name', () => {
+    expect(routineBySlug('Weekly sweep', [ROUTINE, OTHER_ROUTINE])).toBeNull();
+  });
+
+  it('answers null for a slug no loaded routine carries', () => {
+    expect(routineBySlug('gone', [ROUTINE])).toBeNull();
   });
 });
 
@@ -316,7 +321,8 @@ describe('routinePanelVm', () => {
   it('composes the record and passes the parts through', () => {
     expect(routinePanelVm(ROUTINE, PARTS)).toEqual({
       record: {
-        name: 'nightly',
+        slug: 'nightly',
+        name: 'Nightly sweep',
         graphName: 'garden-routine',
         defaultScopeSlug: 'blizzard',
         modelEffort: 'claude-sonnet-5 · medium',
@@ -424,6 +430,10 @@ describe('routineRecentRuns', () => {
       { chunkId: 'ch_3', scopeSlug: 'hub-api', mode: 'delta', findings: 4, mintedAt: '2026-03-05T00:00:00Z' },
       { chunkId: 'ch_1', scopeSlug: 'hub-api', mode: 'delta', findings: 2, mintedAt: '2026-03-01T00:00:00Z' },
     ]);
+  });
+
+  it("matches runs by the routine's slug, never its display name", () => {
+    expect(routineRecentRuns(runs, 'Nightly sweep')).toEqual([]);
   });
 
   it('answers null while the runs read is pending or no routine is selected', () => {

@@ -29,6 +29,7 @@ _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 def _routine(engine: sa.Engine, *, routine_id: str = "rtn_1", default_scope_slug: str = "blizzard") -> Routine:
     return Routine(
         routine_id=routine_id,
+        slug="nightly",
         name="nightly",
         graph_name="alpha",
         default_scope_slug=default_scope_slug,
@@ -43,6 +44,7 @@ def _seed_routine(conn: sa.Connection, routine: Routine) -> None:
             stamp(
                 s.routines,
                 routine_id=routine.routine_id,
+                slug=routine.slug,
                 name=routine.name,
                 graph_name=routine.graph_name,
                 default_scope_slug=routine.default_scope_slug,

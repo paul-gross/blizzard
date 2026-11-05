@@ -1,11 +1,12 @@
 import type { AsyncStateQuery, GraphSummaryView, RoutineView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
+import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 
 const NIGHTLY: RoutineView = {
   routine_id: 'rtn_1',
-  name: 'nightly',
+  slug: 'nightly',
+  name: 'Nightly sweep',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   created_at: '2026-01-01T00:00:00Z',
@@ -19,7 +20,7 @@ const NIGHTLY: RoutineView = {
   revision: null,
 };
 
-const ORPHAN: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', name: 'orphan', graph_name: 'unminted', retired: true };
+const ORPHAN: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', slug: 'orphan', name: 'Orphan', graph_name: 'unminted', retired: true };
 
 const EFFECTIVE_GRAPH: GraphSummaryView = {
   graph_id: 'gr_1',
@@ -31,17 +32,21 @@ const EFFECTIVE_GRAPH: GraphSummaryView = {
   retired: false,
 };
 
-describe('presentRoutineName', () => {
+describe('presentRoutineSlug', () => {
   it('answers null on the bare child route', () => {
-    expect(presentRoutineName(null, [NIGHTLY])).toBeNull();
+    expect(presentRoutineSlug(null, [NIGHTLY])).toBeNull();
   });
 
-  it('answers the name while it names a loaded routine', () => {
-    expect(presentRoutineName('nightly', [NIGHTLY, ORPHAN])).toBe('nightly');
+  it('answers the slug while it names a loaded routine', () => {
+    expect(presentRoutineSlug('nightly', [NIGHTLY, ORPHAN])).toBe('nightly');
   });
 
-  it('answers null for a name no loaded routine carries', () => {
-    expect(presentRoutineName('gone', [NIGHTLY])).toBeNull();
+  it('answers null for a display name, which never keys a routine', () => {
+    expect(presentRoutineSlug('Nightly sweep', [NIGHTLY])).toBeNull();
+  });
+
+  it('answers null for a slug no loaded routine carries', () => {
+    expect(presentRoutineSlug('gone', [NIGHTLY])).toBeNull();
   });
 });
 
@@ -53,8 +58,8 @@ const query = (state: 'pending' | 'error' | 'success'): AsyncStateQuery => ({
 describe('routineListRows', () => {
   it('flags a routine blocked when its graph has no effective mint', () => {
     expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'))).toEqual([
-      { routineId: 'rtn_1', name: 'nightly', graphName: 'garden-routine', blocked: false, retired: false },
-      { routineId: 'rtn_2', name: 'orphan', graphName: 'unminted', blocked: true, retired: true },
+      { routineId: 'rtn_1', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false },
+      { routineId: 'rtn_2', slug: 'orphan', name: 'Orphan', graphName: 'unminted', blocked: true, retired: true },
     ]);
   });
 

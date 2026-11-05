@@ -17,7 +17,7 @@ from sqlalchemy import Engine, select
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.garden.routines import Routine, RoutineNameTakenError
+from blizzard.hub.domain.garden.routines import Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -46,6 +46,7 @@ def _store(tmp_path: Path) -> tuple[RoutineStore, str]:
 
 class _RoutineFields(TypedDict, total=False):
     routine_id: str
+    slug: str
     name: str
     graph_name: str
     default_scope_slug: str
@@ -58,6 +59,7 @@ class _RoutineFields(TypedDict, total=False):
 def _routine(project: str, **overrides: Unpack[_RoutineFields]) -> Routine:
     fields: _RoutineFields = {
         "routine_id": "rtn_1",
+        "slug": "nightly",
         "name": "nightly",
         "graph_name": "alpha",
         "default_scope_slug": "blizzard",
@@ -135,7 +137,7 @@ def test_a_refused_create_leaves_its_scope_mint_unwritten(tmp_path: Path) -> Non
     _create(store, _routine(project))
     mint = Scope.new(ScopeSlug.parse("fresh"), "", _CTX, at=_NOW, project_id=project)
 
-    with pytest.raises(RoutineNameTakenError):
+    with pytest.raises(RoutineSlugTakenError):
         _create(store, _routine(project, routine_id="rtn_2", default_scope_slug="fresh"), scope_mint=mint)
 
     assert ScopeStore(hub_store_connections(engine)).get(project, "fresh") is None
@@ -169,12 +171,12 @@ def test_create_with_no_harnesses_preference_reads_back_empty(tmp_path: Path) ->
     assert stored.default_harnesses == []
 
 
-def test_get_by_name(tmp_path: Path) -> None:
+def test_get_by_slug(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
     _create(store, _routine(project))
 
-    assert store.get_by_name(project, "nightly") == store.get("rtn_1")
-    assert store.get_by_name(project, "ghost") is None
+    assert store.get_by_slug(project, "nightly") == store.get("rtn_1")
+    assert store.get_by_slug(project, "ghost") is None
 
 
 def test_get_unknown_id_is_none(tmp_path: Path) -> None:
@@ -184,8 +186,8 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 def test_list_all_orders_newest_first(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
-    _create(store, _routine(project, routine_id="rtn_old", name="old", created_at=_NOW))
-    _create(store, _routine(project, routine_id="rtn_new", name="new", created_at=_NOW.replace(hour=13)))
+    _create(store, _routine(project, routine_id="rtn_old", slug="old", name="old", created_at=_NOW))
+    _create(store, _routine(project, routine_id="rtn_new", slug="new", name="new", created_at=_NOW.replace(hour=13)))
 
     ids = [r.routine_id for r in store.list_all()]
 
@@ -281,8 +283,8 @@ def test_record_lifecycle_from_a_moved_revision_appends_no_fact(tmp_path: Path) 
 
 def test_retired_ids_and_list_all_reflect_only_the_newest_fact_per_routine(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
-    a = _create(store, _routine(project, routine_id="rtn_a", name="a"))
-    b = _create(store, _routine(project, routine_id="rtn_b", name="b"))
+    a = _create(store, _routine(project, routine_id="rtn_a", slug="a", name="a"))
+    b = _create(store, _routine(project, routine_id="rtn_b", slug="b", name="b"))
 
     _retire(store, a)
     _retire(store, _retire(store, b), retired=False)
@@ -368,8 +370,8 @@ def test_list_routines_returns_the_linked_routine_ids(tmp_path: Path) -> None:
 def test_list_routines_orders_by_routine_id(tmp_path: Path) -> None:
     routine_store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
-    _create(routine_store, _routine(project, routine_id="rtn_b", name="b"))
-    _create(routine_store, _routine(project, routine_id="rtn_a", name="a"))
+    _create(routine_store, _routine(project, routine_id="rtn_b", slug="b", name="b"))
+    _create(routine_store, _routine(project, routine_id="rtn_a", slug="a", name="a"))
     store = RoutineScopeStore(hub_store_connections(engine))
 
     assert store.list_routines(_scope_id(engine, "blizzard")) == ["rtn_a", "rtn_b"]
@@ -407,12 +409,12 @@ def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
     assert [f.finding_id for f in finding_store.list_for(project, "nightly", "other")] == ["fnd_1"]
 
 
-def test_a_create_losing_the_name_to_a_concurrent_one_raises_name_taken(tmp_path: Path) -> None:
+def test_a_create_losing_the_slug_to_a_concurrent_one_raises_slug_taken(tmp_path: Path) -> None:
     store, project = _store(tmp_path)
-    _create(store, _routine(project, routine_id="rtn_1", name="nightly"))
+    _create(store, _routine(project, routine_id="rtn_1", slug="nightly", name="nightly"))
 
-    with pytest.raises(RoutineNameTakenError) as raised:
-        _create(store, _routine(project, routine_id="rtn_2", name="nightly"))
+    with pytest.raises(RoutineSlugTakenError) as raised:
+        _create(store, _routine(project, routine_id="rtn_2", slug="nightly", name="Nightly"))
 
-    assert raised.value.name == "nightly"
+    assert raised.value.slug == "nightly"
     assert store.get("rtn_2") is None

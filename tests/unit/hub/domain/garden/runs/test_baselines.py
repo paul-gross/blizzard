@@ -19,6 +19,7 @@ _PROJECT = "proj_test"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ROUTINE = Routine(
     routine_id="rtn_1",
+    slug="gardening",
     name="gardening",
     graph_name="default",
     default_scope_slug="blizzard",

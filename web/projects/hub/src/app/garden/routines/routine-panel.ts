@@ -22,6 +22,9 @@ import { lifecycleTone } from '../../core/lifecycle-tone';
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
  * and `created_at` earns no row of its own on this record. */
 export interface RoutineRecordVm {
+  /** The routine's immutable handle — what `retire`/`enable` emit. */
+  readonly slug: string;
+  /** The routine's display name. */
   readonly name: string;
   readonly graphName: string;
   readonly defaultScopeSlug: string;
@@ -190,20 +193,20 @@ export class FleetRoutinePanel {
   } | null>(null);
 
   /** The routine whose graph is open for editing, with the graph it opened on, and the draft typed so far — `null`
-   * while none is. Keyed by name so a pick of another routine never carries an open editor across, and by the graph
+   * while none is. Keyed by slug so a pick of another routine never carries an open editor across, and by the graph
    * so a saved edit, reading back a new one, closes the editor while a failed one leaves it open beside its error. */
-  private readonly editing = signal<{ readonly name: string; readonly original: string; readonly value: string } | null>(
+  private readonly editing = signal<{ readonly slug: string; readonly original: string; readonly value: string } | null>(
     null,
   );
 
   protected isEditing(panel: RoutinePanelVm): boolean {
     const editing = this.editing();
-    return editing?.name === panel.record.name && editing.original === panel.record.graphName;
+    return editing?.slug === panel.record.slug && editing.original === panel.record.graphName;
   }
 
   protected startEditing(panel: RoutinePanelVm): void {
-    const { name, graphName } = panel.record;
-    this.editing.set({ name, original: graphName, value: graphName });
+    const { slug, graphName } = panel.record;
+    this.editing.set({ slug, original: graphName, value: graphName });
   }
 
   protected stopEditing(): void {
@@ -215,7 +218,7 @@ export class FleetRoutinePanel {
   }
 
   protected updateGraphDraft(panel: RoutinePanelVm, value: string): void {
-    this.editing.set({ name: panel.record.name, original: panel.record.graphName, value });
+    this.editing.set({ slug: panel.record.slug, original: panel.record.graphName, value });
   }
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
@@ -247,27 +250,29 @@ export class FleetRoutinePanel {
 
   /** Open a confirmation before emitting `retire` once the operator confirms. */
   protected onRetire(): void {
-    const name = this.vm()?.record.name;
-    if (name === undefined) return;
+    const record = this.vm()?.record;
+    if (record === undefined) return;
+    const { slug, name } = record;
     this.pendingConfirm.set({
       heading: `Retire routine ${name}`,
       message: `Retire routine ${name}? It stops offering a run; its runs, findings, proposals, and closures stay live, queryable, and attributable.`,
       confirmLabel: 'Retire',
       variant: 'danger',
-      run: () => this.retire.emit(name),
+      run: () => this.retire.emit(slug),
     });
   }
 
   /** Open a confirmation before emitting `enable` once the operator confirms. */
   protected onEnable(): void {
-    const name = this.vm()?.record.name;
-    if (name === undefined) return;
+    const record = this.vm()?.record;
+    if (record === undefined) return;
+    const { slug, name } = record;
     this.pendingConfirm.set({
       heading: `Re-enable routine ${name}`,
       message: `Re-enable routine ${name}? It resumes offering a run.`,
       confirmLabel: 'Re-enable',
       variant: 'primary',
-      run: () => this.enable.emit(name),
+      run: () => this.enable.emit(slug),
     });
   }
 

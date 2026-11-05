@@ -56,7 +56,7 @@ export const GARDENING_ROUTES: Routes = [
             loadComponent: () => import('./routines/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
           },
           {
-            path: ':routineName',
+            path: ':routineSlug',
             loadComponent: () => import('./routines/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
           },
         ],

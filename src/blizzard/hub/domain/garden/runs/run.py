@@ -67,6 +67,7 @@ class ScopeNotRelatedError(ValueError):
 def compose_charge(
     *,
     routine_name: str,
+    routine_slug: str,
     graph_name: str,
     scope_slug: str,
     scope_description: str,
@@ -75,11 +76,11 @@ def compose_charge(
     baseline: FindingSet | None,
     note: str | None,
 ) -> str:
-    """The run's charge as prose — names the routine and the graph its runs
+    """The run's charge as prose — names the routine by its display name *and* its slug, and the graph its runs
     execute, the scope with its own description, the mode with its resolved baseline,
     and ``note`` as a "This run" section. A pure function over already-resolved values —
     no store — so a unit test drives it directly."""
-    lines = [f"Routine: {routine_name} (graph: {graph_name})"]
+    lines = [f"Routine: {routine_name} (slug: {routine_slug}, graph: {graph_name})"]
     lines.append(f"Scope: {scope_slug} — {scope_description}" if scope_description else f"Scope: {scope_slug}")
     if mode is RunMode.DELTA:
         if baseline is None:
@@ -98,7 +99,7 @@ def compose_charge(
 def require_routine_runnable(routine: Routine, *, retired: bool) -> None:
     """A retired routine refuses a run — checked before anything about its scope."""
     if not Routine.allows(RoutineVerb.RUN, retired=retired):
-        raise RoutineRetiredError(routine.name)
+        raise RoutineRetiredError(routine.slug)
 
 
 def require_related(routine: Routine, scope: Scope, linked: Collection[str]) -> None:
@@ -159,6 +160,7 @@ def plan_run(
     effective_mode, downgraded = settle_mode(requested_mode, baseline)
     charge = compose_charge(
         routine_name=routine.name,
+        routine_slug=routine.slug,
         graph_name=routine.graph_name,
         scope_slug=scope.slug,
         scope_description=scope.description,
@@ -236,7 +238,7 @@ class RunService:
             scope_retired=self._scopes.is_retired(scope.project_id, scope.slug),
             linked=self._routine_scopes.list_scopes(routine.routine_id),
             requested_mode=mode,
-            baseline=self._finding_sets.newest_for_routine_scope(routine.project_id, routine.name, scope.slug),
+            baseline=self._finding_sets.newest_for_routine_scope(routine.project_id, routine.slug, scope.slug),
             note=note,
         )
         pointer, chunk, pointer_at = prepare_mint(
@@ -256,7 +258,7 @@ class RunService:
             body=plan.charge,
             author=author,
             project_id=routine.project_id,
-            routine_name=routine.name,
+            routine_name=routine.slug,
             scope_slug=scope.slug,
             run_mode=plan.effective_mode.value,
             at=pointer_at,

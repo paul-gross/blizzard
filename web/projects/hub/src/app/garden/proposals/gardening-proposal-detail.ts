@@ -7,6 +7,7 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingsQuery } from '../core/finding.query';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
 import { injectHubWorkItemQuery } from '../core/work-item.query';
+import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectConfirmGoneFindingsMutation, injectNotAFindingFindingsMutation, injectResolveFindingsMutation, injectWontFixFindingsMutation, type FindingExitVars } from '../core/finding.mutations';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, resolveFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
@@ -57,6 +58,7 @@ export class GardeningProposalDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly meQuery = injectMeQuery();
+  private readonly routinesQuery = injectHubRoutinesQuery();
 
   private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
 
@@ -99,7 +101,7 @@ export class GardeningProposalDetail {
   );
 
   protected readonly panelVm = computed<ProposalPanelVm | null>(() =>
-    proposalPanelVm(this.selectedProposal(), this.workItemVm()),
+    proposalPanelVm(this.selectedProposal(), this.workItemVm(), this.routinesQuery.data()),
   );
 
   private readonly evidenceFindings = computed<readonly FindingView[]>(() => this.findingsQuery.data() ?? []);

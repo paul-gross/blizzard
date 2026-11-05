@@ -102,12 +102,12 @@
           <h4>Tended by</h4>
           @if (relatedRoutines.length) {
             <ul>
-              @for (routine of relatedRoutines; track routine.name) {
+              @for (routine of relatedRoutines; track routine.slug) {
                 <li>
                   <a
                     class="sp-routine-link"
-                    [routerLink]="['/gardening', 'routines', routine.name] | lensLink"
-                    [attr.data-testid]="'gardening-scope-panel-routine-' + routine.name"
+                    [routerLink]="['/gardening', 'routines', routine.slug] | lensLink"
+                    [attr.data-testid]="'gardening-scope-panel-routine-' + routine.slug"
                     >{{ routine.name }}</a
                   >
                   @if (routine.isDefault) {

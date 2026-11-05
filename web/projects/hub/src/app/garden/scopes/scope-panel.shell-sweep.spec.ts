@@ -22,8 +22,8 @@ const VM: ScopePanelVm = {
   retired: false,
   renderedRetired: false,
   relatedRoutines: [
-    { name: 'nightly', isDefault: true },
-    { name: 'a-very-long-routine-name-that-should-wrap-rather-than-overflow-its-list', isDefault: false },
+    { slug: 'nightly', name: 'nightly', isDefault: true },
+    { slug: 'a-very-long-routine-name-that-should-wrap-rather-than-overflow-its-list', name: 'a-very-long-routine-name-that-should-wrap-rather-than-overflow-its-list', isDefault: false },
   ],
   swept: { at: '2026-03-05T00:00:00Z', notSwept: 'not in 28 days' },
 };

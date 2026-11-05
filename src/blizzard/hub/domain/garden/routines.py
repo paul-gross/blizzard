@@ -1,9 +1,9 @@
 """Routine domain model — an operator-authored pointer at a graph, a default scope, and
 run-defaults the hub hands back unresolved.
 
-``routine_id`` is a surrogate key; the immutable ``name`` is the lineage and keys its change
-rows (``bzh:configured-record``). :class:`RoutineAuthoring` mints an unseen default scope
-and requires the named graph resolve to an enabled mint."""
+``routine_id`` is a surrogate key; the immutable ``slug`` is the lineage and handle and keys its change
+rows (``bzh:configured-record``); ``name`` is a free, editable display name. :class:`RoutineAuthoring` mints an
+unseen default scope and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
 
@@ -27,34 +27,42 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
-from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project
 
 #: The mutable fields, in the order a diff lists them.
-_FIELDS = ("graph_name", "default_scope_slug", "default_model", "default_effort", "default_harnesses")
+_FIELDS = ("name", "graph_name", "default_scope_slug", "default_model", "default_effort", "default_harnesses")
 #: The fields an edit may set but never clear.
-_REQUIRED_FIELDS = ("graph_name", "default_scope_slug", "default_model", "default_harnesses")
+_REQUIRED_FIELDS = ("name", "graph_name", "default_scope_slug", "default_model", "default_harnesses")
 #: The wire name a link or unlink reports the routine's linked set under.
 SCOPES_FIELD = "scopes"
 
 
-class RoutineNameTakenError(ValueError):
-    """A routine create names an already-existing routine name."""
+class RoutineSlugTakenError(ValueError):
+    """A routine create names an already-existing routine slug."""
 
-    def __init__(self, name: str) -> None:
-        super().__init__(f"a routine named {name!r} already exists")
-        self.name = name
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"a routine with slug {slug!r} already exists")
+        self.slug = slug
 
 
-class RoutineNameImmutableError(ValueError):
-    """A routine edit tries to change the name — refused, naming the current one."""
+class RoutineSlugImmutableError(ValueError):
+    """A routine edit tries to change the slug — refused, naming the current one."""
 
-    def __init__(self, current_name: str) -> None:
-        super().__init__(f"a routine's name is immutable — currently named {current_name!r}")
-        self.current_name = current_name
+    def __init__(self, current_slug: str) -> None:
+        super().__init__(f"a routine's slug is immutable — currently {current_slug!r}")
+        self.current_slug = current_slug
+
+
+class RoutineSlugError(ValueError):
+    """A routine create states a slug outside the scope-slug shape."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"routine slug must match [a-z0-9-]+, got {slug!r}")
+        self.slug = slug
 
 
 class RoutineGraphUnresolvedError(ValueError):
@@ -79,14 +87,14 @@ class RoutineScopeOtherProject(ValueError):
     """A routine named a scope of another project as its default or in its linked set: a routine's scopes are
     always its own project's."""
 
-    def __init__(self, routine_name: str, scope_slug: str) -> None:
-        super().__init__(f"scope {scope_slug!r} belongs to another project than routine {routine_name!r}")
-        self.routine_name = routine_name
+    def __init__(self, routine_slug: str, scope_slug: str) -> None:
+        super().__init__(f"scope {scope_slug!r} belongs to another project than routine {routine_slug!r}")
+        self.routine_slug = routine_slug
         self.scope_slug = scope_slug
 
 
 class RoutineVerb(StrEnum):
-    """Every act addressed at a routine by name or id."""
+    """Every act addressed at a routine by slug or id."""
 
     CREATE = "create"
     EDIT = "edit"
@@ -101,9 +109,11 @@ class RoutineVerb(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class RoutineEdit:
-    """A sparse routine edit: :data:`UNSET` leaves a field. ``name`` may only restate the
-    current one; ``None`` clears ``default_effort`` and is refused on every other field."""
+    """A sparse routine edit: :data:`UNSET` leaves a field. ``slug`` may only restate the
+    current one and ``name`` sets the display name; ``None`` clears ``default_effort`` and is refused on every
+    other field."""
 
+    slug: str | None | UnsetType = UNSET
     name: str | None | UnsetType = UNSET
     graph_name: str | None | UnsetType = UNSET
     default_scope_slug: ScopeSlug | None | UnsetType = UNSET
@@ -112,11 +122,28 @@ class RoutineEdit:
     default_harnesses: Sequence[str] | None | UnsetType = UNSET
 
 
-def require_name_free(holder: Routine | None, name: str) -> None:
-    """A name already held — by an enabled or a retired routine, which keeps its name as
+def require_slug_free(holder: Routine | None, slug: str) -> None:
+    """A slug already held — by an enabled or a retired routine, which keeps its slug as
     lineage — refuses a create, never merged."""
     if holder is not None:
-        raise RoutineNameTakenError(name)
+        raise RoutineSlugTakenError(slug)
+
+
+def resolved_handle(slug: str | None, name: str | None) -> tuple[str, str]:
+    """The ``(slug, name)`` a create resolves to: each stated value as stated, the missing one the other's value.
+    Only a **stated** slug is checked against the scope-slug shape; a slug taken from ``name`` is not, as no routine
+    name has ever been shape-checked."""
+    if slug is None and name is None:
+        raise ConfigFieldError("slug", "a routine states a slug, a name, or both")
+    if slug is not None:
+        try:
+            ScopeSlug.parse(slug)
+        except ScopeSlugError as exc:
+            raise RoutineSlugError(slug) from exc
+    resolved_slug = slug if slug is not None else name
+    resolved_name = name if name is not None else slug
+    assert resolved_slug is not None and resolved_name is not None
+    return resolved_slug, resolved_name
 
 
 def require_graph_resolves(graph: Graph | None, graph_name: str) -> Graph:
@@ -143,6 +170,7 @@ class Routine:
     or ``None`` when the verb changes nothing and so writes nothing."""
 
     routine_id: str
+    slug: str
     name: str
     graph_name: str
     default_scope_slug: str
@@ -178,7 +206,6 @@ class Routine:
         cls,
         *,
         project_id: str,
-        name: str,
         graph_name: str,
         default_scope_slug: str,
         default_model: Sequence[str],
@@ -186,12 +213,17 @@ class Routine:
         default_harnesses: Sequence[str],
         ctx: ChangeContext,
         at: datetime,
+        slug: str | None = None,
+        name: str | None = None,
     ) -> tuple[Routine, ConfigChange]:
         """A new routine of ``project_id`` at revision 1 pointing at ``default_scope_slug``, a scope of the same
-        project, with its ``create`` change. The routine's id is minted here, from ``at``."""
+        project, with its ``create`` change. The routine's id is minted here, from ``at``; its slug and display
+        name resolve from the stated ones (:func:`resolved_handle`)."""
+        resolved_slug, resolved_name = resolved_handle(slug, name)
         record = cls(
             routine_id=Id.mint_at(IdPrefix.ROUTINE, at).value,
-            name=name,
+            slug=resolved_slug,
+            name=resolved_name,
             graph_name=graph_name,
             default_scope_slug=default_scope_slug,
             created_at=at,
@@ -202,27 +234,32 @@ class Routine:
         )
         return record, record._change(ctx, 1, ChangeOp.CREATE, record._diff(None), at)
 
+    @property
+    def handle(self) -> str:
+        """The key the document apply addresses the routine by — its slug."""
+        return self.slug
+
     def _change(
         self, ctx: ChangeContext, revision: int, op: ChangeOp, changes: tuple[FieldChange, ...], at: datetime
     ) -> ConfigChange:
         """The change row a verb on this routine writes, in the routine's project."""
         return ConfigChange.of(
-            ctx, RecordKind.ROUTINE, self.name, revision, op, changes, at, project_id=self.project_id
+            ctx, RecordKind.ROUTINE, self.slug, revision, op, changes, at, project_id=self.project_id
         )
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
-        lifecycle.require_revision(if_match, self.revision, kind="routine", key=self.name)
+        lifecycle.require_revision(if_match, self.revision, kind="routine", key=self.slug)
 
     def edit(
         self, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[Routine, ConfigChange] | None:
         """Apply a sparse edit, legal from either state. The revision check comes first, even
-        for an edit that changes nothing; a ``name`` other than the current one refuses — a
-        routine's name is its lineage."""
+        for an edit that changes nothing; a ``slug`` other than the current one refuses — a
+        routine's slug is its lineage."""
         self.require_revision(if_match)
-        if edit.name is not UNSET and edit.name != self.name:
-            raise RoutineNameImmutableError(self.name)
+        if edit.slug is not UNSET and edit.slug != self.slug:
+            raise RoutineSlugImmutableError(self.slug)
         merged = self._merged(edit)
         changes = merged._diff(self)
         if not changes:
@@ -258,7 +295,7 @@ class Routine:
     def require_own_scope(self, scope: Scope) -> None:
         """:class:`RoutineScopeOtherProject` unless ``scope`` belongs to this routine's project."""
         if scope.project_id != self.project_id:
-            raise RoutineScopeOtherProject(self.name, scope.slug)
+            raise RoutineScopeOtherProject(self.slug, scope.slug)
 
     def require_unlinkable(self, scope: Scope) -> None:
         """The routine's own default scope never leaves its set."""
@@ -302,16 +339,16 @@ class Routine:
 
 
 class IReadRoutineRepository(Protocol):
-    """Read-only routine access. A name names a routine within a project; :meth:`list_all` reads every project
+    """Read-only routine access. A slug names a routine within a project; :meth:`list_all` reads every project
     of the tenant."""
 
     def get(self, routine_id: str) -> Routine | None: ...
 
-    def get_by_name(self, project_id: str, name: str) -> Routine | None: ...
+    def get_by_slug(self, project_id: str, slug: str) -> Routine | None: ...
 
-    def get_many_by_name(self, project_id: str, names: Sequence[str]) -> dict[str, Routine]:
-        """The routines of ``project_id`` holding ``names``, keyed by name — ``get_by_name``'s batched plural
-        (``bzh:bulk-reconstitution``); a name no routine holds is absent."""
+    def get_many_by_slug(self, project_id: str, slugs: Sequence[str]) -> dict[str, Routine]:
+        """The routines of ``project_id`` holding ``slugs``, keyed by slug — ``get_by_slug``'s batched plural
+        (``bzh:bulk-reconstitution``); a slug no routine holds is absent."""
         ...
 
     def list_all(self, project_id: str | None = None) -> list[Routine]:
@@ -338,14 +375,14 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
 
     def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
         """Insert the routine row, mint its default scope when ``scope_mint`` is given, and
-        link that default into the routine's set. A ``name`` another routine already holds —
-        a create that lost the race to it — raises :class:`RoutineNameTakenError`."""
+        link that default into the routine's set. A ``slug`` another routine already holds —
+        a create that lost the race to it — raises :class:`RoutineSlugTakenError`."""
         ...
 
     def update(
         self, routine: Routine, *, from_revision: int, change: ConfigChange, scope_mint: ScopeMint | None
     ) -> Routine:
-        """Compare-and-set ``from_revision``, writing everything but ``name``/``routine_id``,
+        """Compare-and-set ``from_revision``, writing everything but ``slug``/``routine_id``,
         minting the default scope when ``scope_mint`` is given, and linking the default into
         the routine's set; :class:`ConfigRevisionConflict` when the stored revision has moved."""
         ...
@@ -417,23 +454,26 @@ class RoutineAuthoring:
         self,
         *,
         project: Project,
-        name: str,
         graph_name: str,
         default_scope_slug: ScopeSlug,
         ctx: ChangeContext,
+        slug: str | None = None,
+        name: str | None = None,
         default_model: list[str] | None = None,
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
     ) -> Routine:
-        """Create a routine in ``project``; its name is free and its default scope resolves (or mints) within
+        """Create a routine in ``project``; its slug is free and its default scope resolves (or mints) within
         that project."""
         project_id = project.project_id
         harnesses = validated_harnesses(default_harnesses or [])
-        require_name_free(self._routines.get_by_name(project_id, name), name)
+        resolved_slug, _ = resolved_handle(slug, name)
+        require_slug_free(self._routines.get_by_slug(project_id, resolved_slug), resolved_slug)
         require_graph_change_resolves(None, graph_name, self._resolves)
         scope, scope_mint = self._scope_registry.resolve(project_id, default_scope_slug, ctx)
         routine, change = Routine.new(
             project_id=project_id,
+            slug=slug,
             name=name,
             graph_name=graph_name,
             default_scope_slug=scope.slug,

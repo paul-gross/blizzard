@@ -903,7 +903,8 @@ def test_the_schema_endpoint_serves_scopes_and_routines(hub: HubHarness) -> None
     scopes = hub.client.get("/api/config/schema/scopes").json()
     assert scopes["required"] == ["slug"] and scopes["additionalProperties"] is False
     routines = hub.client.get("/api/config/schema/routines").json()
-    assert routines["required"] == ["name", "graph_name", "default_scope_slug"]
+    assert routines["required"] == ["graph_name", "default_scope_slug"]
+    assert {"slug", "name", "scopes"} <= routines["properties"].keys()
     assert "scopes" in routines["properties"] and routines["additionalProperties"] is False
 
 
@@ -1013,6 +1014,7 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
     ]
     assert document["routines"] == [
         {
+            "slug": "nightly",
             "name": "nightly",
             "graph_name": "alpha",
             "default_scope_slug": "core",
@@ -1026,6 +1028,33 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
     before = _changes(hub)
     assert {op for _, _, op in _rows(_apply_json(hub, document))} == {"unchanged"}
     assert _changes(hub) == before
+
+
+def test_a_name_only_entry_leaves_the_routine_and_an_operator_set_name_alone(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    _apply_json(hub, _GARDEN)
+    routine = _routine(hub)
+    assert (routine["slug"], routine["name"]) == ("nightly", "nightly")
+    assert _rows(_apply_json(hub, _GARDEN))[-1] == ("routine", "nightly", "unchanged")
+    assert _routine(hub)["revision"] == routine["revision"]
+
+    renamed = hub.client.patch(f"/api/routines/{routine['routine_id']}", json={"name": "Nightly Sweep"})
+    assert renamed.status_code == 200, renamed.text
+    assert _rows(_apply_json(hub, _GARDEN))[-1] == ("routine", "nightly", "unchanged")
+    after = _routine(hub, "Nightly Sweep")
+    assert (after["slug"], after["revision"]) == ("nightly", renamed.json()["revision"])
+
+
+def test_an_entry_with_slug_and_name_sets_the_name_and_export_writes_both(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    _apply_json(hub, _GARDEN)
+    named = {**_GARDEN, "routines": [{**_ROUTINE_ENTRY, "slug": "nightly", "name": "Nightly Sweep"}]}
+    assert _rows(_apply_json(hub, named))[-1] == ("routine", "nightly", "edit")
+    routine = _routine(hub, "Nightly Sweep")
+    assert routine["slug"] == "nightly"
+    exported = hub.client.get("/api/config/export").json()["routines"]
+    assert [(r["slug"], r["name"]) for r in exported] == [("nightly", "Nightly Sweep")]
+    assert {op for _, _, op in _rows(_apply_json(hub, hub.client.get("/api/config/export").json()))} == {"unchanged"}
 
 
 def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: Path) -> None:

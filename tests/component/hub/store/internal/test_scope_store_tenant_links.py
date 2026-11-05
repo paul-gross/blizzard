@@ -95,6 +95,7 @@ def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
     scope = _mint_scope(conns, project, _SLUG, f"the {label} hub")
     routine = Routine(
         routine_id=f"rtn_{label}",
+        slug="nightly",
         name="nightly",
         graph_name="alpha",
         default_scope_slug=_SLUG,
@@ -214,7 +215,7 @@ def test_each_tenants_reads_see_only_its_own_attachments(store: _Store) -> None:
     for tenant, label in ((store.first, "first"), (store.second, "second")):
         assert RoutineScopeStore(tenant.conns).list_routines(tenant.scope.scope_id) == [f"rtn_{label}"]
         assert RoutineScopeStore(tenant.conns).list_scopes(f"rtn_{label}") == [_SLUG]
-        routine = RoutineStore(tenant.conns).get_by_name(tenant.project, "nightly")
+        routine = RoutineStore(tenant.conns).get_by_slug(tenant.project, "nightly")
         assert routine is not None
         assert (routine.routine_id, routine.default_scope_slug) == (f"rtn_{label}", _SLUG)
         assert [f.finding_id for f in FindingStore(tenant.conns).list_for(tenant.project, "nightly", _SLUG)] == [

@@ -52,7 +52,7 @@ export const gardeningDoorwayGuard: CanActivateFn = async (_route, state) => {
  * - With exactly one project, the link opens under its lens as it is.
  * - A run, a finding or a proposal is named by an id unique in the tenant: the link opens under the lens of the
  *   project its own read names. A record the tenant does not hold opens the doorway with a notice.
- * - A scope's slug and a routine's name are unique only inside a project, and the board never matches one across
+ * - A scope's slug and a routine's slug are unique only inside a project, and the board never matches one across
  *   projects: the link opens the doorway with a notice to choose the project.
  * - A bare tab opens the doorway.
  */

@@ -154,12 +154,31 @@ def test_null_clears_effort_and_is_refused_elsewhere_naming_the_field(hub: HubHa
     assert refused.json()["detail"][0]["loc"] == ["body", "graph_name"]
 
 
-def test_a_name_change_and_an_unknown_field_are_refused(hub: HubHarness) -> None:
+def test_a_slug_change_and_an_unknown_field_are_refused(hub: HubHarness) -> None:
     created = _create(hub)
     path = f"/api/routines/{created['routine_id']}"
 
-    assert hub.client.patch(path, json={"name": "renamed"}).status_code == 422
+    assert hub.client.patch(path, json={"slug": "renamed"}).status_code == 422
+    assert hub.client.patch(path, json={"slug": created["slug"]}).status_code == 200
     assert hub.client.patch(path, json={"routine_id": "rtn_x"}).status_code == 422
+
+
+def test_a_create_refuses_a_misshapen_slug_and_takes_the_slug_from_a_lone_name(hub: HubHarness) -> None:
+    body = {"graph_name": "alpha", "default_scope_slug": "blizzard"}
+
+    assert hub.client.post("/api/routines", json={**body, "slug": "Bad Slug"}).status_code == 422
+    created = hub.client.post("/api/routines", json={**body, "name": "Arch Sweep"})
+    assert created.status_code == 201, created.text
+    assert (created.json()["slug"], created.json()["name"]) == ("Arch Sweep", "Arch Sweep")
+
+
+def test_a_patch_sets_the_display_name_and_keeps_the_slug(hub: HubHarness) -> None:
+    created = _create(hub)
+
+    resp = hub.client.patch(f"/api/routines/{created['routine_id']}", json={"name": "Nightly Sweep"})
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["slug"], resp.json()["name"]) == ("nightly", "Nightly Sweep")
 
 
 def test_a_stale_if_match_is_409_and_writes_nothing(hub: HubHarness) -> None:

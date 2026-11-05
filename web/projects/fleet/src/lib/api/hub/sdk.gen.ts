@@ -2092,7 +2092,7 @@ export const listProjectRoutinesApiProjectsProjectRoutinesGet = <ThrowOnError ex
 /**
  * Create Project Routine
  *
- * Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate name in the
+ * Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
  * project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.
  */
 export const createProjectRoutineApiProjectsProjectRoutinesPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectRoutineApiProjectsProjectRoutinesPostData, ThrowOnError>): RequestResult<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError>({
@@ -2396,7 +2396,7 @@ export const listRoutinesApiRoutinesGet = <ThrowOnError extends boolean = false>
 /**
  * Create Routine
  *
- * Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate name
+ * Mint a routine in the call's project, its default scope resolved or minted there; 422 on a duplicate slug
  * in the project, a malformed default scope slug, or a graph name with no enabled mint. Deprecated: `POST
  * /api/projects/{project}/routines`.
  *
@@ -2431,7 +2431,7 @@ export const routineProposalCountsApiRoutinesProposalCountsGet = <ThrowOnError e
  * `period_days`-wide period, findings created and per-kind exit counts, the outflow/
  * withdrawn roll-ups, and the age cut against `introduced_boundary`. `routine` is read in the project
  * `?project=` names, else in the call's project (the tenant's only one, else `422 project_required`). 404 on an
- * unknown routine name in that project; 422 on a malformed instant, a non-positive `period_days`, a
+ * unknown routine slug in that project; 422 on a malformed instant, a non-positive `period_days`, a
  * non-positive span, or a span/`period_days` pair bucketing past the period cap.
  */
 export const routineTrendApiRoutinesTrendGet = <ThrowOnError extends boolean = false>(options: Options<RoutineTrendApiRoutinesTrendGetData, ThrowOnError>): RequestResult<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError>({ url: '/api/routines/trend', ...options });
@@ -2446,10 +2446,10 @@ export const getRoutineApiRoutinesRoutineIdGet = <ThrowOnError extends boolean =
 /**
  * Edit Routine
  *
- * Apply only the fields present — the graph, the default scope, and the model, effort,
- * and harness defaults; an explicit `null` clears `default_effort`. A present `name` must
+ * Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
+ * and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
  * restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
- * id; 422 on a name change, a `null` field, a malformed default scope slug, or a graph name
+ * id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
  * with no enabled mint; 409 on a stale `If-Match` naming the current revision.
  */
 export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolean = false>(options: Options<EditRoutineApiRoutinesRoutineIdPatchData, ThrowOnError>): RequestResult<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError>({

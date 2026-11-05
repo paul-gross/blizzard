@@ -46,7 +46,12 @@ export class GardeningFindingsPage {
   /** The bucket's rows, naming only the routine/scope dimension the active
    * filter leaves unnamed. */
   protected readonly findingListRows = computed<readonly FindingListRowVm[]>(() =>
-    findingListRows(this.filters.filteredBucket(), this.filters.selectedRoutine(), this.filters.selectedScope()),
+    findingListRows(
+      this.filters.filteredBucket(),
+      this.filters.selectedRoutine(),
+      this.filters.selectedScope(),
+      this.filters.routines(),
+    ),
   );
 
   protected readonly bucketState = computed<KitAsyncStateValue>(() =>

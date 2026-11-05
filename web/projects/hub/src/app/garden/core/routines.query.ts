@@ -35,12 +35,12 @@ export function injectHubRoutinesQuery() {
 /**
  * Hub `GET /api/routines/trend` read — one routine's finding inflow against outflow
  * over `[since, until)`. Every argument is an accessor so the caller can recompute the
- * window without re-wiring the query (`injectHubFleetSpendQuery`'s own shape). A routine's name is unique only inside
- * its project, so under a lens the read names it (`?project=`); disabled while `routineName()` is `null` — the
+ * window without re-wiring the query (`injectHubFleetSpendQuery`'s own shape). A routine's slug is unique only inside
+ * its project, so under a lens the read names it (`?project=`); disabled while `routineSlug()` is `null` — the
  * panel's own "nothing selected" rest state.
  */
 export function injectHubRoutineTrendQuery(
-  routineName: () => string | null,
+  routineSlug: () => string | null,
   since: () => string,
   until: () => string,
   introducedBoundary: () => string,
@@ -48,15 +48,15 @@ export function injectHubRoutineTrendQuery(
 ) {
   const project = injectProjectFilter();
   return injectQuery(() => {
-    const name = routineName();
+    const slug = routineSlug();
     const lens = project();
     return {
-      queryKey: lensedKey(hubRoutineTrendKey(name, since(), until(), introducedBoundary(), periodDays()), lens),
-      enabled: name !== null,
+      queryKey: lensedKey(hubRoutineTrendKey(slug, since(), until(), introducedBoundary(), periodDays()), lens),
+      enabled: slug !== null,
       queryFn: async (): Promise<TrendView> => {
         const { data, error } = await routineTrendApiRoutinesTrendGet({
           query: {
-            routine: name!,
+            routine: slug!,
             since: since(),
             until: until(),
             introduced_boundary: introducedBoundary(),
@@ -100,23 +100,23 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
 /**
  * Hub `GET /api/routines/proposal-counts` read — one routine's
  * garden-proposal counts, per class, over `[since, until)`. Every window argument is
- * an accessor, `injectHubRoutineTrendQuery`'s own shape, and like it the read names the lensed project; disabled while `routineName()` is `null`, the same "nothing selected" rest state.
+ * an accessor, `injectHubRoutineTrendQuery`'s own shape, and like it the read names the lensed project; disabled while `routineSlug()` is `null`, the same "nothing selected" rest state.
  */
 export function injectHubRoutineProposalCountsQuery(
-  routineName: () => string | null,
+  routineSlug: () => string | null,
   since: () => string,
   until: () => string,
 ) {
   const project = injectProjectFilter();
   return injectQuery(() => {
-    const name = routineName();
+    const slug = routineSlug();
     const lens = project();
     return {
-      queryKey: lensedKey(hubRoutineProposalCountsKey(name, since(), until()), lens),
-      enabled: name !== null,
+      queryKey: lensedKey(hubRoutineProposalCountsKey(slug, since(), until()), lens),
+      enabled: slug !== null,
       queryFn: async (): Promise<GardenProposalCountsView> => {
         const { data, error } = await routineProposalCountsApiRoutinesProposalCountsGet({
-          query: { routine: name!, since: since(), until: until(), ...(lens !== null ? { project: lens } : {}) },
+          query: { routine: slug!, since: since(), until: until(), ...(lens !== null ? { project: lens } : {}) },
           throwOnError: false,
         });
         if (error) throw error;

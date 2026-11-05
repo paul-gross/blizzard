@@ -11,8 +11,8 @@ import { vi } from 'vitest';
 import { GardeningFindingsPage } from './gardening-findings-page';
 
 const ROUTINES = [
-  { routine_id: 'rt_1', name: 'nightly', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
-  { routine_id: 'rt_2', name: 'weekly', graph_name: 'sweep', default_scope_slug: 'web', created_at: '2026-01-01T00:00:00Z' },
+  { routine_id: 'rt_1', slug: 'nightly', name: 'Nightly sweep', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
+  { routine_id: 'rt_2', slug: 'weekly', name: 'Weekly sweep', graph_name: 'sweep', default_scope_slug: 'web', created_at: '2026-01-01T00:00:00Z' },
 ];
 
 const SCOPES = [
@@ -213,7 +213,7 @@ describe('GardeningFindingsPage', () => {
       expect(el.querySelector(`[data-testid="gardening-findings-${filter}-filter"]`)).toBeTruthy();
     }
     await openFilter(el, 'gardening-findings-routine-filter');
-    expect(inOverlay('gardening-findings-routine-item-nightly')).toBeTruthy();
+    expect(inOverlay('gardening-findings-routine-item-nightly')?.textContent).toContain('Nightly sweep');
     await openFilter(el, 'gardening-findings-routine-filter');
     await openFilter(el, 'gardening-findings-scope-filter');
     expect(inOverlay('gardening-findings-scope-item-blizzard')).toBeTruthy();
@@ -429,15 +429,15 @@ describe('GardeningFindingsPage', () => {
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
     });
 
-    it("shows each row's own routine and scope while both dimensions are unnamed, so a widened bucket disambiguates itself", async () => {
+    it("shows each row's own routine, by display name, and scope while both dimensions are unnamed, so a widened bucket disambiguates itself", async () => {
       const { el } = await mount({ routeOverride: withBucket });
 
       const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
-      expect(nightly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('nightly');
+      expect(nightly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('Nightly sweep');
       expect(nightly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
 
       const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
-      expect(weekly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('weekly');
+      expect(weekly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('Weekly sweep');
       expect(weekly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('web');
     });
 

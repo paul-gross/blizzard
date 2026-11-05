@@ -9,9 +9,9 @@
     @for (row of rows(); track row.routineId) {
       <li>
         <fleet-kit-select-row
-          [selected]="row.name === selectedName()"
-          [testid]="'gardening-routine-row-' + row.name"
-          (picked)="pick(row.name)"
+          [selected]="row.slug === selectedSlug()"
+          [testid]="'gardening-routine-row-' + row.slug"
+          (picked)="pick(row.slug)"
         >
           <span class="rt-top">
             <span class="rt-name">{{ row.name }}</span>

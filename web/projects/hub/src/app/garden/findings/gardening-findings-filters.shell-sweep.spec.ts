@@ -38,6 +38,7 @@ const ROUTINES = [
   {
     routine_id: 'rtn_1',
     name: 'nightly',
+    slug: 'nightly',
     graph_name: 'garden-routine',
     default_scope_slug: 'blizzard',
     default_model: ['claude-sonnet-5'],
@@ -47,6 +48,7 @@ const ROUTINES = [
   {
     routine_id: 'rtn_2',
     name: 'weekly',
+    slug: 'weekly',
     graph_name: 'garden-routine',
     default_scope_slug: 'web',
     default_model: ['claude-sonnet-5'],

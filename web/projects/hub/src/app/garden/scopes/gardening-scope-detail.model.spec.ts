@@ -26,7 +26,8 @@ const DOCS: ScopeView = {
 
 const NIGHTLY: RoutineView = {
   routine_id: 'rtn_1',
-  name: 'nightly',
+  slug: 'nightly',
+  name: 'Nightly sweep',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   created_at: '2026-01-01T00:00:00Z',
@@ -39,7 +40,7 @@ const NIGHTLY: RoutineView = {
   retired: false,
   revision: null,
 };
-const WEEKLY: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', name: 'weekly', default_scope_slug: 'docs' };
+const WEEKLY: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep', default_scope_slug: 'docs' };
 
 describe('scopeBySlug', () => {
   it('answers null on the bare child route', () => {
@@ -68,15 +69,15 @@ describe('relatedRoutineRows', () => {
     expect(relatedRoutineRows(['rtn_1'], BLIZZARD, undefined)).toBeNull();
   });
 
-  it("resolves each id to its routine's name and marks this scope's own defaults", () => {
+  it("resolves each id to its routine's slug and display name and marks this scope's own defaults", () => {
     expect(relatedRoutineRows(['rtn_1', 'rtn_2'], BLIZZARD, [NIGHTLY, WEEKLY])).toEqual([
-      { name: 'nightly', isDefault: true },
-      { name: 'weekly', isDefault: false },
+      { slug: 'nightly', name: 'Nightly sweep', isDefault: true },
+      { slug: 'weekly', name: 'Weekly sweep', isDefault: false },
     ]);
   });
 
   it('falls back to the raw id for a routine the routine read does not carry', () => {
-    expect(relatedRoutineRows(['rtn_9'], BLIZZARD, [NIGHTLY])).toEqual([{ name: 'rtn_9', isDefault: false }]);
+    expect(relatedRoutineRows(['rtn_9'], BLIZZARD, [NIGHTLY])).toEqual([{ slug: 'rtn_9', name: 'rtn_9', isDefault: false }]);
   });
 });
 
@@ -101,7 +102,7 @@ describe('scopePanelVm', () => {
   });
 
   it('renders the real retired flag with nothing pending', () => {
-    const related = [{ name: 'nightly', isDefault: true }];
+    const related = [{ slug: 'nightly', name: 'Nightly sweep', isDefault: true }];
     const swept = { at: null, notSwept: 'not in 28 days' };
     expect(scopePanelVm({ ...BLIZZARD, retired: true }, null, related, swept)).toEqual({
       slug: 'blizzard',

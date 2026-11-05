@@ -1,4 +1,4 @@
-import { type GardenProposalView } from 'fleet';
+import { type GardenProposalView, type RoutineView } from 'fleet';
 
 import {
   ALL_CLASSES,
@@ -111,11 +111,22 @@ describe('proposalRoutineChips', () => {
       proposal({ routine_name: null, origin: 'operator', created_by: 'alice' }),
       proposal({ routine_name: 'architecture' }),
       proposal({ routine_name: 'comments' }),
-    ]);
+    ], []);
     expect(chips).toEqual([
       { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
       { value: 'architecture', label: 'architecture', testid: 'gardening-proposal-routine-item-architecture' },
       { value: 'comments', label: 'comments', testid: 'gardening-proposal-routine-item-comments' },
+    ]);
+  });
+
+  it('keys each chip by slug and labels it with the display name, alphabetized by the label', () => {
+    const chips = proposalRoutineChips(
+      [proposal({ routine_name: 'arch' }), proposal({ routine_name: 'cmt' })],
+      [{ slug: 'arch', name: 'Zoning review' } as RoutineView, { slug: 'cmt', name: 'Comment sweep' } as RoutineView],
+    );
+    expect(chips.slice(1)).toEqual([
+      { value: 'cmt', label: 'Comment sweep', testid: 'gardening-proposal-routine-item-cmt' },
+      { value: 'arch', label: 'Zoning review', testid: 'gardening-proposal-routine-item-arch' },
     ]);
   });
 });
