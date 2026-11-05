@@ -218,6 +218,13 @@ def _strip_daemon_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+def _without_opencode(path: str) -> str:
+    """``path`` less every directory holding an ``opencode`` executable: the binary's version chooses the binding a
+    runner composes, so a developer's own OpenCode never decides which one a test gets."""
+    kept = [entry for entry in path.split(os.pathsep) if not os.access(Path(entry, "opencode"), os.X_OK)]
+    return os.pathsep.join(kept)
+
+
 def pytest_configure() -> None:
     """Apply the daemon environment contract to the suite's environ: every hub and runner subprocess inherits it.
 
@@ -227,6 +234,7 @@ def pytest_configure() -> None:
     for name in DAEMON_ENV["unset"]:
         os.environ.pop(name, None)
     os.environ.update(DAEMON_ENV["set"])
+    os.environ["PATH"] = _without_opencode(os.environ.get("PATH", ""))
     install_tenant_guard()
     install_runner_guard()
 

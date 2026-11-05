@@ -70,8 +70,9 @@ def test_the_binarys_version_chooses_the_opencode_declaration(
 
 def test_a_missing_binary_or_a_disabled_section_takes_opencode_1_without_a_probe(tmp_path: Path) -> None:
     family = harness_families()["opencode"]
+    absent = _Counting()
     missing = _sections(str(tmp_path / "absent")).of("opencode")
-    assert select_declaration(family, missing, _Counting()) is OPENCODE_DECLARATION
+    assert select_declaration(family, missing, absent) is OPENCODE_DECLARATION and absent.probes == 0
     probe = _Counting()
     disabled = _sections(_binary(tmp_path, "2.1.4"), enabled=False).of("opencode")
     assert select_declaration(family, disabled, probe) is OPENCODE_DECLARATION and probe.probes == 0

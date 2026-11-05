@@ -34,11 +34,15 @@ class BindingSelection:
 def select_declaration(
     family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection, versions: VersionProbe
 ) -> IHarnessDeclaration[Any]:
-    """The declaration of ``family`` binding ``section``'s binary, probed once when the family holds several."""
+    """The declaration of ``family`` binding ``section``'s binary, probed once when the family holds several and the
+    binary is there to run; the first otherwise, whose health reports the binary missing."""
     if len(family) == 1 or not section.enabled:
         return family[0]
     candidates = [cast(IVersionSelectedDeclaration[Any], declaration) for declaration in family]
-    raw = versions.observe_version(candidates[0].version_binary(section))
+    binary = candidates[0].version_binary(section)
+    if not versions.binary_present(binary):
+        return family[0]
+    raw = versions.observe_version(binary)
     return next((each for each in candidates if each.admits_version(raw)), family[0])
 
 
