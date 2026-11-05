@@ -6,8 +6,7 @@ import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';
 
 /**
  * A `bounce-envelope` asset, laid out as labelled fields — cause, detail, the action whose pass answered the
- * bounce (or, on an envelope stored before the hub named it, the failed step), then each repository that did not land — with the verbatim JSON one click away behind the raw
- * disclosure. Presentational only: `envelope` is already validated
+ * bounce, then each repository that did not land — with the verbatim JSON one click away behind the raw disclosure. Presentational only: `envelope` is already validated
  * ({@link parseBounceEnvelope}).
  */
 @Component({
@@ -27,17 +26,13 @@ export class ChunkArtifactBounce {
   readonly testid = input('artifact');
 
   protected readonly rows = computed<readonly KitFact[]>(() => {
-    const { cause, detail, step, action, unlanded } = this.envelope();
+    const { cause, detail, action, unlanded } = this.envelope();
     const rows: KitFact[] = [
       { label: 'Cause', value: cause, testid: `${this.testid()}-bounce-cause` },
       { label: 'Detail', value: detail, testid: `${this.testid()}-bounce-detail` },
     ];
     if (action !== null) {
       rows.push({ label: 'Action', value: `${action.name} answered ${action.choice}`, testid: `${this.testid()}-bounce-action` });
-    }
-    if (step !== null) {
-      rows.push({ label: 'Step', value: `${step.name} exited ${step.exit_code}`, testid: `${this.testid()}-bounce-step` });
-      if (step.output_tail !== '') rows.push({ label: 'Output', value: step.output_tail, testid: `${this.testid()}-bounce-output` });
     }
     unlanded.forEach((repo, index) => {
       const pr = repo.pr === null ? '' : `, PR #${repo.pr.number} ${repo.pr.url}`;

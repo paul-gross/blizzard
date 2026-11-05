@@ -152,7 +152,6 @@ class BounceEnvelope:
                 "cause": self.cause,
                 "detail": self.detail,
                 "unlanded": self.unlanded,
-                "step": None,
                 "action": self.action.payload() if self.action else None,
             },
             ensure_ascii=False,

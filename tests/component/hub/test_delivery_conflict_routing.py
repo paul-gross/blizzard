@@ -117,7 +117,7 @@ def test_a_red_check_envelope_names_the_unlanded_repo_its_pr_and_the_land_action
     assert envelope["unlanded"][0]["branch"] == "feat/thing"
     assert envelope["unlanded"][0]["commit"] == _COMMIT
     assert envelope["unlanded"][0]["pr"] == {"number": 1, "url": "https://github.example/acme/widget/pull/1"}
-    assert envelope["step"] is None
+    assert "step" not in envelope
     assert envelope["action"] == {"name": "land", "choice": "failure", "log_artifact": "hub-log.land"}
     assert envelope["detail"] == "PR #1 in acme/widget did not land: `land` answered failure"
     artifact_names = {a["name"] for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]}
@@ -154,7 +154,7 @@ def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_pat
     hub.take_turns()
 
     envelope = _envelope(hub, chunk_id)
-    assert envelope["step"] is None
+    assert "step" not in envelope
     assert envelope["action"]["choice"] == "conflict"
     assert "conflict" in envelope["detail"] and "acme/widget" in envelope["detail"]
     assert "exited" not in envelope["detail"]

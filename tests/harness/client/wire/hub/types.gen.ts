@@ -833,8 +833,7 @@ export type BounceAction = {
  * BounceEnvelope
  *
  * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
- * ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout. ``step`` is
- * deprecated and ``null`` unless the envelope carries a failed step.
+ * ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout.
  */
 export type BounceEnvelope = {
     action: BounceAction | null;
@@ -847,38 +846,9 @@ export type BounceEnvelope = {
      */
     detail: string;
     /**
-     * @deprecated
-     */
-    step: BounceFailedStep | null;
-    /**
      * Unlanded
      */
     unlanded: Array<BounceUnlandedRepo>;
-};
-
-/**
- * BounceFailedStep
- *
- * A step that exited non-zero. ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full
- * log.
- */
-export type BounceFailedStep = {
-    /**
-     * Exit Code
-     */
-    exit_code: number;
-    /**
-     * Log Artifact
-     */
-    log_artifact: string;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Output Tail
-     */
-    output_tail: string;
 };
 
 /**

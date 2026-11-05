@@ -604,7 +604,7 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     envelope = json.loads(detail["bounces"][0]["envelope"])
     assert "poll_timeout" in envelope["detail"]
     assert envelope["unlanded"] == []
-    assert envelope["step"] is None
+    assert "step" not in envelope
     assert envelope["action"] is None
 
 

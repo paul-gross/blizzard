@@ -1393,7 +1393,7 @@
         "type": "object"
       },
       "BounceEnvelope": {
-        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout. ``step`` is\ndeprecated and ``null`` unless the envelope carries a failed step.",
+        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout.",
         "properties": {
           "action": {
             "anyOf": [
@@ -1414,17 +1414,6 @@
             "title": "Detail",
             "type": "string"
           },
-          "step": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/BounceFailedStep"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "deprecated": true
-          },
           "unlanded": {
             "items": {
               "$ref": "#/components/schemas/BounceUnlandedRepo"
@@ -1437,39 +1426,9 @@
           "cause",
           "detail",
           "unlanded",
-          "step",
           "action"
         ],
         "title": "BounceEnvelope",
-        "type": "object"
-      },
-      "BounceFailedStep": {
-        "description": "A step that exited non-zero. ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full\nlog.",
-        "properties": {
-          "exit_code": {
-            "title": "Exit Code",
-            "type": "integer"
-          },
-          "log_artifact": {
-            "title": "Log Artifact",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "output_tail": {
-            "title": "Output Tail",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "exit_code",
-          "output_tail",
-          "log_artifact"
-        ],
-        "title": "BounceFailedStep",
         "type": "object"
       },
       "BouncePullRequest": {

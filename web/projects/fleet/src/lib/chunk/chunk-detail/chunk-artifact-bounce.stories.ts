@@ -7,7 +7,6 @@ const causeAndDetail: BounceEnvelope = {
   cause: 'failure',
   detail: 'PR #7 in acme/one did not land: `land` answered failure',
   unlanded: [],
-  step: null,
   action: null,
 };
 
@@ -31,14 +30,6 @@ const answeredAction: BounceEnvelope = {
   action: { name: 'land', choice: 'failure', log_artifact: 'hub-log.land' },
 };
 export const AnsweredAction: Story = { args: { envelope: answeredAction, raw: JSON.stringify(answeredAction) } };
-
-// An envelope stored before hub steps stopped running commands: a failed step, and no action.
-const failedStep: BounceEnvelope = {
-  ...causeAndDetail,
-  detail: 'PR #7 in acme/one did not land: `tests` exited 2',
-  step: { name: 'tests', exit_code: 2, output_tail: '2 failed, 40 passed', log_artifact: 'hub-log.tests' },
-};
-export const FailedStep: Story = { args: { envelope: failedStep, raw: JSON.stringify(failedStep) } };
 
 const unlanded: BounceEnvelope = {
   ...answeredAction,

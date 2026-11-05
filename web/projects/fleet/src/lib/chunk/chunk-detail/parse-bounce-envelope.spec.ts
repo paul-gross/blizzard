@@ -1,7 +1,7 @@
 import { bounceReason, parseBounceEnvelope } from './parse-bounce-envelope';
 
 describe('parseBounceEnvelope', () => {
-  it('reads cause, detail, the unlanded rows and the failed step of a stored step envelope', () => {
+  it('reads cause, detail and the unlanded rows of a stored step envelope, ignoring its step', () => {
     const raw = JSON.stringify({
       cause: 'failure',
       detail: 'd',
@@ -18,34 +18,30 @@ describe('parseBounceEnvelope', () => {
         { repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: { number: 7, url: 'https://forge/pull/7' } },
         { repo: 'acme/two', branch: 'feat/x', commit: 'b2', pr: null },
       ],
-      step: { name: 'tests', exit_code: 2, output_tail: 'boom', log_artifact: 'hub-log.tests' },
       action: null,
     });
   });
 
-  it('reads the action a pass answered beside a null step', () => {
+  it('reads the action a pass answered', () => {
     const raw = JSON.stringify({
       cause: 'failure',
       detail: 'acme/one did not land: `land` answered failure',
       unlanded: [],
-      step: null,
       action: { name: 'land', choice: 'failure', log_artifact: null },
     });
     expect(parseBounceEnvelope(raw)).toEqual({
       cause: 'failure',
       detail: 'acme/one did not land: `land` answered failure',
       unlanded: [],
-      step: null,
       action: { name: 'land', choice: 'failure', log_artifact: null },
     });
   });
 
-  it('defaults an absent unlanded, step and action, and ignores a key it does not know', () => {
+  it('defaults an absent unlanded and action, and ignores a key it does not know', () => {
     expect(parseBounceEnvelope('{"cause":"c","detail":"d","waited_s":600}')).toEqual({
       cause: 'c',
       detail: 'd',
       unlanded: [],
-      step: null,
       action: null,
     });
   });
@@ -55,7 +51,6 @@ describe('parseBounceEnvelope', () => {
       expect(parseBounceEnvelope(raw)).toBeNull();
     }
     expect(parseBounceEnvelope('{"cause":"c","detail":"d","unlanded":[{"repo":"r"}]}')).toBeNull();
-    expect(parseBounceEnvelope('{"cause":"c","detail":"d","step":{"name":"t"}}')).toBeNull();
     expect(parseBounceEnvelope('{"cause":"c","detail":"d","action":{"name":"land"}}')).toBeNull();
     expect(parseBounceEnvelope('{"cause":"c","detail":"d","action":{"name":"land","choice":"failure","log_artifact":3}}')).toBeNull();
   });
