@@ -471,32 +471,39 @@ test.describe('poll timeout, on the controlled clock', () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result.some((pull) => pull.merged)).toBe(false);
   });
-});
-});
 
-traced(timeoutTitle, async ({ repository, issue, api, forge, runnerHosts, traceSink }) => {
-  test.slow();
-  const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  await lever(forge, repo, 'checks_pending');
-  await createGraph(api, repo, 'default-delivery', 4);
-  const { chunk } = await issue('pr-ci', { repository: repo });
-  expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  await drive(host, api, chunk.chunk_id, (s) => s.pending !== null);
-  await expect.poll(async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body.bounces.length, { timeout: 30000 }).toBeGreaterThan(0);
-  await drive(host, api, chunk.chunk_id, (s) => s.history.filter((h) => h.choice_name === 'pass').length >= 2);
-  const chunkSpans = () => traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
-  await expect.poll(() => {
-    const spans = chunkSpans();
-    return [spans.filter((span) => roleOf(span) === 'step').length >= 3, spans.some((span) => roleOf(span) === 'runner/invocation')];
-  }, { timeout: 30000 }).toEqual([true, true]);
-  const traces = tracesOf(chunkSpans());
-  const bounce = traces[1]!.root.events.filter((event) => event.name === 'bounce');
-  expect(bounce).toHaveLength(1);
-  expect(bounce[0]!.attributes['blizzard.bounce.cause']).toBe('poll-timeout');
-  assertSkeleton(traces, [
-    { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'] },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'build', events: ['bounce'], minEvents: { 'hub poll pending': 2 }, minChildren: { 'hub exec': 1 }, link: 'next', attributes: { 'blizzard.bounce.cause': 'poll-timeout' } },
-    { name: 'step build', outcome: 'transitioned', toNode: 'deliver', link: 'bounce' },
-  ]);
+  traced(timeoutTitle, async ({ repository, issue, api, clock, flushTraces, forge, runnerHosts, traceSink }) => {
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    await lever(forge, repo, 'checks_pending');
+    await createGraph(api, repo, 'default-delivery', 4);
+    const { chunk } = await issue('pr-ci', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    // The hub misnames a step that opens and closes on one instant after the node it moved to, so time passes while build runs.
+    const read = async () => {
+      const state = await stepped(api, chunk.chunk_id);
+      if (state.current_node_name === 'build') await clock.advance(1);
+      return state;
+    };
+    await stepUntil(host, read, (s) => s.pending !== null, { stallPasses: 80, progress: chunkProgress });
+    await clock.advance(1);
+    await api.flowStep();
+    await clock.advance(5);
+    await stepUntil(host, read, (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
+    await stepUntil(host, read, (s) => s.history.filter((h) => h.choice_name === 'pass').length >= 2, { stallPasses: 80, progress: chunkProgress });
+    await flushTraces(host);
+    const chunkSpans = () => traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
+    const flushed = chunkSpans();
+    expect([flushed.filter((span) => roleOf(span) === 'step').length >= 3, flushed.some((span) => roleOf(span) === 'runner/invocation')]).toEqual([true, true]);
+    const traces = tracesOf(flushed);
+    const bounce = traces[1]!.root.events.filter((event) => event.name === 'bounce');
+    expect(bounce).toHaveLength(1);
+    expect(bounce[0]!.attributes['blizzard.bounce.cause']).toBe('poll-timeout');
+    assertSkeleton(traces, [
+      { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'] },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'build', events: ['bounce'], minEvents: { 'hub poll pending': 2 }, minChildren: { 'hub exec': 1 }, link: 'next', attributes: { 'blizzard.bounce.cause': 'poll-timeout' } },
+      { name: 'step build', outcome: 'transitioned', toNode: 'deliver', link: 'bounce' },
+    ]);
+  });
+});
 });
