@@ -21,6 +21,9 @@ import type { ScopeDescriptionEditEvent, ScopeSweptVm } from './scope-list';
 /** One routine related to the selected scope — `isDefault` marks whether this scope
  * is that routine's own default, `RelatedScopeVm`'s own shape (`routine-panel.ts`). */
 export interface RelatedRoutineVm {
+  /** The routine's handle — its link and test id key on it. */
+  readonly slug: string;
+  /** The routine's display name. */
   readonly name: string;
   readonly isDefault: boolean;
 }

@@ -218,8 +218,8 @@ const PANEL_SCOPE: ScopePanelVm = {
   retired: false,
   renderedRetired: false,
   relatedRoutines: [
-    { name: 'nightly', isDefault: true },
-    { name: 'weekly', isDefault: false },
+    { slug: 'nightly', name: 'nightly', isDefault: true },
+    { slug: 'weekly', name: 'weekly', isDefault: false },
   ],
   swept: { at: null, notSwept: 'not in 28 days' },
 };

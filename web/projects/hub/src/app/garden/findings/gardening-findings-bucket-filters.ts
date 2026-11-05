@@ -28,6 +28,8 @@ const ROUTINE_VALUE_PREFIX = 'routine:';
 const SCOPE_VALUE_PREFIX = 'scope:';
 
 export interface FindingsBucketFilters {
+  /** The loaded routines — what a finding's routine slug resolves against for its display name. */
+  readonly routines: Signal<readonly RoutineView[]>;
   readonly selectedRoutine: Signal<string | null>;
   readonly selectedScope: Signal<string | null>;
   readonly routineChips: Signal<readonly KitChipOption[]>;
@@ -76,9 +78,9 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const routineChips = computed<readonly KitChipOption[]>(() => [
     { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-findings-routine-all' },
     ...routines().map((r) => ({
-      value: ROUTINE_VALUE_PREFIX + r.name,
+      value: ROUTINE_VALUE_PREFIX + r.slug,
       label: r.name,
-      testid: `gardening-findings-routine-item-${r.name}`,
+      testid: `gardening-findings-routine-item-${r.slug}`,
     })),
   ]);
   const routineChipValue = computed<string>(() => {
@@ -201,6 +203,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   });
 
   return {
+    routines,
     selectedRoutine,
     selectedScope,
     routineChips,

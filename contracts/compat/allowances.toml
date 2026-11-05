@@ -48,3 +48,31 @@ surface = "config"
 where = "data/hub_workdirs"
 reason = "durable path removed"
 because = "0.4 lists data/hub_workdirs as a deprecated, reclaimable durable path (v0.4.0-rc.1:src/blizzard/hub/config_keys.py:127-130) that no 0.4 code writes or reads: its only writer was a hub node's run: step, and a hub node runs no commands; the hub now deletes the directory on boot, so an operator has nothing to carry or back up."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "routines"
+reason = "unique constraint added to an existing table"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :167), so no 0.4 hub writes a routine beside the new constraint, and the walk back drops it."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "RoutineEntry.slug"
+reason = "property added to a forbid schema a response reaches"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the board ships no reader of it."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "RoutineEntry.name"
+reason = "response property newly became nullable"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the export always writes the name, so it never reads null."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "RoutineEntry.name"
+reason = "response property stopped being required"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the export always writes the name, so it is always present."

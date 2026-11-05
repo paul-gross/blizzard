@@ -98,6 +98,7 @@ describe('injectHubRoutinesQuery', () => {
           {
             routine_id: 'rtn_1',
             name: 'nightly',
+            slug: 'nightly',
             graph_name: 'garden',
             default_scope_slug: 'blizzard',
             default_model: [],

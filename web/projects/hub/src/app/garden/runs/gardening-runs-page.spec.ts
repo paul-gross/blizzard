@@ -85,6 +85,7 @@ describe('GardeningRunsPage', () => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/runs') return [RUN_ROW, ESCALATED_RUN_ROW];
+      if (method === 'GET' && path === '/api/routines') return [];
       return {};
     });
     await TestBed.configureTestingModule({

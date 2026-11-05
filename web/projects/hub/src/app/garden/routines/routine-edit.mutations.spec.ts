@@ -12,7 +12,7 @@ describe('injectEditRoutineMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({ routine_id: 'rt_1', name: 'nightly', graph_name: 'garden-delta' }));
+    stub = stubRequestClient(hubClient, () => ({ routine_id: 'rt_1', slug: 'nightly', name: 'nightly', graph_name: 'garden-delta' }));
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

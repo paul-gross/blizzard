@@ -6,14 +6,16 @@ import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 const ROWS: readonly RoutineListRowVm[] = [
   {
     routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123',
-    name: 'nightly',
+    slug: 'nightly',
+    name: 'Nightly sweep',
     graphName: 'garden-routine',
     blocked: false,
     retired: false,
   },
   {
     routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876',
-    name: 'weekly-audit',
+    slug: 'weekly-audit',
+    name: 'Weekly audit',
     graphName: 'architecture',
     blocked: true,
     retired: false,
@@ -24,7 +26,7 @@ describe('FleetRoutineList', () => {
   async function mount(inputs: {
     rows?: readonly RoutineListRowVm[];
     state?: 'loading' | 'error' | 'empty' | 'ready';
-    selectedName?: string | null;
+    selectedSlug?: string | null;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetRoutineList],
@@ -33,17 +35,17 @@ describe('FleetRoutineList', () => {
     const fixture = TestBed.createComponent(FleetRoutineList);
     fixture.componentRef.setInput('rows', inputs.rows ?? ROWS);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
-    fixture.componentRef.setInput('selectedName', inputs.selectedName ?? null);
+    fixture.componentRef.setInput('selectedSlug', inputs.selectedSlug ?? null);
     await fixture.whenStable();
     return fixture;
   }
 
-  it('renders every routine with its name and graph', async () => {
+  it('renders every routine with its display name and graph, keyed by its slug', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
     const row = el.querySelector('[data-testid="gardening-routine-row-nightly"]');
-    expect(row?.textContent).toContain('nightly');
+    expect(row?.querySelector('.rt-name')?.textContent).toBe('Nightly sweep');
     expect(row?.textContent).toContain('graph garden-routine');
     expect(row?.querySelector('[data-testid="gardening-routine-cadence"]')?.textContent).toBe('manual');
   });
@@ -71,8 +73,8 @@ describe('FleetRoutineList', () => {
   it('marks a retired routine distinctly from an enabled one', async () => {
     const fixture = await mount({
       rows: [
-        { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', name: 'nightly', graphName: 'garden-routine', blocked: false, retired: false },
-        { routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876', name: 'weekly-audit', graphName: 'architecture', blocked: false, retired: true },
+        { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false },
+        { routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876', slug: 'weekly-audit', name: 'Weekly audit', graphName: 'architecture', blocked: false, retired: true },
       ],
     });
     const el = fixture.nativeElement as HTMLElement;
@@ -81,8 +83,8 @@ describe('FleetRoutineList', () => {
     expect(el.querySelector('[data-testid="gardening-routine-row-weekly-audit"]')?.textContent).toContain('retired');
   });
 
-  it('reflects selectedName onto the matching row only', async () => {
-    const fixture = await mount({ selectedName: 'nightly' });
+  it('reflects selectedSlug onto the matching row only', async () => {
+    const fixture = await mount({ selectedSlug: 'nightly' });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(
@@ -93,11 +95,11 @@ describe('FleetRoutineList', () => {
     ).toBe(false);
   });
 
-  it('emits routinePick with the routine name on a row click', async () => {
+  it('emits routinePick with the routine slug on a row click', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | undefined;
-    fixture.componentInstance.routinePick.subscribe((name) => (emitted = name));
+    fixture.componentInstance.routinePick.subscribe((slug) => (emitted = slug));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-row-weekly-audit"]')?.click();
 

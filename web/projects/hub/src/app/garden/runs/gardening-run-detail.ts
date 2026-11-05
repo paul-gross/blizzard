@@ -40,7 +40,7 @@ export class GardeningRunDetail {
   private readonly deltaQuery = injectHubRunDeltaQuery(() => this.chunkId());
 
   protected readonly deltaVm = computed<RunDeltaVm | null>(() =>
-    runDeltaVm(this.deltaQuery.data(), (chunkId) => this.runs.mintedAtFor(chunkId)),
+    runDeltaVm(this.deltaQuery.data(), (chunkId) => this.runs.mintedAtFor(chunkId), this.runs.routinesQuery.data()),
   );
 
   /** `chunkId() === null` rests as `'empty'` *before* `asyncState` is consulted — `deltaQuery` is

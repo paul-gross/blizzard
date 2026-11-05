@@ -24,10 +24,10 @@ import type {
 } from './routine-panel';
 import type { ProposalCountsRowVm } from './routine-proposal-counts';
 
-/** The routine `name` names, or `null` when `name` is `null` (the bare child route)
- * or names no loaded routine. Routines are keyed by `name`, unique per routine. */
-export function routineByName(name: string | null, routines: readonly RoutineView[]): RoutineView | null {
-  return name === null ? null : (routines.find((r) => r.name === name) ?? null);
+/** The routine `slug` names, or `null` when `slug` is `null` (the bare child route)
+ * or names no loaded routine. Routines are keyed by their immutable `slug`; `name` is only what one reads as. */
+export function routineBySlug(slug: string | null, routines: readonly RoutineView[]): RoutineView | null {
+  return slug === null ? null : (routines.find((r) => r.slug === slug) ?? null);
 }
 
 /** The effective graph `routine` runs against — `null` with no routine, or while the
@@ -131,12 +131,12 @@ export function modelEffortLabel(models: readonly string[], effort: string | nul
   return `${models.length > 0 ? models.join(', ') : '—'} · ${effort ?? '—'}`;
 }
 
-/** The routine `name`'s runs in the runs window, newest first, each with the findings its delivered sets added — `null`
+/** The routine `slug`'s runs in the runs window, newest first, each with the findings its delivered sets added — `null`
  * while the runs read is pending. */
-export function routineRecentRuns(runs: readonly RunRowView[] | undefined, name: string | null): readonly RecentRunVm[] | null {
-  if (runs === undefined || name === null) return null;
+export function routineRecentRuns(runs: readonly RunRowView[] | undefined, slug: string | null): readonly RecentRunVm[] | null {
+  if (runs === undefined || slug === null) return null;
   return runs
-    .filter((run) => run.routine_name === name)
+    .filter((run) => run.routine_name === slug)
     .sort((a, b) => Date.parse(b.minted_at) - Date.parse(a.minted_at))
     .map((run) => ({
       chunkId: run.chunk_id,
@@ -173,6 +173,7 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
   if (routine === null) return null;
   return {
     record: {
+      slug: routine.slug,
       name: routine.name,
       graphName: routine.graph_name,
       defaultScopeSlug: routine.default_scope_slug,
@@ -199,13 +200,13 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
  * the routine read; a resolved one waits on the graph read, so a graph-list failure
  * never reads as a confident "blocked". */
 export function routinePanelState(
-  routineName: string | null,
+  routineSlug: string | null,
   selected: RoutineView | null,
   routinesQuery: AsyncStateQuery,
   graphsPending: boolean,
   graphsError: boolean,
 ): KitAsyncStateValue {
-  if (selected === null) return restingAsyncState(routineName === null, routinesQuery, true);
+  if (selected === null) return restingAsyncState(routineSlug === null, routinesQuery, true);
   if (graphsPending) return 'loading';
   if (graphsError) return 'error';
   return 'ready';

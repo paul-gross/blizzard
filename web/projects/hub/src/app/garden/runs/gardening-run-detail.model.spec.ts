@@ -1,4 +1,4 @@
-import { type RunDeltaView } from 'fleet';
+import { type RoutineView, type RunDeltaView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { runDeltaVm } from './gardening-run-detail.model';
@@ -30,18 +30,24 @@ const noMintedAt = (): string | null => null;
 
 describe('runDeltaVm', () => {
   it('is null until the delta read resolves', () => {
-    expect(runDeltaVm(undefined, noMintedAt)).toBeNull();
+    expect(runDeltaVm(undefined, noMintedAt, [])).toBeNull();
+  });
+
+  it("names the run's routine by its display name, looked up by the slug the delta carries", () => {
+    expect(runDeltaVm(delta(), noMintedAt, [{ slug: 'docs', name: 'Docs sweep' } as RoutineView])?.routineName).toBe(
+      'Docs sweep',
+    );
   });
 
   it('takes minted_at from the supplied lookup, keyed by the run', () => {
-    const vm = runDeltaVm(delta(), (chunkId) => (chunkId === 'ch_1' ? '2026-06-01T00:00:00Z' : null));
+    const vm = runDeltaVm(delta(), (chunkId) => (chunkId === 'ch_1' ? '2026-06-01T00:00:00Z' : null), []);
     expect(vm).toMatchObject({ chunkId: 'ch_1', routineName: 'docs', scopeSlug: 'web', mintedAt: '2026-06-01T00:00:00Z' });
   });
 
   it('maps no escalation to null and a present one field by field', () => {
-    expect(runDeltaVm(delta(), noMintedAt)?.escalation).toBeNull();
+    expect(runDeltaVm(delta(), noMintedAt, [])?.escalation).toBeNull();
     const escalation = { node_name: 'build', takeover_command: 'tk', wrapped_takeover_command: 'wtk' };
-    expect(runDeltaVm(delta({ escalation }), noMintedAt)?.escalation).toEqual({
+    expect(runDeltaVm(delta({ escalation }), noMintedAt, [])?.escalation).toEqual({
       nodeName: 'build',
       takeoverCommand: 'tk',
       wrappedTakeoverCommand: 'wtk',
@@ -49,7 +55,7 @@ describe('runDeltaVm', () => {
   });
 
   it('shapes each set, labelling revisions sorted by repo', () => {
-    expect(runDeltaVm(delta({ sets: [set] }), noMintedAt)?.sets).toEqual([
+    expect(runDeltaVm(delta({ sets: [set] }), noMintedAt, [])?.sets).toEqual([
       {
         findingSetId: 'fs_1',
         revisionsLabel: 'alpha@a1, zeta@b2',
@@ -63,6 +69,6 @@ describe('runDeltaVm', () => {
 
   it('labels a set with no revisions as a dash', () => {
     const bare = { ...set, revisions: {} } as DeliveredSet;
-    expect(runDeltaVm(delta({ sets: [bare] }), noMintedAt)?.sets[0].revisionsLabel).toBe('—');
+    expect(runDeltaVm(delta({ sets: [bare] }), noMintedAt, [])?.sets[0].revisionsLabel).toBe('—');
   });
 });

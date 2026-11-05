@@ -20,7 +20,8 @@ const VIEWER_ME_RESPONSE: MeResponse = {
 
 const ROUTINE = {
   routine_id: 'rtn_1',
-  name: 'nightly',
+  name: 'Nightly sweep',
+  slug: 'nightly',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   default_model: ['claude-sonnet-5'],
@@ -145,11 +146,50 @@ describe('GardeningRoutineDetail', () => {
   it('cuts the trend read’s window from FLEET_CLOCK, 28 days back', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 12, 0, 0);
     TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs });
-    await render({ params: { routineName: 'nightly' } });
+    await render({ params: { routineSlug: 'nightly' } });
 
     const search = stub.forRoute('/api/routines/trend', 'GET').map((r) => r.search).join('\n');
     expect(search).toContain(`since=${encodeURIComponent(new Date(nowMs - 28 * 24 * 60 * 60 * 1000).toISOString())}`);
     expect(search).toContain(`until=${encodeURIComponent(new Date(nowMs).toISOString())}`);
+  });
+
+  it('resolves the routine by its slug, reads its trend and proposal counts by slug, and shows its display name', async () => {
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-record"] h3')?.textContent).toBe('Nightly sweep');
+    expect(stub.forRoute('/api/routines/trend', 'GET').map((r) => r.search).join('\n')).toContain('routine=nightly');
+    expect(stub.forRoute('/api/routines/proposal-counts', 'GET').map((r) => r.search).join('\n')).toContain(
+      'routine=nightly',
+    );
+  });
+
+  it('never resolves a routine by its display name', async () => {
+    const fixture = await render({ params: { routineSlug: 'Nightly sweep' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-record"]')).toBeNull();
+  });
+
+  it("lists the routine's recent runs, matched by the slug each run carries", async () => {
+    const run = {
+      chunk_id: 'ch_1',
+      routine_name: 'nightly',
+      scope_slug: 'blizzard',
+      mode: 'full',
+      minted_at: '2026-01-10T00:00:00Z',
+      outcome: 'done',
+      escalation: null,
+      delivered: [],
+    };
+    const fixture = await render({
+      params: { routineSlug: 'nightly' },
+      routeOverride: (method, path) =>
+        method === 'GET' && path === '/api/runs' ? [run, { ...run, chunk_id: 'ch_2', routine_name: 'Nightly sweep' }] : undefined,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-fact-runs"]')?.textContent).toContain('1 in the');
   });
 
   it('shows its own empty state on the bare child route, selecting nothing', async () => {
@@ -160,8 +200,8 @@ describe('GardeningRoutineDetail', () => {
     expect(el.querySelector('[data-testid="gardening-routine-record"]')).toBeNull();
   });
 
-  it('a routineName param naming an unknown routine resolves to the empty state, not a stale panel', async () => {
-    const fixture = await render({ params: { routineName: 'ghost' } });
+  it('a routineSlug param naming an unknown routine resolves to the empty state, not a stale panel', async () => {
+    const fixture = await render({ params: { routineSlug: 'ghost' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-routine-panel-empty"]')).toBeTruthy();
@@ -169,7 +209,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('renders the proposal counts panel alongside Activity and Strategy once a routine is selected', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const panel = el.querySelector('[data-testid="gardening-routine-proposal-counts-panel"]');
@@ -185,11 +225,11 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('renders no field absent from RoutineView, on no field the hub does not store', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const record = el.querySelector('[data-testid="gardening-routine-panel"]');
-    expect(record?.textContent).toContain('nightly');
+    expect(record?.textContent).toContain('Nightly sweep');
     expect(record?.textContent).toContain('garden-routine');
     expect(record?.textContent).toContain('blizzard');
     expect(record?.textContent).toContain('claude-sonnet-5');
@@ -197,7 +237,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('lists the related scopes, marking the routine default', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
@@ -206,7 +246,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('renders the strategy as read-only prose with no edit affordance beyond the Run trigger', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const strategy = el.querySelector('[data-testid="gardening-routine-strategy"]');
@@ -217,7 +257,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('renders inflow, outflow, and reopened, distinguished from each other', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const facts = el.querySelector('[data-testid="gardening-routine-trend-facts"]');
@@ -226,7 +266,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('renders the measurement series as text', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-routine-measurements"]')?.textContent).toContain(
@@ -235,7 +275,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('keys last-swept on routine and scope, and marks a never-swept scope distinctly from a stale sweep', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const swept = el.querySelector('[data-testid="gardening-routine-last-swept-blizzard"]');
@@ -245,7 +285,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('says a routine whose graph has no effective mint is blocked, and offers no run', async () => {
-    const fixture = await render({ graphs: [], params: { routineName: 'nightly' } });
+    const fixture = await render({ graphs: [], params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     const blocked = el.querySelector('[data-testid="gardening-routine-blocked"]');
@@ -258,7 +298,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('names no CLI verb anywhere — the Run trigger is the whole affordance', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.textContent).not.toContain('hub routine run');
@@ -268,7 +308,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('opens the run dialog off the panel Run trigger, and closing it tears the dialog down', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-run-dialog"]')).toBeNull();
@@ -276,7 +316,7 @@ describe('GardeningRoutineDetail', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-run"]')!.click();
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="run-dialog-title"]')?.textContent).toContain('nightly');
+    expect(el.querySelector('[data-testid="run-dialog-title"]')?.textContent).toContain('Nightly sweep');
 
     el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-cancel"]')!.click();
     await settle(fixture);
@@ -287,21 +327,21 @@ describe('GardeningRoutineDetail', () => {
   // --- Lifecycle: retire/enable, `GardeningScopeDetail`'s own shape --
 
   it('shows no lifecycle control for a read-only identity', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
   });
 
   it('shows the lifecycle control for an identity with graph:edit', async () => {
-    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
   });
 
   it('retires a routine through POST /api/routines/{id}/retire once confirmed', async () => {
-    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
@@ -316,7 +356,7 @@ describe('GardeningRoutineDetail', () => {
     const fixture = await render({
       routines: [{ ...ROUTINE, retired: true }],
       me: OPERATOR_ME_RESPONSE,
-      params: { routineName: 'nightly' },
+      params: { routineSlug: 'nightly' },
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -327,11 +367,11 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('leaves another routine’s Retire enabled while one routine’s Retire is pending, and re-disables on re-select', async () => {
-    const OTHER_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly' };
+    const OTHER_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', slug: 'weekly', name: 'weekly' };
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       routines: [ROUTINE, OTHER_ROUTINE],
-      params: { routineName: 'nightly' },
+      params: { routineSlug: 'nightly' },
       routeOverride: (method, path) => {
         if (method === 'GET' && path === '/api/routines/rtn_2/sweeps') return { ...SWEEPS, routine_name: 'weekly' };
         if (method === 'GET' && path === '/api/routines/rtn_2/scopes') return [];
@@ -354,11 +394,11 @@ describe('GardeningRoutineDetail', () => {
     await tick();
     expect(retire()?.disabled).toBe(true);
 
-    paramMap$.next(convertToParamMap({ routineName: 'weekly' }));
+    paramMap$.next(convertToParamMap({ routineSlug: 'weekly' }));
     await tick();
     expect(retire()?.disabled).toBe(false);
 
-    paramMap$.next(convertToParamMap({ routineName: 'nightly' }));
+    paramMap$.next(convertToParamMap({ routineSlug: 'nightly' }));
     await tick();
     expect(retire()?.disabled).toBe(true);
   });
@@ -366,7 +406,7 @@ describe('GardeningRoutineDetail', () => {
   it('renders the retired override while Retire is pending, reverting to the real state on rejection', async () => {
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
-      params: { routineName: 'nightly' },
+      params: { routineSlug: 'nightly' },
       routeOverride: (method, path) =>
         method === 'POST' && path === '/api/routines/rtn_1/retire'
           ? stubError(404, { detail: 'unknown routine rtn_1' })
@@ -403,7 +443,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('submits an edited graph through PATCH /api/routines/{id}', async () => {
-    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
@@ -420,7 +460,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('withholds Edit from an identity without graph:edit', async () => {
-    const fixture = await render({ params: { routineName: 'nightly' } });
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();

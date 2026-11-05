@@ -21,8 +21,8 @@ const DOORWAY_SCOPES = [
 ] as ScopeView[];
 
 const DOORWAY_ROUTINES = [
-  { name: 'garden-weekly', routine_id: 'rt_1', project_id: 'proj_b', retired: false },
-  { name: 'retired-one', routine_id: 'rt_2', project_id: 'proj_b', retired: true },
+  { name: 'garden-weekly', slug: 'garden-weekly', routine_id: 'rt_1', project_id: 'proj_b', retired: false },
+  { name: 'retired-one', slug: 'retired-one', routine_id: 'rt_2', project_id: 'proj_b', retired: true },
 ] as RoutineView[];
 
 const DOORWAY_RUNS = [

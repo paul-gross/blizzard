@@ -22,7 +22,7 @@ export function relatedRoutineRows(
   const routinesById = new Map(routines.map((r) => [r.routine_id, r]));
   return ids.map((id) => {
     const routine = routinesById.get(id);
-    return { name: routine?.name ?? id, isDefault: routine?.default_scope_slug === scope.slug };
+    return { slug: routine?.slug ?? id, name: routine?.name ?? id, isDefault: routine?.default_scope_slug === scope.slug };
   });
 }
 

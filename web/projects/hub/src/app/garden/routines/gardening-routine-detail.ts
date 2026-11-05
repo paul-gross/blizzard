@@ -10,7 +10,7 @@ import {
   proposalCountsRows,
   routineRecentRuns,
   relatedScopeRows,
-  routineByName,
+  routineBySlug,
   routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
@@ -94,15 +94,15 @@ export class GardeningRoutineDetail {
   private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
-  /** The `routineName` route param, or `null` on the bare child route. Routines are
-   * keyed by `name` (unique per routine), not id. */
-  private readonly routineNameParam = toSignal(
-    this.route.paramMap.pipe(map((params) => params.get('routineName'))),
+  /** The `routineSlug` route param, or `null` on the bare child route. Routines are
+   * keyed by their immutable `slug`, not id. */
+  private readonly routineSlugParam = toSignal(
+    this.route.paramMap.pipe(map((params) => params.get('routineSlug'))),
     { initialValue: null },
   );
 
   private readonly selectedRoutine = computed<RoutineView | null>(() =>
-    routineByName(this.routineNameParam(), this.routines()),
+    routineBySlug(this.routineSlugParam(), this.routines()),
   );
 
   private readonly effectiveGraph = computed<GraphSummaryView | null>(() =>
@@ -128,7 +128,7 @@ export class GardeningRoutineDetail {
 
   private readonly graphQuery = injectHubGraphQuery(() => this.effectiveGraph()?.graph_id ?? null);
   private readonly trendQuery = injectHubRoutineTrendQuery(
-    () => this.selectedRoutine()?.name ?? null,
+    () => this.selectedRoutine()?.slug ?? null,
     () => this.window.since,
     () => this.window.until,
     () => this.window.introducedBoundary,
@@ -141,7 +141,7 @@ export class GardeningRoutineDetail {
   );
   private readonly scopesQuery = injectHubRoutineScopesQuery(() => this.selectedRoutine()?.routine_id ?? null);
   private readonly proposalCountsQuery = injectHubRoutineProposalCountsQuery(
-    () => this.selectedRoutine()?.name ?? null,
+    () => this.selectedRoutine()?.slug ?? null,
     () => this.window.since,
     () => this.window.until,
   );
@@ -176,7 +176,7 @@ export class GardeningRoutineDetail {
   );
 
   private readonly recentRuns = computed(() =>
-    routineRecentRuns(this.runsQuery.data(), this.selectedRoutine()?.name ?? null),
+    routineRecentRuns(this.runsQuery.data(), this.selectedRoutine()?.slug ?? null),
   );
 
   private readonly recentRunsState = computed<KitAsyncStateValue>(() =>
@@ -213,7 +213,7 @@ export class GardeningRoutineDetail {
    * sections already render around individually. */
   protected readonly panelState = computed<KitAsyncStateValue>(() =>
     routinePanelState(
-      this.routineNameParam(),
+      this.routineSlugParam(),
       this.selectedRoutine(),
       this.routinesQuery,
       this.graphsQuery.isPending(),
@@ -259,8 +259,8 @@ export class GardeningRoutineDetail {
     });
   }
 
-  protected onRetireRoutine(name: string): void {
-    const routineId = routineByName(name, this.routines())?.routine_id;
+  protected onRetireRoutine(slug: string): void {
+    const routineId = routineBySlug(slug, this.routines())?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
@@ -269,8 +269,8 @@ export class GardeningRoutineDetail {
     );
   }
 
-  protected onEnableRoutine(name: string): void {
-    const routineId = routineByName(name, this.routines())?.routine_id;
+  protected onEnableRoutine(slug: string): void {
+    const routineId = routineBySlug(slug, this.routines())?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(

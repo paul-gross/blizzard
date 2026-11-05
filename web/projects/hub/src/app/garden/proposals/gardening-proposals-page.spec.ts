@@ -150,6 +150,7 @@ describe('GardeningProposalsPage', () => {
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       if (method === 'GET' && path === '/api/me') return me;
+      if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
       return {};
     });

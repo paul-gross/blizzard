@@ -1,4 +1,5 @@
-import type { RunRowView } from 'fleet';
+import type { RoutineView, RunRowView } from 'fleet';
+import { routineDisplayName } from '../core/routine-display-name';
 import type { RunListCountsVm, RunListRowVm } from './run-list';
 
 /** A run's counts triple, summed across every set it delivered — `null` when it
@@ -17,11 +18,14 @@ export function summedCounts(
   );
 }
 
-/** The run list's rows, one per run in the read's order. */
-export function runListRows(runs: readonly RunRowView[]): readonly RunListRowVm[] {
+/** The run list's rows, one per run in the read's order, each routine read by its display name. */
+export function runListRows(
+  runs: readonly RunRowView[],
+  routines: readonly RoutineView[] | undefined,
+): readonly RunListRowVm[] {
   return runs.map((row) => ({
     chunkId: row.chunk_id,
-    routineName: row.routine_name,
+    routineName: routineDisplayName(row.routine_name, routines),
     scopeSlug: row.scope_slug,
     mode: row.mode,
     mintedAt: row.minted_at,

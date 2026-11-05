@@ -5,10 +5,11 @@ import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelect
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
 /** One row of the routine list — just enough to pick a routine. Selection keys on
- * `name` (unique per routine), not `routineId`.
+ * `slug` (the routine's immutable handle), not `routineId`; `name` is what it reads as.
  * `routineId` renders as its own compact ref. */
 export interface RoutineListRowVm {
   readonly routineId: string;
+  readonly slug: string;
   readonly name: string;
   readonly graphName: string;
   /** Whether the routine's effective graph has no effective mint. */
@@ -20,7 +21,7 @@ export interface RoutineListRowVm {
 /**
  * The gardening routine panel's routine list — presentational only, no query
  * injection. Renders the rows it is handed on `fleet-kit-select-row`, highlights
- * `selectedName`, and emits a `routinePick` event on a row click; the container
+ * `selectedSlug`, and emits a `routinePick` event on a row click; the container
  * owns what "selected" then does.
  */
 @Component({
@@ -32,7 +33,7 @@ export interface RoutineListRowVm {
 })
 export class FleetRoutineList {
   readonly rows = input.required<readonly RoutineListRowVm[]>();
-  readonly selectedName = input<string | null>(null);
+  readonly selectedSlug = input<string | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 
   /** Named `routinePick`, not `select` — `@angular-eslint/no-output-native` forbids an
@@ -44,7 +45,7 @@ export class FleetRoutineList {
   /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
   protected readonly lifecycleTone = lifecycleTone;
 
-  protected pick(name: string): void {
-    this.routinePick.emit(name);
+  protected pick(slug: string): void {
+    this.routinePick.emit(slug);
   }
 }

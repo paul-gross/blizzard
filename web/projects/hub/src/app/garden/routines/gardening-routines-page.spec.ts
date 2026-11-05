@@ -9,7 +9,8 @@ import { GardeningRoutinesPage } from './gardening-routines-page';
 
 const ROUTINE = {
   routine_id: 'rtn_1',
-  name: 'nightly',
+  name: 'Nightly sweep',
+  slug: 'nightly',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   default_model: ['claude-sonnet-5'],
@@ -50,7 +51,7 @@ const routes: Routes = [
     component: GardeningRoutinesPage,
     children: [
       { path: '', component: TestRoutineDetail },
-      { path: ':routineName', component: TestRoutineDetail },
+      { path: ':routineSlug', component: TestRoutineDetail },
     ],
   },
 ];
@@ -105,6 +106,22 @@ describe('GardeningRoutinesPage', () => {
 
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.classList.contains('selected')).toBe(
       true,
+    );
+  });
+
+  it('lists the routine by its display name, keyed and highlighted by its slug', async () => {
+    const { el } = await render({ url: '/gardening/routines/nightly' });
+
+    const row = el.querySelector('[data-testid="gardening-routine-row-nightly"]');
+    expect(row?.querySelector('.rt-name')?.textContent).toBe('Nightly sweep');
+    expect(row?.classList.contains('selected')).toBe(true);
+  });
+
+  it('highlights no row for a route naming the display name rather than the slug', async () => {
+    const { el } = await render({ url: '/gardening/routines/Nightly%20sweep', mobile: true });
+
+    expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.classList.contains('selected')).toBe(
+      false,
     );
   });
 

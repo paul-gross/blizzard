@@ -45,6 +45,7 @@ function tokenColor(token: string): string {
 const ROUTINE = {
   routine_id: 'rtn_1',
   name: 'nightly',
+  slug: 'nightly',
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   default_model: ['claude-sonnet-5'],
@@ -271,8 +272,8 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
 describe('gardening routines page retired-marker shell sweep (web:shell-sweep)', () => {
   it.each([1280, 390, 320])('renders retired and blocked routine rows as red kit labels with no horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
-    const RETIRED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly-audit', retired: true };
-    const BLOCKED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_3', name: 'unminted', graph_name: 'never-minted-graph' };
+    const RETIRED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', slug: 'weekly-audit', name: 'weekly-audit', retired: true };
+    const BLOCKED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_3', slug: 'unminted', name: 'unminted', graph_name: 'never-minted-graph' };
     const stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/routines') return [ROUTINE, RETIRED_ROUTINE, BLOCKED_ROUTINE];
       if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];

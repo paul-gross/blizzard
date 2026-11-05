@@ -4,13 +4,13 @@
   testidPrefix="gardening-routines"
   backLabel="Routines"
   [drilldown]="mobile()"
-  [hasSelection]="routineNameParam() !== null"
+  [hasSelection]="routineSlugParam() !== null"
   (back)="onBack()"
 >
   <fleet-kit-panel kit-master-detail-list class="gr-left" [label]="'Routines · ' + projectName()">
     <app-routine-list
       [rows]="listRows()"
-      [selectedName]="selectedRoutineName()"
+      [selectedSlug]="selectedRoutineSlug()"
       [state]="listState()"
       (routinePick)="selectRoutine($event)"
     />

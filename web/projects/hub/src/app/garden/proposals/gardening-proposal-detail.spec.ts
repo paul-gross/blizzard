@@ -122,6 +122,7 @@ describe('GardeningProposalDetail', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       if (method === 'GET' && path === '/api/me') return me;
+      if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
       if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
         return { source: 'hub', ref: '42', label: 'hub#42', web_url: '/board/chunk/ch_1', title: 't', body: 'b', author: { kind: 'user' }, closure: null, closed_at: null, created_at: '2026-01-01T00:00:00Z', edited_at: '2026-01-01T00:00:00Z', stated_priority: null };
@@ -315,6 +316,7 @@ describe('GardeningProposalDetail', () => {
       stub = stubRequestClient(hubClient, (method, path) => {
         if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [WAITING_A], next_cursor: null };
         if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path === '/api/routines') return [];
         if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
         if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'note required' });
         return {};

@@ -1,4 +1,5 @@
-import { type RunDeltaView } from 'fleet';
+import { type RoutineView, type RunDeltaView } from 'fleet';
+import { routineDisplayName } from '../core/routine-display-name';
 import { type RunDeltaVm } from './run-delta';
 
 /** One `revisions` map, rendered `repo@revision, …` — `gardening-routine-detail.ts`'s
@@ -13,15 +14,17 @@ function revisionsLabel(revisions: Record<string, string>): string {
 }
 
 /** The selected run's delta as the view model {@link RunDeltaVm} renders — `null` until the read resolves.
- * `mintedAtFor` supplies the run's `minted_at`, which the delta read does not carry. */
+ * `mintedAtFor` supplies the run's `minted_at`, which the delta read does not carry; `routines` resolves its routine's
+ * slug to the display name. */
 export function runDeltaVm(
   delta: RunDeltaView | undefined,
   mintedAtFor: (chunkId: string) => string | null,
+  routines: readonly RoutineView[] | undefined,
 ): RunDeltaVm | null {
   if (delta === undefined) return null;
   return {
     chunkId: delta.chunk_id,
-    routineName: delta.routine_name,
+    routineName: routineDisplayName(delta.routine_name, routines),
     scopeSlug: delta.scope_slug,
     mintedAt: mintedAtFor(delta.chunk_id),
     escalation:

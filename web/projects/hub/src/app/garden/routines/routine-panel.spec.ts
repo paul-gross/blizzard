@@ -5,7 +5,8 @@ import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 
 const VM: RoutinePanelVm = {
   record: {
-    name: 'nightly',
+    slug: 'nightly',
+    name: 'Nightly sweep',
     graphName: 'garden-routine',
     defaultScopeSlug: 'blizzard',
     modelEffort: 'claude-sonnet-5 · medium',
@@ -92,7 +93,7 @@ describe('FleetRoutinePanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const record = el.querySelector('[data-testid="gardening-routine-record"]');
-    expect(record?.textContent).toContain('nightly');
+    expect(record?.textContent).toContain('Nightly sweep');
     const facts = el.querySelector('[data-testid="gardening-routine-record-facts"]');
     expect(facts?.tagName.toLowerCase()).toBe('dl');
     expect(Array.from(facts!.querySelectorAll('dt')).map((dt) => dt.textContent?.trim())).toEqual([
@@ -390,13 +391,13 @@ describe('FleetRoutinePanel', () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | null = null;
-    fixture.componentInstance.retire.subscribe((name) => (emitted = name));
+    fixture.componentInstance.retire.subscribe((slug) => (emitted = slug));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(emitted).toBe(VM.record.name);
+    expect(emitted).toBe('nightly');
   });
 
   it('emits nothing when the operator cancels the retire confirm', async () => {
