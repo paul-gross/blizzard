@@ -28,10 +28,9 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow =>
     ...over,
   }) as unknown as RunnerRow;
 
-const binding = (project: string, agents: number, agentsInUse: number) => ({
+const binding = (project: string, agentsInUse: number) => ({
   project,
   workspaceId: 'w',
-  agents,
   agentsInUse,
   unreported: false,
 });
@@ -82,8 +81,8 @@ describe('envGauges', () => {
 });
 
 describe('agentGauges', () => {
-  it('draws one gauge — the agents busy across its bindings of the runner’s count, summing bindings only when none registered', () => {
-    expect(agentGauges(row('r', { bindingLines: [binding('blizzard', 2, 2), binding('winter', 1, 0)] }))).toEqual([
+  it('draws one gauge — the agents busy across its bindings of the runner’s count', () => {
+    expect(agentGauges(row('r', { agents: 3, bindingLines: [binding('blizzard', 2), binding('winter', 0)] }))).toEqual([
       { name: 'agents', used: 2, total: 3 },
     ]);
   });
@@ -91,11 +90,15 @@ describe('agentGauges', () => {
   it('is empty for a runner declaring no bindings', () => {
     expect(agentGauges(row('r'))).toEqual([]);
   });
+
+  it('is empty for a runner that registered no count, however many bindings it lists', () => {
+    expect(agentGauges(row('r', { bindingLines: [binding('p', 0)] }))).toEqual([]);
+  });
 });
 
 describe('railVm', () => {
   it('gauges a runner against the count it registered, not its bindings', () => {
-    const a = row('a', { agents: 2, bindingLines: [binding('p', 2, 1), binding('q', 2, 1)] });
+    const a = row('a', { agents: 2, bindingLines: [binding('p', 1), binding('q', 1)] });
     const vm = railVm(groups([], [a]));
 
     expect(vm.rows.map((entry) => entry.agents)).toEqual([[{ name: 'agents', used: 2, total: 2 }]]);
@@ -103,7 +106,7 @@ describe('railVm', () => {
 
 
   it('lists hosted runners in card order, then the host-less, each with its agents', () => {
-    const a = row('a', { bindingLines: [binding('p', 1, 0)] });
+    const a = row('a', { agents: 1, bindingLines: [binding('p', 0)] });
     const b = row('b');
     const vm = railVm(groups([{ card: card('h1', [{ capacity: 1, inUse: 0 }]), rows: [a] }], [b]));
 

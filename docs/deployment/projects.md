@@ -190,9 +190,9 @@ whose workspace is full never stands in front of another project's work. The env
 one pool, shared by every runner of the host that binds a project to it. Two entries that resolve to the same project
 leave the runner claiming nothing until one is removed; its status names both.
 
-A binding's own `agents` is deprecated. When `[[runner]] agents` is unset, the runner's count is the sum of its
-bindings' `agents`, and the host logs the deprecation; when both are set, the runner's count wins and the per-binding
-values are ignored. A binding without `agents` and no runner count halts the runner.
+A binding carries no `agents` of its own: every binding shares `[[runner]] agents`. A host file that sets `agents` on a
+binding halts that runner at load, its error naming `[[runner]] agents`, and a runner with bindings and no `agents`
+halts the same way.
 
 `blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on its
 first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is added

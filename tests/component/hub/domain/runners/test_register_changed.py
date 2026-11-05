@@ -74,7 +74,7 @@ _CHANGES: dict[str, _RegisterFields] = {
     "subscriptions": {"subscriptions": None},
     "gates": {"gates": ()},
     "projects": {"projects": ()},
-    "bindings": {"bindings": (RunnerBinding("proj", "w1", 2),)},
+    "bindings": {"bindings": (RunnerBinding("proj", "w1"),)},
     "subscription": {"subscription": "s"},
     "declining": {"declining": (RunnerDeclining("floor", "exhausted", "anthropic"),)},
 }

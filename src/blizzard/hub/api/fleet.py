@@ -270,9 +270,7 @@ def peek_matched_queue(
     if registration is not None and registration.host_id is not None:
         host = services.hosts.get_host(registration.host_id)
     served: frozenset[str] = (
-        frozenset()
-        if registration is None
-        else offered_projects(registration, host, project=request.project, projects=request.projects)
+        frozenset() if registration is None else offered_projects(registration, host, projects=request.projects)
     )
     statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request, served=served).view
@@ -1032,7 +1030,7 @@ def register_runner(
             bindings=(
                 None
                 if request.bindings is None
-                else tuple(RunnerBinding(b.project, b.workspace_id, b.agents) for b in request.bindings)
+                else tuple(RunnerBinding(b.project, b.workspace_id) for b in request.bindings)
             ),
             subscription=request.subscription,
             agents=request.agents,
@@ -1071,7 +1069,7 @@ def register_runner(
         projects=runners_api.served_views(
             registered.projects, runners_api.served_projects(services, registered.projects)
         ),
-        bindings=runners_api.binding_views(registered.bindings, flags),
+        bindings=runners_api.binding_views(registered.bindings, flags, request.agents),
         subscription=registered.subscription,
         subscription_unrostered=flags.subscription_unrostered,
         hub_version=registered.version.hub_version,

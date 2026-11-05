@@ -227,13 +227,11 @@ class HttpHubClient:
         capabilities: Sequence[HarnessCapability],
         *,
         policy: QueueMatchPolicy,
-        project: str | None = None,
         projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
         request = QueuePeekRequest(
             capabilities=[_capability(c) for c in capabilities],
             policy=policy,
-            project=project,
             projects=None if projects is None else list(projects),
         )
         resp = self._post(f"{_FLEET_API}/queue/peek", request.model_dump(mode="json"))
@@ -371,7 +369,7 @@ class HttpHubClient:
                 gates=list(gates),
                 projects=list(projects) if projects is not None else None,
                 bindings=(
-                    [RunnerBinding(project=b.project, workspace_id=b.workspace_id, agents=b.agents) for b in bindings]
+                    [RunnerBinding(project=b.project, workspace_id=b.workspace_id) for b in bindings]
                     if bindings is not None
                     else None
                 ),

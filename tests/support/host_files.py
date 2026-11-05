@@ -42,10 +42,13 @@ def write_minimal_host(
     runner: str = "",
     projects: str = "[]",
     runner_name: str = "runner-local",
+    agents: int = 1,
 ) -> Path:
     """Write a small valid ``blizzard-host.toml`` into ``root``: one workspace and one runner, each with the extra
-    keys the test names (``top`` before any table, ``workspace`` and ``runner`` inside their tables)."""
+    keys the test names (``top`` before any table, ``workspace`` and ``runner`` inside their tables). A runner that
+    binds projects gets the shared ``agents`` count."""
     root.mkdir(parents=True, exist_ok=True)
+    runner_agents = "" if projects == "[]" else f"agents = {agents}\n"
     text = (
         f"{top}\n"
         "[[workspace]]\n"
@@ -55,6 +58,7 @@ def write_minimal_host(
         f'id = "{TEST_RUNNER_ID}"\n'
         f'name = "{runner_name}"\n'
         f"projects = {projects}\n"
+        f"{runner_agents}"
         f"{runner}\n"
     )
     path = HostLayout(root).config_path

@@ -582,7 +582,7 @@ class RunnerIngest:
         values: dict[tuple[str, ...], str] = {}
         if ids:
             values[("projects",)] = bindings_literal(
-                tuple(ProjectBinding(b.project, ids.get(b.workspace, b.workspace), b.agents) for b in entry.bindings)
+                tuple(ProjectBinding(b.project, ids.get(b.workspace, b.workspace)) for b in entry.bindings)
             )
         files: list[tuple[Path, Path]] = []
         runner_dir = self.host.root / RUNNERS_DIRNAME / entry.name
@@ -701,9 +701,7 @@ def _string_literal(value: str) -> str:
 
 def bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
     entries = (
-        f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)}"
-        + ("" if b.agents is None else f", agents = {b.agents}")
-        + " }"
+        f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)}" + " }"
         for b in bindings
     )
     return "[" + ", ".join(entries) + "]"

@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261102_0900_drop_hub_exec_slot",
+  "head_revision": "20261104_0900_binding_agents_retired",
   "store": "hub",
   "tables": {
     "answer_deliveries": {

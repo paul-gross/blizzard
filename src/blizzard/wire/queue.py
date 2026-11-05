@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.unrecognized import Unrecognized
@@ -51,19 +51,10 @@ class QueuePeekRequest(BaseModel):
 
     capabilities: list[RunnerCapability] = []
     policy: Annotated[PeekPolicy, ToleratedRequestVocabulary("Policy")] = QueueMatchPolicy.PASS_OVER
-    #: Narrows the peek to this one project of the runner's declaration, by the entry as declared or the project id it
-    #: resolved to; a project the runner does not serve is offered nothing. ``None`` peeks every project it serves.
-    project: str | None = None
     #: Narrows the peek to these projects of the runner's declaration, each by the entry as declared or the id it
-    #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` leaves the peek
-    #: to ``project``; an empty list offers nothing. Sent together with ``project`` it is refused.
+    #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` peeks every
+    #: project the runner serves; an empty list offers nothing.
     projects: list[str] | None = None
-
-    @model_validator(mode="after")
-    def _one_narrowing(self) -> QueuePeekRequest:
-        if self.project is not None and self.projects is not None:
-            raise ValueError("send either project or projects, not both")
-        return self
 
 
 class QueuePageView(WireModel):

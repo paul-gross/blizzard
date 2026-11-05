@@ -43,12 +43,12 @@ from tests.support.runner_fakes import NO_TRACING
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 
 
-def _config(root: Path, **kwargs: str) -> RunnerConfig:
+def _config(root: Path, **kwargs: Any) -> RunnerConfig:
     write_minimal_host(root, **kwargs)
     return load_host_config(root).runner_config(_TOKEN)
 
 
-def _refused_runner(root: Path, **kwargs: str) -> str:
+def _refused_runner(root: Path, **kwargs: Any) -> str:
     """The runner errors a host file with these keys leaves its one runner halted by."""
     write_minimal_host(root, **kwargs)
     (halted,) = load_host_config(root).projections(_TOKEN)
@@ -56,7 +56,7 @@ def _refused_runner(root: Path, **kwargs: str) -> str:
     return "; ".join(halted.errors)
 
 
-def _refused_host(root: Path, **kwargs: str) -> str:
+def _refused_host(root: Path, **kwargs: Any) -> str:
     write_minimal_host(root, **kwargs)
     with pytest.raises(HostConfigError) as raised:
         load_host_config(root)

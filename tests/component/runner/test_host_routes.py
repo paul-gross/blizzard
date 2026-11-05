@@ -67,9 +67,7 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
         identity_verdict=None,
         runner_name=config.name,
         workspace_id=config.home_workspace.id,
-        bindings=tuple(
-            BindingDeclaration(b.project, b.workspace, config.binding_agents(b)) for b in config.bindings or ()
-        ),
+        bindings=tuple(BindingDeclaration(b.project, b.workspace, config.agents) for b in config.bindings or ()),
         agents=config.agents,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({}), workspace_id="ws-1"),
@@ -90,7 +88,7 @@ def _runner(
         name=name,
         workspaces=one_workspace(id="ws-1"),
         bindings=bindings,
-        agents=sum(b.agents or 0 for b in bindings),
+        agents=2 * len(bindings),
     )
     store = make_store(db_url, runner_id)
     return config, store, make_stores(store)
@@ -104,10 +102,8 @@ def _two_runner_app(
     registration: HostRegistrationHolder | None = None,
     host_identity: HostIdentityHolder | None = None,
 ) -> tuple[FastAPI, RunnerStores, RunnerStores]:
-    a_config, a_store, a_stores = _runner(
-        tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),)
-    )
-    b_config, b_store, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1", 1),))
+    a_config, a_store, a_stores = _runner(tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1"),))
+    b_config, b_store, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1"),))
     clock = FixedClock(_NOW)
     seams = tuple(
         runner_seams(
