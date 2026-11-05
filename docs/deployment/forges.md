@@ -74,40 +74,19 @@ A forge is configured through the same doors as the records that name it:
 
 A repository and a work source each name their forge by `forge`, an id or a slug, and are stored with its id. Reads
 carry `forge_id`, `forge_slug`, and `forge_name`. A work source's forge must be of its provider's kind: another kind is
-refused `422 forge_kind_mismatch`. An unknown or retired forge is refused `422 forge_unavailable`. A repository create
-naming neither `forge` nor `forge_api_url` is refused `422 forge_required`.
+refused `422 forge_kind_mismatch`. An unknown or retired forge is refused `422 forge_unavailable`. A create that names
+no `forge` is refused `422 forge_required`, and an edit cannot clear it.
+
+A record no longer carries the forge's address: `forge_api_url` on a repository, and `api_base` or `web_base` on a work
+source, are refused `422 field_moved_to_forge` at the field on every create and edit. The refusal names the forge that
+now carries the field — the one the write names, else the record's own on an edit, else the tenant's forge holding the
+origin sent — so set the origin on that forge instead ([upgrade.md](../upgrade.md#forges-replace-the-address-fields)).
 
 The board links a commit's branch, and a landed repository's commit, through its project's linked repository record and
 that record's forge, regardless of the chunk's work-item source. A landed commit's link from its pull request wins when
 there is one. A missing or ambiguous repository match, or a chunk with no project, gives no link. The GitHub binding
 derives both addresses from the forge's web origin, so a `web_base` edit moves the links of repositories that name it on
 the next read; a forge kind without a browser-link binding gives no link.
-
-### The old address fields
-
-Before forges, each record carried the server's address itself: `forge_api_url` on a repository, `api_base` and
-`web_base` on a work source. These fields are deprecated and still accepted, with a warning, until a later release
-retires them:
-
-- A write that sends only an old field resolves it to the tenant's forge with that API origin, and creates the forge
-  when none exists. The new forge's slug and name come from the address, with `-2`, `-3` and so on added when the tenant
-  already holds the slug.
-- A write that sends an old field beside `forge` is accepted when the field agrees with the forge, and refused
-  `422 forge_conflict` when it does not. A work source's `web_base` agrees only with its forge's web origin, so set the
-  web origin on the forge instead.
-- An old field whose origin a retired forge holds is refused `422 forge_unavailable`; enable the forge instead.
-- A work source created with neither `forge` nor `api_base` names the tenant's `https://api.github.com` forge. An edit
-  that omits both leaves the forge as it is, while `--clear api-base` re-points the source at that forge.
-- Every read still answers the old fields, derived from the forge and marked deprecated in the OpenAPI document.
-
-A write that leaned on an old field answers with a `Deprecation` header and a `warnings` entry for each, naming the
-field and the forge it resolved to, and the hub records one `config-old-field-used` event per field
-([observability.md](./observability.md#the-operational-event-log)). Once no event appears, nothing still sends an old
-field. A version-1 configuration document that carries an address is such a write.
-
-The `repositories.forge_api_url`, `work_sources.api_base` and `work_sources.web_base` store columns are deprecated too.
-The hub keeps them equal to the forge on every write and every forge edit, and only a hub rolled back past the migration
-reads them.
 
 [Checking forge addresses before the forge migration](./repositories.md#checking-forge-addresses-before-the-forge-migration)
 owns the pre-flight check an upgrade runs first.

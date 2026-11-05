@@ -50,7 +50,6 @@ Name such a repository by its new slug.
 | `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                              |
 | `name`               | The display name, free text. It may be edited.                                                                        |
 | `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                          |
-| `forge_api_url`      | Deprecated. The forge's API origin, derived from `forge` on reads.                                                    |
 | `owner`              | The repository's owner on the forge.                                                                                  |
 | `repo`               | The repository's name on the forge.                                                                                   |
 | `base_branch`        | The branch work lands on.                                                                                             |
@@ -58,14 +57,15 @@ Name such a repository by its new slug.
 | `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                       |
 | `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it. |
 
-Every field but the deprecated `forge_api_url`, `landing_policy` and `park_timeout_hours` is required. `landing_policy`
-defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the one field that can, with
-`edit --clear park-timeout` or a `PATCH` sending `null`. [Delivery policy](./delivery-policy.md) helps choose and
-operate each policy. A policy is refused `422 forge_capability_missing` when the repository's forge does not offer every
-capability it needs, naming each one; `GET /api/config/schema/repositories` lists each policy with the capabilities it
-requires, and `blizzard hub forge get` lists the capabilities a forge offers. Each `(forge, owner, repo)` belongs to one
-record. `create` takes exactly one of `forge` and `forge_api_url`; the old field is accepted with a warning until a
-later release retires it, and [forges.md](./forges.md#the-old-address-fields) owns how it resolves.
+Every field but `landing_policy` and `park_timeout_hours` is required; a create without `forge` is refused
+`422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the
+one field that can, with `edit --clear park-timeout` or a `PATCH` sending `null`.
+[Delivery policy](./delivery-policy.md) helps choose and operate each policy. A policy is refused
+`422 forge_capability_missing` when the repository's forge does not offer every capability it needs, naming each one;
+`GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge get`
+lists the capabilities a forge offers. Each `(forge, owner, repo)` belongs to one record. The forge carries the API
+origin, so a `forge_api_url` is refused `422 field_moved_to_forge`, naming the forge
+([forges.md](./forges.md#records-that-name-a-forge)).
 
 ### The forge token
 
@@ -88,10 +88,9 @@ failure is never re-run and routes as the change's own failure.
 repo are already taken, when the secret is missing or retired, or when the forge cannot honour the policy. Taking a slug
 another repository left moves it to the new repository. Every later change moves the revision by one:
 
-- `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--forge-api-url`, `--owner`,
-  `--repo`, `--base-branch`, `--secret`, `--policy`, and `--park-timeout`; `--clear park-timeout` clears the timeout,
-  and is refused beside `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the
-  revision.
+- `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--owner`, `--repo`, `--base-branch`,
+  `--secret`, `--policy`, and `--park-timeout`; `--clear park-timeout` clears the timeout, and is refused beside
+  `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the revision.
 - `retire <repository>` hides the repository from `list` unless `--include-retired` is given. A retired repository keeps
   its forge, owner and repo, so `create` for another slug on the same coordinate is refused with a message naming the
   holder; `enable` the holder instead.
@@ -115,9 +114,8 @@ with `config:edit` can create, edit, retire, and enable them there, seeing the f
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change. The repository
 form picks an enabled forge by name instead of editing an address, and picks the landing policy: a policy the chosen
 forge cannot honour is disabled and names the capabilities it lacks, and the park timeout appears only for `park`. A
-repository's detail shows its landing policy, and for `park` its timeout, or `default` when none is set. Version-2
-configuration documents use the forge's slug in `forge`; version-1 documents continue to use the deprecated
-`forge_api_url`.
+repository's detail shows its landing policy, and for `park` its timeout, or `default` when none is set. A
+[configuration document](./config-documents.md) names the forge by its slug in `forge`.
 
 ## Checking forge addresses before the forge migration
 
