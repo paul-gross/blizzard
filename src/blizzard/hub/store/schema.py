@@ -124,9 +124,6 @@ graph_nodes = Table(
     Column("checks_timeout", Integer, nullable=True),
     # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
     Column("bounce_cap", Integer, nullable=True),
-    # A hub node's stored commands, JSON ``{command, name, produces}`` list — read and written only by the
-    # migrations; the hub writes it NULL.
-    Column("run", Text, nullable=True, info={"deprecated": "0.3"}),
     # Pending-poll cadence (#66); null uses the executor defaults.
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),

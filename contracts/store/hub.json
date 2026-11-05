@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261101_0900_turn_page",
+  "head_revision": "20261104_0900_drop_graph_nodes_run",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -4102,12 +4102,6 @@
           "nullable": true,
           "server_default": false,
           "type": "Integer"
-        },
-        "run": {
-          "deprecated": "0.3",
-          "nullable": true,
-          "server_default": false,
-          "type": "Text"
         },
         "session": {
           "deprecated": null,
