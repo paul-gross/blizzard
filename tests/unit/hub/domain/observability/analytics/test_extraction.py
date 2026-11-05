@@ -381,7 +381,7 @@ _OPENCODE_V2 = "opencode-v2/1"
         ("subagent", {"agent": "general", "prompt": "go"}, KIND_AGENT_SPAWN, "general"),
     ],
 )
-def test_opencode_2_calls_mint_their_events(tool: str, arguments: dict[str, str], kind: str, subject: str) -> None:
+def test_opencode_2_calls_mint_their_events(tool: str, arguments: dict[str, object], kind: str, subject: str) -> None:
     """OpenCode 2's tools and argument keys, proven against the live 2.1.4 capture."""
     events = extract_events([_tool_turn(0, tool, arguments)], normalizer_version=_OPENCODE_V2)
 
