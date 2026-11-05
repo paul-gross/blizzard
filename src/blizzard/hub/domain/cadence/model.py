@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
+from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.run_mode import RunMode
@@ -51,19 +52,6 @@ class ScopeSelection(StrEnum):
     ALL = "all"
     LISTED = "listed"
     DEFAULT = "default"
-
-
-class AttentionReason(StrEnum):
-    """Why a cadence cannot run an errand — the refusals a hand-started run would meet, shown beforehand."""
-
-    ROUTINE_UNKNOWN = "routine_unknown"
-    ROUTINE_RETIRED = "routine_retired"
-    GRAPH_UNRESOLVED = "graph_unresolved"
-    SCOPE_UNKNOWN = "scope_unknown"
-    SCOPE_RETIRED = "scope_retired"
-    SCOPE_UNLINKED = "scope_unlinked"
-    NO_SCOPES = "no_scopes"
-    NO_CHORES = "no_chores"
 
 
 @domain_model
@@ -463,6 +451,11 @@ class Cadence:
     project_id: str
     revision: int = 1
     retired: bool = False
+
+    @property
+    def handle(self) -> str:
+        """The key the cadence's change rows and document entry carry."""
+        return self.slug
 
     @classmethod
     def new(

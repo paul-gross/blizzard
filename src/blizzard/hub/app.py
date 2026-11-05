@@ -50,6 +50,8 @@ from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.auth_session import refuse_closed_tenant
+from blizzard.hub.api.cadences import project_router as project_cadences_router
+from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.api.chunks import router as chunks_router
@@ -507,6 +509,7 @@ def create_app(
     app.include_router(secrets_router)
     app.include_router(config_router)
     app.include_router(routines_router)
+    app.include_router(cadences_router)
     app.include_router(findings_router)
     app.include_router(garden_proposals_router)
     app.include_router(garden_runs_router)
@@ -546,6 +549,7 @@ def create_app(
     # A project's gardening, nested under `/api/projects/{project}` after the project routes themselves.
     app.include_router(project_scopes_router)
     app.include_router(project_routines_router)
+    app.include_router(project_cadences_router)
     app.include_router(project_findings_router)
     app.include_router(project_garden_proposals_router)
     app.include_router(project_garden_runs_router)

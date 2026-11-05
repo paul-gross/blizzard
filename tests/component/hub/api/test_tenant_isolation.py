@@ -321,6 +321,11 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         reason="the body names a graph: one outside the tenant is no enabled graph of that name",
     ),
     ("GET", "/api/routines"): _LIST,
+    ("GET", "/api/cadences"): _LIST,
+    ("GET", "/api/cadences/{cadence_id}"): _f(),
+    ("PATCH", "/api/cadences/{cadence_id}"): _f({}),
+    ("POST", "/api/cadences/{cadence_id}/retire"): _f({}),
+    ("POST", "/api/cadences/{cadence_id}/enable"): _f({}),
     ("GET", "/api/routines/proposal-counts"): _list(**_WINDOW),
     ("GET", "/api/routines/trend"): _f(
         params={"routine": "{routine_name}", "introduced_boundary": "2026-06-01T00:00:00Z", **_WINDOW}
@@ -458,6 +463,8 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         {"name": "beta-extra", "graph_name": "{graph_name}", "default_scope_slug": "s"}
     ),
     ("GET", "/api/projects/{project}/routines"): _f(),
+    ("POST", "/api/projects/{project}/cadences"): _f({"slug": "beta-extra", "spacing": "1d"}),
+    ("GET", "/api/projects/{project}/cadences"): _f(),
     ("GET", "/api/projects/{project}/findings"): _f(),
     ("GET", "/api/projects/{project}/findings/classes"): _f(),
     ("GET", "/api/projects/{project}/garden-proposals"): _f(),
@@ -617,6 +624,7 @@ def test_a_tenant_sees_its_own_records_in_its_listings(two: Two) -> None:
             ("/api/graphs", t.ids["graph_id"]),
             ("/api/scopes", t.ids["slug"]),
             ("/api/routines", t.ids["routine_id"]),
+            ("/api/cadences", t.ids["cadence_id"]),
             ("/api/secrets", t.ids["secret"]),
             ("/api/repositories", t.ids["repository"]),
             ("/api/work-sources", t.ids["source"]),

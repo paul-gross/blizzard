@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.cadence.model import CadenceEdit, CadenceShape
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
@@ -83,6 +84,17 @@ class DeclaredRoutine:
 
 @domain_model
 @dataclass(frozen=True)
+class DeclaredCadence:
+    """A cadence the document names by slug within ``project`` — a project slug, ``None`` for the tenant's only one:
+    its create shape and the sparse edit of what it states."""
+
+    shape: CadenceShape
+    edit: CadenceEdit
+    project: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
 class DocumentEntries:
     """Every entry of one document, by section, as its edge decoded them."""
 
@@ -93,3 +105,4 @@ class DocumentEntries:
     projects: tuple[ProjectDeclaration, ...] = ()
     scopes: tuple[DeclaredScope, ...] = ()
     routines: tuple[DeclaredRoutine, ...] = ()
+    cadences: tuple[DeclaredCadence, ...] = ()

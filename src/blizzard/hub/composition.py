@@ -1328,6 +1328,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             scopes=scope_store,
             routines=routine_store,
             routine_scopes=routine_scope_store,
+            cadences=cadence_store,
             graphs=graph_store,
             secrets=stores.secrets,
             pick=parts.color_pick,

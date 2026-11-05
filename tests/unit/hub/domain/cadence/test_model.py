@@ -10,13 +10,13 @@ from typing import Literal
 
 import pytest
 
+from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.model import (
     Anchor,
     Attention,
     AttentionFacts,
-    AttentionReason,
     Cadence,
     Chore,
     ChoreShape,

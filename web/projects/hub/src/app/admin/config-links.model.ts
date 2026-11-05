@@ -14,6 +14,8 @@ const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
     [RecordKind.PROJECT]: ['/admin', 'projects'],
     [RecordKind.SCOPE]: ['/gardening', 'scopes'],
     [RecordKind.ROUTINE]: ['/gardening', 'routines'],
+    // The board has no cadence surface yet.
+    [RecordKind.CADENCE]: null,
     [RecordKind.PROJECT_SOURCE_LINK]: null,
     [RecordKind.PROJECT_REPOSITORY_LINK]: null,
   },

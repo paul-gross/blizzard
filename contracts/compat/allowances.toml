@@ -76,3 +76,17 @@ surface = "http-api"
 where = "RoutineEntry.name"
 reason = "response property stopped being required"
 because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the export always writes the name, so it is always present."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ConfigDocument.cadences"
+reason = "property added to a forbid schema a response reaches"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the board ships no reader of it."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ConfigDocumentV2.cadences"
+reason = "property added to a forbid schema a response reaches"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the board ships no reader of it."

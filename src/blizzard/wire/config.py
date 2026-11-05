@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
+from blizzard.wire.cadence import CadenceDocument
 from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
@@ -94,10 +95,18 @@ class RoutineEntry(RoutineDocument):
     project: str | None = None
 
 
+class CadenceEntry(CadenceDocument):
+    """A cadence entry of a document: the cadence, in ``project`` — an id or a slug; named as a scope entry's is.
+    Its chores name routines and scopes of that project, by slug."""
+
+    project: str | None = None
+
+
 class ConfigDocument(BaseModel):
     """A declarative configuration document. Each entry is the kind's own document model, so a field an
     entry omits is left as stored; projects reconcile before scopes and routines, and scopes before
-    routines, so an entry may name a project or a scope the same document declares; ``secrets`` lists
+    routines, so an entry may name a project or a scope the same document declares; cadences reconcile after
+    routines, so a document may declare a routine and the cadence that keeps it; ``secrets`` lists
     secret names that must already be active. ``GET /api/config/export`` writes every field of every
     entry, ``projects`` first, and names every project by its slug."""
 
@@ -110,6 +119,7 @@ class ConfigDocument(BaseModel):
     repositories: list[RepositoryDocument] = []
     scopes: list[ScopeEntry] = []
     routines: list[RoutineEntry] = []
+    cadences: list[CadenceEntry] = []
 
 
 class ForgeEntry(BaseModel):
@@ -167,6 +177,7 @@ class ConfigDocumentV2(BaseModel):
     repositories: list[RepositoryEntry] = []
     scopes: list[ScopeEntry] = []
     routines: list[RoutineEntry] = []
+    cadences: list[CadenceEntry] = []
 
 
 class ConfigApplyOutcome(WireModel):

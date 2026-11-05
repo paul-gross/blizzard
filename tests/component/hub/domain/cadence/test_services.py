@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.hub.domain.cadence.model import (
     Attention,
-    AttentionReason,
     Cadence,
     CadenceAdmissionRefused,
     CadenceEdit,

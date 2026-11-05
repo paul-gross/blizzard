@@ -1169,6 +1169,21 @@
         "title": "ArtifactView",
         "type": "object"
       },
+      "AttentionReason": {
+        "description": "Why a cadence cannot run an errand \u2014 the refusals a hand-started run would meet, shown beforehand.",
+        "enum": [
+          "routine_unknown",
+          "routine_retired",
+          "graph_unresolved",
+          "scope_unknown",
+          "scope_retired",
+          "scope_unlinked",
+          "no_scopes",
+          "no_chores"
+        ],
+        "title": "AttentionReason",
+        "type": "string"
+      },
       "BacklogPageView": {
         "description": "``GET /api/backlog``'s own bounded page: ``next_cursor``\nis ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
         "properties": {
@@ -1521,6 +1536,442 @@
         "title": "BounceView",
         "type": "object"
       },
+      "CadenceAttentionView": {
+        "description": "One thing that stops a cadence's errands: the chore by key (``None`` for the whole cadence), the scope when\nit stops one errand, and why.",
+        "properties": {
+          "chore": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chore"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AttentionReason",
+            "x-blizzard-open": true
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "required": [
+          "reason",
+          "chore",
+          "scope"
+        ],
+        "title": "CadenceAttentionView",
+        "type": "object"
+      },
+      "CadenceCreateRequest": {
+        "additionalProperties": false,
+        "description": "Create a cadence in the path's project; its slug is free there, retired cadences included.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor"
+          },
+          "chores": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChoreDocument"
+            },
+            "title": "Chores",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CadenceScheduleDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "spacing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacing"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "CadenceCreateRequest",
+        "type": "object"
+      },
+      "CadenceEditRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set. An explicit ``null`` clears ``schedule``,\n``spacing``, or ``anchor`` and is refused on ``name`` and ``chores``. ``chores`` is the whole list; a chore\nwhose key stays keeps its id. The slug is immutable, so a body carrying it is refused.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor"
+          },
+          "chores": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChoreDocument"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chores"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CadenceScheduleDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spacing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacing"
+          }
+        },
+        "title": "CadenceEditRequest",
+        "type": "object"
+      },
+      "CadenceEntry": {
+        "additionalProperties": false,
+        "description": "A cadence entry of a document: the cadence, in ``project`` \u2014 an id or a slug; named as a scope entry's is.\nIts chores name routines and scopes of that project, by slug.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor"
+          },
+          "chores": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChoreDocument"
+            },
+            "title": "Chores",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CadenceScheduleDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "spacing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacing"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "CadenceEntry",
+        "type": "object"
+      },
+      "CadenceLifecycleRequest": {
+        "description": "Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "CadenceLifecycleRequest",
+        "type": "object"
+      },
+      "CadenceScheduleDocument": {
+        "additionalProperties": false,
+        "description": "The moments a cadence may fire: a five-field cron expression read as wall-clock time in an IANA ``zone``.\nBoth are required; a table missing one is refused naming it.",
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone"
+          }
+        },
+        "title": "CadenceScheduleDocument",
+        "type": "object"
+      },
+      "CadenceScheduleView": {
+        "description": "A cadence's schedule as stored.",
+        "properties": {
+          "cron": {
+            "title": "Cron",
+            "type": "string"
+          },
+          "zone": {
+            "title": "Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "zone"
+        ],
+        "title": "CadenceScheduleView",
+        "type": "object"
+      },
+      "CadenceView": {
+        "description": "A cadence as served by the create, list, read, edit, and lifecycle routes, with its attention as it stands at\nthe read \u2014 empty when nothing stops its errands, or when it is retired.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor"
+          },
+          "attention": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadenceAttentionView"
+            },
+            "title": "Attention",
+            "type": "array"
+          },
+          "cadence_id": {
+            "title": "Cadence Id",
+            "type": "string"
+          },
+          "chores": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChoreView"
+            },
+            "title": "Chores",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CadenceScheduleView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "spacing_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacing Minutes"
+          }
+        },
+        "required": [
+          "cadence_id",
+          "slug",
+          "name",
+          "schedule",
+          "spacing_minutes",
+          "anchor",
+          "chores",
+          "attention",
+          "created_at",
+          "retired",
+          "revision",
+          "project_id",
+          "project_slug",
+          "project_name"
+        ],
+        "title": "CadenceView",
+        "type": "object"
+      },
       "CapturedLandingTermsView": {
         "description": "Repository terms captured by the submission's first turn.",
         "properties": {
@@ -1593,6 +2044,146 @@
         ],
         "title": "ChoiceTargetKind",
         "type": "string"
+      },
+      "ChoreDocument": {
+        "additionalProperties": false,
+        "description": "One chore of a cadence, keyed within it by ``key``. ``scopes`` is ``\"all\"``, a list of scope slugs, or\nabsent for one run over the routine's default scope; ``mode`` is ``full`` when absent and ``promote`` true.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "promote": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promote"
+          },
+          "routine": {
+            "title": "Routine",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "const": "all",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "key",
+          "routine"
+        ],
+        "title": "ChoreDocument",
+        "type": "object"
+      },
+      "ChoreView": {
+        "description": "One chore of a cadence, in the order written.",
+        "properties": {
+          "chore_id": {
+            "title": "Chore Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/RunMode",
+            "x-blizzard-open": true
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "promote": {
+            "title": "Promote",
+            "type": "boolean"
+          },
+          "routine": {
+            "title": "Routine",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "const": "all",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          },
+          "scopes_set_at": {
+            "title": "Scopes Set At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chore_id",
+          "key",
+          "routine",
+          "scopes",
+          "mode",
+          "note",
+          "promote",
+          "scopes_set_at"
+        ],
+        "title": "ChoreView",
+        "type": "object"
       },
       "ChunkChangeCause": {
         "enum": [
@@ -4267,8 +4858,16 @@
       },
       "ConfigDocument": {
         "additionalProperties": false,
-        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; projects reconcile before scopes and routines, and scopes before\nroutines, so an entry may name a project or a scope the same document declares; ``secrets`` lists\nsecret names that must already be active. ``GET /api/config/export`` writes every field of every\nentry, ``projects`` first, and names every project by its slug.",
+        "description": "A declarative configuration document. Each entry is the kind's own document model, so a field an\nentry omits is left as stored; projects reconcile before scopes and routines, and scopes before\nroutines, so an entry may name a project or a scope the same document declares; cadences reconcile after\nroutines, so a document may declare a routine and the cadence that keeps it; ``secrets`` lists\nsecret names that must already be active. ``GET /api/config/export`` writes every field of every\nentry, ``projects`` first, and names every project by its slug.",
         "properties": {
+          "cadences": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadenceEntry"
+            },
+            "title": "Cadences",
+            "type": "array"
+          },
           "projects": {
             "default": [],
             "items": {
@@ -4333,6 +4932,14 @@
         "additionalProperties": false,
         "description": "A declarative document whose forge records and references are explicit.",
         "properties": {
+          "cadences": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadenceEntry"
+            },
+            "title": "Cadences",
+            "type": "array"
+          },
           "forges": {
             "default": [],
             "items": {
@@ -9954,7 +10561,9 @@
           "frg",
           "flw",
           "fsub",
-          "htn"
+          "htn",
+          "cad",
+          "chr"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -12317,6 +12926,7 @@
           "forge",
           "scope",
           "routine",
+          "cadence",
           "project",
           "project_source_link",
           "project_repository_link"
@@ -23225,6 +23835,366 @@
         ]
       }
     },
+    "/api/cadences": {
+      "get": {
+        "description": "Every cadence with its attention, newest first \u2014 of the project `?project=` names, else of every project; a\nretired cadence excluded by default, included and marked when `include_retired`.",
+        "operationId": "list_cadences_api_cadences_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CadenceView"
+                  },
+                  "title": "Response List Cadences Api Cadences Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Cadences",
+        "tags": [
+          "cadences"
+        ]
+      }
+    },
+    "/api/cadences/{cadence_id}": {
+      "get": {
+        "description": "One cadence's whole record with its attention; 404 on an unknown id.",
+        "operationId": "get_cadence_api_cadences__cadence_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cadence_id",
+            "required": true,
+            "schema": {
+              "title": "Cadence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadenceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cadence",
+        "tags": [
+          "cadences"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present \u2014 the name, the schedule, the spacing, the anchor, and the whole chore list,\nmatched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears\n`schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422\nnaming the field on a `null` name or chore list, or a merged shape that cannot mean anything; 403 when the\ncadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale\n`If-Match`.",
+        "operationId": "edit_cadence_api_cadences__cadence_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cadence_id",
+            "required": true,
+            "schema": {
+              "title": "Cadence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CadenceEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadenceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Cadence",
+        "tags": [
+          "cadences"
+        ]
+      }
+    },
+    "/api/cadences/{cadence_id}/enable": {
+      "post": {
+        "description": "Re-enable a retired cadence; enabling an enabled one writes nothing. 404 on an unknown id; 403 when it keeps\na promoting chore and the caller may not promote chunks; 409 on a stale `If-Match`.",
+        "operationId": "enable_cadence_api_cadences__cadence_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cadence_id",
+            "required": true,
+            "schema": {
+              "title": "Cadence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CadenceLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadenceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Cadence",
+        "tags": [
+          "cadences"
+        ]
+      }
+    },
+    "/api/cadences/{cadence_id}/retire": {
+      "post": {
+        "description": "Retire a cadence \u2014 a reversible brake: a retired cadence mints nothing. Retiring a retired cadence writes\nnothing. 404 on an unknown id, 409 on a stale `If-Match`.",
+        "operationId": "retire_cadence_api_cadences__cadence_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cadence_id",
+            "required": true,
+            "schema": {
+              "title": "Cadence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CadenceLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadenceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Cadence",
+        "tags": [
+          "cadences"
+        ]
+      }
+    },
     "/api/chunk-counts": {
       "get": {
         "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that\nproject's chunks alone. With ``done_since``, ``done_since`` answers how many of the ``done`` ones finished at or\nafter that instant; the caller chooses the boundary.",
@@ -24690,7 +25660,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a version 1 or 2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. An entry's address \u2014 a work source's `api_base` and\n`web_base`, a repository's `forge_api_url` \u2014 resolves to the tenant's forge with that origin, planned in the same\ntransaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for\na stored record that states no address keeps its forge. Version 2 declares forges and names them by id or slug.",
+        "description": "Reconcile a version 1 or 2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`, 403 when a cadence write would leave it promoting its runs and the caller may not promote\nchunks; a refusal leaves the store unchanged. An entry's address \u2014 a work source's `api_base` and\n`web_base`, a repository's `forge_api_url` \u2014 resolves to the tenant's forge with that origin, planned in the same\ntransaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for\na stored record that states no address keeps its forge. Version 2 declares forges and names them by id or slug.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -24888,7 +25858,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every project with its standing links, every active, non-built-in work source and repository, and every\nactive scope and routine (its linked scope set included) named in its project by slug, with every field, and\nevery active secret name, as a document that applies back as a no-op. Retired records are left out, since\napplying one would enable it.",
+        "description": "Every project with its standing links, every active, non-built-in work source and repository, and every\nactive scope, routine (its linked scope set included), and cadence named in its project by slug, with every\nfield, and\nevery active secret name, as a document that applies back as a no-op. Retired records are left out, since\napplying one would enable it.",
         "operationId": "export_config_api_config_export_get",
         "parameters": [
           {
@@ -30323,6 +31293,130 @@
         "summary": "Patch Project",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/cadences": {
+      "get": {
+        "description": "Every cadence of the project with its attention, newest first \u2014 a retired cadence excluded by default,\nincluded and marked when `include_retired`; 404 on an unknown project.",
+        "operationId": "list_project_cadences_api_projects__project__cadences_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CadenceView"
+                  },
+                  "title": "Response List Project Cadences Api Projects  Project  Cadences Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Cadences",
+        "tags": [
+          "cadences"
+        ]
+      },
+      "post": {
+        "description": "Create a cadence in the project. 422 naming the field on a shape that cannot mean anything \u2014 no schedule and\nno spacing, a malformed cron, zone, spacing, anchor, or chore \u2014 or on a slug the project already holds; 403 when\nit would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose\nroutine or scopes do not resolve is accepted, and shown in the cadence's `attention`.",
+        "operationId": "create_project_cadence_api_projects__project__cadences_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CadenceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CadenceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Cadence",
+        "tags": [
+          "cadences"
         ]
       }
     },

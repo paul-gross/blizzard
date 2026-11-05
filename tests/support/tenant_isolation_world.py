@@ -175,7 +175,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     )
     t.keep("routine_id", routine["routine_id"])
     t.keep("routine_name", f"{label}-routine")
-    # No cadence route serves yet, so its cadence is written through the tenant's own services.
+    # Written through the tenant's own services, so its chore can name the routine created above.
     cadence = harness.services.cadence_authoring.create(
         CadenceShape(
             slug=f"{label}-cadence",
