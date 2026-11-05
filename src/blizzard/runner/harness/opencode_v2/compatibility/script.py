@@ -48,3 +48,14 @@ TAKEOVER_PROMPT = "Reply with the word TAKEN and nothing else."
 RESTART_COMMAND = "sleep 20; echo RESTART-SURVIVED"
 RESTART_PROMPT = f"Use the shell tool exactly once to run `{RESTART_COMMAND}` and wait for it. Then reply DONE."
 RESTART_ENV_PROMPT = "Use the shell tool exactly once to run `echo AFTER=${BLZ_PROOF_ENV:-}`. Reply with its output."
+NOTES_FILE = "NOTES.md"
+NOTES_TEXT = "first line of the proof notes\n"
+SKILL_NAME = "proof-skill"
+SKILL_DOCUMENT = (
+    f"---\nname: {SKILL_NAME}\ndescription: The blizzard proof skill. Load it when asked to load {SKILL_NAME}.\n---\n"
+    "Reply with the word SKILLED.\n"
+)
+TOOLS_PROMPT = (
+    f"Use the read tool exactly once to read `{NOTES_FILE}`. Then use your skill tool exactly once to load the skill "
+    f"named `{SKILL_NAME}`, and follow it."
+)

@@ -1,9 +1,9 @@
-"""Service-tier proof for the OpenCode 2 driver against a real ``mock-opencode-2 emit-engine`` artifact, registered as
-the managed service under each test's own isolated home (``bzh:external-cli-fake-is-service-tier``). Each prompt is
-the engine's script, run only inside its fence: the variable rides the driver's environment, which the driver applies
-to the root, and the service's own, which every child runs under; the marker sits in the session's directory. Most
-turns run the real ``blizzard runner opencode drive``; one runs through the adapter and the real launcher, one is
-taken over through the adapter's composed ``attend`` command, and one is killed and orphaned through the adapter."""
+"""Service-tier proof for the OpenCode 2 driver and transcript source against a real ``mock-opencode-2 emit-engine``
+artifact, registered as the managed service under each test's isolated home (``bzh:external-cli-fake-is-service-tier``).
+Each prompt is the engine's script, run only inside its fence: the variable rides the driver's environment and the
+service's own, and the marker sits in the session's directory. Most turns run the real ``blizzard runner opencode
+drive``; others run through the adapter and the real launcher, its ``attend`` takeover, and its orphan of a killed
+driver, and the transcript source reads turns back forward, children included, recovering a killed driver's usage."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+import structlog
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -36,7 +37,9 @@ from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind,
 from blizzard.runner.harness.opencode_v2.result import DriverResult, Outcome, parse_result
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
 from blizzard.runner.harness.opencode_v2.shapes import parse_message, parse_session
+from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
+from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.support.child_launch import CHILDREN, version_probe
@@ -450,3 +453,92 @@ def _wait_for_running(client: OpenCodeServiceClient, session_id: str, timeout: f
             pass  # the driver has not created the session yet
         time.sleep(0.2)
     raise AssertionError(f"session {session_id} and its child never ran")
+
+
+# -- the transcript source --------------------------------------------------------------------------------------------
+
+
+def _transcripts(engine: Engine, runner_id: str = "run_1") -> OpenCodeTwoTranscriptSource:
+    path = engine.home / ".local" / "state" / "opencode" / "service.json"
+    errors = TranscriptErrorFactory(structlog.get_logger("test"))
+    return OpenCodeTwoTranscriptSource(
+        lambda: read_registration(path), UrllibServiceTransport(), errors, runner_id=runner_id
+    )
+
+
+def _wait_for_call(client: OpenCodeServiceClient, session_id: str, status: str, timeout: float = 30) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            messages = [parse_message(m) for m in client.messages(session_id)]
+        except ServiceRequestError:
+            messages = []  # the driver has not created the session yet
+        parts = [p for m in messages for p in m.parts if p.state is not None and p.state.status == status]
+        if parts:
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"session {session_id} never had a {status} call")
+
+
+def test_a_turn_is_read_forward_while_it_runs_and_its_call_patched_once_it_ends(engine: Engine) -> None:
+    request = engine.request("shell('sleep 2; echo SLEPT')\ntext('done')")
+    worker = engine.start(request)
+    _wait_for_call(engine.client(), request.session_id, "running")
+    source = _transcripts(engine)
+    live = source.turns_since(request.session_id, spawn_cwd=None, since=None)
+    call = live.turns[-1].tool
+    assert live.available and call is not None and call.name == "shell" and call.output is None
+    _, err = worker.communicate(timeout=60)
+    assert worker.returncode == 0, err
+    after = source.turns_since(request.session_id, spawn_cwd=None, since=live.next_position)
+    assert [(late.tool_use_id, "SLEPT" in late.output) for late in after.late_tool_outputs] == [
+        (call.tool_use_id, True)
+    ]
+    assert [turn.text for turn in after.turns if turn.kind == "asst"] == ["done"]
+    again = source.turns_since(request.session_id, spawn_cwd=None, since=after.next_position)
+    assert again.turns == [] and again.late_tool_outputs == []
+
+
+def test_a_childs_conversation_is_a_sidechain_of_its_subagent_call(engine: Engine) -> None:
+    child = "shell('echo CHILD')\ntext('child done')"
+    request = engine.request(f"subagent({child!r}, description='report')\ntext('root done')")
+    assert engine.drive(request).outcome is Outcome.SUCCEEDED
+    batch = _transcripts(engine).turns_since(request.session_id, spawn_cwd=None, since=None)
+    spawns = [turn for turn in batch.turns if turn.tool is not None and turn.tool.name == "subagent"]
+    assert spawns and spawns[0].sidechain is not None and spawns[0].tool is not None
+    sidechain = spawns[0].sidechain
+    assert sidechain.link == "session-id" and "child done" in [turn.text for turn in sidechain.turns]
+    assert batch.agent_tool_use_ids == {sidechain.agent_id: spawns[0].tool.tool_use_id}
+
+
+def test_another_runners_session_is_not_found_and_a_foreign_position_unreadable(engine: Engine) -> None:
+    request = engine.request("text('theirs')", runner_id="run_other")
+    engine.drive(request)
+    assert _transcripts(engine).turns_since(request.session_id, spawn_cwd=None, since=None).reason == "not_found"
+    mine = _transcripts(engine, "run_other")
+    foreign = TranscriptPosition('{"cursor": {"seen": []}, "linked_children": []}')
+    assert mine.turns_since(request.session_id, spawn_cwd=None, since=foreign).reason == "unreadable"
+
+
+def test_a_killed_drivers_usage_is_recovered_from_the_transcript(engine: Engine) -> None:
+    script = "usage(input=120, output=8, reasoning=3, cache_read=40, cost=0)\nstep()\nshell('sleep 60')"
+    request = engine.request(script)
+    worker = engine.start(request)
+    client = engine.client()
+    _wait_for_call(client, request.session_id, "running")
+    worker.kill()
+    worker.communicate(timeout=30)
+    try:
+        source = _transcripts(engine)
+        lines = source.read_raw_lines(request.session_id, spawn_cwd=None)
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            adapter = _adapter(engine, executor)
+            sample = adapter.sum_transcript_usage(lines, "spawn")
+        finally:
+            executor.shutdown(wait=True)
+        assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens) == (120, 11, 40)
+        assert sample.cost_usd is None and sample.model == "openai/gpt-6-luna"
+        assert source.context_tokens(request.session_id, spawn_cwd=None) == 160
+    finally:
+        client.interrupt(request.session_id)

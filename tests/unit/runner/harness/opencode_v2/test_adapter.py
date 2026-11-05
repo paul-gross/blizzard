@@ -5,6 +5,7 @@ overload it reads from the driver's result."""
 from __future__ import annotations
 
 import io
+import json
 import stat
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -258,3 +259,56 @@ def test_the_autonomy_rides_the_request(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path, autonomy=Autonomy.Normal)
     adapter.spawn(_envelope(), _preamble(tmp_path), None)
     assert launcher.requests[0].autonomy is Autonomy.Normal
+
+
+def _record(session: str, parent: str | None, message: dict[str, Any]) -> str:
+    return json.dumps({"session": session, "parent": parent, "message": message})
+
+
+def _step(message_id: str, model: str, *, cost: float = 0.0, completed: bool = True) -> dict[str, Any]:
+    provider, name = model.split("/")
+    step: dict[str, Any] = {
+        "type": "assistant",
+        "id": message_id,
+        "time": {"created": 1, **({"completed": 2} if completed else {})},
+        "content": [],
+        "model": {"providerID": provider, "id": name, "variant": "high"},
+    }
+    if completed:
+        step |= {"tokens": {"input": 10, "output": 2, "reasoning": 1, "cache": {"read": 5, "write": 1}}, "cost": cost}
+    return step
+
+
+def test_a_killed_turns_usage_is_recovered_from_the_root_and_every_descendant_in_its_records(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    lines = [
+        _record("ses_r", None, {"type": "user", "id": "msg_u", "time": {"created": 0}, "text": "go"}),
+        _record("ses_r", None, _step("msg_1", "openai/gpt-6-luna")),
+        _record("ses_c", "ses_r", _step("msg_c", "openai/gpt-6-mini")),
+        _record("ses_r", None, _step("msg_2", "openai/gpt-6-luna", completed=False)),
+        "not json",
+    ]
+    sample = adapter.sum_transcript_usage(lines, "spawn")
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        20,
+        6,
+        10,
+        2,
+    )
+    assert sample.cost_usd is None and sample.model == "openai/gpt-6-luna"
+    assert adapter.observed_model(lines) == "openai/gpt-6-luna"
+
+
+def test_a_compactions_usage_is_recovered_with_the_steps(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    compaction = _step("msg_k", "openai/gpt-6-luna", cost=0.5) | {"type": "compaction", "summary": "so far"}
+    lines = [_record("ses_r", None, _step("msg_1", "openai/gpt-6-luna")), _record("ses_r", None, compaction)]
+    sample = adapter.sum_transcript_usage(lines, "spawn")
+    assert (sample.input_tokens, sample.output_tokens, sample.cost_usd) == (20, 6, 0.5)
+
+
+def test_a_reported_cost_in_the_records_is_summed(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    lines = [_record("ses_r", None, _step("msg_1", "openai/gpt-6-luna", cost=0.25))] * 2
+    assert adapter.sum_transcript_usage(lines, "spawn").cost_usd == 0.5
+    assert adapter.observed_model([]) is None

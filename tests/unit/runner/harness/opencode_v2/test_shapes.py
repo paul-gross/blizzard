@@ -41,6 +41,9 @@ _MESSAGE_LISTS = (
     "restart_messages",
     "steer_messages",
     "takeover_messages",
+    "transcript_live",
+    "transcript_after",
+    "transcript_tools_messages",
 )
 
 
@@ -72,7 +75,8 @@ def test_every_captured_message_and_part_parses(version: str) -> None:
     kinds = {message.type for message in messages}
     assert {"user", "assistant", "idle", "synthetic", "compaction"} <= kinds
     assistants = [message for message in messages if message.type == "assistant"]
-    assert all(message.tokens is not None and message.cost is not None for message in assistants)
+    ended = [message for message in assistants if message.completed is not None]
+    assert ended and all(message.tokens is not None and message.cost is not None for message in ended)
     tools = [part for message in assistants for part in message.parts if part.type == "tool"]
     assert tools and all(part.id and part.name and part.state is not None for part in tools)
     assert {part.state.status for part in tools if part.state is not None} >= {"completed", "error"}
@@ -172,7 +176,7 @@ _TOKENS: JsonObject = {"input": 1, "output": 1, "reasoning": 0, "cache": {"read"
     ("parse", "record"),
     [
         (parse_session, {"id": "ses_1", "tokens": _TOKENS, "cost": 0}),
-        (parse_message, {"type": "assistant", "id": "msg_1", "time": {"created": 1}, "cost": 0}),
+        (parse_message, {"type": "assistant", "id": "msg_1", "tokens": _TOKENS, "cost": 0}),
         (parse_message, {"type": "idle", "id": "msg_1", "time": {"created": 1}}),
         (parse_permission_request, {"id": "per_1", "sessionID": "ses_1"}),
         (parse_form_request, {"id": "frm_1"}),
@@ -185,6 +189,26 @@ def test_a_record_missing_a_read_field_is_refused(parse: object, record: dict[st
     assert callable(parse)
     with pytest.raises(OpenCodeTwoShapeError):
         parse(record)
+
+
+@pytest.mark.parametrize("version", _VERSIONS)
+def test_a_step_still_streaming_parses_with_no_usage_yet(version: str) -> None:
+    live = [parse_message(item) for item in _items(_fixture(version, "transcript_live"))]
+    step = next(message for message in live if message.type == "assistant")
+    assert step.tokens is None and step.cost is None and step.completed is None
+    call = step.parts[0]
+    assert call.state is not None and call.state.status == "running" and call.state.output is None
+
+
+@pytest.mark.parametrize("version", _VERSIONS)
+def test_a_finished_call_carries_its_output_and_a_failed_one_its_error(version: str) -> None:
+    after = [parse_message(item) for item in _items(_fixture(version, "transcript_tools_messages"))]
+    calls = {part.name: part for message in after for part in message.parts if part.type == "tool"}
+    read = calls["read"].state
+    assert read is not None and read.output is not None and "first line of the proof notes" in read.output
+    denied = [parse_message(item) for item in _items(_fixture(version, "interrupt_root_messages"))]
+    failed = [p.state for m in denied for p in m.parts if p.state is not None and p.state.status == "error"]
+    assert failed and all(state.error for state in failed)
 
 
 def test_an_unread_message_or_part_type_is_kept_by_its_type() -> None:

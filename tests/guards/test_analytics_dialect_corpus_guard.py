@@ -8,6 +8,7 @@ files are the subject, not an in-file builder. A fixture its version's manifest 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -20,9 +21,21 @@ from tests.support.repo_files import repo_root
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
+
+@dataclass(frozen=True)
+class _Corpus:
+    """Where a dialect's captures live, the major version whose folders are its evidence, and the key a captured
+    tool part names its tool under."""
+
+    directory: Path
+    major: int
+    name_key: str
+
+
 #: Dialects with pinned captures; Claude Code has none.
-_CORPUS_DIRS: dict[str, Path] = {
-    "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode",
+_CORPUS_DIRS: dict[str, _Corpus] = {
+    "opencode-export/1": _Corpus(_PACKAGE_ROOT / "contracts" / "opencode", major=1, name_key="tool"),
+    "opencode-v2/1": _Corpus(_PACKAGE_ROOT / "contracts" / "opencode", major=2, name_key="name"),
 }
 
 
@@ -50,7 +63,7 @@ def _synthetic_fixtures(version_dir: Path) -> set[str]:
     return names
 
 
-def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
+def _tool_inputs_in_corpus(corpus: _Corpus) -> dict[str, set[str]]:
     """Every ``tool``'s own ``state.input`` key set actually observed in the corpus —
     keyed by tool name, so both the tool name and its argument key are checkable."""
     inputs: dict[str, set[str]] = {}
@@ -58,8 +71,8 @@ def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
     def _walk(node: object) -> None:
         obj = _json_object(node)
         if obj is not None:
-            tool = obj.get("tool")
-            if isinstance(tool, str):
+            tool = obj.get(corpus.name_key)
+            if isinstance(tool, str) and isinstance(obj.get("state"), dict):
                 state = _json_object(obj.get("state"))
                 tool_input = _json_object(state.get("input")) if state is not None else None
                 inputs.setdefault(tool, set()).update(tool_input or set())
@@ -68,8 +81,10 @@ def _tool_inputs_in_corpus(corpus_dir: Path) -> dict[str, set[str]]:
         for item in _json_array(node) or []:
             _walk(item)
 
-    # OpenCode 2 captures are not `opencode-export/1` evidence.
-    for version_dir in sorted(p for p in corpus_dir.iterdir() if p.is_dir() and Version(p.name).major == 1):
+    # Each major version's captures are evidence for its own dialect alone.
+    for version_dir in sorted(
+        p for p in corpus.directory.iterdir() if p.is_dir() and Version(p.name).major == corpus.major
+    ):
         synthetic = _synthetic_fixtures(version_dir)
         for path in version_dir.glob("*.json"):
             if path.name != "manifest.json" and path.name not in synthetic:
@@ -101,7 +116,7 @@ def test_every_registered_entry_matches_its_pinned_corpus(normalizer_version: st
     for kind, entry in registered.items():
         assert entry.tool_name in corpus_inputs, (
             f"{normalizer_version}'s {kind} entry registers tool {entry.tool_name!r}, "
-            f"not present in {_CORPUS_DIRS[normalizer_version]}"
+            f"not present in {_CORPUS_DIRS[normalizer_version].directory}"
         )
         assert entry.argument_key in corpus_inputs[entry.tool_name], (
             f"{normalizer_version}'s {kind} entry registers argument key {entry.argument_key!r} for tool "

@@ -38,8 +38,16 @@ _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="subagent_type"),
 }
 
+#: OpenCode 2's, proven against the live 2.x captures under the same directory.
+_OPENCODE_V2_1: dict[str, DialectEntry] = {
+    KIND_FILE_READ: DialectEntry(tool_name="read", argument_key="path"),
+    KIND_SKILL_INVOCATION: DialectEntry(tool_name="skill", argument_key="id"),
+    KIND_AGENT_SPAWN: DialectEntry(tool_name="subagent", argument_key="agent"),
+}
+
 #: Every registered dialect, keyed by the segment's own exact normalizer_version.
 DIALECTS: dict[str, dict[str, DialectEntry]] = {
     "claude-code-jsonl/2": _CLAUDE_CODE_JSONL_2,
     "opencode-export/1": _OPENCODE_EXPORT_1,
+    "opencode-v2/1": _OPENCODE_V2_1,
 }

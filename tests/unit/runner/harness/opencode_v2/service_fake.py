@@ -4,6 +4,7 @@ check — one per driver poll — ``on_poll``; each may move the session tree to
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
@@ -32,7 +33,7 @@ def assistant(message_id: str, text: str = "", *, tools: tuple[Record, ...] = ()
     return {
         "type": "assistant",
         "id": message_id,
-        "time": {"created": 2},
+        "time": {"created": 2, "completed": 3},
         "content": content,
         "tokens": TOKENS,
         "cost": 0.25,
@@ -80,6 +81,33 @@ class SessionService:
     #: A path suffix -> the status every request ending in it answers instead.
     failing: dict[str, int] = field(default_factory=dict[str, int])
     on_poll: Callable[[SessionService], None] | None = None
+    #: Each message listing's session and query, in order.
+    listings: list[tuple[str, dict[str, str]]] = field(default_factory=list[tuple[str, dict[str, str]]])
+
+    def _page(self, session_id: str, query: dict[str, list[str]]) -> tuple[int, object]:
+        """A page as 2.1.4 serves one: a cursor carries its own order and is refused beside one."""
+        cursor, order = query.get("cursor", [None])[0], query.get("order", [None])[0]
+        if cursor is not None and order is not None:
+            return 400, {"_tag": "InvalidCursorError", "message": "Cursor cannot be combined with order"}
+        limit = int(query.get("limit", ["50"])[0])
+        if limit > 200:
+            return 400, {"_tag": "InvalidRequestError"}
+        listed = list(self.messages[session_id])
+        after = None
+        if cursor is not None:
+            decoded = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+            after, order = decoded["id"], decoded["order"]
+        if order == "desc":
+            listed.reverse()
+        if after is not None:
+            ids = [m["id"] for m in listed]
+            listed = listed[ids.index(after) + 1 :] if after in ids else []
+        page = listed[:limit]
+        if not page:
+            return 200, {"data": [], "cursor": {"previous": None, "next": None}}
+        following = {"id": page[-1]["id"], "order": order or "asc", "direction": "next"}
+        token = base64.urlsafe_b64encode(json.dumps(following).encode()).decode().rstrip("=")
+        return 200, {"data": page, "cursor": {"previous": None, "next": token}}
 
     def add_session(self, session_id: str, *, parent: str | None = None, **fields: object) -> Record:
         record: Record = {
@@ -129,7 +157,7 @@ class SessionService:
             return 200, {"data": [s for s in self.sessions.values() if s.get("parentID") == parent]}
         session_id = segments[0]
         if session_id not in self.sessions:
-            return 404, {"error": "not found"}
+            return 404, {"_tag": "SessionNotFoundError", "sessionID": session_id, "message": "Session not found"}
         rest = segments[1:]
         if not rest:
             if method == "GET":
@@ -146,8 +174,12 @@ class SessionService:
             if self.on_prompt is not None:
                 self.on_prompt(self, session_id, body)
             return 200, {"data": {"id": "msg_prompt"}}
+        if action == "message" and len(rest) == 2:
+            found = [m for m in self.messages[session_id] if m["id"] == rest[1]]
+            return (200, {"data": found[0]}) if found else (404, {"error": "message not found"})
         if action == "message":
-            return 200, {"data": self.messages[session_id]}
+            self.listings.append((session_id, {key: values[-1] for key, values in query.items()}))
+            return self._page(session_id, query)
         if action == "inbox":
             return 200, {"data": self.inbox.get(session_id, [])}
         if action == "interrupt":

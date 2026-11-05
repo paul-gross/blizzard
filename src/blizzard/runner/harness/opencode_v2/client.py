@@ -19,6 +19,8 @@ from blizzard.runner.harness.opencode_v2.transport import IServiceTransport, Ser
 API_PREFIX = "/api/"
 EXPERIMENTAL_PREFIX = "/api/experimental/"
 SERVICE_USERNAME = "opencode"
+#: The largest page the service serves; it defaults to 50.
+MESSAGE_PAGE_LIMIT = 200
 
 
 class ServiceRequestError(RuntimeError):
@@ -28,6 +30,7 @@ class ServiceRequestError(RuntimeError):
         super().__init__(f"OpenCode {operation} answered {status}: {detail}")
         self.operation = operation
         self.status = status
+        self.detail = detail
 
 
 class ServiceShapeError(ValueError):
@@ -107,6 +110,16 @@ class SessionCreate:
 
 @domain_model
 @dataclass(frozen=True)
+class MessagePage:
+    """One page of a message listing; ``next`` resumes after its last message, and ``None`` on an empty page."""
+
+    items: tuple[JsonObject, ...]
+    next: str | None
+    raw: JsonObject
+
+
+@domain_model
+@dataclass(frozen=True)
 class ServiceInfo:
     version: str
     pid: int
@@ -126,6 +139,17 @@ def _objects(value: JsonValue, operation: str) -> list[JsonObject]:
     if not isinstance(value, list):
         raise ServiceShapeError(f"OpenCode {operation} did not answer a list")
     return [_object(item, operation) for item in value]
+
+
+def parse_message_page(answer: JsonValue) -> MessagePage:
+    """One message listing's answer: its messages, the cursor after them, and the envelope as served."""
+    operation = "session.message.list"
+    envelope = _object(answer, operation)
+    page_cursor = envelope.get("cursor")
+    following = page_cursor.get("next") if isinstance(page_cursor, dict) else None
+    if following is not None and not isinstance(following, str):
+        raise ServiceShapeError(f"OpenCode {operation} answered a cursor that is not a string")
+    return MessagePage(tuple(_objects(envelope.get("data"), operation)), following, envelope)
 
 
 def basic_authorization(password: str) -> str:
@@ -249,18 +273,26 @@ class OpenCodeServiceClient:
     def switch_agent(self, session_id: str, agent: str) -> None:
         self._call("session.switchAgent", "POST", self._session(session_id, "/agent"), {"agent": agent})
 
-    def messages(
-        self, session_id: str, *, order: str = "asc", limit: int | None = None, cursor: str | None = None
-    ) -> list[JsonObject]:
-        params: dict[str, str] = {"order": order}
+    def message_page(
+        self, session_id: str, *, cursor: str | None = None, order: str = "asc", limit: int | None = None
+    ) -> MessagePage:
+        """One page of ``session_id``'s messages: from the start in ``order``, or after ``cursor``, which carries its
+        own order and is never sent beside one."""
+        params: dict[str, str] = {"cursor": cursor} if cursor is not None else {"order": order}
         if limit is not None:
             params["limit"] = str(limit)
-        if cursor is not None:
-            params["cursor"] = cursor
         path = self._session(session_id, f"/message?{urlencode(params)}")
-        return _objects(
-            _data(self._call("session.message.list", "GET", path), "session.message.list"), "session.message.list"
-        )
+        return parse_message_page(self._call("session.message.list", "GET", path))
+
+    def messages(self, session_id: str, *, order: str = "asc") -> list[JsonObject]:
+        """Every message of ``session_id`` in ``order``, following the service's pages to the last."""
+        page = self.message_page(session_id, order=order, limit=MESSAGE_PAGE_LIMIT)
+        listed = list(page.items)
+        # A page shorter than asked is taken as the last; 2.1.4 proves only that an empty page ends the listing.
+        while page.next is not None and len(page.items) == MESSAGE_PAGE_LIMIT:
+            page = self.message_page(session_id, cursor=page.next, limit=MESSAGE_PAGE_LIMIT)
+            listed.extend(page.items)
+        return listed
 
     def message(self, session_id: str, message_id: str) -> JsonObject:
         path = self._session(session_id, f"/message/{quote(message_id, safe='')}")
@@ -315,7 +347,9 @@ def _sse_events(lines: Iterator[bytes]) -> Iterator[JsonObject]:
 
 
 __all__ = [
+    "MESSAGE_PAGE_LIMIT",
     "Delivery",
+    "MessagePage",
     "ModelReference",
     "OpenCodeServiceClient",
     "PermissionDecision",
@@ -326,4 +360,5 @@ __all__ = [
     "ServiceShapeError",
     "SessionCreate",
     "basic_authorization",
+    "parse_message_page",
 ]

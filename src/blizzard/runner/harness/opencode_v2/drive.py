@@ -25,6 +25,7 @@ from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError, cla
 from blizzard.runner.harness.opencode_v2.request import DriveRequest
 from blizzard.runner.harness.opencode_v2.result import Decision, DriverResult, Outcome, ResultWriter, Step
 from blizzard.runner.harness.opencode_v2.shapes import (
+    STEP_TYPES,
     Message,
     OpenCodeTwoShapeError,
     parse_event,
@@ -40,7 +41,6 @@ from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableErro
 DEFAULT_GRACE_SECONDS = 30.0
 #: What a call the driver makes can fail with that the service, not the turn, is to blame for.
 _SERVICE_FAULTS = (ServiceUnreachableError, ServiceRequestError, ServiceShapeError, OpenCodeTwoShapeError)
-_STEP_TYPES = frozenset({"assistant", "compaction"})
 _SETTLED_TOOL_STATES = frozenset({"completed", "error"})
 _OUTCOMES = {outcome.value: outcome for outcome in Outcome}
 
@@ -362,7 +362,7 @@ class TurnDriver:
         steps: list[Step] = []
         for session_id, parent in poll.parents.items():
             for message in self._turn_messages(poll, session_id):
-                if message.type not in _STEP_TYPES or message.tokens is None:
+                if message.type not in STEP_TYPES or message.tokens is None:
                     continue
                 model = None if message.model is None else f"{message.model.provider_id}/{message.model.id}"
                 steps.append(Step(session_id, parent, message.id, model, message.tokens, message.cost or 0.0))

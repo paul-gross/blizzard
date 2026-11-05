@@ -26,6 +26,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
@@ -34,11 +35,13 @@ from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, parse_result
 from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceUnavailableError
+from blizzard.runner.harness.opencode_v2.shapes import STEP_TYPES, Message, OpenCodeTwoShapeError, parse_message
+from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -101,7 +104,12 @@ class OpenCodeTwoAdapter:
         self._effort_aliases = dict(effort_aliases)
         self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         self._autonomy = autonomy
-        self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
+        self._transcript_source: IHarnessTranscriptSource = transcript_source or OpenCodeTwoTranscriptSource(
+            self._registration,
+            UrllibServiceTransport(),
+            TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
+            runner_id=runner_id,
+        )
         self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(self._registration, UrllibServiceTransport())
 
     @property
@@ -412,20 +420,26 @@ class OpenCodeTwoAdapter:
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
-        """No transcript is read yet, so nothing is summed from one."""
-        del lines, model, invocation_start, invocation_end
+        """Every step the transcript's records carry, the root's and each descendant's, summed as the driver's
+        result is; what a killed driver never reported is recovered from them."""
+        del invocation_start, invocation_end
+        steps = [step for _, step in _transcript_steps(lines)]
+        costs = [step.cost for step in steps if step.cost]
         return UsageSample(
             kind=kind,
-            model=observed or "unknown",
-            input_tokens=0,
-            output_tokens=0,
-            cache_read_tokens=0,
-            cache_create_tokens=0,
-            cost_usd=None,
+            model=observed or self.observed_model(lines) or model or self._model or "unknown",
+            input_tokens=sum(step.tokens.input for step in steps if step.tokens),
+            output_tokens=sum(step.tokens.output + step.tokens.reasoning for step in steps if step.tokens),
+            cache_read_tokens=sum(step.tokens.cache_read for step in steps if step.tokens),
+            cache_create_tokens=sum(step.tokens.cache_write for step in steps if step.tokens),
+            cost_usd=sum(costs) if costs else None,
         )
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
-        del lines
+        """The model the newest root step in the records ran."""
+        for root, step in reversed(_transcript_steps(lines)):
+            if root and step.model is not None:
+                return f"{step.model.provider_id}/{step.model.id}"
         return None
 
     def transcript_source(self) -> IHarnessTranscriptSource:
@@ -447,6 +461,24 @@ class OpenCodeTwoAdapter:
         if error is None or error.kind is not ErrorKind.OVERLOAD:
             return None
         return ProviderOverload(detail=error.message)
+
+
+def _transcript_steps(lines: Sequence[str]) -> list[tuple[bool, Message]]:
+    """Each step a raw transcript record carries, and whether it is the root's; unreadable records skip."""
+    steps: list[tuple[bool, Message]] = []
+    for line in lines:
+        try:
+            record = decode_json(line)
+            if not isinstance(record, dict) or not isinstance(raw := record.get("message"), dict):
+                continue
+            if raw.get("type") not in STEP_TYPES:
+                continue
+            message = parse_message(raw)
+        except (ValueError, OpenCodeTwoShapeError):
+            continue
+        if message.tokens is not None:
+            steps.append((record.get("parent") is None, message))
+    return steps
 
 
 _harness_adapter_conforms: type[IHarnessAdapter] = OpenCodeTwoAdapter

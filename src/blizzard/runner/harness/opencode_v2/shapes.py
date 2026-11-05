@@ -170,9 +170,23 @@ def parse_session(value: JsonValue) -> SessionRecord:
 @domain_model
 @dataclass(frozen=True)
 class ToolState:
+    """``output`` is a completed call's text and ``error`` a failed call's message; both ``None`` until it ends."""
+
     status: str
     input: JsonObject = field(default_factory=dict[str, JsonValue])
     metadata: JsonObject = field(default_factory=dict[str, JsonValue])
+    output: str | None = None
+    error: str | None = None
+
+    @property
+    def child_session_id(self) -> str | None:
+        """The child session a ``subagent`` call spawned, as its state records it."""
+        return _child_session_id(self.metadata)
+
+
+def _child_session_id(metadata: JsonObject) -> str | None:
+    child = metadata.get("sessionID")
+    return child if isinstance(child, str) and child else None
 
 
 @domain_model
@@ -185,13 +199,35 @@ class Part:
     id: str | None = None
     name: str | None = None
     state: ToolState | None = None
+    created: int | None = None
+
+
+def _created(record: JsonObject, what: str) -> int | None:
+    return _optional_int(_optional_object(record, "time", what), "created", f"{what}.time")
+
+
+def _tool_output(state: JsonObject) -> str | None:
+    content = state.get("content")
+    if not isinstance(content, list):
+        return None
+    texts = [item.get("text") for item in content if isinstance(item, dict) and item.get("type") == "text"]
+    return "".join(text for text in texts if isinstance(text, str))
+
+
+def _tool_error(state: JsonObject) -> str | None:
+    error = state.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        return message if isinstance(message, str) else ""
+    return error if isinstance(error, str) else None
 
 
 def parse_part(value: JsonValue) -> Part:
     record = _object(value, "part")
     kind = _text(record, "type", "part")
+    what = f"part.{kind}"
     if kind in ("text", "reasoning"):
-        return Part(type=kind, text=_text(record, "text", f"part.{kind}"))
+        return Part(type=kind, text=_text(record, "text", what), created=_created(record, what))
     if kind != "tool":
         return Part(type=kind)
     state = _object(record.get("state"), "part.tool.state")
@@ -203,16 +239,23 @@ def parse_part(value: JsonValue) -> Part:
             status=_text(state, "status", "part.tool.state"),
             input=_optional_object(state, "input", "part.tool.state"),
             metadata=_optional_object(state, "metadata", "part.tool.state"),
+            output=_tool_output(state),
+            error=_tool_error(state),
         ),
+        created=_created(record, what),
     )
+
+
+#: The message types that are model steps, each carrying the tokens and cost it spent.
+STEP_TYPES = frozenset({"assistant", "compaction"})
 
 
 @domain_model
 @dataclass(frozen=True)
 class Message:
-    """One session message. ``parts`` and ``finish`` are an assistant step's; ``tokens``, ``cost`` and ``model`` an
-    assistant step's or a compaction's; ``outcome`` an idle's; ``error`` an assistant step's or an idle's; ``text`` a
-    user or synthetic message's."""
+    """One session message. ``parts``, ``finish`` and ``completed`` are an assistant step's; ``tokens``, ``cost`` and
+    ``model`` an assistant step's or a compaction's; ``outcome`` an idle's; ``error`` an assistant step's or an idle's;
+    ``text`` a user or synthetic message's, or a compaction's summary."""
 
     type: str
     id: str
@@ -225,6 +268,7 @@ class Message:
     model: ModelReference | None = None
     outcome: str | None = None
     error: StructuredError | None = None
+    completed: int | None = None
 
     def final_text(self) -> str:
         return "".join(part.text for part in self.parts if part.type == "text")
@@ -244,6 +288,7 @@ def parse_message(value: JsonValue) -> Message:
             type=kind,
             id=base.id,
             created=created,
+            text=_optional_text(record, "summary", what) or "",
             tokens=parse_tokens(record.get("tokens"), f"{what}.tokens"),
             cost=_number(record, "cost", what),
             model=None if model is None else parse_model_reference(model, f"{what}.model"),
@@ -255,8 +300,10 @@ def parse_message(value: JsonValue) -> Message:
             id=base.id,
             created=created,
             parts=tuple(parse_part(part) for part in _list(record, "content", what)),
-            tokens=parse_tokens(record.get("tokens"), f"{what}.tokens"),
-            cost=_number(record, "cost", what),
+            # A step still streaming carries neither until it ends.
+            tokens=None if record.get("tokens") is None else parse_tokens(record.get("tokens"), f"{what}.tokens"),
+            cost=None if record.get("cost") is None else _number(record, "cost", what),
+            completed=_optional_int(_object(record.get("time"), f"{what}.time"), "completed", f"{what}.time"),
             finish=_optional_text(record, "finish", what),
             model=None if model is None else parse_model_reference(model, f"{what}.model"),
             error=parsed_error,
@@ -355,6 +402,7 @@ def parse_listed_model(value: JsonValue) -> ListedModel:
 
 
 __all__ = [
+    "STEP_TYPES",
     "Event",
     "FormRequest",
     "InboxItem",

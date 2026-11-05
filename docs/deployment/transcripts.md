@@ -8,9 +8,12 @@ outage like the fact lane's store-and-forward — a wedged or slow flush never d
 read-side coupling remains: a closing lease's still-open segment is pumped once more before the closure records, bounded
 by a five-second budget checked only between reads — one slow read can push closure past it, a deliberate bounded wait.
 
-Two harnesses produce this lane's content today, each behind its own `IHarnessTranscriptSource`: Claude Code, read from
-its own on-disk JSONL session file, and OpenCode, read via a bounded `opencode export <session-id>` subprocess
-(`OpenCodeTranscriptSource`). Everything below applies to both alike unless stated otherwise.
+Three harnesses produce this lane's content, each behind its own `IHarnessTranscriptSource`: Claude Code, read from its
+own on-disk JSONL session file; OpenCode 1, read via a bounded `opencode export <session-id>` subprocess
+(`OpenCodeTranscriptSource`); and OpenCode 2, read through the managed service's message listing, paged forward by
+cursor and never starting or continuing a turn (`OpenCodeTwoTranscriptSource`) — a child session ships as a subagent
+conversation under the call that spawned it. The runner does not dispatch OpenCode 2 turns yet, so that source has
+nothing to read until it does. Everything below applies to all three alike unless stated otherwise.
 
 `[transcripts]` `ship` defaults to false: with no table or `ship` omitted, the runner reads no session content and
 enqueues no non-final record. `ship` gates non-final records alone: every open segment still ships its final record at
@@ -82,9 +85,10 @@ imports as one merged segment on the lease it began, not split at resume seams.
 Run backfill as the runner's own user, with the runner's environment, daemon stopped — all three load-bearing, only the
 last enforced: it writes the single-writer store, refusing while anything holds the socket and failing closed (a wedged
 daemon counts); with no `transcripts_root`, Claude Code sessions read from `$HOME/.claude/projects`, so another user
-reads every session as gone — OpenCode sessions are unaffected, since `OpenCodeTranscriptSource` never reads
-`transcripts_root` at all, shelling `opencode export <session-id>` directly; and the hub token comes from the process
-environment, without which every flush is refused.
+reads every session as gone — OpenCode sessions are unaffected, since neither OpenCode source reads `transcripts_root`:
+OpenCode 1 shells `opencode export <session-id>` directly, and OpenCode 2 reads through the service this user
+registered, reading a session no blizzard runner minted, or one the service no longer holds, as gone; and the hub token
+comes from the process environment, without which every flush is refused.
 
 `backfill --limit N` bounds one run — on a long history, content past the hub's per-runner daily rate is rejected rather
 than queued; the verb refuses outright while `ship = false`. `backfill --dry-run` classifies without opening or shipping

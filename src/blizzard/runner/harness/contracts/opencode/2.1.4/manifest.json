@@ -88,6 +88,10 @@
       "source": "live"
     },
     {
+      "path": "message_pages.json",
+      "source": "live"
+    },
+    {
       "path": "model_listing.json",
       "source": "live"
     },
@@ -120,6 +124,10 @@
       "source": "live"
     },
     {
+      "path": "session_not_found.json",
+      "source": "live"
+    },
+    {
       "path": "steer_messages.json",
       "source": "live"
     },
@@ -133,6 +141,10 @@
     },
     {
       "path": "transcript_live.json",
+      "source": "live"
+    },
+    {
+      "path": "transcript_tools_messages.json",
       "source": "live"
     },
     {
@@ -288,6 +300,15 @@
         "transcript_after"
       ],
       "name": "transcript_read"
+    },
+    {
+      "classification": "supported",
+      "evidence": [
+        "transcript_tools_messages",
+        "message_pages",
+        "session_not_found"
+      ],
+      "name": "transcript_tools"
     },
     {
       "classification": "supported",

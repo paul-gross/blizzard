@@ -14,8 +14,9 @@ from pathlib import Path
 
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import EvidenceState
-from blizzard.runner.harness.json_value import JsonObject, JsonValue
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode_v2.client import (
+    MESSAGE_PAGE_LIMIT,
     Delivery,
     ModelReference,
     PermissionDecision,
@@ -257,6 +258,7 @@ class OpenCodeTwoProof:
             (ProofRow.EVENTS, self.row_events),
             (ProofRow.CHILD_AGENTS, self.row_child_agents),
             (ProofRow.TRANSCRIPT_READ, self.row_transcript_read),
+            (ProofRow.TRANSCRIPT_TOOLS, self.row_transcript_tools),
             (ProofRow.COMPACTION, self.row_compaction),
             (ProofRow.MODEL_AND_VARIANT, self.row_model_and_variant),
             (ProofRow.TAKEOVER, self.row_takeover),
@@ -883,6 +885,68 @@ class OpenCodeTwoProof:
             ("transcript_live", "transcript_after"),
             facts,
         )
+
+    def row_transcript_tools(self) -> RowObservation:
+        """The tool calls the analytics dialect keys on, the message listing's paging, and a missing session's
+        answer."""
+        (self.scratch / script.NOTES_FILE).write_text(script.NOTES_TEXT)
+        skill = self.scratch / ".opencode" / "skills" / script.SKILL_NAME
+        skill.mkdir(parents=True, exist_ok=True)
+        (skill / "SKILL.md").write_text(script.SKILL_DOCUMENT)
+        session_id = self.open("transcript-tools")
+        messages = self.turn(session_id, script.TOOLS_PROMPT)
+        self.capture("transcript_tools_messages", list[JsonValue](messages))
+        client = self.core.client
+        first = client.message_page(session_id, limit=1)
+        second = client.message_page(session_id, cursor=first.next, limit=1) if first.next else None
+        whole = client.message_page(session_id, limit=MESSAGE_PAGE_LIMIT)
+        after_tail = client.message_page(session_id, cursor=whole.next) if whole.next else None
+        self.capture(
+            "message_pages",
+            {
+                "first": first.raw,
+                "second": None if second is None else second.raw,
+                "after_tail": None if after_tail is None else after_tail.raw,
+            },
+        )
+        missing = self._missing_session()
+        self.capture("session_not_found", missing)
+        tools = {str(part.get("name")): part_state(part) for part in tool_parts(messages)}
+        ids = [m.get("id") for m in messages]
+        facts: JsonObject = {
+            "tool_inputs": {
+                name: list[JsonValue](sorted(as_object(state.get("input")))) for name, state in tools.items()
+            },
+            "read_completed": tools.get("read", {}).get("status") == "completed",
+            "skill_completed": tools.get("skill", {}).get("status") == "completed",
+            "pages_continue": second is not None and [m.get("id") for m in second.items] == ids[1:2],
+            "cursor_opaque": first.next is not None and first.next not in ids,
+            "empty_page_ends": after_tail is not None and not after_tail.items and after_tail.next is None,
+            "missing_session_status": missing.get("status"),
+        }
+        ok = all(bool(facts[key]) for key in ("read_completed", "skill_completed", "pages_continue", "empty_page_ends"))
+        ok = ok and facts["missing_session_status"] == 404
+        return RowObservation(
+            ProofRow.TRANSCRIPT_TOOLS,
+            EvidenceState.OBSERVED if ok else EvidenceState.FAILED,
+            "the read and skill tools ran and recorded their input; the message listing pages forward through an "
+            "opaque cursor to an empty last page, and a missing session answers 404"
+            if ok
+            else f"the transcript's tools or paging did not behave as the contract requires: {facts}",
+            ("transcript_tools_messages", "message_pages", "session_not_found"),
+            facts,
+        )
+
+    def _missing_session(self) -> JsonObject:
+        try:
+            self.core.client.messages(new_session_id())
+        except ServiceRequestError as exc:
+            try:
+                body: JsonValue = decode_json(exc.detail)
+            except ValueError:
+                body = exc.detail
+            return {"status": exc.status, "body": body}
+        return {"status": 200}
 
     def row_compaction(self) -> RowObservation:
         session_id = self.open("compaction")

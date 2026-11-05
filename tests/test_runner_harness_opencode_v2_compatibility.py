@@ -54,7 +54,7 @@ def test_the_v2_version_normalizer_reads_one_line(raw: str | None, version: str 
 
 
 def test_the_roster_covers_every_contract_row_once() -> None:
-    assert len(ROW_ROSTER) == len(set(ROW_ROSTER)) == 22
+    assert len(ROW_ROSTER) == len(set(ROW_ROSTER)) == 23
 
 
 def test_a_report_missing_a_row_is_refused() -> None:
